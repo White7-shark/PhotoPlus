@@ -1,0 +1,42 @@
+const GB = 1024 * 1024 * 1024;
+
+/** A realistic raw payload as produced by CapabilityProbe.kt. */
+export function rawCapabilities(overrides: { ramGb?: number; sdkInt?: number; glEs31?: boolean; lowRam?: boolean; freeGb?: number } = {}) {
+  return {
+    schemaVersion: 1,
+    collectedAt: 1700000000000,
+    os: { sdkInt: overrides.sdkInt ?? 34, release: '14', manufacturer: 'Tecno', model: 'Camon 30', supportedAbis: ['arm64-v8a'], is64Bit: true },
+    memory: { totalBytes: (overrides.ramGb ?? 8) * GB * 0.93, availableBytes: 2 * GB, lowMemory: false, isLowRamDevice: overrides.lowRam ?? false },
+    cpu: { cores: 8, socModel: 'MT6789' },
+    storage: { totalBytes: 128 * GB, availableBytes: (overrides.freeGb ?? 40) * GB },
+    display: { widthPx: 1080, heightPx: 2400, density: 2.75 },
+    cameras: [
+      {
+        id: '0',
+        lensFacing: 'back',
+        hardwareLevel: 'full',
+        sensorMegapixels: 50.3,
+        maxJpegSize: { width: 8160, height: 6144 },
+        controls: { manualSensor: true, manualPostProcessing: true, raw: true, burstCapture: true, depthOutput: false, logicalMultiCamera: true, manualFocus: true, autoFocus: true, flash: true, opticalStabilization: true, exposureCompensation: true },
+        ranges: { iso: [50, 6400], exposureTimeNs: [10000, 32000000000], exposureCompensation: [-12, 12], exposureCompensationStep: 0.1666, zoomRatio: [1, 10], maxDigitalZoom: 10, minFocusDistanceDiopters: 10 },
+        focalLengthsMm: [5.6],
+        apertures: [1.8],
+        outputFormats: ['jpeg', 'yuv', 'raw'],
+      },
+      {
+        id: '1',
+        lensFacing: 'front',
+        hardwareLevel: 'limited',
+        sensorMegapixels: 32,
+        maxJpegSize: { width: 6528, height: 4896 },
+        controls: { manualSensor: false, manualPostProcessing: false, raw: false, burstCapture: false, depthOutput: false, logicalMultiCamera: false, manualFocus: false, autoFocus: true, flash: false, opticalStabilization: false, exposureCompensation: true },
+        ranges: { iso: null, exposureTimeNs: null, exposureCompensation: [-8, 8], exposureCompensationStep: 0.25, zoomRatio: null, maxDigitalZoom: 4, minFocusDistanceDiopters: 0 },
+        focalLengthsMm: [3.2],
+        apertures: [2.2],
+        outputFormats: ['jpeg', 'yuv'],
+      },
+    ],
+    imageFormats: { decode: ['jpeg', 'png', 'webp', 'heif', 'avif'], encode: ['jpeg', 'png', 'webp', 'heic'], hevcEncoder: true, ultraHdr: true },
+    acceleration: { glEsVersion: '3.2', glEs31: overrides.glEs31 ?? true, vulkan: overrides.glEs31 ?? true, vulkanVersion: '1.1', nnapi: true, nnapiDeprecated: false, renderEffectBlur: true },
+  };
+}

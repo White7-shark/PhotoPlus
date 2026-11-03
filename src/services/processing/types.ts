@@ -1,0 +1,55 @@
+/** Mirrors ProcessRequest.kt / pp_op_type. */
+export type EditOperation =
+  | { type: 'tone'; exposure?: number; brightness?: number; contrast?: number }
+  | { type: 'grayscale' }
+  | { type: 'rotate'; quarterTurns: number }
+  | { type: 'flip'; horizontal?: boolean; vertical?: boolean }
+  | { type: 'crop'; x: number; y: number; width: number; height: number }
+  | { type: 'resize'; width: number; height: number }
+  | { type: 'sharpen'; amount: number }
+  | { type: 'saturation'; amount: number };
+
+export type OutputFormat = 'jpeg' | 'png' | 'webp';
+
+export interface ProcessRequest {
+  inputPath: string;
+  outputPath: string;
+  operations: EditOperation[];
+  format?: OutputFormat;
+  quality?: number;
+  maxDimension?: number;
+}
+
+export interface ProcessResult {
+  outputPath: string;
+  width: number;
+  height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  format: OutputFormat;
+  sizeBytes: number;
+  timings: { decodeMs: number; processMs: number; totalMs: number };
+}
+
+export interface EngineInfo {
+  available: boolean;
+  version: string | null;
+  loadError: string | null;
+  workers: number;
+  memoryBudgetBytes: number;
+  maxDecodeDimension: number;
+  operations: string[];
+  outputFormats: string[];
+}
+
+export interface EngineMemoryStats {
+  currentBytes: number;
+  peakBytes: number;
+  budgetBytes: number;
+  liveAllocations: number;
+  totalAllocations: number;
+  failedAllocations: number;
+  activeJobs: number;
+}
+
+export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';

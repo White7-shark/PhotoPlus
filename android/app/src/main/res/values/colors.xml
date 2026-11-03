@@ -1,0 +1,4 @@
+<resources>
+    <!-- Matches theme token colors.background (dark) to avoid a white launch flash. -->
+    <color name="pp_background">#05050A</color>
+</resources>

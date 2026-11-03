@@ -1,0 +1,153 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, View } from 'react-native';
+
+import { AppText, GlassSurface, ListRow, ProgressBar, Screen, SectionHeader, SegmentedControl, Skeleton, ToggleRow } from '../components';
+import type { TabScreenProps } from '../navigation/types';
+import { errorMessage } from '../native';
+import type { AppSettings } from '../services/database/repositories/SettingsRepository';
+import { formatBytes, getStorageService, type StorageUsage } from '../services/storage/StorageService';
+import { useAppStore } from '../state/store';
+import { useTheme } from '../theme';
+
+const APP_VERSION = '0.1.0 · Phase 1';
+
+export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
+  const theme = useTheme();
+  const settings = useAppStore(s => s.settings);
+  const updateSetting = useAppStore(s => s.updateSetting);
+  const [usage, setUsage] = useState<StorageUsage | null>(null);
+  const [usageError, setUsageError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+
+  const save = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) =>
+    updateSetting(key, value).catch(e => Alert.alert('Setting not saved', errorMessage(e)));
+
+  const refreshUsage = useCallback(() => {
+    setUsageError(null);
+    // Wrapped so a missing native module surfaces as a message, not a crash.
+    Promise.resolve()
+      .then(() => getStorageService().usage())
+      .then(setUsage)
+      .catch(e => setUsageError(errorMessage(e)));
+  }, []);
+
+  useEffect(refreshUsage, [refreshUsage]);
+
+  const clearCache = async () => {
+    setClearing(true);
+    try {
+      const freed = await getStorageService().clearCache();
+      Alert.alert('Cache cleared', `${formatBytes(freed)} freed.`);
+      refreshUsage();
+    } catch (e) {
+      Alert.alert('Could not clear cache', errorMessage(e));
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const usedFraction = usage && usage.deviceTotalBytes > 0 ? 1 - usage.deviceAvailableBytes / usage.deviceTotalBytes : 0;
+
+  return (
+    <Screen title="Settings" overline="Preferences">
+      <SectionHeader title="Appearance" />
+      <GlassSurface style={{ padding: 16, gap: 14, marginBottom: 24 }}>
+        <SegmentedControl
+          label="Theme"
+          value={settings.themePreference}
+          onChange={v => save('themePreference', v)}
+          options={[
+            { value: 'dark', label: 'Dark', icon: 'moon' },
+            { value: 'light', label: 'Light', icon: 'sun' },
+            { value: 'system', label: 'Auto', icon: 'refresh' },
+          ]}
+        />
+        <AppText variant="caption" tone="tertiary">
+          Dark is recommended for judging exposure and colour accurately.
+        </AppText>
+      </GlassSurface>
+
+      <SectionHeader title="Camera & motion" />
+      <GlassSurface style={{ marginBottom: 24 }}>
+        <ToggleRow icon="grid" title="Composition grid" subtitle="Rule-of-thirds overlay in the camera" value={settings.cameraGrid} onChange={v => save('cameraGrid', v)} />
+        <ToggleRow icon="sparkles" title="Haptic feedback" value={settings.haptics} onChange={v => save('haptics', v)} />
+        <View style={{ padding: 16, gap: 10 }}>
+          <AppText variant="bodyStrong">Reduce motion</AppText>
+          <SegmentedControl
+            label="Reduce motion"
+            value={settings.reduceMotion}
+            onChange={v => save('reduceMotion', v)}
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]}
+          />
+        </View>
+      </GlassSurface>
+
+      <SectionHeader title="Export" />
+      <GlassSurface style={{ padding: 16, gap: 14, marginBottom: 24 }}>
+        <AppText variant="bodyStrong">Default format</AppText>
+        <SegmentedControl
+          label="Default export format"
+          value={settings.defaultExportFormat}
+          onChange={v => save('defaultExportFormat', v)}
+          options={[
+            { value: 'jpeg', label: 'JPEG' },
+            { value: 'png', label: 'PNG' },
+            { value: 'webp', label: 'WebP' },
+          ]}
+        />
+        <AppText variant="bodyStrong">Quality</AppText>
+        <SegmentedControl
+          label="Default export quality"
+          value={String(settings.defaultExportQuality) as '80' | '92' | '100'}
+          onChange={v => save('defaultExportQuality', Number(v))}
+          options={[
+            { value: '80', label: 'Compact' },
+            { value: '92', label: 'High' },
+            { value: '100', label: 'Max' },
+          ]}
+        />
+      </GlassSurface>
+
+      <SectionHeader title="Storage" />
+      <GlassSurface style={{ marginBottom: 24 }}>
+        <View style={{ padding: 16, gap: 10 }}>
+          {usage ? (
+            <>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <AppText variant="bodyStrong">Photo Plus uses {formatBytes(usage.appTotalBytes)}</AppText>
+                <AppText variant="callout" tone="secondary">
+                  {formatBytes(usage.deviceAvailableBytes)} free
+                </AppText>
+              </View>
+              <ProgressBar value={usedFraction} label="Device storage used" tint={usedFraction > 0.92 ? theme.colors.danger : undefined} />
+            </>
+          ) : usageError ? (
+            <AppText variant="callout" tone="danger">
+              Storage info unavailable: {usageError}
+            </AppText>
+          ) : (
+            <>
+              <Skeleton height={18} width="60%" />
+              <Skeleton height={8} />
+            </>
+          )}
+        </View>
+        <ListRow icon="image" title="Captures" value={usage ? formatBytes(usage.areas.captures ?? 0) : '—'} />
+        <ListRow icon="folder" title="Projects & exports" value={usage ? formatBytes((usage.areas.projects ?? 0) + (usage.areas.exports ?? 0)) : '—'} />
+        <ListRow icon="layers" title="Packs & models" value={usage ? formatBytes((usage.areas.packs ?? 0) + (usage.areas.models ?? 0)) : '—'} />
+        <ListRow icon="trash" iconTint={theme.colors.danger} title={clearing ? 'Clearing…' : 'Clear temporary cache'} value={usage ? formatBytes(usage.cacheBytes) : undefined} onPress={clearing ? undefined : clearCache} accessibilityHint="Removes temporary processing files. Your photos are not affected." last />
+      </GlassSurface>
+
+      <SectionHeader title="About" />
+      <GlassSurface>
+        <ListRow icon="cpu" title="Device & capabilities" onPress={() => navigation.navigate('DeviceInfo')} />
+        <ListRow icon="wand" title="Engine lab" subtitle="Run a processing self-test" onPress={() => navigation.navigate('Diagnostics')} />
+        <ListRow icon="info" title="Version" value={APP_VERSION} last />
+      </GlassSurface>
+    </Screen>
+  );
+}
