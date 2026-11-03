@@ -7,7 +7,7 @@ import { AppText } from './AppText';
 import { Button } from './Button';
 import { GlassSurface } from './GlassSurface';
 import { Icon, type IconName } from './Icon';
-import { LogoMark } from './Logo';
+import { LogoFull } from './Logo';
 
 /** Standard loading state; announces itself to screen readers. */
 export function LoadingState({ label = 'Loading…', style }: { label?: string; style?: ViewStyle }) {
@@ -163,7 +163,7 @@ export function SplashState({ label }: { label: string }) {
       accessibilityLabel={label}
       accessibilityLiveRegion="polite"
     >
-      <LogoMark size={96} />
+      <LogoFull size={180} />
       <ActivityIndicator color="#FFFFFF" />
       <AppText variant="callout" tone="secondary">
         {label}

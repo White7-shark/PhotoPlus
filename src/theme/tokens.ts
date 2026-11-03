@@ -16,6 +16,8 @@ export interface ColorTokens {
   accentCool: string;
   premium: string;
   premiumDeep: string;
+  /** Logo gold, for the "Plus" of the wordmark. */
+  brandGold: string;
   success: string;
   warning: string;
   danger: string;
@@ -57,6 +59,7 @@ const darkColors: ColorTokens = {
   accentCool: palette.lagoon,
   premium: palette.gold,
   premiumDeep: palette.goldDeep,
+  brandGold: palette.brandGold,
   success: palette.success,
   warning: palette.warning,
   danger: palette.danger,
@@ -87,6 +90,7 @@ const lightColors: ColorTokens = {
   accentCool: '#0F9C8C',
   premium: '#B07A16',
   premiumDeep: '#8A5E0E',
+  brandGold: '#B86A00',
   success: '#12935F',
   warning: '#A86A00',
   danger: '#D33A3A',

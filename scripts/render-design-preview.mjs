@@ -13,8 +13,6 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { logoSvg } from '../src/brand/logoGeometry.ts';
-
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,12 +48,22 @@ for (const m of body.matchAll(/\n {2}(\w+): ([\s\S]*?)(?=,\n {2}\w+: |,\n$)/g)) 
 const icon = (name, size = 22, color = '#F7F5FB', sw = 1.75) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
 
-// ---- in-app logo mark (same construction as Logo.tsx) ---------------------
-function mark(size) {
-  return logoSvg({ size })
-    .replace(/id="(\w+)"/g, `id="$1_${size}"`)
-    .replace(/url\(#(\w+)\)/g, `url(#$1_${size})`);
-}
+// ---- brand artwork (the same PNGs the app bundles; see Logo.tsx) ----------
+const dataUri = p => `data:image/png;base64,${readFileSync(join(root, p)).toString('base64')}`;
+const EMBLEM = dataUri('src/assets/brand/logo-emblem@3x.png');
+const FULL_LOGO = dataUri('src/assets/brand/logo-full@3x.png');
+const FULL_LOGO_HI = dataUri('assets/brand/photoplus-logo.png');
+const mark = size =>
+  `<img src="${EMBLEM}" width="${size}" height="${size}" style="border-radius:${size * 0.225}px;display:block">`;
+const fullLogo = (size, src = FULL_LOGO) => `<img src="${src}" width="${size}" height="${size}" style="display:block">`;
+// Launcher icon as Android shows it: the central 72dp of the 108dp adaptive
+// canvas, masked to the launcher's shape.
+const FOREGROUND = dataUri('android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png');
+const MONOCHROME = dataUri('android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_monochrome.png');
+const launcher = (size, radius, themed = false) => {
+  const full = (size * 108) / 72;
+  return `<div style="width:${size}px;height:${size}px;border-radius:${radius};overflow:hidden;position:relative;background:${themed ? '#3B3F5C' : '#05041E'}"><img src="${themed ? MONOCHROME : FOREGROUND}" style="position:absolute;width:${full}px;height:${full}px;left:${(size - full) / 2}px;top:${(size - full) / 2}px${themed ? ';filter:brightness(1.05) sepia(.25) hue-rotate(190deg)' : ''}"></div>`;
+};
 
 const css = `
 :root{--bg:#05050A;--raised:#0A0911;--t1:#F7F5FB;--t2:rgba(247,245,251,0.74);--t3:rgba(247,245,251,0.56);
@@ -130,7 +138,7 @@ const status = (light = false) =>
 const tabbar = active =>
   `<div class="tabbar glass strong r-xl">${[['Studio', 'aperture'], ['Projects', 'folder'], ['Camera'], ['Packs', 'bag'], ['Settings', 'gear']].map(([n, i]) => (n === 'Camera' ? `<div class="tab"><div class="shutterTab"><div>${icon('camera', 24, '#fff', 2)}</div></div></div>` : `<div class="tab ${n === active ? 'on' : ''}">${icon(i, 22, n === active ? '#F7F5FB' : 'rgba(247,245,251,0.56)', n === active ? 2.1 : 1.75)}<span>${n}</span><div class="dot"></div></div>`)).join('')}</div>`;
 const wordmark = size =>
-  `<div class="row" style="gap:${size * 0.28}px">${mark(size)}<div style="display:flex;align-items:baseline"><span style="font-size:${size * 0.62}px;font-weight:800;letter-spacing:-.6px">Photo</span><span style="font-size:${size * 0.62}px;font-weight:300;letter-spacing:-.4px;margin-left:${size * 0.12}px;color:var(--accent)">Plus</span></div></div>`;
+  `<div class="row" style="gap:${size * 0.28}px">${mark(size)}<div style="display:flex;align-items:baseline"><span style="font-size:${size * 0.64}px;font-weight:900;letter-spacing:-.6px">Photo</span><span style="font-size:${size * 0.64}px;font-weight:900;letter-spacing:-.6px;color:#FFB01F">Plus</span></div></div>`;
 
 const pillars = [
   ['Camera Studio', 'Manual control, pro modes, composition guides', 'aperture', 'rgba(255,122,69,0.55)', false],
@@ -144,8 +152,8 @@ const premiumBadge = `<span class="badge b-gold">${icon('crown', 12, '#F5C66B', 
 const screens = {};
 
 screens.onboarding = `${aurora()}${status()}<div class="content" style="padding-top:84px;display:flex;flex-direction:column">
-  <div style="display:flex;flex-direction:column;align-items:center">${mark(112)}<div class="display" style="margin-top:22px">Photo Plus</div>
-  <div class="body t2" style="text-align:center;margin-top:8px;max-width:300px">Your photoshoot studio — camera, director and darkroom in one.</div></div>
+  <div style="display:flex;flex-direction:column;align-items:center">${fullLogo(240)}
+  <div class="body t2" style="text-align:center;margin-top:14px;max-width:300px">Your photoshoot studio — camera, director and darkroom in one.</div></div>
   <div style="display:flex;flex-direction:column;gap:12px;margin-top:34px">${[
     ['aperture', 'A pro camera in your pocket', 'Manual controls and composition guides, tuned to your phone.'],
     ['sparkles', 'An assistant that directs', 'Pose, light and framing guidance — on-device, no cloud.'],
@@ -267,25 +275,16 @@ const brand = `<div style="width:1200px;padding:56px;background:#07060c;position
  <div class="blob" style="width:600px;height:600px;top:-260px;left:-200px;opacity:.5;background-image:radial-gradient(circle,#FF7A45 0%,#FF7A45 18%,transparent 70%)"></div>
  <div class="blob" style="width:600px;height:600px;bottom:-300px;right:-200px;opacity:.45;background-image:radial-gradient(circle,#5B5BF7 0%,#5B5BF7 18%,transparent 70%)"></div>
  <div style="position:relative">
- <div class="overline acc">Photo Plus · Brand</div><div class="title1" style="font-size:40px;line-height:46px;margin:6px 0 6px">Aperture Plus</div>
- <div class="body t2" style="max-width:720px">Six aperture blades in the golden-hour → blue-hour spectrum close around a lens holding a plus: photography, a shutter in motion, and the promise of <i>more</i> from the phone you already own. A glass sheen ties the mark to the app's glass UI.</div>
- <div class="row" style="gap:40px;margin-top:36px;align-items:flex-end">
-  <div style="text-align:center">${logoSvg({ size: 260, background: true })
-    .replace(/id="(\w+)"/g, 'id="$1_icon"')
-    .replace(/url\(#(\w+)\)/g, 'url(#$1_icon)')}<div class="caption t3" style="margin-top:10px">App icon</div></div>
-  <div style="text-align:center"><div style="width:180px;height:180px;border-radius:50%;overflow:hidden">${logoSvg({
-    size: 180,
-    background: true,
-  })
-    .replace(/id="(\w+)"/g, 'id="$1_round"')
-    .replace(
-      /url\(#(\w+)\)/g,
-      'url(#$1_round)',
-    )}</div><div class="caption t3" style="margin-top:10px">Adaptive (circle mask)</div></div>
-  <div style="text-align:center"><div style="width:180px;height:180px;border-radius:40px;background:#F3F1F8;display:flex;align-items:center;justify-content:center">${mark(140)}</div><div class="caption t3" style="margin-top:10px">Mark on light</div></div>
-  <div style="text-align:center"><div style="display:flex;gap:18px;align-items:flex-end">${[64, 40, 24].map(s => mark(s)).join('')}</div><div class="caption t3" style="margin-top:10px">Small sizes</div></div>
+ <div class="overline acc">Photo Plus · Brand</div><div class="title1" style="font-size:40px;line-height:46px;margin:6px 0 6px">Photo Plus logo</div>
+ <div class="body t2" style="max-width:760px">The master artwork is used as-is for the full logo (Welcome screen, splash, store listing). Launcher icons use its camera emblem, because Android masks icons to a small safe zone where the wordmark and tagline would be cropped or unreadable.</div>
+ <div class="row" style="gap:44px;margin-top:36px;align-items:flex-end">
+  <div style="text-align:center">${fullLogo(300, FULL_LOGO_HI)}<div class="caption t3" style="margin-top:10px">Full logo</div></div>
+  <div style="text-align:center">${launcher(150, '50%')}<div class="caption t3" style="margin-top:10px">Launcher · circle</div></div>
+  <div style="text-align:center">${launcher(150, '30%')}<div class="caption t3" style="margin-top:10px">Launcher · squircle</div></div>
+  <div style="text-align:center">${launcher(150, '50%', true)}<div class="caption t3" style="margin-top:10px">Themed icon</div></div>
+  <div style="text-align:center"><div style="display:flex;gap:16px;align-items:flex-end">${[64, 40, 24].map(s => mark(s)).join('')}</div><div class="caption t3" style="margin-top:10px">In-app mark</div></div>
  </div>
- <div class="glass r-xl" style="margin-top:36px;padding:28px 32px;display:flex;align-items:center;justify-content:space-between">${wordmark(56)}<div class="body t2" style="max-width:360px">Wordmark: <b style="color:var(--t1)">Photo</b> in heavy weight, <span style="color:var(--accent)">Plus</span> in light ember. Confident, editorial, unmistakably photographic.</div></div>
+ <div class="glass r-xl" style="margin-top:36px;padding:28px 32px;display:flex;align-items:center;justify-content:space-between">${wordmark(56)}<div class="body t2" style="max-width:380px">Header wordmark matches the logo lettering: heavy white <b style="color:var(--t1)">Photo</b>, logo-gold <b style="color:#FFB01F">Plus</b>.</div></div>
  <div class="title3" style="margin:36px 0 12px">Darkroom Aurora palette</div>
  <div class="row" style="gap:12px">${sw('Ink', '#05050A')}${sw('Ember', '#FF7A45', '#1a0d06')}${sw('Rose', '#F2477E')}${sw('Orchid', '#C04DFF')}${sw('Indigo', '#5B5BF7')}${sw('Lagoon', '#2DD4BF', '#04201c')}${sw('Gold', '#F5C66B', '#1A1206')}</div>
  <div class="row" style="gap:12px;margin-top:12px">${sw('Spectrum (decorative)', G.spectrum)}${sw('Action (AA text)', G.action)}${sw('Premium', G.premium, '#1A1206')}${sw('Lagoon', G.lagoon)}</div>

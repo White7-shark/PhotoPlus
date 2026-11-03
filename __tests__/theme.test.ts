@@ -23,7 +23,7 @@ describe('theme contrast (WCAG 2.x)', () => {
         expect(contrastRatio(t.textTertiary, ...layers)).toBeGreaterThanOrEqual(3);
       });
       it(`${mode}: status colours are legible on ${name}`, () => {
-        for (const c of [t.accent, t.premium, t.success, t.warning, t.danger, t.info]) {
+        for (const c of [t.accent, t.premium, t.brandGold, t.success, t.warning, t.danger, t.info]) {
           expect(contrastRatio(c, ...layers)).toBeGreaterThanOrEqual(3);
         }
       });

@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:engine": "cmake -S native/engine -B native/engine/build -DPP_ENGINE_BUILD_TESTS=ON -DPP_ENGINE_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug && cmake --build native/engine/build -j && ./native/engine/build/photoplus_engine_tests",
     "test:android": "cd android && ./gradlew :app:testDebugUnitTest :app:lintDebug",
-    "icons": "node scripts/generate-icons.mjs",
+    "icons": "python3 scripts/generate-icons.py",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:engine",
     "postinstall": "patch-package",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"__tests__/**/*.{ts,tsx}\" \"scripts/*.mjs\"",

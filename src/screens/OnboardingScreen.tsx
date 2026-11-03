@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 
-import { AppText, AuroraBackground, Button, GlassSurface, Icon, LogoMark, type IconName } from '../components';
+import { AppText, AuroraBackground, Button, GlassSurface, Icon, LogoFull, type IconName } from '../components';
 import { useResponsive } from '../hooks/useResponsive';
 import type { RootScreenProps } from '../navigation/types';
 import { getPermissionService } from '../services/permissions/PermissionService';
@@ -54,11 +54,8 @@ export function OnboardingScreen({ navigation }: RootScreenProps<'Onboarding'>) 
       <AuroraBackground />
       <View style={{ width: r.contentWidth, alignSelf: 'center', flex: 1 }}>
         <View style={{ alignItems: 'center', marginTop: 12 }}>
-          <LogoMark size={112} />
-          <AppText variant="display" align="center" style={{ marginTop: 22 }} accessibilityRole="header">
-            Photo Plus
-          </AppText>
-          <AppText variant="body" tone="secondary" align="center" style={{ marginTop: 8, maxWidth: 320 }}>
+          <LogoFull size={Math.min(240, r.contentWidth * 0.7)} />
+          <AppText variant="body" tone="secondary" align="center" style={{ marginTop: 14, maxWidth: 320 }}>
             Your photoshoot studio — camera, director and darkroom in one.
           </AppText>
         </View>

@@ -28,6 +28,9 @@ export const palette = {
   lagoon: '#2DD4BF',
   gold: '#F5C66B',
   goldDeep: '#C9922E',
+  /** "Plus" lettering and swoosh in the brand logo. */
+  brandGold: '#FFB01F',
+  brandOrange: '#FF8A00',
 
   success: '#3DDC97',
   warning: '#FFC145',

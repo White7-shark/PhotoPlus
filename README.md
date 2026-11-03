@@ -45,7 +45,7 @@ Gradle 9.8.2 is provided by the wrapper.
 ```
 src/                 React Native app (TypeScript)
   app/               root component and startup sequence
-  brand/             logo geometry (shared by the app, icons and previews)
+  assets/brand/      logo images bundled in the app (emblem + full logo)
   components/        design-system components (glass, buttons, states…)
   navigation/        stack + glass tab bar
   screens/           Studio, Camera, Projects, Packs, Settings, Device, Engine Lab
@@ -55,6 +55,7 @@ src/                 React Native app (TypeScript)
   native/specs/      TurboModule / Fabric codegen specs
 android/             Kotlin native layer + JNI bridge
 native/engine/       platform-agnostic C/C++ processing engine (+ host tests)
-scripts/             dev tooling (icon generation)
+scripts/             dev tooling (brand asset/icon generation, design preview)
+assets/brand/        master logo artwork (source/) and exported brand assets
 docs/                spec, architecture, phase reports
 ```

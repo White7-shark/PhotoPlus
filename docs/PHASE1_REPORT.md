@@ -36,7 +36,7 @@
 | **E. Device capability detection** | `device/CapabilityProbe.kt` + `src/services/capabilities/` |
 | Android version, RAM, cameras, formats, controls, acceleration, storage | probed per section with fault isolation |
 | Model compatibility | `modelCompatibility()` — tier, GPU delegate, 64-bit, storage |
-| **Brand** | `src/brand/logoGeometry.ts`, `assets/brand/`, generated launcher + adaptive icons |
+| **Brand** | Master logo `assets/brand/source/photoplus-logo.png` → generated full logo, emblem, adaptive + themed launcher icons and Play Store icon (`npm run icons`) |
 
 ## Testing evidence
 
@@ -103,10 +103,10 @@ Found while verifying the fixes:
 
 ## Design preview
 
-`docs/design/`, rendered from the app's own tokens, gradients, logo geometry and icon paths:
+`docs/design/`, rendered from the app's own tokens, gradients, logo images and icon paths:
 
 - `overview-1.png`, `overview-2.png`: all seven screens in device frames
 - `brand-sheet.png`: logo, app and adaptive icons, wordmark, palette, components
 - `screen-*.png`: individual screens at 2×
 
-Regenerate with `node scripts/render-design-preview.mjs` (icons: `npm run icons`).
+Regenerate with `node scripts/render-design-preview.mjs` (brand assets and launcher icons: `npm run icons`, which needs Python 3 + Pillow).

@@ -1,70 +1,41 @@
-import React, { useMemo } from 'react';
-import { View, type ViewStyle } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Stop } from 'react-native-svg';
+import React from 'react';
+import { Image, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
 
-import { apertureGeometry, BLADE_COLORS } from '../brand/logoGeometry';
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
 
+// Rendered from the master artwork by scripts/generate-icons.py.
+const EMBLEM = require('../assets/brand/logo-emblem.png');
+const FULL_LOGO = require('../assets/brand/logo-full.png');
+
 interface LogoMarkProps {
   size?: number;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
-/** The "Aperture Plus" mark, rendered from the shared brand geometry. */
+/** Camera emblem from the Photo Plus logo, as a rounded app-icon tile. */
 export function LogoMark({ size = 48, style }: LogoMarkProps) {
-  const g = useMemo(() => apertureGeometry(100), []);
-  const R = g.outerRadius;
-  const c = g.center;
+  const imageStyle: ImageStyle = { width: size, height: size, borderRadius: size * 0.225 };
   return (
     <View style={style} accessibilityRole="image" accessibilityLabel="Photo Plus logo">
-      <Svg width={size} height={size} viewBox="0 0 100 100">
-        <Defs>
-          {BLADE_COLORS.map((color, i) => (
-            <LinearGradient key={color + i} id={`blade${i}`} x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={color} />
-              <Stop offset="1" stopColor={BLADE_COLORS[(i + 1) % BLADE_COLORS.length]} />
-            </LinearGradient>
-          ))}
-          <RadialGradient id="lens" cx="0.4" cy="0.35" r="0.7">
-            <Stop offset="0" stopColor="#2A2340" />
-            <Stop offset="1" stopColor="#07060C" />
-          </RadialGradient>
-          <LinearGradient id="sheen" x1="0" y1="0" x2="0.6" y2="1">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.55} />
-            <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0.05} />
-          </LinearGradient>
-        </Defs>
-        <Circle cx={c} cy={c} r={R + g.bladeGap} fill="#0A0911" />
-        {g.blades.map((d, i) => (
-          <Path
-            key={i}
-            d={d}
-            fill={`url(#blade${i})`}
-            stroke="#0A0911"
-            strokeWidth={g.bladeGap}
-            strokeLinejoin="round"
-          />
-        ))}
-        <Circle cx={c} cy={c} r={g.innerRadius * 0.98} fill="url(#lens)" />
-        <Path
-          d={`M ${c - R * 0.86} ${c - R * 0.12} A ${R * 0.9} ${R * 0.9} 0 0 1 ${c + R * 0.62} ${c - R * 0.7} A ${R * 1.3} ${R * 1.3} 0 0 0 ${c - R * 0.86} ${c - R * 0.12} Z`}
-          fill="url(#sheen)"
-        />
-        <Path d={g.plus} stroke="#FFFFFF" strokeWidth={g.plusStroke} strokeLinecap="round" />
-        <Circle cx={c + g.innerRadius * 0.62} cy={c - g.innerRadius * 0.62} r={g.plusStroke * 0.42} fill="#F5C66B" />
-      </Svg>
+      <Image source={EMBLEM} style={imageStyle} resizeMode="cover" />
     </View>
   );
 }
 
-interface WordmarkProps {
-  size?: number;
+/** The complete Photo Plus logo artwork (emblem, wordmark and tagline). */
+export function LogoFull({ size = 220, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={style} accessibilityRole="image" accessibilityLabel="Photo Plus. Shoot, edit, create more.">
+      <Image source={FULL_LOGO} style={{ width: size, height: size }} resizeMode="contain" />
+    </View>
+  );
 }
 
-/** Mark + "Photo Plus" wordmark. */
-export function Logo({ size = 36 }: WordmarkProps) {
+/** Emblem + "Photo Plus" wordmark for headers, styled after the logo lettering. */
+export function Logo({ size = 36 }: { size?: number }) {
   const theme = useTheme();
+  const text = { fontSize: size * 0.64, fontWeight: '900' as const, letterSpacing: -0.6 };
   return (
     <View
       style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.28 }}
@@ -74,22 +45,8 @@ export function Logo({ size = 36 }: WordmarkProps) {
     >
       <LogoMark size={size} />
       <View style={{ flexDirection: 'row', alignItems: 'baseline' }} importantForAccessibility="no-hide-descendants">
-        <AppText
-          style={{ fontSize: size * 0.62, fontWeight: '800', letterSpacing: -0.6, color: theme.colors.textPrimary }}
-        >
-          Photo
-        </AppText>
-        <AppText
-          style={{
-            fontSize: size * 0.62,
-            fontWeight: '300',
-            letterSpacing: -0.4,
-            marginLeft: size * 0.12,
-            color: theme.colors.accent,
-          }}
-        >
-          Plus
-        </AppText>
+        <AppText style={[text, { color: theme.colors.textPrimary }]}>Photo</AppText>
+        <AppText style={[text, { color: theme.colors.brandGold }]}>Plus</AppText>
       </View>
     </View>
   );
