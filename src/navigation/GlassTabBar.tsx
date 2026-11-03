@@ -29,7 +29,14 @@ export function GlassTabBar({ state, navigation }: BottomTabBarProps) {
   }
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-      <GlassSurface intensity="strong" radius={theme.radii.xl} style={styles.bar} accessibilityRole="tablist">
+      {/* Content scrolls underneath and Android RN has no backdrop blur, so the
+          dock uses dense "smoked" glass to keep tab labels legible. */}
+      <GlassSurface
+        intensity="strong"
+        radius={theme.radii.xl}
+        style={[styles.bar, { backgroundColor: theme.mode === 'dark' ? 'rgba(16,14,25,0.86)' : 'rgba(251,250,253,0.9)' }]}
+        accessibilityRole="tablist"
+      >
         {state.routes.map((route, index) => {
           const focused = state.index === index;
           const meta = META[route.name] ?? { icon: 'aperture', label: route.name };

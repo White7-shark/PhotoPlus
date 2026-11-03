@@ -31,6 +31,22 @@ object ImageCodec {
     return Bounds(opts.outWidth, opts.outHeight, opts.outMimeType)
   }
 
+  /** Bounds as displayed (EXIF orientation applied), matching what ImageDecoder produces. */
+  fun readDisplayBounds(file: File): Bounds {
+    val raw = readBounds(file)
+    val orientation = try {
+      ExifInterface(file.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+    } catch (e: IOException) {
+      ExifInterface.ORIENTATION_NORMAL
+    }
+    return if (swapsAxes(orientation)) raw.copy(width = raw.height, height = raw.width) else raw
+  }
+
+  fun swapsAxes(orientation: Int): Boolean = orientation == ExifInterface.ORIENTATION_ROTATE_90 ||
+    orientation == ExifInterface.ORIENTATION_ROTATE_270 ||
+    orientation == ExifInterface.ORIENTATION_TRANSPOSE ||
+    orientation == ExifInterface.ORIENTATION_TRANSVERSE
+
   /**
    * Decodes into a software ARGB_8888 bitmap (required for pixel locking),
    * downsampling so the longest edge is at most [maxDimension]. EXIF
@@ -47,6 +63,8 @@ object ImageCodec {
         srcH = info.size.height
         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
         decoder.isMutableRequired = false
+        // The engine works in straight alpha (see pp_engine.h).
+        decoder.isUnpremultipliedRequired = true
         val longest = max(srcW, srcH)
         if (longest > maxDimension) {
           val ratio = maxDimension.toDouble() / longest
@@ -57,11 +75,28 @@ object ImageCodec {
       throw EngineException(EngineException.UNSUPPORTED_FORMAT, "Unable to decode image: ${e.message}")
     }
     val argb = if (bitmap.config == Bitmap.Config.ARGB_8888) bitmap else {
-      val converted = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-      bitmap.recycle()
-      converted ?: throw EngineException(EngineException.OUT_OF_MEMORY, "Unable to convert bitmap")
+      try { toStraightArgb8888(bitmap) } finally { bitmap.recycle() }
     }
     return Decoded(argb, srcW, srcH)
+  }
+
+  /**
+   * Converts other configs (e.g. RGBA_F16 wide-gamut decodes) to straight-alpha
+   * ARGB_8888. getPixels/setPixels always use non-premultiplied colours, so a
+   * row-at-a-time copy is correct and keeps the extra memory to one row.
+   */
+  private fun toStraightArgb8888(src: Bitmap): Bitmap {
+    val out = try {
+      Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
+    } catch (e: OutOfMemoryError) {
+      throw EngineException(EngineException.OUT_OF_MEMORY, "Unable to convert bitmap")
+    }
+    val row = IntArray(src.width)
+    for (y in 0 until src.height) {
+      src.getPixels(row, 0, src.width, 0, y, src.width, 1)
+      out.setPixels(row, 0, src.width, 0, y, src.width, 1)
+    }
+    return out
   }
 
   /** Writes atomically: encode to a sibling temp file, then rename. */
@@ -114,7 +149,7 @@ object ImageCodec {
   }
 
   fun readMetadata(file: File): Map<String, Any?> {
-    val bounds = readBounds(file)
+    val bounds = readDisplayBounds(file)
     val exif = try { ExifInterface(file.absolutePath) } catch (e: IOException) { null }
     return mapOf(
       "path" to file.absolutePath,

@@ -26,7 +26,8 @@ export function SectionHeader({ title, action, overline }: { title: string; over
   );
 }
 
-export function Badge({ label, tone = 'neutral', icon }: { label: string; tone?: 'neutral' | 'premium' | 'success' | 'warning' | 'danger' | 'accent'; icon?: IconName }) {
+/** `media` is for badges placed on photos/artwork: a dark chip that stays legible on any image. */
+export function Badge({ label, tone = 'neutral', icon }: { label: string; tone?: 'neutral' | 'premium' | 'success' | 'warning' | 'danger' | 'accent' | 'media'; icon?: IconName }) {
   const theme = useTheme();
   const palette = {
     neutral: { bg: theme.colors.glassFillStrong, fg: theme.colors.textSecondary, border: theme.colors.glassStroke },
@@ -35,6 +36,7 @@ export function Badge({ label, tone = 'neutral', icon }: { label: string; tone?:
     warning: { bg: 'rgba(255,193,69,0.14)', fg: theme.colors.warning, border: 'rgba(255,193,69,0.4)' },
     danger: { bg: 'rgba(255,107,107,0.14)', fg: theme.colors.danger, border: 'rgba(255,107,107,0.4)' },
     accent: { bg: 'rgba(255,122,69,0.14)', fg: theme.colors.accent, border: 'rgba(255,122,69,0.4)' },
+    media: { bg: 'rgba(10,9,17,0.62)', fg: '#FFFFFF', border: 'rgba(255,255,255,0.22)' },
   }[tone];
   return (
     <View

@@ -1,6 +1,5 @@
 #include "photoplus/pipeline.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -102,32 +101,6 @@ Result<ImageBuffer> runPipeline(const ImageBuffer& input, const pp_op* ops, std:
     }
   }
   return current;
-}
-
-std::size_t estimatePeakBytes(const ImageBuffer& input, const pp_op* ops, std::size_t count) {
-  const std::size_t bpp = static_cast<std::size_t>(bytesPerPixel(input.format()));
-  std::size_t w = static_cast<std::size_t>(input.width());
-  std::size_t h = static_cast<std::size_t>(input.height());
-  std::size_t peak = w * h * bpp;  // working clone
-  for (std::size_t i = 0; ops != nullptr && i < count; ++i) {
-    std::size_t nw = w, nh = h;
-    const pp_op& op = ops[i];
-    if (op.type == PP_OP_ROTATE90) {
-      const long turns = std::lround(op.p[0]);
-      if (turns % 2 != 0) std::swap(nw, nh);
-    } else if (op.type == PP_OP_CROP || op.type == PP_OP_RESIZE) {
-      const int idx = op.type == PP_OP_CROP ? 2 : 0;
-      if (std::isfinite(op.p[idx]) && std::isfinite(op.p[idx + 1]) && op.p[idx] > 0 &&
-          op.p[idx + 1] > 0) {
-        nw = static_cast<std::size_t>(op.p[idx]);
-        nh = static_cast<std::size_t>(op.p[idx + 1]);
-      }
-    }
-    peak = std::max(peak, (w * h + nw * nh) * bpp);
-    w = nw;
-    h = nh;
-  }
-  return peak;
 }
 
 }  // namespace photoplus

@@ -90,12 +90,15 @@ class EngineModule(reactContext: ReactApplicationContext) :
     var result: Bitmap? = null
     var handle = 0L
     try {
+      check(!decoded.bitmap.hasAlpha() || !decoded.bitmap.isPremultiplied) { "Engine input must be unpremultiplied" }
       val ops = request.operationsForDecodeScale(decoded.scale)
       val decodeMs = SystemClock.elapsedRealtime() - started
       handle = NativeEngine.nativeProcess(decoded.bitmap, request.typeIds(ops), request.packedParams(ops), token)
       val width = NativeEngine.nativeResultWidth(handle)
       val height = NativeEngine.nativeResultHeight(handle)
-      result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+      // Engine output is straight alpha; mark the bitmap so Android does not
+      // reinterpret it as premultiplied when encoding.
+      result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
       NativeEngine.nativeCopyResultToBitmap(handle, result)
       NativeEngine.nativeReleaseResult(handle)
       handle = 0L
@@ -153,6 +156,10 @@ class EngineModule(reactContext: ReactApplicationContext) :
 
   override fun resetProfiler() {
     if (engineAvailable) NativeEngine.nativeResetProfiler()
+  }
+
+  override fun resetMemoryPeak() {
+    if (engineAvailable) NativeEngine.nativeResetMemoryPeak()
   }
 
   override fun generateTestImage(width: Double, height: Double, promise: Promise) {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 
-import { AppText, Badge, Button, GlassSurface, Icon, PremiumBadge, Screen, SectionHeader } from '../components';
+import { AppText, Badge, GlassSurface, Icon, PremiumBadge, Screen, SectionHeader } from '../components';
 import { useResponsive } from '../hooks/useResponsive';
 import { PREMIUM_PRICE } from '../services/entitlements/features';
 import { useTheme } from '../theme';
@@ -43,7 +43,12 @@ export function MarketplaceScreen() {
           <AppText variant="body" tone="secondary">
             Packs bring backdrops, lighting recipes, poses and styling to your camera. Unlocking packs is part of Premium — {PREMIUM_PRICE.currency} {PREMIUM_PRICE.amount}/{PREMIUM_PRICE.period}.
           </AppText>
-          <Button label="Premium arrives soon" variant="premium" icon="crown" disabled style={{ alignSelf: 'flex-start', marginTop: 6 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }} accessible accessibilityLabel="Premium subscriptions arrive in a later update">
+            <Icon name="crown" size={16} color={theme.colors.premium} />
+            <AppText variant="callout" tone="premium" style={{ fontWeight: '700' }}>
+              Premium subscriptions arrive in a later update
+            </AppText>
+          </View>
         </View>
       </GlassSurface>
 
@@ -54,7 +59,7 @@ export function MarketplaceScreen() {
             <GlassSurface radius={theme.radii.lg} style={{ padding: 0 }}>
               <View style={{ aspectRatio: 0.8, backgroundImage: pack.gradient, justifyContent: 'space-between', padding: 12 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Badge label={pack.included ? 'Included' : 'Add-on'} tone={pack.included ? 'premium' : 'neutral'} />
+                  <Badge label={pack.included ? 'Included' : 'Add-on'} tone="media" icon={pack.included ? 'crown' : 'plus'} />
                   <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }}>
                     <Icon name="lock" size={15} color="#FFFFFF" />
                   </View>

@@ -8,16 +8,24 @@ class MemoryBudgetPolicyTest {
   private val gb = 1024L * 1024L * 1024L
 
   @Test fun budgetsScaleWithRamTier() {
-    val entry = MemoryBudgetPolicy.forTotalRam(3 * gb - 200 * 1024 * 1024) // "3 GB" phones report less
-    val standard = MemoryBudgetPolicy.forTotalRam(3 * gb + 512L * 1024 * 1024)
-    val recommended = MemoryBudgetPolicy.forTotalRam(4 * gb)
-    val performance = MemoryBudgetPolicy.forTotalRam(8 * gb)
+    val entry = MemoryBudgetPolicy.forTotalRam(2 * gb)
+    val standard = MemoryBudgetPolicy.forTotalRam(3 * gb * 93 / 100) // a "3 GB" phone
+    val recommended = MemoryBudgetPolicy.forTotalRam(4 * gb * 93 / 100) // a "4 GB" phone
+    val performance = MemoryBudgetPolicy.forTotalRam(8 * gb * 93 / 100)
     assertTrue(entry.engineBytes < standard.engineBytes)
     assertTrue(standard.engineBytes < recommended.engineBytes)
     assertTrue(recommended.engineBytes < performance.engineBytes)
     assertEquals(1, entry.workers)
     assertEquals(2, performance.workers)
     assertTrue(performance.maxDecodeDimension > entry.maxDecodeDimension)
+  }
+
+  @Test fun boundariesMatchTypeScriptTiering() {
+    // Same fixtures as __tests__/capabilities.test.ts ("3/4/6 GB product targets").
+    assertEquals(320L * 1024 * 1024, MemoryBudgetPolicy.forTotalRam(3 * gb * 93 / 100).engineBytes) // entry
+    assertEquals(512L * 1024 * 1024, MemoryBudgetPolicy.forTotalRam(4 * gb * 93 / 100).engineBytes) // standard
+    assertEquals(768L * 1024 * 1024, MemoryBudgetPolicy.forTotalRam(6 * gb * 93 / 100).engineBytes) // performance
+    assertEquals(192L * 1024 * 1024, MemoryBudgetPolicy.forTotalRam(2 * gb * 93 / 100).engineBytes) // unsupported
   }
 
   @Test fun lowRamFlagForcesSmallestBudget() {

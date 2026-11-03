@@ -203,15 +203,26 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeSetMemoryBud
 
 JNIEXPORT jstring JNICALL Java_com_photoplus_engine_NativeEngine_nativeProfileReport(JNIEnv* env,
                                                                                        jobject) {
-  const size_t needed = pp_profiler_report_json(nullptr, 0);
-  std::string buffer(needed + 1, '\0');
-  pp_profiler_report_json(buffer.data(), buffer.size());
-  buffer.resize(needed);
-  return env->NewStringUTF(buffer.c_str());
+  // Concurrent jobs can grow the report between sizing and filling, so retry
+  // with headroom until the whole report fits.
+  std::string buffer(pp_profiler_report_json(nullptr, 0) + 512, '\0');
+  for (int attempt = 0; attempt < 4; ++attempt) {
+    const size_t needed = pp_profiler_report_json(buffer.data(), buffer.size());
+    if (needed < buffer.size()) {
+      buffer.resize(needed);
+      return env->NewStringUTF(buffer.c_str());
+    }
+    buffer.assign(needed + 512, '\0');
+  }
+  return env->NewStringUTF("{}");
 }
 
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeResetProfiler(JNIEnv*, jobject) {
   pp_profiler_reset();
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeResetMemoryPeak(JNIEnv*, jobject) {
+  pp_memory_reset_peak();
 }
 
 }  // extern "C"

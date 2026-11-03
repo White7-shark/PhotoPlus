@@ -79,7 +79,7 @@ const char* pp_status_name(pp_status status) {
 
 const char* pp_last_error_message(void) { return g_lastError.c_str(); }
 
-pp_status pp_image_create(int32_t width, int32_t height, pp_pixel_format format, pp_image** out) {
+pp_status pp_image_create(int32_t width, int32_t height, int32_t format, pp_image** out) {
   return guarded([&]() -> pp_status {
     if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
     *out = nullptr;
@@ -95,7 +95,7 @@ pp_status pp_image_create(int32_t width, int32_t height, pp_pixel_format format,
 }
 
 pp_status pp_image_wrap(void* pixels, int32_t width, int32_t height, int32_t stride,
-                        pp_pixel_format format, pp_image** out) {
+                        int32_t format, pp_image** out) {
   return guarded([&]() -> pp_status {
     if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
     *out = nullptr;

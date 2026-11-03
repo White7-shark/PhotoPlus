@@ -64,6 +64,11 @@ export class ImageProcessingService {
     this.engine.resetProfiler();
   }
 
+  /** Starts a fresh peak-memory window (e.g. before a measured run). */
+  resetMemoryPeak() {
+    this.engine.resetMemoryPeak();
+  }
+
   generateTestImage(width: number, height: number): Promise<string> {
     return this.engine.generateTestImage(width, height);
   }

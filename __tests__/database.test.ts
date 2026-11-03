@@ -75,6 +75,15 @@ describe('SettingsRepository', () => {
     await expect(repos.settings.set('defaultExportQuality', 30)).rejects.toThrow(/Invalid/);
   });
 
+  it('reset restores defaults but keeps internal bookkeeping', async () => {
+    const { repos } = await freshRepos();
+    const inbox = await repos.projects.ensureInbox();
+    await repos.settings.set('themePreference', 'light');
+    await repos.settings.reset();
+    expect(await repos.settings.load()).toEqual(DEFAULT_SETTINGS);
+    expect((await repos.projects.ensureInbox()).id).toBe(inbox.id);
+  });
+
   it('stores internal blobs separately from user settings', async () => {
     const { repos } = await freshRepos();
     await repos.settings.setInternal('capabilities', { a: 1 });
@@ -120,6 +129,14 @@ describe('ProjectsRepository & ImagesRepository', () => {
     const img = { projectId: p.id, path: '/dup.jpg', source: 'import' as const, width: 1, height: 1, sizeBytes: 1, mimeType: null, capturedAt: null };
     await repos.images.add(img);
     await expect(repos.images.add(img)).rejects.toThrow();
+  });
+
+  it('ensureInbox recovers from a corrupt stored id', async () => {
+    const { db, repos } = await freshRepos();
+    await db.execute("INSERT INTO settings VALUES ('internal.inboxProjectId', '{broken', 0)");
+    const inbox = await repos.projects.ensureInbox();
+    expect(inbox.name).toBe('Captures');
+    expect((await repos.projects.ensureInbox()).id).toBe(inbox.id);
   });
 
   it('ensureInbox is stable across calls and recreates a deleted inbox', async () => {

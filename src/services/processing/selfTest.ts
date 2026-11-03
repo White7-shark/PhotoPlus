@@ -35,6 +35,8 @@ interface Options {
 export async function runSelfTest({ service, outputDir, iterations = 10, signal, onProgress, history }: Options): Promise<SelfTestReport> {
   service.resetProfiler();
   const input = await service.generateTestImage(1600, 1200);
+  // Measure this run only, not whatever an earlier export peaked at.
+  service.resetMemoryPeak();
   const baseline = (await service.memoryStats()).currentBytes;
   let processSum = 0;
   let totalSum = 0;

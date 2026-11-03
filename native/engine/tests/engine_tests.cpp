@@ -74,7 +74,7 @@ TEST(create_rejects_invalid_dimensions) {
   EXPECT_TRUE(img == nullptr);
   EXPECT_EQ(pp_image_create(-5, 10, PP_FORMAT_RGBA8, &img), PP_ERROR_INVALID_ARGUMENT);
   EXPECT_EQ(pp_image_create(20000, 10, PP_FORMAT_RGBA8, &img), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_image_create(10, 10, static_cast<pp_pixel_format>(99), &img),
+  EXPECT_EQ(pp_image_create(10, 10, 99, &img),
             PP_ERROR_UNSUPPORTED_FORMAT);
   EXPECT_TRUE(std::strlen(pp_last_error_message()) > 0);
   EXPECT_EQ(pp_image_create(10, 10, PP_FORMAT_RGBA8, nullptr), PP_ERROR_INVALID_ARGUMENT);

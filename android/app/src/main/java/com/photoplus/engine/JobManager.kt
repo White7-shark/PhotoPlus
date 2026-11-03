@@ -62,34 +62,47 @@ class JobManager(
     }
   }
 
+  private sealed class Outcome<out T> {
+    data class Success<T>(val value: T) : Outcome<T>()
+    data class Failure(val error: EngineException) : Outcome<Nothing>()
+  }
+
   private fun <T> run(job: Job, listener: JobListener<T>, work: (Long) -> T) {
-    try {
+    val outcome: Outcome<T> = try {
       if (job.cancelled) throw cancelledError()
       synchronized(job) {
         if (job.cancelled) throw cancelledError()
         job.token = tokens.create()
       }
       listener.onStateChanged(job.id, JobState.RUNNING)
-      val result = work(job.token)
+      val value = work(job.token)
       if (job.cancelled) throw cancelledError()
-      listener.onStateChanged(job.id, JobState.SUCCEEDED)
-      listener.onSuccess(job.id, result)
+      Outcome.Success(value)
     } catch (e: EngineException) {
-      val state = if (e.code == EngineException.CANCELLED) JobState.CANCELLED else JobState.FAILED
-      listener.onStateChanged(job.id, state)
-      listener.onFailure(job.id, e)
+      Outcome.Failure(e)
     } catch (e: OutOfMemoryError) {
-      listener.onStateChanged(job.id, JobState.FAILED)
-      listener.onFailure(job.id, EngineException(EngineException.OUT_OF_MEMORY, "Not enough memory to process this image"))
+      Outcome.Failure(EngineException(EngineException.OUT_OF_MEMORY, "Not enough memory to process this image"))
     } catch (e: Exception) {
-      listener.onStateChanged(job.id, JobState.FAILED)
-      listener.onFailure(job.id, EngineException(EngineException.INTERNAL, e.message ?: e.javaClass.simpleName))
+      Outcome.Failure(EngineException(EngineException.INTERNAL, e.message ?: e.javaClass.simpleName))
     } finally {
+      // Release native resources and deregister BEFORE notifying, so when
+      // JavaScript sees the result the job no longer holds memory or a token.
       synchronized(job) {
         if (job.token != 0L) tokens.destroy(job.token)
         job.token = 0L
       }
       jobs.remove(job.id, job)
+    }
+    when (outcome) {
+      is Outcome.Success -> {
+        listener.onStateChanged(job.id, JobState.SUCCEEDED)
+        listener.onSuccess(job.id, outcome.value)
+      }
+      is Outcome.Failure -> {
+        val state = if (outcome.error.code == EngineException.CANCELLED) JobState.CANCELLED else JobState.FAILED
+        listener.onStateChanged(job.id, state)
+        listener.onFailure(job.id, outcome.error)
+      }
     }
   }
 

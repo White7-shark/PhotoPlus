@@ -45,6 +45,9 @@ function fakeEngine(opts: { delayMs?: number; failWith?: string } = {}) {
     getMemoryStats: jest.fn(async () => ({ currentBytes: current, peakBytes: peak, budgetBytes: 1e9, liveAllocations: 0, totalAllocations: 0, failedAllocations: 0, activeJobs: pending.size })),
     getProfileReport: jest.fn(async () => JSON.stringify({ 'op.tone': { calls: 3, totalMs: 6, avgMs: 2, maxMs: 3 }, 'pipeline.total': { calls: 3, totalMs: 30, avgMs: 10, maxMs: 12 }, other: { calls: 1, totalMs: 1, avgMs: 1, maxMs: 1 } })),
     resetProfiler: jest.fn(),
+    resetMemoryPeak: jest.fn(() => {
+      peak = current;
+    }),
     generateTestImage: jest.fn(async () => '/cache/test.jpg'),
     readImageMetadata: jest.fn(),
     addListener: jest.fn(),
@@ -144,6 +147,7 @@ describe('runSelfTest', () => {
     expect(progress).toEqual([0.25, 0.5, 0.75, 1]);
     expect(report.operations.map(o => o.name)).toEqual(['full pipeline', 'tone']);
     expect(record).toHaveBeenCalledTimes(1);
+    expect(engine.resetMemoryPeak).toHaveBeenCalledTimes(1);
   });
 
   it('stops on cancellation and records it', async () => {

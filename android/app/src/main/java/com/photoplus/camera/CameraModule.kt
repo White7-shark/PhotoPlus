@@ -40,7 +40,8 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
         target,
         flash,
         onSaved = { file ->
-          val bounds = ImageCodec.readBounds(file)
+          // Display orientation, consistent with how the engine decodes it.
+          val bounds = ImageCodec.readDisplayBounds(file)
           promise.resolve(
             mapOf(
               "path" to file.absolutePath,

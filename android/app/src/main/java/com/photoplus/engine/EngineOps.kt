@@ -76,9 +76,22 @@ data class ProcessRequest(
     return out
   }
 
-  /** Re-expresses source-relative coordinates after decode-time downsampling. */
-  fun operationsForDecodeScale(scale: Double): List<EngineOp> =
-    operations.map { if (it is EngineOp.Crop) it.scaled(scale) else it }
+  /**
+   * Re-expresses source-relative coordinates after decode-time downsampling.
+   * Only crops *before* the first resize are in source pixel space; once a
+   * resize has run, later crops address the resized image and must not be
+   * rescaled. (Rotations/flips preserve scale, so they don't change this.)
+   */
+  fun operationsForDecodeScale(scale: Double): List<EngineOp> {
+    var resized = false
+    return operations.map { op ->
+      when {
+        op is EngineOp.Resize -> op.also { resized = true }
+        op is EngineOp.Crop && !resized -> op.scaled(scale)
+        else -> op
+      }
+    }
+  }
 
   companion object {
     const val DEFAULT_MAX_DIMENSION = 4096

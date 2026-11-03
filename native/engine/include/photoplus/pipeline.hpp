@@ -14,11 +14,8 @@ namespace photoplus {
 // Memory strategy: the input is cloned once into a working buffer; in-place
 // operations mutate that buffer; geometry operations replace it. At most two
 // full-size buffers are alive at any time, which keeps peak memory
-// predictable for the host's budget calculation (see estimatePeakBytes).
+// predictable: roughly 2x the working image (plus the host's input buffer).
 Result<ImageBuffer> runPipeline(const ImageBuffer& input, const pp_op* ops, std::size_t count,
                                 const CancellationToken* token);
-
-// Conservative upper bound on bytes the pipeline may hold simultaneously.
-std::size_t estimatePeakBytes(const ImageBuffer& input, const pp_op* ops, std::size_t count);
 
 }  // namespace photoplus

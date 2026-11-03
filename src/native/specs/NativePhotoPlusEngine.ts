@@ -13,6 +13,7 @@ export interface Spec extends TurboModule {
   getMemoryStats(): Promise<Object>;
   getProfileReport(): Promise<string>;
   resetProfiler(): void;
+  resetMemoryPeak(): void;
   generateTestImage(width: number, height: number): Promise<string>;
   readImageMetadata(path: string): Promise<Object>;
   addListener(eventName: string): void;

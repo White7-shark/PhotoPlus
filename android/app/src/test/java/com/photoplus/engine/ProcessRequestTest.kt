@@ -70,4 +70,12 @@ class ProcessRequestTest {
     assertEquals(EngineOp.Resize(64, 64), ops[1]) // absolute targets are untouched
     assertEquals(req.operations, req.operationsForDecodeScale(1.0))
   }
+
+  @Test fun cropAfterResizeIsNotRescaled() {
+    val req = ProcessRequest.fromMap(
+      base(mapOf("type" to "resize", "width" to 2000.0, "height" to 1500.0),
+        mapOf("type" to "crop", "x" to 1000.0, "y" to 750.0, "width" to 1000.0, "height" to 750.0)),
+    )
+    assertEquals(EngineOp.Crop(1000, 750, 1000, 750), req.operationsForDecodeScale(0.512)[1])
+  }
 }

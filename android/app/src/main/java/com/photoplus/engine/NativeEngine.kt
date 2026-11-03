@@ -43,4 +43,5 @@ object NativeEngine {
   external fun nativeSetMemoryBudget(bytes: Long)
   external fun nativeProfileReport(): String
   external fun nativeResetProfiler()
+  external fun nativeResetMemoryPeak()
 }

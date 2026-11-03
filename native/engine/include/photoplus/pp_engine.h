@@ -41,6 +41,10 @@ typedef enum pp_status {
   PP_ERROR_INTERNAL = 6
 } pp_status;
 
+/* All formats with alpha use *straight* (non-premultiplied) alpha. Hosts must
+ * un-premultiply before handing pixels to the engine (Android: decode with
+ * ImageDecoder.setUnpremultipliedRequired and keep Bitmap.isPremultiplied
+ * false), otherwise tonal operations would corrupt translucent edges. */
 typedef enum pp_pixel_format {
   PP_FORMAT_RGBA8 = 0, /* Android Bitmap.Config.ARGB_8888 byte order */
   PP_FORMAT_BGRA8 = 1,
@@ -100,9 +104,11 @@ const char* pp_status_name(pp_status status);
 const char* pp_last_error_message(void);
 
 /* ---- Images ------------------------------------------------------------- */
-pp_status pp_image_create(int32_t width, int32_t height, pp_pixel_format format, pp_image** out);
+/* `format` is a pp_pixel_format value. It is typed int32_t so that values
+ * from foreign callers can be validated without undefined behaviour. */
+pp_status pp_image_create(int32_t width, int32_t height, int32_t format, pp_image** out);
 pp_status pp_image_wrap(void* pixels, int32_t width, int32_t height, int32_t stride,
-                        pp_pixel_format format, pp_image** out);
+                        int32_t format, pp_image** out);
 void pp_image_destroy(pp_image* image);
 pp_status pp_image_get_info(const pp_image* image, pp_image_info* out);
 void* pp_image_pixels(pp_image* image);

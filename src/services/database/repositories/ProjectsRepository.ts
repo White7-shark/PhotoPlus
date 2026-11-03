@@ -1,5 +1,6 @@
 import { createId } from '../ids';
 import type { SqlExecutor } from '../SqlExecutor';
+import { SettingsRepository } from './SettingsRepository';
 
 export interface Project {
   id: string;
@@ -51,8 +52,14 @@ export function normaliseProjectName(name: string): string {
   return trimmed.slice(0, 120);
 }
 
+const INBOX_KEY = 'inboxProjectId';
+
 export class ProjectsRepository {
-  constructor(private readonly db: SqlExecutor, private readonly now: () => number = Date.now) {}
+  private readonly internal: SettingsRepository;
+
+  constructor(private readonly db: SqlExecutor, private readonly now: () => number = Date.now) {
+    this.internal = new SettingsRepository(db, now);
+  }
 
   async create(name: string): Promise<Project> {
     const id = createId('prj', this.now());
@@ -108,20 +115,15 @@ export class ProjectsRepository {
 
   /** Returns the id of the default "Captures" project, creating it on first use. */
   async ensureInbox(name = 'Captures'): Promise<Project> {
-    const rows = await this.db.query<{ value: string }>("SELECT value FROM settings WHERE key = 'internal.inboxProjectId'");
-    if (rows[0]) {
-      const id = JSON.parse(rows[0].value) as string;
+    const id = await this.internal.getInternal<unknown>(INBOX_KEY);
+    if (typeof id === 'string') {
       const existing = await this.get(id);
       if (existing) {
         return existing;
       }
     }
     const project = await this.create(name);
-    await this.db.execute(
-      `INSERT INTO settings (key, value, updated_at) VALUES ('internal.inboxProjectId', ?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-      [JSON.stringify(project.id), this.now()],
-    );
+    await this.internal.setInternal(INBOX_KEY, project.id);
     return project;
   }
 }

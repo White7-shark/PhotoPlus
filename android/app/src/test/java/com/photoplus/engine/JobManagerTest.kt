@@ -52,7 +52,7 @@ class JobManagerTest {
     assertEquals(42, rec.result)
     assertEquals(listOf(JobState.QUEUED, JobState.RUNNING, JobState.SUCCEEDED), rec.states.toList())
     assertTrue(tokens.live.isEmpty())
-    waitUntil { manager.activeJobCount == 0 }
+    assertEquals(0, manager.activeJobCount) // cleaned up before the listener ran
   }
 
   @Test fun engineErrorsArePropagatedWithCode() {

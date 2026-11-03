@@ -1,97 +1,48 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Photo Plus
 
-# Getting Started
+Your photoshoot studio on Android: a pro camera, an AI director and a darkroom, all in one app. It works offline first, and photos stay on the device.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+- **Platform:** Android 10+ (API 29), React Native 0.88 + TypeScript, Kotlin, C/C++
+- **Product spec:** [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md)
+- **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Phase 1 report (testing & review evidence):** [`docs/PHASE1_REPORT.md`](docs/PHASE1_REPORT.md)
 
-## Step 1: Start Metro
-
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
-
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
+## Getting started
 
 ```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+npm install
+npm start            # Metro bundler
+npm run android      # build & install a debug build on a device/emulator
 ```
 
-### iOS
+Requires Node ≥ 22.11, JDK 17+, Android SDK (platform 37, build-tools 37.0.0), NDK 27.1.12297006 and CMake 3.22.1.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## Verification
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+| Command | What it checks |
+|---|---|
+| `npm run typecheck` | TypeScript across app and tests |
+| `npm run lint` | ESLint (React Native config) |
+| `npm test` | Jest: services, SQLite schema (real SQLite via sql.js), UI accessibility |
+| `npm run test:engine` | C++ engine tests under AddressSanitizer + UBSan |
+| `npm run test:android` | Kotlin JVM unit tests + Android Lint |
+| `npm run verify` | All of the above except Android |
 
-```sh
-bundle install
+## Repository layout
+
 ```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
+src/                 React Native app (TypeScript)
+  app/               root component and startup sequence
+  brand/             logo geometry (shared by the app, icons and previews)
+  components/        design-system components (glass, buttons, states…)
+  navigation/        stack + glass tab bar
+  screens/           Studio, Camera, Projects, Packs, Settings, Device, Engine Lab
+  services/          capabilities, permissions, database, processing, storage…
+  state/             zustand store
+  theme/             tokens, contrast utilities, ThemeProvider
+  native/specs/      TurboModule / Fabric codegen specs
+android/             Kotlin native layer + JNI bridge
+native/engine/       platform-agnostic C/C++ processing engine (+ host tests)
+scripts/             dev tooling (icon generation)
+docs/                spec, architecture, phase reports
 ```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.

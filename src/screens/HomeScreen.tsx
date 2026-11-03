@@ -74,7 +74,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
           </AppText>
           <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
             <Button label="Open camera" icon="camera" size="lg" onPress={() => navigation.navigate('Camera')} />
-            <Button label="Engine lab" icon="wand" variant="glass" size="lg" onPress={() => navigation.navigate('Diagnostics')} />
+            <Button label="Engine lab" icon="wand" variant="glass" onPress={() => navigation.navigate('Diagnostics')} />
           </View>
         </View>
       </GlassSurface>

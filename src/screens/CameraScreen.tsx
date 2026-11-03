@@ -73,6 +73,14 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
   // releases the hardware for other apps immediately.
   const active = focused && foreground && permission === 'granted';
 
+  // Whenever the preview stops (tab change, backgrounding), the native session
+  // is released; the shutter must wait for the next onCameraReady.
+  useEffect(() => {
+    if (!active) {
+      setSession('starting');
+    }
+  }, [active]);
+
   const capture = useCallback(async () => {
     if (capturing || session !== 'ready') {
       return;

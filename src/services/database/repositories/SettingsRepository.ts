@@ -88,8 +88,9 @@ export class SettingsRepository {
     );
   }
 
+  /** Restores user settings to defaults; internal bookkeeping rows are kept. */
   async reset(): Promise<void> {
-    await this.db.execute('DELETE FROM settings');
+    await this.db.execute("DELETE FROM settings WHERE key NOT LIKE 'internal.%'");
   }
 
   /** Arbitrary JSON blobs that are not user settings (e.g. cached capabilities). */
