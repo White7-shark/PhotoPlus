@@ -25,7 +25,11 @@ export interface AccessDecision {
   wouldBeBlocked: boolean;
 }
 
-export function checkFeature(feature: FeatureKey, state: EntitlementState, enforce = ENFORCEMENT_ENABLED): AccessDecision {
+export function checkFeature(
+  feature: FeatureKey,
+  state: EntitlementState,
+  enforce = ENFORCEMENT_ENABLED,
+): AccessDecision {
   const requiredPlan = FEATURES[feature].plan;
   const permitted = requiredPlan === 'free' || state.plan === 'premium';
   return { allowed: enforce ? permitted : true, requiredPlan, wouldBeBlocked: !permitted };

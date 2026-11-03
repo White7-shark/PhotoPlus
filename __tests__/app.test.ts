@@ -10,7 +10,16 @@ import { rawCapabilities } from './helpers/fixtures';
 import { parseCapabilities } from '../src/services/capabilities';
 import { SqlJsExecutor } from './helpers/sqljsExecutor';
 
-const engineInfo = { available: true, version: '0.1.0', loadError: null, workers: 2, memoryBudgetBytes: 1, maxDecodeDimension: 4096, operations: [], outputFormats: [] };
+const engineInfo = {
+  available: true,
+  version: '0.1.0',
+  loadError: null,
+  workers: 2,
+  memoryBudgetBytes: 1,
+  maxDecodeDimension: 4096,
+  operations: [],
+  outputFormats: [],
+};
 
 function deps(overrides: Partial<BootstrapDeps> = {}): BootstrapDeps {
   return {
@@ -33,7 +42,9 @@ describe('bootstrap', () => {
   });
 
   it('fails clearly when the database cannot open', async () => {
-    await expect(bootstrap(deps({ openDatabase: async () => Promise.reject(new Error('disk')) }))).rejects.toMatchObject({ step: 'database' });
+    await expect(
+      bootstrap(deps({ openDatabase: async () => Promise.reject(new Error('disk')) })),
+    ).rejects.toMatchObject({ step: 'database' });
   });
 
   it('degrades: falls back to cached capabilities and flags a missing engine', async () => {
@@ -89,7 +100,16 @@ describe('app store', () => {
   it('deletes projects and returns file paths for cleanup', async () => {
     await useAppStore.getState().start(deps());
     const p = await useAppStore.getState().createProject('Temp');
-    await useAppStore.getState().repos!.images.add({ projectId: p!.id, path: '/f.jpg', source: 'camera', width: 1, height: 1, sizeBytes: 1, mimeType: null, capturedAt: null });
+    await useAppStore.getState().repos!.images.add({
+      projectId: p!.id,
+      path: '/f.jpg',
+      source: 'camera',
+      width: 1,
+      height: 1,
+      sizeBytes: 1,
+      mimeType: null,
+      capturedAt: null,
+    });
     expect(await useAppStore.getState().deleteProject(p!.id)).toEqual(['/f.jpg']);
     expect(useAppStore.getState().projects).toEqual([]);
   });
@@ -99,14 +119,28 @@ describe('entitlements (infrastructure, enforcement off in Phase 1)', () => {
   const premium = { plan: 'premium' as const, ownedPackIds: ['neon-noir'], includedPackIds: ['golden-coast'] };
 
   it('catalogue matches the spec split', () => {
-    const premiumIds = Object.values(FEATURES).filter(f => f.plan === 'premium').map(f => f.id);
-    expect(premiumIds).toEqual(expect.arrayContaining(['marketplace.packAccess', 'assistant.pose', 'replication.background', 'editing.customWatermark', 'replication.clothing']));
+    const premiumIds = Object.values(FEATURES)
+      .filter(f => f.plan === 'premium')
+      .map(f => f.id);
+    expect(premiumIds).toEqual(
+      expect.arrayContaining([
+        'marketplace.packAccess',
+        'assistant.pose',
+        'replication.background',
+        'editing.customWatermark',
+        'replication.clothing',
+      ]),
+    );
     expect(FEATURES.marketplaceBrowse.plan).toBe('free');
     expect(FEATURES.watermarkStyles.plan).toBe('free');
   });
 
   it('allows everything while enforcement is off but reports what would be blocked', () => {
-    expect(checkFeature('poseGuidance', FREE_STATE)).toEqual({ allowed: true, requiredPlan: 'premium', wouldBeBlocked: true });
+    expect(checkFeature('poseGuidance', FREE_STATE)).toEqual({
+      allowed: true,
+      requiredPlan: 'premium',
+      wouldBeBlocked: true,
+    });
     expect(checkFeature('cropRotate', FREE_STATE).wouldBeBlocked).toBe(false);
     expect(packAccess('golden-coast', FREE_STATE)).toBe('apply');
   });

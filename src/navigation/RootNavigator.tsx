@@ -79,7 +79,11 @@ export function RootNavigator() {
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator
         initialRouteName={onboarded ? 'Main' : 'Onboarding'}
-        screenOptions={{ headerShown: false, animation: 'fade_from_bottom', contentStyle: { backgroundColor: theme.colors.background } }}
+        screenOptions={{
+          headerShown: false,
+          animation: 'fade_from_bottom',
+          contentStyle: { backgroundColor: theme.colors.background },
+        }}
       >
         <Stack.Screen name="Onboarding" component={Onboarding} />
         <Stack.Screen name="Main" component={MainTabs} />

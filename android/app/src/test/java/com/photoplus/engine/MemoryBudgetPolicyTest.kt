@@ -1,8 +1,8 @@
 package com.photoplus.engine
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 class MemoryBudgetPolicyTest {
   private val gb = 1024L * 1024L * 1024L
@@ -46,7 +46,7 @@ class MemoryBudgetPolicyTest {
       val b = MemoryBudgetPolicy.forTotalRam(ram * gb)
       val d = b.maxDecodeDimension.toLong()
       val fourThree = d * (d * 3 / 4) * 4
-      assertTrue("tier ${ram}GB", fourThree * 2 <= b.engineBytes)
+      assertTrue(fourThree * 2 <= b.engineBytes, "tier ${ram}GB")
     }
   }
 }

@@ -23,7 +23,11 @@ export interface SqlExecutor {
 }
 
 export class DatabaseError extends Error {
-  constructor(message: string, readonly code: string = 'SQL_ERROR', readonly cause?: unknown) {
+  constructor(
+    message: string,
+    readonly code: string = 'SQL_ERROR',
+    readonly cause?: unknown,
+  ) {
     super(message);
     this.name = 'DatabaseError';
   }

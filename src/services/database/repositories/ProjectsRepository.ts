@@ -57,17 +57,22 @@ const INBOX_KEY = 'inboxProjectId';
 export class ProjectsRepository {
   private readonly internal: SettingsRepository;
 
-  constructor(private readonly db: SqlExecutor, private readonly now: () => number = Date.now) {
+  constructor(
+    private readonly db: SqlExecutor,
+    private readonly now: () => number = Date.now,
+  ) {
     this.internal = new SettingsRepository(db, now);
   }
 
   async create(name: string): Promise<Project> {
     const id = createId('prj', this.now());
     const ts = this.now();
-    await this.db.execute(
-      'INSERT INTO projects (id, name, archived, created_at, updated_at) VALUES (?, ?, 0, ?, ?)',
-      [id, normaliseProjectName(name), ts, ts],
-    );
+    await this.db.execute('INSERT INTO projects (id, name, archived, created_at, updated_at) VALUES (?, ?, 0, ?, ?)', [
+      id,
+      normaliseProjectName(name),
+      ts,
+      ts,
+    ]);
     const created = await this.get(id);
     if (!created) {
       throw new Error('Project was not persisted');

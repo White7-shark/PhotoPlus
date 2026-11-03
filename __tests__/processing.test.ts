@@ -29,7 +29,16 @@ function fakeEngine(opts: { delayMs?: number; failWith?: string } = {}) {
             pending.delete(jobId);
             current -= 1000;
             listeners.forEach(l => l({ jobId, state: 'succeeded' }));
-            resolve({ outputPath: '/cache/out.jpg', width: 10, height: 10, sourceWidth: 10, sourceHeight: 10, format: 'jpeg', sizeBytes: 100, timings: { decodeMs: 1, processMs: 4, totalMs: 6 } });
+            resolve({
+              outputPath: '/cache/out.jpg',
+              width: 10,
+              height: 10,
+              sourceWidth: 10,
+              sourceHeight: 10,
+              format: 'jpeg',
+              sizeBytes: 100,
+              timings: { decodeMs: 1, processMs: 4, totalMs: 6 },
+            });
           }, opts.delayMs ?? 0);
         }),
     ),
@@ -42,8 +51,22 @@ function fakeEngine(opts: { delayMs?: number; failWith?: string } = {}) {
       }
     }),
     cancelAll: jest.fn(),
-    getMemoryStats: jest.fn(async () => ({ currentBytes: current, peakBytes: peak, budgetBytes: 1e9, liveAllocations: 0, totalAllocations: 0, failedAllocations: 0, activeJobs: pending.size })),
-    getProfileReport: jest.fn(async () => JSON.stringify({ 'op.tone': { calls: 3, totalMs: 6, avgMs: 2, maxMs: 3 }, 'pipeline.total': { calls: 3, totalMs: 30, avgMs: 10, maxMs: 12 }, other: { calls: 1, totalMs: 1, avgMs: 1, maxMs: 1 } })),
+    getMemoryStats: jest.fn(async () => ({
+      currentBytes: current,
+      peakBytes: peak,
+      budgetBytes: 1e9,
+      liveAllocations: 0,
+      totalAllocations: 0,
+      failedAllocations: 0,
+      activeJobs: pending.size,
+    })),
+    getProfileReport: jest.fn(async () =>
+      JSON.stringify({
+        'op.tone': { calls: 3, totalMs: 6, avgMs: 2, maxMs: 3 },
+        'pipeline.total': { calls: 3, totalMs: 30, avgMs: 10, maxMs: 12 },
+        other: { calls: 1, totalMs: 1, avgMs: 1, maxMs: 1 },
+      }),
+    ),
     resetProfiler: jest.fn(),
     resetMemoryPeak: jest.fn(() => {
       peak = current;
@@ -117,13 +140,17 @@ describe('ImageProcessingService', () => {
     const { engine, events } = fakeEngine();
     const controller = new AbortController();
     controller.abort();
-    await expect(new ImageProcessingService(engine, events).process(request, { signal: controller.signal })).rejects.toMatchObject({ code: 'CANCELLED' });
+    await expect(
+      new ImageProcessingService(engine, events).process(request, { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(engine.process).not.toHaveBeenCalled();
   });
 
   it('maps native error codes', async () => {
     const { engine, events } = fakeEngine({ failWith: 'BUDGET_EXCEEDED' });
-    await expect(new ImageProcessingService(engine, events).process(request)).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' });
+    await expect(new ImageProcessingService(engine, events).process(request)).rejects.toMatchObject({
+      code: 'BUDGET_EXCEEDED',
+    });
   });
 
   it('tolerates a malformed profile report', async () => {
@@ -139,7 +166,13 @@ describe('runSelfTest', () => {
     const svc = new ImageProcessingService(engine, events);
     const record = jest.fn(async () => ({}));
     const progress: number[] = [];
-    const report = await runSelfTest({ service: svc, outputDir: '/cache/processing/', iterations: 4, onProgress: p => progress.push(p), history: { record } as never });
+    const report = await runSelfTest({
+      service: svc,
+      outputDir: '/cache/processing/',
+      iterations: 4,
+      onProgress: p => progress.push(p),
+      history: { record } as never,
+    });
     expect(engine.process).toHaveBeenCalledTimes(4);
     expect(engine.process.mock.calls[0][1]).toMatchObject({ outputPath: '/cache/processing/selftest.jpg' });
     expect(report.avgProcessMs).toBe(4);
@@ -155,7 +188,13 @@ describe('runSelfTest', () => {
     const svc = new ImageProcessingService(engine, events);
     const controller = new AbortController();
     const record = jest.fn(async () => ({}));
-    const run = runSelfTest({ service: svc, outputDir: '/c', iterations: 5, signal: controller.signal, history: { record } as never });
+    const run = runSelfTest({
+      service: svc,
+      outputDir: '/c',
+      iterations: 5,
+      signal: controller.signal,
+      history: { record } as never,
+    });
     setTimeout(() => controller.abort(), 5);
     await expect(run).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));

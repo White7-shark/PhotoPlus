@@ -42,15 +42,22 @@
 
 | Suite | Result |
 |---|---|
+All results below were produced on the latest-stable toolchain: Node 26 LTS, JDK 25 LTS, Gradle 9.8.2, AGP 9.5.0, Kotlin 2.4.21, NDK r30, CMake 4.1.2, C++23. See [DEPENDENCIES.md](DEPENDENCIES.md).
+
+| Suite | Result |
+|---|---|
 | TypeScript `tsc --noEmit` (app + tests) | ✅ 0 errors |
-| ESLint (`@react-native` config) | ✅ 0 errors, 0 warnings |
-| Jest: 7 suites (services, real-SQLite DB tests via sql.js, UI accessibility, boot flow) | ✅ **111 / 111** |
-| C++ engine tests under **AddressSanitizer + UBSan** | ✅ **27 / 27**, no reports |
-| C++ engine tests under **ThreadSanitizer** | ✅ 27 / 27, no races |
-| C++ Release build | ✅ 27 / 27, `-Wall -Wextra -Wpedantic -Wshadow -Wconversion` clean |
-| Kotlin compile (all 4 ABIs for native) | ✅ |
-| Kotlin JVM unit tests | ✅ **32 / 32** (job manager run twice to check for flakiness) |
-| Android Lint | ✅ 0 errors (18 warnings: RN template resources, dependency-update notices, KTX style hints) |
+| ESLint 10, type-aware, `@typescript-eslint/no-deprecated` = error | ✅ 0 errors, 0 warnings |
+| Prettier 3 | ✅ all files formatted |
+| Jest 30: 7 suites (services, real-SQLite DB tests via sql.js, UI accessibility, boot flow) | ✅ **111 / 111**, stable on cold caches with coverage |
+| C++23 engine tests under **AddressSanitizer + UBSan** | ✅ **27 / 27**, no reports |
+| C++23 engine tests under **ThreadSanitizer** | ✅ 27 / 27, no races |
+| C++23 Release build | ✅ 27 / 27, `-Wall -Wextra -Wpedantic -Wshadow -Wconversion` clean |
+| Kotlin compile + native build (all 4 ABIs, NDK r30) | ✅ 0 compiler warnings in our code |
+| Kotlin JVM unit tests (JUnit Jupiter 6) | ✅ **32 / 32** |
+| Gradle `--warning-mode all` | ✅ 0 deprecations from our build files |
+| Android Lint | ✅ **No issues found** |
+| Clean `npm ci` | ✅ 0 deprecated packages, 0 warnings |
 | Production JS bundle (Metro) + Hermes bytecode compile | ✅ |
 
 ### Acceptance criteria → how they are verified

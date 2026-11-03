@@ -31,16 +31,16 @@ Error invalidOp(std::size_t index, const std::string& why) {
 Result<ImageBuffer> runPipeline(const ImageBuffer& input, const pp_op* ops, std::size_t count,
                                 const CancellationToken* token) {
   ScopedTimer timer("pipeline.total");
-  if (input.empty()) return makeError(PP_ERROR_INVALID_ARGUMENT, "Input image is empty");
-  if (count > 0 && ops == nullptr) return makeError(PP_ERROR_INVALID_ARGUMENT, "ops is null");
-  if (isCancelled(token)) return makeError(PP_ERROR_CANCELLED, "Processing was cancelled");
+  if (input.empty()) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Input image is empty"));
+  if (count > 0 && ops == nullptr) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "ops is null"));
+  if (isCancelled(token)) return failure(makeError(PP_ERROR_CANCELLED, "Processing was cancelled"));
 
   auto working = cloneImage(input);
-  if (!working) return working.error();
+  if (!working) return failure(working.error());
   ImageBuffer current = std::move(working).value();
 
   for (std::size_t i = 0; i < count; ++i) {
-    if (isCancelled(token)) return makeError(PP_ERROR_CANCELLED, "Processing was cancelled");
+    if (isCancelled(token)) return failure(makeError(PP_ERROR_CANCELLED, "Processing was cancelled"));
     const pp_op& op = ops[i];
     Error err{PP_OK, {}};
     Result<ImageBuffer> replaced{ImageBuffer{}};
@@ -61,7 +61,7 @@ Result<ImageBuffer> runPipeline(const ImageBuffer& input, const pp_op* ops, std:
         break;
       case PP_OP_ROTATE90: {
         int32_t turns = 0;
-        if (!toInt(op.p[0], &turns)) return invalidOp(i, "rotation must be finite");
+        if (!toInt(op.p[0], &turns)) return failure(invalidOp(i, "rotation must be finite"));
         replaced = ops::rotate90(current, turns, token);
         replaces = true;
         break;
@@ -70,7 +70,7 @@ Result<ImageBuffer> runPipeline(const ImageBuffer& input, const pp_op* ops, std:
         int32_t x, y, w, h;
         if (!toInt(op.p[0], &x) || !toInt(op.p[1], &y) || !toInt(op.p[2], &w) ||
             !toInt(op.p[3], &h)) {
-          return invalidOp(i, "crop rectangle must be finite");
+          return failure(invalidOp(i, "crop rectangle must be finite"));
         }
         replaced = ops::crop(current, x, y, w, h, token);
         replaces = true;
@@ -79,7 +79,7 @@ Result<ImageBuffer> runPipeline(const ImageBuffer& input, const pp_op* ops, std:
       case PP_OP_RESIZE: {
         int32_t w, h;
         if (!toInt(op.p[0], &w) || !toInt(op.p[1], &h)) {
-          return invalidOp(i, "resize dimensions must be finite");
+          return failure(invalidOp(i, "resize dimensions must be finite"));
         }
         replaced = ops::resizeBilinear(current, w, h, token);
         replaces = true;
@@ -90,14 +90,14 @@ Result<ImageBuffer> runPipeline(const ImageBuffer& input, const pp_op* ops, std:
         replaces = true;
         break;
       default:
-        return invalidOp(i, "unknown operation type " + std::to_string(op.type));
+        return failure(invalidOp(i, "unknown operation type " + std::to_string(op.type)));
     }
 
     if (replaces) {
-      if (!replaced) return replaced.error();
+      if (!replaced) return failure(replaced.error());
       current = std::move(replaced).value();  // frees the previous buffer
     } else if (err.status != PP_OK) {
-      return err;
+      return failure(err);
     }
   }
   return current;

@@ -24,7 +24,11 @@ export interface BootstrapResult {
 }
 
 export class BootstrapError extends Error {
-  constructor(message: string, readonly step: string, readonly cause?: unknown) {
+  constructor(
+    message: string,
+    readonly step: string,
+    readonly cause?: unknown,
+  ) {
     super(message);
     this.name = 'BootstrapError';
   }

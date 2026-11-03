@@ -39,14 +39,14 @@ export interface AppStore {
   projectsError: string | null;
 
   // ---- actions
-  start(deps?: BootstrapDeps): Promise<void>;
-  updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void>;
-  loadProjects(): Promise<void>;
-  createProject(name: string): Promise<Project | null>;
-  deleteProject(id: string): Promise<string[]>;
-  setMemoryPressure(level: MemoryPressure): void;
-  setForeground(active: boolean): void;
-  dismissWarning(index: number): void;
+  start: (deps?: BootstrapDeps) => Promise<void>;
+  updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
+  loadProjects: () => Promise<void>;
+  createProject: (name: string) => Promise<Project | null>;
+  deleteProject: (id: string) => Promise<string[]>;
+  setMemoryPressure: (level: MemoryPressure) => void;
+  setForeground: (active: boolean) => void;
+  dismissWarning: (index: number) => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -85,7 +85,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         engine: result.engine,
         warnings: result.warnings,
       });
-      get().loadProjects();
+      void get().loadProjects();
     } catch (error) {
       log.error('Bootstrap failed', error);
       set({

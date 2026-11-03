@@ -3,7 +3,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppText, AuroraBackground, Badge, Button, ErrorState, GlassSurface, Icon, IconButton, LoadingState } from '../components';
+import {
+  AppText,
+  AuroraBackground,
+  Badge,
+  Button,
+  ErrorState,
+  GlassSurface,
+  Icon,
+  IconButton,
+  LoadingState,
+} from '../components';
 import { CameraPreview } from '../components/CameraPreview';
 import type { TabScreenProps } from '../navigation/types';
 import { errorMessage } from '../native';
@@ -51,10 +61,16 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
     let cancelled = false;
     permissions
       .ensure('camera')
-      .then(status => !cancelled && setPermission(status))
+      .then(status => {
+        if (!cancelled) {
+          setPermission(status);
+        }
+      })
       .catch(e => {
         log.error('permission check failed', e);
-        !cancelled && setPermission('unavailable');
+        if (!cancelled) {
+          setPermission('unavailable');
+        }
       });
     return () => {
       cancelled = true;
@@ -74,12 +90,15 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
   const active = focused && foreground && permission === 'granted';
 
   // Whenever the preview stops (tab change, backgrounding), the native session
-  // is released; the shutter must wait for the next onCameraReady.
-  useEffect(() => {
+  // is released; the shutter must wait for the next onCameraReady. Adjusted
+  // during render (React's recommended pattern) rather than in an effect.
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
     if (!active) {
       setSession('starting');
     }
-  }, [active]);
+  }
 
   const capture = useCallback(async () => {
     if (capturing || session !== 'ready') {
@@ -101,7 +120,7 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
           mimeType: 'image/jpeg',
           capturedAt: shot.capturedAt,
         });
-        loadProjects();
+        void loadProjects();
       }
       setToast('Saved to Captures');
     } catch (e) {
@@ -120,7 +139,16 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
           <LoadingState label="Preparing camera…" />
         ) : (
           <GlassSurface style={{ padding: 28, alignItems: 'center', gap: 14 }}>
-            <View style={{ width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundImage: theme.gradients.spectrum }}>
+            <View
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 36,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundImage: theme.gradients.spectrum,
+              }}
+            >
               <Icon name="camera" size={32} color="#FFFFFF" />
             </View>
             <AppText variant="title2" align="center" accessibilityRole="header">
@@ -132,9 +160,13 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
                 : 'Photo Plus needs the camera to take photos. Everything stays on your device.'}
             </AppText>
             {permission === 'blocked' ? (
-              <Button label="Open settings" icon="gear" onPress={() => permissions.openSettings()} />
+              <Button label="Open settings" icon="gear" onPress={() => void permissions.openSettings()} />
             ) : (
-              <Button label="Allow camera" icon="camera" onPress={() => permissions.request('camera').then(setPermission)} />
+              <Button
+                label="Allow camera"
+                icon="camera"
+                onPress={() => void permissions.request('camera').then(setPermission)}
+              />
             )}
             <Button label="Back to studio" variant="ghost" onPress={() => navigation.navigate('Studio')} />
           </GlassSurface>
@@ -163,10 +195,22 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
       {showGrid ? (
         <View pointerEvents="none" style={StyleSheet.absoluteFill} importantForAccessibility="no-hide-descendants">
           {[1, 2].map(i => (
-            <View key={`v${i}`} style={[styles.gridLine, { left: `${(i * 100) / 3}%`, top: 0, bottom: 0, width: StyleSheet.hairlineWidth }]} />
+            <View
+              key={`v${i}`}
+              style={[
+                styles.gridLine,
+                { left: `${(i * 100) / 3}%`, top: 0, bottom: 0, width: StyleSheet.hairlineWidth },
+              ]}
+            />
           ))}
           {[1, 2].map(i => (
-            <View key={`h${i}`} style={[styles.gridLine, { top: `${(i * 100) / 3}%`, left: 0, right: 0, height: StyleSheet.hairlineWidth }]} />
+            <View
+              key={`h${i}`}
+              style={[
+                styles.gridLine,
+                { top: `${(i * 100) / 3}%`, left: 0, right: 0, height: StyleSheet.hairlineWidth },
+              ]}
+            />
           ))}
         </View>
       ) : null}
@@ -201,14 +245,26 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
             icon="grid"
             label={showGrid ? 'Hide grid' : 'Show grid'}
             active={showGrid}
-            onPress={() => useAppStore.getState().updateSetting('cameraGrid', !showGrid).catch(() => undefined)}
+            onPress={() =>
+              useAppStore
+                .getState()
+                .updateSetting('cameraGrid', !showGrid)
+                .catch(() => undefined)
+            }
           />
         </View>
       </View>
 
       {toast ? (
-        <View style={{ position: 'absolute', top: insets.top + 80, alignSelf: 'center' }} accessibilityLiveRegion="polite">
-          <Badge label={toast} tone={toast.startsWith('Capture failed') ? 'danger' : 'success'} icon={toast.startsWith('Capture failed') ? 'alert' : 'check'} />
+        <View
+          style={{ position: 'absolute', top: insets.top + 80, alignSelf: 'center' }}
+          accessibilityLiveRegion="polite"
+        >
+          <Badge
+            label={toast}
+            tone={toast.startsWith('Capture failed') ? 'danger' : 'success'}
+            icon={toast.startsWith('Capture failed') ? 'alert' : 'check'}
+          />
         </View>
       ) : null}
 
@@ -217,9 +273,18 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
         <GlassSurface intensity="strong" radius={36} style={styles.dock}>
           <View style={styles.thumbSlot}>
             {lastShot ? (
-              <Image source={{ uri: `file://${lastShot}` }} style={styles.thumb} accessibilityLabel="Last captured photo" />
+              <Image
+                source={{ uri: `file://${lastShot}` }}
+                style={styles.thumb}
+                accessibilityLabel="Last captured photo"
+              />
             ) : (
-              <View style={[styles.thumb, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' }]}>
+              <View
+                style={[
+                  styles.thumb,
+                  { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
+                ]}
+              >
                 <Icon name="image" size={20} color="rgba(255,255,255,0.6)" />
               </View>
             )}
@@ -233,7 +298,15 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
             onPress={capture}
             style={[styles.shutterOuter, { opacity: session === 'ready' ? 1 : 0.5 }]}
           >
-            <View style={[styles.shutterInner, { backgroundImage: capturing ? theme.gradients.spectrum : undefined, transform: [{ scale: capturing ? 0.86 : 1 }] }]} />
+            <View
+              style={[
+                styles.shutterInner,
+                {
+                  backgroundImage: capturing ? theme.gradients.spectrum : undefined,
+                  transform: [{ scale: capturing ? 0.86 : 1 }],
+                },
+              ]}
+            />
           </Pressable>
           <View style={styles.thumbSlot}>
             {support?.frontCamera !== false ? (
@@ -249,7 +322,11 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
           </View>
         </GlassSurface>
         <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.75)', marginTop: 10 }}>
-          {session === 'starting' ? 'Starting camera…' : lens === 'back' ? 'PHOTO · BACK CAMERA' : 'PHOTO · FRONT CAMERA'}
+          {session === 'starting'
+            ? 'Starting camera…'
+            : lens === 'back'
+              ? 'PHOTO · BACK CAMERA'
+              : 'PHOTO · FRONT CAMERA'}
         </AppText>
       </View>
     </View>
@@ -258,11 +335,35 @@ export function CameraScreen({ navigation }: TabScreenProps<'Camera'>) {
 
 const styles = StyleSheet.create({
   gridLine: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.35)' },
-  topBar: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between' },
+  topBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingHorizontal: 16 },
-  dock: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 420, paddingHorizontal: 18, paddingVertical: 14 },
+  dock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    maxWidth: 420,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
   thumbSlot: { width: 56, alignItems: 'center' },
   thumb: { width: 48, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.6)' },
-  shutterOuter: { width: 82, height: 82, borderRadius: 41, borderWidth: 4, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  shutterOuter: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   shutterInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#FFFFFF' },
 });

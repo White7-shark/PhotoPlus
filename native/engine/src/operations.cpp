@@ -160,23 +160,23 @@ Error flip(ImageBuffer& image, bool horizontal, bool vertical, const Cancellatio
 Result<ImageBuffer> rotate90(const ImageBuffer& src, int quarterTurns,
                              const CancellationToken* token) {
   ScopedTimer timer("op.rotate90");
-  if (src.empty()) return makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image");
+  if (src.empty()) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image"));
   const int turns = ((quarterTurns % 4) + 4) % 4;
   if (turns == 0) return cloneImage(src);
   if (turns == 2) {
     auto out = cloneImage(src);
-    if (!out) return out.error();
+    if (!out) return failure(out.error());
     Error err = flip(out.value(), true, true, token);
-    if (err.status != PP_OK) return err;
+    if (err.status != PP_OK) return failure(err);
     return std::move(out).value();
   }
   const int32_t w = src.width(), h = src.height();
   auto out = ImageBuffer::allocate(h, w, src.format());
-  if (!out) return out.error();
+  if (!out) return failure(out.error());
   ImageBuffer& dst = out.value();
   const int32_t bpp = bytesPerPixel(src.format());
   for (int32_t y = 0; y < h; ++y) {
-    if (isCancelled(token)) return cancelled();
+    if (isCancelled(token)) return failure(cancelled());
     const uint8_t* srow = src.row(y);
     for (int32_t x = 0; x < w; ++x) {
       // Clockwise: (x, y) -> (h - 1 - y, x). Counter-clockwise: (y, w - 1 - x).
@@ -191,19 +191,19 @@ Result<ImageBuffer> rotate90(const ImageBuffer& src, int quarterTurns,
 Result<ImageBuffer> crop(const ImageBuffer& src, int32_t x, int32_t y, int32_t width,
                          int32_t height, const CancellationToken* token) {
   ScopedTimer timer("op.crop");
-  if (src.empty()) return makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image");
+  if (src.empty()) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image"));
   if (x < 0 || y < 0 || width <= 0 || height <= 0 || x > src.width() - width ||
       y > src.height() - height) {
-    return makeError(PP_ERROR_INVALID_ARGUMENT,
+    return failure(makeError(PP_ERROR_INVALID_ARGUMENT,
                      "Crop rectangle " + std::to_string(width) + "x" + std::to_string(height) +
                          "+" + std::to_string(x) + "+" + std::to_string(y) +
-                         " is outside the image");
+                         " is outside the image"));
   }
   auto out = ImageBuffer::allocate(width, height, src.format());
-  if (!out) return out.error();
+  if (!out) return failure(out.error());
   const int32_t bpp = bytesPerPixel(src.format());
   for (int32_t row = 0; row < height; ++row) {
-    if (isCancelled(token)) return cancelled();
+    if (isCancelled(token)) return failure(cancelled());
     std::memcpy(out.value().row(row), src.row(y + row) + x * bpp,
                 static_cast<std::size_t>(width) * bpp);
   }
@@ -213,9 +213,9 @@ Result<ImageBuffer> crop(const ImageBuffer& src, int32_t x, int32_t y, int32_t w
 Result<ImageBuffer> resizeBilinear(const ImageBuffer& src, int32_t width, int32_t height,
                                    const CancellationToken* token) {
   ScopedTimer timer("op.resize");
-  if (src.empty()) return makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image");
+  if (src.empty()) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image"));
   auto out = ImageBuffer::allocate(width, height, src.format());
-  if (!out) return out.error();
+  if (!out) return failure(out.error());
   ImageBuffer& dst = out.value();
   const int32_t bpp = bytesPerPixel(src.format());
   const float sx = static_cast<float>(src.width()) / static_cast<float>(width);
@@ -223,7 +223,7 @@ Result<ImageBuffer> resizeBilinear(const ImageBuffer& src, int32_t width, int32_
   const int32_t maxX = src.width() - 1, maxY = src.height() - 1;
 
   for (int32_t y = 0; y < height; ++y) {
-    if (isCancelled(token)) return cancelled();
+    if (isCancelled(token)) return failure(cancelled());
     // Pixel-centre mapping keeps the image from shifting by half a pixel.
     const float fy = std::clamp((static_cast<float>(y) + 0.5f) * sy - 0.5f, 0.0f,
                                 static_cast<float>(maxY));
@@ -251,18 +251,18 @@ Result<ImageBuffer> resizeBilinear(const ImageBuffer& src, int32_t width, int32_
 
 Result<ImageBuffer> sharpen(const ImageBuffer& src, float amount, const CancellationToken* token) {
   ScopedTimer timer("op.sharpen");
-  if (src.empty()) return makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image");
-  if (!std::isfinite(amount)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Amount must be finite");
+  if (src.empty()) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image"));
+  if (!std::isfinite(amount)) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Amount must be finite"));
   const float k = std::clamp(amount, 0.0f, 2.0f);
   auto out = ImageBuffer::allocate(src.width(), src.height(), src.format());
-  if (!out) return out.error();
+  if (!out) return failure(out.error());
   ImageBuffer& dst = out.value();
   const int32_t bpp = bytesPerPixel(src.format());
   const int32_t channels = colorChannels(src.format());
   const int32_t w = src.width(), h = src.height();
 
   for (int32_t y = 0; y < h; ++y) {
-    if (isCancelled(token)) return cancelled();
+    if (isCancelled(token)) return failure(cancelled());
     const uint8_t* rows[3] = {src.row(std::max(0, y - 1)), src.row(y), src.row(std::min(h - 1, y + 1))};
     uint8_t* d = dst.row(y);
     for (int32_t x = 0; x < w; ++x) {

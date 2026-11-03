@@ -110,8 +110,7 @@ export const gradients = {
   spectrum: 'linear-gradient(135deg, #FF7A45 0%, #F2477E 48%, #8B5CF6 100%)',
   /** Same hues, deepened so white labels meet WCAG AA (≥ 4.5:1) at every stop. */
   action: 'linear-gradient(135deg, #CC4128 0%, #C2306A 50%, #7445E0 100%)',
-  spectrumSoft:
-    'linear-gradient(135deg, rgba(255,122,69,0.9) 0%, rgba(242,71,126,0.9) 50%, rgba(139,92,246,0.9) 100%)',
+  spectrumSoft: 'linear-gradient(135deg, rgba(255,122,69,0.9) 0%, rgba(242,71,126,0.9) 50%, rgba(139,92,246,0.9) 100%)',
   premium: 'linear-gradient(135deg, #FFE3A3 0%, #F5C66B 45%, #C9922E 100%)',
   lagoon: 'linear-gradient(135deg, #2DD4BF 0%, #5B5BF7 100%)',
   glassSheen:

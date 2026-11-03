@@ -20,7 +20,9 @@ export function validateOperation(op: EditOperation, index: number): string | nu
       if (!finite(op.x, op.y, op.width, op.height)) {
         return `Operation #${index}: crop must be finite`;
       }
-      return op.width > 0 && op.height > 0 && op.x >= 0 && op.y >= 0 ? null : `Operation #${index}: invalid crop rectangle`;
+      return op.width > 0 && op.height > 0 && op.x >= 0 && op.y >= 0
+        ? null
+        : `Operation #${index}: invalid crop rectangle`;
     case 'resize':
       return op.width > 0 && op.height > 0 && op.width <= 16384 && op.height <= 16384
         ? null

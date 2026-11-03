@@ -2,6 +2,7 @@ package com.photoplus.engine
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import androidx.core.graphics.createBitmap
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableMap
@@ -98,7 +99,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
       val height = NativeEngine.nativeResultHeight(handle)
       // Engine output is straight alpha; mark the bitmap so Android does not
       // reinterpret it as premultiplied when encoding.
-      result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
+      result = createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
       NativeEngine.nativeCopyResultToBitmap(handle, result)
       NativeEngine.nativeReleaseResult(handle)
       handle = 0L

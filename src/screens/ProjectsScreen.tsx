@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
 import { Alert, Image, TextInput, View } from 'react-native';
 
-import { AppText, Button, EmptyState, ErrorState, GlassSurface, Icon, IconButton, LoadingState, Screen } from '../components';
+import {
+  AppText,
+  Button,
+  EmptyState,
+  ErrorState,
+  GlassSurface,
+  Icon,
+  IconButton,
+  LoadingState,
+  Screen,
+} from '../components';
 import { useResponsive } from '../hooks/useResponsive';
 import type { TabScreenProps } from '../navigation/types';
 import { errorMessage } from '../native';
@@ -57,7 +67,9 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
       overline="Library"
       onRefresh={loadProjects}
       refreshing={projectsStatus === 'loading'}
-      headerRight={<IconButton icon="plus" label="New project" onPress={() => setCreating(c => !c)} active={creating} />}
+      headerRight={
+        <IconButton icon="plus" label="New project" onPress={() => setCreating(c => !c)} active={creating} />
+      }
     >
       {creating ? (
         <GlassSurface style={{ padding: 16, marginBottom: 16, gap: 12 }}>
@@ -106,19 +118,48 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
       ) : (
         <View style={{ gap: 12 }}>
           {projects.map(p => (
-            <GlassSurface key={p.id} radius={theme.radii.lg} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 12 }}>
-              <View style={{ width: r.breakpoint === 'compact' ? 64 : 84, aspectRatio: 1, borderRadius: 14, overflow: 'hidden', backgroundImage: theme.gradients.spectrumSoft, alignItems: 'center', justifyContent: 'center' }}>
-                {p.coverPath ? <Image source={{ uri: `file://${p.coverPath}` }} style={{ width: '100%', height: '100%' }} /> : <Icon name="image" size={24} color="#FFFFFF" />}
+            <GlassSurface
+              key={p.id}
+              radius={theme.radii.lg}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 12 }}
+            >
+              <View
+                style={{
+                  width: r.breakpoint === 'compact' ? 64 : 84,
+                  aspectRatio: 1,
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  backgroundImage: theme.gradients.spectrumSoft,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {p.coverPath ? (
+                  <Image source={{ uri: `file://${p.coverPath}` }} style={{ width: '100%', height: '100%' }} />
+                ) : (
+                  <Icon name="image" size={24} color="#FFFFFF" />
+                )}
               </View>
-              <View style={{ flex: 1 }} accessible accessibilityLabel={`${p.name}, ${p.imageCount} photos, updated ${new Date(p.updatedAt).toLocaleDateString()}`}>
+              <View
+                style={{ flex: 1 }}
+                accessible
+                accessibilityLabel={`${p.name}, ${p.imageCount} photos, updated ${new Date(p.updatedAt).toLocaleDateString()}`}
+              >
                 <AppText variant="bodyStrong" numberOfLines={1}>
                   {p.name}
                 </AppText>
                 <AppText variant="caption" tone="secondary">
-                  {p.imageCount} {p.imageCount === 1 ? 'photo' : 'photos'} · {new Date(p.updatedAt).toLocaleDateString()}
+                  {p.imageCount} {p.imageCount === 1 ? 'photo' : 'photos'} ·{' '}
+                  {new Date(p.updatedAt).toLocaleDateString()}
                 </AppText>
               </View>
-              <IconButton icon="trash" label={`Delete ${p.name}`} size={44} tint={theme.colors.danger} onPress={() => confirmDelete(p.id, p.name)} />
+              <IconButton
+                icon="trash"
+                label={`Delete ${p.name}`}
+                size={44}
+                tint={theme.colors.danger}
+                onPress={() => confirmDelete(p.id, p.name)}
+              />
             </GlassSurface>
           ))}
         </View>

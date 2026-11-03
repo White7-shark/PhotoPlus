@@ -11,7 +11,10 @@ export interface CaptureResult {
 }
 
 export class CameraError extends Error {
-  constructor(message: string, readonly code: string) {
+  constructor(
+    message: string,
+    readonly code: string,
+  ) {
     super(message);
     this.name = 'CameraError';
   }

@@ -1,11 +1,12 @@
 <resources>
 
-    <!-- Base application theme. -->
+    <!-- Base application theme. The app draws edge-to-edge (enforced from
+         API 35), so no status/navigation bar colours are set here; React
+         Native styles text inputs itself, so their native background is a
+         plain inset rather than AppCompat's private resources. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:editTextBackground">@drawable/pp_edit_text_background</item>
         <item name="android:windowBackground">@color/pp_background</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
 </resources>

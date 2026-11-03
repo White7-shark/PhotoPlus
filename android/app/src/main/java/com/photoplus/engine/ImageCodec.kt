@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.os.Build
+import androidx.core.graphics.createBitmap
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.io.FileOutputStream
@@ -87,7 +88,7 @@ object ImageCodec {
    */
   private fun toStraightArgb8888(src: Bitmap): Bitmap {
     val out = try {
-      Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
+      createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
     } catch (e: OutOfMemoryError) {
       throw EngineException(EngineException.OUT_OF_MEMORY, "Unable to convert bitmap")
     }
@@ -106,9 +107,14 @@ object ImageCodec {
     val compressFormat = when (format) {
       OutputFormat.JPEG -> Bitmap.CompressFormat.JPEG
       OutputFormat.PNG -> Bitmap.CompressFormat.PNG
-      OutputFormat.WEBP ->
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Bitmap.CompressFormat.WEBP_LOSSY
-        else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
+      OutputFormat.WEBP -> {
+        // WEBP_LOSSY arrived in Android 11; the pre-11 constant is deprecated,
+        // so WebP export is offered on Android 11+ only (see CapabilityProbe).
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+          throw EngineException(EngineException.UNSUPPORTED_FORMAT, "WebP export requires Android 11 or newer")
+        }
+        Bitmap.CompressFormat.WEBP_LOSSY
+      }
     }
     try {
       FileOutputStream(tmp).use { out ->
@@ -127,7 +133,7 @@ object ImageCodec {
 
   /** Synthetic photo-like image used by diagnostics and self-tests. */
   fun generateTestImage(target: File, width: Int, height: Int) {
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
     try {
       val canvas = Canvas(bitmap)
       val sky = Paint().apply {

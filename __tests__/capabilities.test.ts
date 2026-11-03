@@ -21,7 +21,10 @@ describe('parseCapabilities', () => {
   });
 
   it('survives garbage and reports missing sections', () => {
-    const caps = parseCapabilities({ os: 'nope', cameras: [{ id: 3 }, null, { id: 'x', lensFacing: 'sideways', ranges: { iso: [1] } }] });
+    const caps = parseCapabilities({
+      os: 'nope',
+      cameras: [{ id: 3 }, null, { id: 'x', lensFacing: 'sideways', ranges: { iso: [1] } }],
+    });
     expect(caps.missingSections).toEqual(expect.arrayContaining(['os', 'memory', 'storage', 'acceleration']));
     expect(caps.cameras).toHaveLength(1);
     expect(caps.cameras[0].lensFacing).toBe('unknown');
@@ -55,7 +58,14 @@ describe('device tiers', () => {
 describe('camera feature support', () => {
   it('exposes manual controls only when the main sensor supports them', () => {
     const s = cameraFeatureSupport(parseCapabilities(rawCapabilities()));
-    expect(s).toMatchObject({ manualExposure: true, manualIso: true, rawCapture: true, frontCamera: true, zoom: true, flash: true });
+    expect(s).toMatchObject({
+      manualExposure: true,
+      manualIso: true,
+      rawCapture: true,
+      frontCamera: true,
+      zoom: true,
+      flash: true,
+    });
   });
 
   it('ignores manual-sensor claims on LEGACY hardware', () => {
@@ -117,6 +127,8 @@ describe('detectCapabilities', () => {
   });
 
   it('times out instead of hanging startup', async () => {
-    await expect(detectCapabilities({ getCapabilities: () => new Promise(() => undefined) }, 20)).rejects.toThrow(/timed out/);
+    await expect(detectCapabilities({ getCapabilities: () => new Promise(() => undefined) }, 20)).rejects.toThrow(
+      /timed out/,
+    );
   });
 });

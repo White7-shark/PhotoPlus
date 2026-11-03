@@ -29,7 +29,11 @@ function write(level: LogLevel, scope: string, message: string, data?: unknown) 
     const sink = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
     // Tests set this flag to keep output clean; logs are still buffered.
     if (!(globalThis as { __PP_SILENT_LOGS__?: boolean }).__PP_SILENT_LOGS__) {
-      data === undefined ? sink(line) : sink(line, data);
+      if (data === undefined) {
+        sink(line);
+      } else {
+        sink(line, data);
+      }
     }
   }
 }

@@ -10,9 +10,21 @@ import { useTheme } from '../theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const PROMISES: { icon: IconName; title: string; body: string }[] = [
-  { icon: 'aperture', title: 'A pro camera in your pocket', body: 'Manual controls and composition guides, tuned to your phone.' },
-  { icon: 'sparkles', title: 'An assistant that directs', body: 'Pose, light and framing guidance — on-device, no cloud.' },
-  { icon: 'shield', title: 'Private by design', body: 'Works offline. Your photos never leave this device unless you share them.' },
+  {
+    icon: 'aperture',
+    title: 'A pro camera in your pocket',
+    body: 'Manual controls and composition guides, tuned to your phone.',
+  },
+  {
+    icon: 'sparkles',
+    title: 'An assistant that directs',
+    body: 'Pose, light and framing guidance — on-device, no cloud.',
+  },
+  {
+    icon: 'shield',
+    title: 'Private by design',
+    body: 'Works offline. Your photos never leave this device unless you share them.',
+  },
 ];
 
 export function OnboardingScreen({ navigation }: RootScreenProps<'Onboarding'>) {
@@ -26,7 +38,9 @@ export function OnboardingScreen({ navigation }: RootScreenProps<'Onboarding'>) 
     setBusy(true);
     try {
       if (askCamera) {
-        await getPermissionService().ensure('camera').catch(() => undefined);
+        await getPermissionService()
+          .ensure('camera')
+          .catch(() => undefined);
       }
       await updateSetting('onboardingCompleted', true).catch(() => undefined);
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
@@ -50,8 +64,23 @@ export function OnboardingScreen({ navigation }: RootScreenProps<'Onboarding'>) 
         </View>
         <View style={{ gap: 12, marginTop: 36 }}>
           {PROMISES.map(p => (
-            <GlassSurface key={p.title} radius={theme.radii.lg} style={{ flexDirection: 'row', gap: 14, padding: 16, alignItems: 'center' }} accessible accessibilityLabel={`${p.title}. ${p.body}`}>
-              <View style={{ width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundImage: theme.gradients.spectrum }}>
+            <GlassSurface
+              key={p.title}
+              radius={theme.radii.lg}
+              style={{ flexDirection: 'row', gap: 14, padding: 16, alignItems: 'center' }}
+              accessible
+              accessibilityLabel={`${p.title}. ${p.body}`}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundImage: theme.gradients.spectrum,
+                }}
+              >
                 <Icon name={p.icon} size={22} color="#FFFFFF" />
               </View>
               <View style={{ flex: 1 }}>
@@ -64,8 +93,23 @@ export function OnboardingScreen({ navigation }: RootScreenProps<'Onboarding'>) 
           ))}
         </View>
         <View style={{ flex: 1, minHeight: 24 }} />
-        <Button label="Get started" size="lg" icon="camera" fullWidth loading={busy} onPress={() => finish(true)} accessibilityHint="Asks for camera access, then opens the studio" />
-        <Button label="Explore first" variant="ghost" fullWidth disabled={busy} onPress={() => finish(false)} style={{ marginTop: 6 }} />
+        <Button
+          label="Get started"
+          size="lg"
+          icon="camera"
+          fullWidth
+          loading={busy}
+          onPress={() => finish(true)}
+          accessibilityHint="Asks for camera access, then opens the studio"
+        />
+        <Button
+          label="Explore first"
+          variant="ghost"
+          fullWidth
+          disabled={busy}
+          onPress={() => finish(false)}
+          style={{ marginTop: 6 }}
+        />
       </View>
     </View>
   );

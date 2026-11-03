@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor, act } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { Text } from 'react-native';
 
+import App from '../src/app/App';
 import { Button, ErrorBoundary, IconButton, ProgressBar, SegmentedControl } from '../src/components';
 import { EmptyState, ErrorState } from '../src/components/States';
 import { HomeScreen } from '../src/screens/HomeScreen';
@@ -43,7 +44,17 @@ describe('components', () => {
 
   it('SegmentedControl behaves as an accessible radio group', async () => {
     const onChange = jest.fn();
-    await wrap(<SegmentedControl label="Theme" value="dark" onChange={onChange} options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]} />);
+    await wrap(
+      <SegmentedControl
+        label="Theme"
+        value="dark"
+        onChange={onChange}
+        options={[
+          { value: 'dark', label: 'Dark' },
+          { value: 'light', label: 'Light' },
+        ]}
+      />,
+    );
     expect(screen.getByRole('radio', { name: 'Dark' }).props.accessibilityState.selected).toBe(true);
     await fireEvent.press(screen.getByRole('radio', { name: 'Light' }));
     expect(onChange).toHaveBeenCalledWith('light');
@@ -143,14 +154,13 @@ describe('screens', () => {
 });
 
 describe('App boot', () => {
+  // Integration test over the whole app tree; generous timeout for cold
+  // transform caches with coverage instrumentation.
   it('shows the splash then a retryable error when native storage is missing', async () => {
-    const App = require('../src/app/App').default;
     useAppStore.setState({ status: 'idle', repos: null });
     await render(<App />);
-    await act(async () => {
-      await new Promise<void>(r => setTimeout(() => r(), 10));
-    });
-    expect(useAppStore.getState().status).toBe('error');
-    expect(screen.getByText('Something went wrong at startup')).toBeTruthy();
-  });
+    // Wait on the outcome, not a fixed delay: cold module loading can be slow.
+    await waitFor(() => expect(useAppStore.getState().status).toBe('error'));
+    expect(await screen.findByText('Something went wrong at startup')).toBeTruthy();
+  }, 20000);
 });

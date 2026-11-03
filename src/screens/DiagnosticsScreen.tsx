@@ -1,7 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 
-import { AppText, Badge, Button, ErrorState, GlassSurface, ListRow, ProgressBar, Screen, SectionHeader, StatTile } from '../components';
+import {
+  AppText,
+  Badge,
+  Button,
+  ErrorState,
+  GlassSurface,
+  ListRow,
+  ProgressBar,
+  Screen,
+  SectionHeader,
+  StatTile,
+} from '../components';
 import type { RootScreenProps } from '../navigation/types';
 import { errorMessage } from '../native';
 import { createLogger } from '../services/logging/logger';
@@ -66,7 +77,10 @@ export function DiagnosticsScreen({ navigation }: RootScreenProps<'Diagnostics'>
   return (
     <Screen title="Engine Lab" overline="Diagnostics" onBack={navigation.goBack} bottomInset={24}>
       {!engine ? (
-        <ErrorState title="Processing engine unavailable" message="This device could not load the native engine. Camera capture still works." />
+        <ErrorState
+          title="Processing engine unavailable"
+          message="This device could not load the native engine. Camera capture still works."
+        />
       ) : (
         <>
           <GlassSurface style={{ padding: 18, gap: 12, marginBottom: 20 }} glow="rgba(91,91,247,0.25)">
@@ -76,7 +90,8 @@ export function DiagnosticsScreen({ navigation }: RootScreenProps<'Diagnostics'>
               <Badge label={`Budget ${formatBytes(engine.memoryBudgetBytes, 0)}`} />
             </View>
             <AppText variant="body" tone="secondary">
-              Generates a test photo and runs a full edit pipeline — tone, rotate, crop, resize, sharpen, colour — repeatedly in C++, then checks that memory returns to baseline.
+              Generates a test photo and runs a full edit pipeline — tone, rotate, crop, resize, sharpen, colour —
+              repeatedly in C++, then checks that memory returns to baseline.
             </AppText>
             {running ? <ProgressBar value={progress} label="Self-test progress" /> : null}
             <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -97,7 +112,12 @@ export function DiagnosticsScreen({ navigation }: RootScreenProps<'Diagnostics'>
                 <StatTile icon="refresh" label="Iterations" value={`${report.iterations}`} tint={theme.colors.info} />
               </View>
               <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                <StatTile icon="memory" label="Peak engine memory" value={formatBytes(report.memory.peakBytes)} tint={theme.colors.premium} />
+                <StatTile
+                  icon="memory"
+                  label="Peak engine memory"
+                  value={formatBytes(report.memory.peakBytes)}
+                  tint={theme.colors.premium}
+                />
                 <StatTile
                   icon={report.memoryReturnedToBaseline ? 'check' : 'alert'}
                   label="Memory after run"
@@ -108,7 +128,12 @@ export function DiagnosticsScreen({ navigation }: RootScreenProps<'Diagnostics'>
               <SectionHeader title="Per-operation timings" />
               <GlassSurface>
                 {report.operations.map((op, i) => (
-                  <ListRow key={op.name} title={op.name} value={`${op.avgMs.toFixed(1)} ms avg · ${op.calls}×`} last={i === report.operations.length - 1} />
+                  <ListRow
+                    key={op.name}
+                    title={op.name}
+                    value={`${op.avgMs.toFixed(1)} ms avg · ${op.calls}×`}
+                    last={i === report.operations.length - 1}
+                  />
                 ))}
               </GlassSurface>
             </>

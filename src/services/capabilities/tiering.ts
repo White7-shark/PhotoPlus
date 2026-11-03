@@ -54,8 +54,7 @@ export function primaryCamera(caps: DeviceCapabilities, facing: 'back' | 'front'
   // Prefer the most capable sensor of that facing.
   const rank = { level3: 4, full: 3, limited: 2, external: 1, legacy: 0, unknown: 0 } as const;
   return [...matches].sort(
-    (a, b) =>
-      rank[b.hardwareLevel] - rank[a.hardwareLevel] || (b.sensorMegapixels ?? 0) - (a.sensorMegapixels ?? 0),
+    (a, b) => rank[b.hardwareLevel] - rank[a.hardwareLevel] || (b.sensorMegapixels ?? 0) - (a.sensorMegapixels ?? 0),
   )[0];
 }
 
@@ -100,13 +99,62 @@ export interface ModelRequirement {
 }
 
 export const MODEL_CATALOG: readonly ModelRequirement[] = [
-  { id: 'segmentation-lite', name: 'Subject segmentation (lite)', purpose: 'Portrait focus, basic background effects', sizeMb: 4, minTier: 'entry', needsGpu: false },
-  { id: 'pose-lite', name: 'Pose detection (lite)', purpose: 'Live pose guidance', sizeMb: 6, minTier: 'entry', needsGpu: false },
-  { id: 'face-landmarks', name: 'Face landmarks', purpose: 'Retouching and lighting analysis', sizeMb: 3, minTier: 'entry', needsGpu: false },
-  { id: 'segmentation-hq', name: 'Subject segmentation (HQ)', purpose: 'Background removal and replacement', sizeMb: 28, minTier: 'standard', needsGpu: true },
-  { id: 'pose-full', name: 'Pose matching (full)', purpose: 'Reference pose matching', sizeMb: 24, minTier: 'standard', needsGpu: false },
-  { id: 'relight', name: 'Relighting', purpose: 'Lighting and shadow reproduction', sizeMb: 60, minTier: 'performance', needsGpu: true },
-  { id: 'garment-transfer', name: 'Garment transfer', purpose: 'Clothing transformation for compatible packs', sizeMb: 140, minTier: 'performance', needsGpu: true },
+  {
+    id: 'segmentation-lite',
+    name: 'Subject segmentation (lite)',
+    purpose: 'Portrait focus, basic background effects',
+    sizeMb: 4,
+    minTier: 'entry',
+    needsGpu: false,
+  },
+  {
+    id: 'pose-lite',
+    name: 'Pose detection (lite)',
+    purpose: 'Live pose guidance',
+    sizeMb: 6,
+    minTier: 'entry',
+    needsGpu: false,
+  },
+  {
+    id: 'face-landmarks',
+    name: 'Face landmarks',
+    purpose: 'Retouching and lighting analysis',
+    sizeMb: 3,
+    minTier: 'entry',
+    needsGpu: false,
+  },
+  {
+    id: 'segmentation-hq',
+    name: 'Subject segmentation (HQ)',
+    purpose: 'Background removal and replacement',
+    sizeMb: 28,
+    minTier: 'standard',
+    needsGpu: true,
+  },
+  {
+    id: 'pose-full',
+    name: 'Pose matching (full)',
+    purpose: 'Reference pose matching',
+    sizeMb: 24,
+    minTier: 'standard',
+    needsGpu: false,
+  },
+  {
+    id: 'relight',
+    name: 'Relighting',
+    purpose: 'Lighting and shadow reproduction',
+    sizeMb: 60,
+    minTier: 'performance',
+    needsGpu: true,
+  },
+  {
+    id: 'garment-transfer',
+    name: 'Garment transfer',
+    purpose: 'Clothing transformation for compatible packs',
+    sizeMb: 140,
+    minTier: 'performance',
+    needsGpu: true,
+  },
 ];
 
 export type InferenceDelegate = 'gpu' | 'nnapi' | 'cpu';
@@ -145,7 +193,12 @@ export function modelCompatibility(
       return { model, compatible: false, delegate: null, reason: `Requires ${tierLabel[model.minTier]} tier or above` };
     }
     if (model.needsGpu && delegate !== 'gpu') {
-      return { model, compatible: false, delegate: null, reason: 'Requires GPU acceleration (OpenGL ES 3.1 or Vulkan)' };
+      return {
+        model,
+        compatible: false,
+        delegate: null,
+        reason: 'Requires GPU acceleration (OpenGL ES 3.1 or Vulkan)',
+      };
     }
     if (freeStorage > 0 && freeStorage < model.sizeMb * 1024 * 1024 * 3) {
       return { model, compatible: false, delegate: null, reason: 'Not enough free storage to install' };

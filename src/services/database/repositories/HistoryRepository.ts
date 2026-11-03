@@ -30,7 +30,10 @@ interface HistoryRow {
 export const HISTORY_RETENTION = 500;
 
 export class HistoryRepository {
-  constructor(private readonly db: SqlExecutor, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly db: SqlExecutor,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   async record(entry: Omit<HistoryEntry, 'id' | 'createdAt'>): Promise<HistoryEntry> {
     const full: HistoryEntry = { ...entry, id: createId('job', this.now()), createdAt: this.now() };

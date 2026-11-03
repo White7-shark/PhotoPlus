@@ -1,10 +1,10 @@
 package com.photoplus.engine
 
-import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -36,14 +36,14 @@ class JobManagerTest {
     override fun onStateChanged(jobId: String, state: JobState) { states.add(state) }
     override fun onSuccess(jobId: String, result: T) { this.result = result; done.countDown() }
     override fun onFailure(jobId: String, error: EngineException) { this.error = error; done.countDown() }
-    fun await() = assertTrue("job did not finish", done.await(5, TimeUnit.SECONDS))
+    fun await() = assertTrue(done.await(5, TimeUnit.SECONDS), "job did not finish")
   }
 
   private val executor = Executors.newFixedThreadPool(2)
   private val tokens = FakeTokens()
   private val manager = JobManager(executor, tokens)
 
-  @After fun tearDown() { executor.shutdownNow() }
+  @AfterEach fun tearDown() { executor.shutdownNow() }
 
   @Test fun successfulJobReportsLifecycleAndReleasesToken() {
     val rec = Recorder<Int>()

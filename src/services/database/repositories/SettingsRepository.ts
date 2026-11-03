@@ -55,7 +55,10 @@ export function isValidSetting<K extends keyof AppSettings>(key: K, value: unkno
  * app at startup.
  */
 export class SettingsRepository {
-  constructor(private readonly db: SqlExecutor, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly db: SqlExecutor,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   async load(): Promise<AppSettings> {
     const rows = await this.db.query<{ key: string; value: string }>('SELECT key, value FROM settings');
@@ -95,7 +98,9 @@ export class SettingsRepository {
 
   /** Arbitrary JSON blobs that are not user settings (e.g. cached capabilities). */
   async getInternal<T>(key: string): Promise<T | null> {
-    const rows = await this.db.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', [`internal.${key}`]);
+    const rows = await this.db.query<{ value: string }>('SELECT value FROM settings WHERE key = ?', [
+      `internal.${key}`,
+    ]);
     if (!rows[0]) {
       return null;
     }

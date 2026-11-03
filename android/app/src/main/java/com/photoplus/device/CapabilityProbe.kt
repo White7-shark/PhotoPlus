@@ -177,7 +177,9 @@ object CapabilityProbe {
         "avif".takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.S },
       ),
       "encode" to listOfNotNull(
-        "jpeg", "png", "webp",
+        "jpeg", "png",
+        // Non-deprecated WebP encoding (WEBP_LOSSY) requires Android 11.
+        "webp".takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.R },
         // HEIC export needs a hardware HEVC encoder (HeifWriter).
         "heic".takeIf { hevcEncoder },
       ),

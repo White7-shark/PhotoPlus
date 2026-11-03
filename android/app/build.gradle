@@ -1,5 +1,4 @@
 apply plugin: "com.android.application"
-apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 /**
@@ -73,55 +72,60 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
-    ndkVersion rootProject.ext.ndkVersion
-    buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdk rootProject.ext.compileSdkVersion
+    ndkVersion = rootProject.ext.ndkVersion
+    buildToolsVersion = rootProject.ext.buildToolsVersion
+    // Latest platform release: Android 37 with minor API level 2 (AGP 9 DSL).
+    compileSdk {
+        version = release(rootProject.ext.compileSdkVersion) {
+            minorApiLevel = 2
+        }
+    }
 
-    namespace "com.photoplus"
+    namespace = "com.photoplus"
     defaultConfig {
-        applicationId "com.photoplus"
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "0.1.0"
+        applicationId = "com.photoplus"
+        minSdk = rootProject.ext.minSdkVersion
+        targetSdk = rootProject.ext.targetSdkVersion
+        versionCode = 1
+        versionName = "0.1.0"
 
         externalNativeBuild {
             cmake {
                 // Must match React Native's STL to avoid duplicate runtimes.
-                arguments "-DANDROID_STL=c++_shared"
-                cppFlags "-std=c++17"
+                arguments += ["-DANDROID_STL=c++_shared"]
             }
         }
     }
 
     externalNativeBuild {
         cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "4.1.2"
         }
     }
 
     testOptions {
         unitTests.returnDefaultValues = false
+        unitTests.all { useJUnitPlatform() }
     }
     signingConfigs {
         debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+            storeFile = file('debug.keystore')
+            storePassword = 'android'
+            keyAlias = 'androiddebugkey'
+            keyPassword = 'android'
         }
     }
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            signingConfig = signingConfigs.debug
         }
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
-            minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            signingConfig = signingConfigs.debug
+            minifyEnabled = enableProguardInReleaseBuilds
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
@@ -138,10 +142,15 @@ dependencies {
     implementation("androidx.camera:camera-view:$cameraxVersion")
     // Image metadata
     implementation("androidx.exifinterface:exifinterface:1.4.2")
+    // Latest AndroidX core/appcompat (React Native would otherwise resolve older ones).
+    implementation("androidx.core:core-ktx:1.19.1")
+    implementation("androidx.appcompat:appcompat:1.8.0")
 
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     // Real org.json for JVM tests (the Android stub throws).
-    testImplementation("org.json:json:20250517")
+    testImplementation("org.json:json:20260814")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

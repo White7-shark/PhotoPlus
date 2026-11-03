@@ -1,8 +1,8 @@
 package com.photoplus.storage
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Test
 
 class SqlValuesTest {
   @Test fun parsesTypedParams() {

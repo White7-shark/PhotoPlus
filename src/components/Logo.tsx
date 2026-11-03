@@ -37,7 +37,14 @@ export function LogoMark({ size = 48, style }: LogoMarkProps) {
         </Defs>
         <Circle cx={c} cy={c} r={R + g.bladeGap} fill="#0A0911" />
         {g.blades.map((d, i) => (
-          <Path key={i} d={d} fill={`url(#blade${i})`} stroke="#0A0911" strokeWidth={g.bladeGap} strokeLinejoin="round" />
+          <Path
+            key={i}
+            d={d}
+            fill={`url(#blade${i})`}
+            stroke="#0A0911"
+            strokeWidth={g.bladeGap}
+            strokeLinejoin="round"
+          />
         ))}
         <Circle cx={c} cy={c} r={g.innerRadius * 0.98} fill="url(#lens)" />
         <Path
@@ -67,7 +74,9 @@ export function Logo({ size = 36 }: WordmarkProps) {
     >
       <LogoMark size={size} />
       <View style={{ flexDirection: 'row', alignItems: 'baseline' }} importantForAccessibility="no-hide-descendants">
-        <AppText style={{ fontSize: size * 0.62, fontWeight: '800', letterSpacing: -0.6, color: theme.colors.textPrimary }}>
+        <AppText
+          style={{ fontSize: size * 0.62, fontWeight: '800', letterSpacing: -0.6, color: theme.colors.textPrimary }}
+        >
           Photo
         </AppText>
         <AppText

@@ -80,9 +80,9 @@ static Error validateDimensions(int32_t width, int32_t height) {
 
 Result<ImageBuffer> ImageBuffer::allocate(int32_t width, int32_t height, PixelFormat format) {
   Error dimError = validateDimensions(width, height);
-  if (dimError.status != PP_OK) return dimError;
+  if (dimError.status != PP_OK) return failure(dimError);
   const int32_t bpp = bytesPerPixel(format);
-  if (bpp == 0) return makeError(PP_ERROR_UNSUPPORTED_FORMAT, "Unknown pixel format");
+  if (bpp == 0) return failure(makeError(PP_ERROR_UNSUPPORTED_FORMAT, "Unknown pixel format"));
 
   ImageBuffer image;
   image.width_ = width;
@@ -94,9 +94,9 @@ Result<ImageBuffer> ImageBuffer::allocate(int32_t width, int32_t height, PixelFo
   void* mem = MemoryTracker::instance().allocate(image.byteSize(), &status);
   if (mem == nullptr) {
     image.width_ = image.height_ = image.stride_ = 0;
-    return makeError(status, status == PP_ERROR_BUDGET_EXCEEDED
+    return failure(makeError(status, status == PP_ERROR_BUDGET_EXCEEDED
                                  ? "Allocation exceeds engine memory budget"
-                                 : "Out of memory allocating image buffer");
+                                 : "Out of memory allocating image buffer"));
   }
   image.data_ = static_cast<uint8_t*>(mem);
   image.owns_ = true;
@@ -105,13 +105,13 @@ Result<ImageBuffer> ImageBuffer::allocate(int32_t width, int32_t height, PixelFo
 
 Result<ImageBuffer> ImageBuffer::wrap(void* pixels, int32_t width, int32_t height, int32_t stride,
                                       PixelFormat format) {
-  if (pixels == nullptr) return makeError(PP_ERROR_INVALID_ARGUMENT, "Pixel pointer is null");
+  if (pixels == nullptr) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Pixel pointer is null"));
   Error dimError = validateDimensions(width, height);
-  if (dimError.status != PP_OK) return dimError;
+  if (dimError.status != PP_OK) return failure(dimError);
   const int32_t bpp = bytesPerPixel(format);
-  if (bpp == 0) return makeError(PP_ERROR_UNSUPPORTED_FORMAT, "Unknown pixel format");
+  if (bpp == 0) return failure(makeError(PP_ERROR_UNSUPPORTED_FORMAT, "Unknown pixel format"));
   if (stride < width * bpp) {
-    return makeError(PP_ERROR_INVALID_ARGUMENT, "Stride is smaller than one row of pixels");
+    return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Stride is smaller than one row of pixels"));
   }
   ImageBuffer image;
   image.data_ = static_cast<uint8_t*>(pixels);
@@ -138,9 +138,9 @@ Error copyPixels(const ImageBuffer& src, ImageBuffer& dst) {
 
 Result<ImageBuffer> cloneImage(const ImageBuffer& src) {
   auto out = ImageBuffer::allocate(src.width(), src.height(), src.format());
-  if (!out) return out.error();
+  if (!out) return failure(out.error());
   Error err = copyPixels(src, out.value());
-  if (err.status != PP_OK) return err;
+  if (err.status != PP_OK) return failure(err);
   return std::move(out).value();
 }
 
@@ -183,10 +183,10 @@ inline void writePixel(uint8_t* p, PixelFormat f, Rgba c) {
 }  // namespace
 
 Result<ImageBuffer> convertFormat(const ImageBuffer& src, PixelFormat target) {
-  if (src.empty()) return makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image");
+  if (src.empty()) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Empty image"));
   if (src.format() == target) return cloneImage(src);
   auto out = ImageBuffer::allocate(src.width(), src.height(), target);
-  if (!out) return out.error();
+  if (!out) return failure(out.error());
   const int32_t sbpp = bytesPerPixel(src.format());
   const int32_t dbpp = bytesPerPixel(target);
   ImageBuffer& dst = out.value();

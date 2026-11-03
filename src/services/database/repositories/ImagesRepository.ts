@@ -68,7 +68,10 @@ const toImage = (r: ImageRow): ImageRecord => ({
 });
 
 export class ImagesRepository {
-  constructor(private readonly db: SqlExecutor, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly db: SqlExecutor,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   async add(image: NewImage): Promise<ImageRecord> {
     const record: ImageRecord = {

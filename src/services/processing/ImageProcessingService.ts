@@ -1,4 +1,4 @@
-import { DeviceEventEmitter, type EmitterSubscription } from 'react-native';
+import { DeviceEventEmitter, type EventSubscription } from 'react-native';
 
 import { errorCode, errorMessage, nativeModules, NativeEvents, requireNative, type EngineSpec } from '../../native';
 import { createId } from '../database/ids';
@@ -9,7 +9,10 @@ import { validateRequest } from './validate';
 const log = createLogger('processing');
 
 export class ProcessingError extends Error {
-  constructor(message: string, readonly code: string) {
+  constructor(
+    message: string,
+    readonly code: string,
+  ) {
     super(message);
     this.name = 'ProcessingError';
   }
@@ -25,7 +28,10 @@ export interface ProcessOptions {
 }
 
 interface EventSource {
-  addListener(event: string, listener: (payload: { jobId: string; state: JobState }) => void): EmitterSubscription | { remove(): void };
+  addListener(
+    event: string,
+    listener: (payload: { jobId: string; state: JobState }) => void,
+  ): EventSubscription | { remove(): void };
 }
 
 /**
@@ -93,7 +99,7 @@ export class ImageProcessingService {
     options.signal?.addEventListener('abort', onAbort);
     this.active.add(jobId);
     try {
-      const result = await this.engine.process(jobId, request as unknown as Object);
+      const result = await this.engine.process(jobId, request);
       return result as unknown as ProcessResult;
     } catch (error) {
       const code = errorCode(error) ?? 'INTERNAL';

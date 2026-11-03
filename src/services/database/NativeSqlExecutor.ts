@@ -2,7 +2,10 @@ import { errorCode, errorMessage, nativeModules, requireNative, type DatabaseSpe
 import { DatabaseError, type ExecuteResult, type SqlExecutor, type SqlParam, type SqlStatement } from './SqlExecutor';
 
 export class NativeSqlExecutor implements SqlExecutor {
-  private constructor(private readonly name: string, private readonly native: DatabaseSpec) {}
+  private constructor(
+    private readonly name: string,
+    private readonly native: DatabaseSpec,
+  ) {}
 
   static async open(
     name: string,

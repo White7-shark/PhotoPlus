@@ -1,18 +1,16 @@
 package com.photoplus.device
 
 import android.content.ComponentCallbacks2
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
-@Suppress("DEPRECATION")
 class MemoryPressureMonitorTest {
-  @Test fun mapsTrimLevels() {
-    assertEquals(MemoryPressureMonitor.Level.MODERATE, MemoryPressureMonitor.levelFor(ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW))
-    assertEquals(MemoryPressureMonitor.Level.CRITICAL, MemoryPressureMonitor.levelFor(ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL))
-    assertEquals(MemoryPressureMonitor.Level.NORMAL, MemoryPressureMonitor.levelFor(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN))
-    assertEquals(MemoryPressureMonitor.Level.MODERATE, MemoryPressureMonitor.levelFor(ComponentCallbacks2.TRIM_MEMORY_BACKGROUND))
-    assertEquals(MemoryPressureMonitor.Level.CRITICAL, MemoryPressureMonitor.levelFor(ComponentCallbacks2.TRIM_MEMORY_COMPLETE))
-    assertEquals(MemoryPressureMonitor.Level.NORMAL, MemoryPressureMonitor.levelFor(ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE))
+  @Test fun mapsSupportedSignals() {
+    val m = MemoryPressureMonitor
+    assertEquals(MemoryPressureMonitor.Level.MODERATE, m.levelFor(ComponentCallbacks2.TRIM_MEMORY_BACKGROUND, systemLowOnMemory = false))
+    assertEquals(MemoryPressureMonitor.Level.CRITICAL, m.levelFor(ComponentCallbacks2.TRIM_MEMORY_BACKGROUND, systemLowOnMemory = true))
+    assertEquals(MemoryPressureMonitor.Level.CRITICAL, m.levelFor(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN, systemLowOnMemory = true))
+    assertEquals(MemoryPressureMonitor.Level.NORMAL, m.levelFor(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN, systemLowOnMemory = false))
   }
 
   @Test fun dispatchNotifiesListenersAndRemembersLevel() {

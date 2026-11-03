@@ -8,7 +8,15 @@ import { GlassSurface } from './GlassSurface';
 import { Icon, type IconName } from './Icon';
 import { Animated } from 'react-native';
 
-export function SectionHeader({ title, action, overline }: { title: string; overline?: string; action?: React.ReactNode }) {
+export function SectionHeader({
+  title,
+  action,
+  overline,
+}: {
+  title: string;
+  overline?: string;
+  action?: React.ReactNode;
+}) {
   return (
     <View style={styles.sectionHeader}>
       <View style={{ flex: 1 }}>
@@ -27,7 +35,15 @@ export function SectionHeader({ title, action, overline }: { title: string; over
 }
 
 /** `media` is for badges placed on photos/artwork: a dark chip that stays legible on any image. */
-export function Badge({ label, tone = 'neutral', icon }: { label: string; tone?: 'neutral' | 'premium' | 'success' | 'warning' | 'danger' | 'accent' | 'media'; icon?: IconName }) {
+export function Badge({
+  label,
+  tone = 'neutral',
+  icon,
+}: {
+  label: string;
+  tone?: 'neutral' | 'premium' | 'success' | 'warning' | 'danger' | 'accent' | 'media';
+  icon?: IconName;
+}) {
   const theme = useTheme();
   const palette = {
     neutral: { bg: theme.colors.glassFillStrong, fg: theme.colors.textSecondary, border: theme.colors.glassStroke },
@@ -77,7 +93,17 @@ export interface ListRowProps {
   last?: boolean;
 }
 
-export function ListRow({ icon, iconTint, title, subtitle, value, onPress, right, accessibilityHint, last }: ListRowProps) {
+export function ListRow({
+  icon,
+  iconTint,
+  title,
+  subtitle,
+  value,
+  onPress,
+  right,
+  accessibilityHint,
+  last,
+}: ListRowProps) {
   const theme = useTheme();
   const content = (
     <View
@@ -129,7 +155,21 @@ export function ListRow({ icon, iconTint, title, subtitle, value, onPress, right
   );
 }
 
-export function ToggleRow({ title, subtitle, value, onChange, icon, last }: { title: string; subtitle?: string; value: boolean; onChange: (v: boolean) => void; icon?: IconName; last?: boolean }) {
+export function ToggleRow({
+  title,
+  subtitle,
+  value,
+  onChange,
+  icon,
+  last,
+}: {
+  title: string;
+  subtitle?: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  icon?: IconName;
+  last?: boolean;
+}) {
   const theme = useTheme();
   return (
     <ListRow
@@ -156,7 +196,17 @@ export interface SegmentOption<T extends string> {
   icon?: IconName;
 }
 
-export function SegmentedControl<T extends string>({ options, value, onChange, label }: { options: SegmentOption<T>[]; value: T; onChange: (v: T) => void; label: string }) {
+export function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: SegmentOption<T>[];
+  value: T;
+  onChange: (v: T) => void;
+  label: string;
+}) {
   const theme = useTheme();
   return (
     <View
@@ -191,8 +241,13 @@ export function SegmentedControl<T extends string>({ options, value, onChange, l
               backgroundImage: selected ? theme.gradients.action : undefined,
             }}
           >
-            {opt.icon ? <Icon name={opt.icon} size={16} color={selected ? '#FFFFFF' : theme.colors.textSecondary} /> : null}
-            <AppText variant="callout" style={{ color: selected ? '#FFFFFF' : theme.colors.textSecondary, fontWeight: '700' }}>
+            {opt.icon ? (
+              <Icon name={opt.icon} size={16} color={selected ? '#FFFFFF' : theme.colors.textSecondary} />
+            ) : null}
+            <AppText
+              variant="callout"
+              style={{ color: selected ? '#FFFFFF' : theme.colors.textSecondary, fontWeight: '700' }}
+            >
               {opt.label}
             </AppText>
           </Pressable>
@@ -226,10 +281,27 @@ export function ProgressBar({ value, label, tint }: { value: number; label: stri
   );
 }
 
-export function StatTile({ label, value, icon, tint, style }: { label: string; value: string; icon: IconName; tint?: string; style?: ViewStyle }) {
+export function StatTile({
+  label,
+  value,
+  icon,
+  tint,
+  style,
+}: {
+  label: string;
+  value: string;
+  icon: IconName;
+  tint?: string;
+  style?: ViewStyle;
+}) {
   const theme = useTheme();
   return (
-    <GlassSurface style={[{ flex: 1, padding: 14, gap: 10 }, style ?? {}]} radius={theme.radii.md} accessible accessibilityLabel={`${label}: ${value}`}>
+    <GlassSurface
+      style={[{ flex: 1, padding: 14, gap: 10 }, style ?? {}]}
+      radius={theme.radii.md}
+      accessible
+      accessibilityLabel={`${label}: ${value}`}
+    >
       <Icon name={icon} size={18} color={tint ?? theme.colors.accent} />
       <View>
         <AppText variant="title3" numberOfLines={1} adjustsFontSizeToFit>
@@ -244,11 +316,33 @@ export function StatTile({ label, value, icon, tint, style }: { label: string; v
 }
 
 /** Pressable glass card with press-scale feedback. */
-export function PressableCard({ onPress, label, hint, children, style, radius }: { onPress: () => void; label: string; hint?: string; children: React.ReactNode; style?: ViewStyle; radius?: number }) {
+export function PressableCard({
+  onPress,
+  label,
+  hint,
+  children,
+  style,
+  radius,
+}: {
+  onPress: () => void;
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+  style?: ViewStyle;
+  radius?: number;
+}) {
   const { scale, onPressIn, onPressOut } = usePressScale();
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
-      <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint} style={{ flex: 1 }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityHint={hint}
+        style={{ flex: 1 }}
+      >
         <GlassSurface radius={radius} style={{ flex: 1 }}>
           {children}
         </GlassSurface>

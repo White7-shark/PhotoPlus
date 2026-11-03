@@ -96,7 +96,10 @@ export function logoSvg(options: { size?: number; background?: boolean; padding?
   const g = apertureGeometry(inner);
   const offset = size * pad;
   const blades = g.blades
-    .map((d, i) => `<path d="${d}" fill="url(#blade${i})" stroke="#0A0911" stroke-width="${round(g.bladeGap)}" stroke-linejoin="round"/>`)
+    .map(
+      (d, i) =>
+        `<path d="${d}" fill="url(#blade${i})" stroke="#0A0911" stroke-width="${round(g.bladeGap)}" stroke-linejoin="round"/>`,
+    )
     .join('');
   const bladeGradients = BLADE_COLORS.map((color, i) => {
     const next = BLADE_COLORS[(i + 1) % BLADE_COLORS.length];

@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.25...4.1)
 project(photoplus_engine LANGUAGES CXX)
 
-# The engine is platform-agnostic C++17. It is consumed by the Android JNI
+# The engine is platform-agnostic C++23. It is consumed by the Android JNI
 # bridge (android/app/src/main/cpp) and built standalone for host tests.
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

@@ -48,7 +48,10 @@ const toAsset = (r: AssetRow): AssetRecord => ({
  * is decided by the entitlement layer (see services/entitlements).
  */
 export class AssetRegistry {
-  constructor(private readonly db: SqlExecutor, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly db: SqlExecutor,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   async register(asset: Omit<AssetRecord, 'installedAt' | 'lastUsedAt'>): Promise<AssetRecord> {
     const installedAt = this.now();
@@ -58,7 +61,17 @@ export class AssetRegistry {
        ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, name = excluded.name, version = excluded.version,
          path = excluded.path, size_bytes = excluded.size_bytes, checksum = excluded.checksum,
          source = excluded.source, installed_at = excluded.installed_at`,
-      [asset.id, asset.kind, asset.name, asset.version, asset.path, Math.round(asset.sizeBytes), asset.checksum, asset.source, installedAt],
+      [
+        asset.id,
+        asset.kind,
+        asset.name,
+        asset.version,
+        asset.path,
+        Math.round(asset.sizeBytes),
+        asset.checksum,
+        asset.source,
+        installedAt,
+      ],
     );
     return { ...asset, installedAt, lastUsedAt: null };
   }
@@ -89,7 +102,9 @@ export class AssetRegistry {
 
   async totalBytes(kind?: AssetKind): Promise<number> {
     const rows = kind
-      ? await this.db.query<{ total: number | null }>('SELECT SUM(size_bytes) AS total FROM assets WHERE kind = ?', [kind])
+      ? await this.db.query<{ total: number | null }>('SELECT SUM(size_bytes) AS total FROM assets WHERE kind = ?', [
+          kind,
+        ])
       : await this.db.query<{ total: number | null }>('SELECT SUM(size_bytes) AS total FROM assets');
     return rows[0]?.total ?? 0;
   }

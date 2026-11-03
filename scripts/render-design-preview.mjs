@@ -8,12 +8,12 @@
  * Glass is built exactly as in the app — translucent fill + sheen + hairline
  * over a blurred aurora — with no browser-only backdrop-filter.
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { logoSvg, apertureGeometry, BLADE_COLORS } from '../src/brand/logoGeometry.ts';
+import { logoSvg } from '../src/brand/logoGeometry.ts';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -38,10 +38,9 @@ const G = {
 const iconSrc = readFileSync(join(root, 'src/components/Icon.tsx'), 'utf8');
 const body = iconSrc.slice(iconSrc.indexOf('export const ICONS = {'), iconSrc.indexOf('} as const;'));
 const ICONS = {};
-for (const m of body.matchAll(/\n  (\w+): ([\s\S]*?)(?=,\n  \w+: |,\n$)/g)) {
+for (const m of body.matchAll(/\n {2}(\w+): ([\s\S]*?)(?=,\n {2}\w+: |,\n$)/g)) {
   ICONS[m[1]] = m[2]
     .replace(/<\/?>/g, '')
-    .replace(/[()]/g, s => s) // keep transform parentheses
     .replace(/<Path/g, '<path')
     .replace(/<Circle/g, '<circle')
     .replace(/<Rect/g, '<rect')
@@ -53,7 +52,9 @@ const icon = (name, size = 22, color = '#F7F5FB', sw = 1.75) =>
 
 // ---- in-app logo mark (same construction as Logo.tsx) ---------------------
 function mark(size) {
-  return logoSvg({ size }).replace(/id="(\w+)"/g, `id="$1_${size}"`).replace(/url\(#(\w+)\)/g, `url(#$1_${size})`);
+  return logoSvg({ size })
+    .replace(/id="(\w+)"/g, `id="$1_${size}"`)
+    .replace(/url\(#(\w+)\)/g, `url(#$1_${size})`);
 }
 
 const css = `
@@ -111,14 +112,25 @@ body{font-family:Roboto,'Segoe UI',system-ui,sans-serif;background:#0d0c12;color
 `;
 
 function aurora(variant = 'default') {
-  const blobs = variant === 'calm'
-    ? [['#C04DFF', 420, 'top:-160px;right:-140px', .35], ['#5B5BF7', 380, 'bottom:-160px;left:-120px', .3]]
-    : [['#FF7A45', 460, 'top:-170px;left:-150px', .55], ['#C04DFF', 400, 'top:30%;right:-190px', .42], ['#5B5BF7', 480, 'bottom:-220px;left:10%', .45]];
+  const blobs =
+    variant === 'calm'
+      ? [
+          ['#C04DFF', 420, 'top:-160px;right:-140px', 0.35],
+          ['#5B5BF7', 380, 'bottom:-160px;left:-120px', 0.3],
+        ]
+      : [
+          ['#FF7A45', 460, 'top:-170px;left:-150px', 0.55],
+          ['#C04DFF', 400, 'top:30%;right:-190px', 0.42],
+          ['#5B5BF7', 480, 'bottom:-220px;left:10%', 0.45],
+        ];
   return `<div class="aurora">${blobs.map(([c, s, pos, o]) => `<div class="blob" style="width:${s}px;height:${s}px;${pos};opacity:${o};background-image:radial-gradient(circle at center, ${c} 0%, ${c} 18%, transparent 70%)"></div>`).join('')}<div class="vignette"></div></div>`;
 }
-const status = (light = false) => `<div class="status" style="color:${light ? '#fff' : 'var(--t1)'}"><span>9:41</span><span style="display:flex;gap:6px;align-items:center"><svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.3" y="5" width="3" height="6" rx="1"/><rect x="8.6" y="2.5" width="3" height="8.5" rx="1"/><rect x="13" y="0" width="3" height="11" rx="1"/></svg><svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="currentColor"><rect x=".5" y=".5" width="20" height="11" rx="3"/><rect x="2" y="2" width="14" height="8" rx="1.5" fill="currentColor"/><path d="M22.5 4v4"/></svg></span></div>`;
-const tabbar = active => `<div class="tabbar glass strong r-xl">${[['Studio', 'aperture'], ['Projects', 'folder'], ['Camera'], ['Packs', 'bag'], ['Settings', 'gear']].map(([n, i]) => n === 'Camera' ? `<div class="tab"><div class="shutterTab"><div>${icon('camera', 24, '#fff', 2)}</div></div></div>` : `<div class="tab ${n === active ? 'on' : ''}">${icon(i, 22, n === active ? '#F7F5FB' : 'rgba(247,245,251,0.56)', n === active ? 2.1 : 1.75)}<span>${n}</span><div class="dot"></div></div>`).join('')}</div>`;
-const wordmark = size => `<div class="row" style="gap:${size * .28}px">${mark(size)}<div style="display:flex;align-items:baseline"><span style="font-size:${size * .62}px;font-weight:800;letter-spacing:-.6px">Photo</span><span style="font-size:${size * .62}px;font-weight:300;letter-spacing:-.4px;margin-left:${size * .12}px;color:var(--accent)">Plus</span></div></div>`;
+const status = (light = false) =>
+  `<div class="status" style="color:${light ? '#fff' : 'var(--t1)'}"><span>9:41</span><span style="display:flex;gap:6px;align-items:center"><svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.3" y="5" width="3" height="6" rx="1"/><rect x="8.6" y="2.5" width="3" height="8.5" rx="1"/><rect x="13" y="0" width="3" height="11" rx="1"/></svg><svg width="24" height="12" viewBox="0 0 24 12" fill="none" stroke="currentColor"><rect x=".5" y=".5" width="20" height="11" rx="3"/><rect x="2" y="2" width="14" height="8" rx="1.5" fill="currentColor"/><path d="M22.5 4v4"/></svg></span></div>`;
+const tabbar = active =>
+  `<div class="tabbar glass strong r-xl">${[['Studio', 'aperture'], ['Projects', 'folder'], ['Camera'], ['Packs', 'bag'], ['Settings', 'gear']].map(([n, i]) => (n === 'Camera' ? `<div class="tab"><div class="shutterTab"><div>${icon('camera', 24, '#fff', 2)}</div></div></div>` : `<div class="tab ${n === active ? 'on' : ''}">${icon(i, 22, n === active ? '#F7F5FB' : 'rgba(247,245,251,0.56)', n === active ? 2.1 : 1.75)}<span>${n}</span><div class="dot"></div></div>`)).join('')}</div>`;
+const wordmark = size =>
+  `<div class="row" style="gap:${size * 0.28}px">${mark(size)}<div style="display:flex;align-items:baseline"><span style="font-size:${size * 0.62}px;font-weight:800;letter-spacing:-.6px">Photo</span><span style="font-size:${size * 0.62}px;font-weight:300;letter-spacing:-.4px;margin-left:${size * 0.12}px;color:var(--accent)">Plus</span></div></div>`;
 
 const pillars = [
   ['Camera Studio', 'Manual control, pro modes, composition guides', 'aperture', 'rgba(255,122,69,0.55)', false],
@@ -134,7 +146,16 @@ const screens = {};
 screens.onboarding = `${aurora()}${status()}<div class="content" style="padding-top:84px;display:flex;flex-direction:column">
   <div style="display:flex;flex-direction:column;align-items:center">${mark(112)}<div class="display" style="margin-top:22px">Photo Plus</div>
   <div class="body t2" style="text-align:center;margin-top:8px;max-width:300px">Your photoshoot studio — camera, director and darkroom in one.</div></div>
-  <div style="display:flex;flex-direction:column;gap:12px;margin-top:34px">${[['aperture', 'A pro camera in your pocket', 'Manual controls and composition guides, tuned to your phone.'], ['sparkles', 'An assistant that directs', 'Pose, light and framing guidance — on-device, no cloud.'], ['shield', 'Private by design', 'Works offline. Your photos never leave this device unless you share them.']].map(([i, t, b]) => `<div class="glass r-lg row gap12" style="padding:16px;gap:14px"><div style="width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;background-image:${G.spectrum};flex:none">${icon(i, 22, '#fff')}</div><div><div class="strongt">${t}</div><div class="caption t2" style="margin-top:2px">${b}</div></div></div>`).join('')}</div>
+  <div style="display:flex;flex-direction:column;gap:12px;margin-top:34px">${[
+    ['aperture', 'A pro camera in your pocket', 'Manual controls and composition guides, tuned to your phone.'],
+    ['sparkles', 'An assistant that directs', 'Pose, light and framing guidance — on-device, no cloud.'],
+    ['shield', 'Private by design', 'Works offline. Your photos never leave this device unless you share them.'],
+  ]
+    .map(
+      ([i, t, b]) =>
+        `<div class="glass r-lg row gap12" style="padding:16px;gap:14px"><div style="width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;background-image:${G.spectrum};flex:none">${icon(i, 22, '#fff')}</div><div><div class="strongt">${t}</div><div class="caption t2" style="margin-top:2px">${b}</div></div></div>`,
+    )
+    .join('')}</div>
   <div style="flex:1"></div>
   <div class="btn primary" style="justify-content:center;width:100%;height:56px">${icon('camera', 20, '#fff', 2)}Get started</div>
   <div class="btn ghost" style="justify-content:center;width:100%;margin:4px 0 26px">Explore first</div></div>`;
@@ -166,13 +187,29 @@ screens.camera = `<div style="position:absolute;inset:0;background:#000">${scene
     <div style="width:56px;display:flex;justify-content:center"><div class="iconbtn" style="width:48px;height:48px">${icon('flip', 21)}</div></div></div>
    <div class="caption" style="color:rgba(255,255,255,.75);margin-top:10px;letter-spacing:1.4px">PHOTO · BACK CAMERA</div></div>`;
 
-const projects = [['Studio portraits — March', 24, 'linear-gradient(160deg,#FFB36B,#FF5E7E 55%,#5A2A6E)'], ['Captures', 61, 'linear-gradient(160deg,#2DD4BF,#5B5BF7 60%,#120A2A)'], ['Accra street — golden hour', 37, 'linear-gradient(160deg,#F5C66B,#C9922E 50%,#3a2412)'], ['Wedding: Ama & Kofi', 112, 'linear-gradient(160deg,#FFF3E2,#E8C9A8 50%,#8E6B55)']];
+const projects = [
+  ['Studio portraits — March', 24, 'linear-gradient(160deg,#FFB36B,#FF5E7E 55%,#5A2A6E)'],
+  ['Captures', 61, 'linear-gradient(160deg,#2DD4BF,#5B5BF7 60%,#120A2A)'],
+  ['Accra street — golden hour', 37, 'linear-gradient(160deg,#F5C66B,#C9922E 50%,#3a2412)'],
+  ['Wedding: Ama & Kofi', 112, 'linear-gradient(160deg,#FFF3E2,#E8C9A8 50%,#8E6B55)'],
+];
 screens.projects = `${aurora()}${status()}<div class="content">
   <div class="row" style="margin-bottom:20px"><div style="flex:1"><div class="overline acc">Library</div><div class="title1">Projects</div></div><div class="iconbtn" style="width:48px;height:48px">${icon('plus', 21)}</div></div>
   <div style="display:flex;flex-direction:column;gap:12px">${projects.map(([n, c, g]) => `<div class="glass r-lg row" style="gap:14px;padding:12px"><div style="width:64px;height:64px;border-radius:14px;background-image:${g};flex:none"></div><div style="flex:1;min-width:0"><div class="strongt" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n}</div><div class="caption t2">${c} photos · 3 Nov 2026</div></div><div class="iconbtn">${icon('trash', 19, '#FF6B6B')}</div></div>`).join('')}</div>
 </div>${tabbar('Projects')}`;
 
-const packs = [['Golden Coast', 'Warm beach editorial', 24, 'linear-gradient(160deg, #FFB36B 0%, #FF5E7E 55%, #5A2A6E 100%)', true], ['Neon Noir', 'Cinematic city night', 18, 'linear-gradient(160deg, #2DD4BF 0%, #5B5BF7 50%, #120A2A 100%)', false], ['Studio Ivory', 'Clean high-key portraits', 30, 'linear-gradient(160deg, #FFF3E2 0%, #E8C9A8 50%, #8E6B55 100%)', true], ['Kente Royale', 'Bold heritage colour', 20, 'linear-gradient(160deg, #F5C66B 0%, #2F9E5B 45%, #B4232F 100%)', false]];
+const packs = [
+  ['Golden Coast', 'Warm beach editorial', 24, 'linear-gradient(160deg, #FFB36B 0%, #FF5E7E 55%, #5A2A6E 100%)', true],
+  ['Neon Noir', 'Cinematic city night', 18, 'linear-gradient(160deg, #2DD4BF 0%, #5B5BF7 50%, #120A2A 100%)', false],
+  [
+    'Studio Ivory',
+    'Clean high-key portraits',
+    30,
+    'linear-gradient(160deg, #FFF3E2 0%, #E8C9A8 50%, #8E6B55 100%)',
+    true,
+  ],
+  ['Kente Royale', 'Bold heritage colour', 20, 'linear-gradient(160deg, #F5C66B 0%, #2F9E5B 45%, #B4232F 100%)', false],
+];
 screens.packs = `${aurora()}${status()}<div class="content">
   <div class="overline acc">Marketplace</div><div class="title1" style="margin-bottom:18px">Photoshoot Packs</div>
   <div class="glass r-xl" style="margin-bottom:20px;box-shadow:0 18px 40px -12px rgba(0,0,0,.45),0 0 32px -6px rgba(245,198,107,0.25)"><div style="padding:18px;background-image:linear-gradient(130deg, rgba(245,198,107,0.28) 0%, rgba(245,198,107,0.04) 70%);display:flex;flex-direction:column;gap:9px">${premiumBadge}<div class="title2">Recreate iconic shoots</div><div class="callout t2">Backdrops, lighting recipes, poses and styling for your camera. Packs are part of Premium — GHS 50/month.</div><div class="row gap8 callout" style="color:var(--gold);font-weight:700;margin-top:2px">${icon('crown', 16, '#F5C66B')}Premium subscriptions arrive in a later update</div></div></div>
@@ -192,20 +229,40 @@ screens.settings = `${aurora()}${status()}<div class="content">
   <div class="lrow"><div class="ricon">${icon('trash', 18, '#FF6B6B')}</div><div style="flex:1" class="strongt">Clear temporary cache</div><div class="callout t2">84 MB</div>${icon('chevronRight', 18, 'rgba(247,245,251,0.56)')}</div></div>
 </div>${tabbar('Settings')}`;
 
-const stat = (i, v, l, c) => `<div class="glass r-md" style="flex:1;padding:14px;display:flex;flex-direction:column;gap:10px">${icon(i, 18, c)}<div><div class="title3">${v}</div><div class="caption t3">${l}</div></div></div>`;
+const stat = (i, v, l, c) =>
+  `<div class="glass r-md" style="flex:1;padding:14px;display:flex;flex-direction:column;gap:10px">${icon(i, 18, c)}<div><div class="title3">${v}</div><div class="caption t3">${l}</div></div></div>`;
 screens.device = `${aurora()}${status()}<div class="content">
   <div class="row gap12" style="margin-bottom:16px"><div class="iconbtn">${icon('chevronLeft', 19)}</div><div><div class="overline acc">Tecno Camon 30</div><div class="title2">Device</div></div></div>
   <div class="row gap8" style="margin-bottom:14px;flex-wrap:wrap"><span class="badge b-ok">${icon('shield', 12, '#3DDC97', 2.2)}Performance tier</span><span class="badge b-n">Android 14 · API 34</span></div>
   <div class="row gap10" style="margin-bottom:10px">${stat('memory', '7.4 GB', 'RAM', '#FF7A45')}${stat('storage', '40.0 GB', 'Free storage', '#2DD4BF')}</div>
   <div class="row gap10" style="margin-bottom:20px">${stat('cpu', '8', 'CPU cores', '#6CB4FF')}${stat('camera', '2', 'Cameras', '#F5C66B')}</div>
   <div class="overline t3">Main sensor · full</div><div class="title3" style="margin:2px 0 10px">Camera controls</div>
-  <div class="glass r-lg">${[['Manual shutter speed', 'Supported'], ['Manual ISO', '50–6400'], ['RAW capture', 'Supported'], ['Zoom', '1× – 10×']].map(([a, b]) => `<div class="lrow"><div style="flex:1" class="strongt">${a}</div><div class="callout t2">${b}</div></div>`).join('')}</div>
+  <div class="glass r-lg">${[
+    ['Manual shutter speed', 'Supported'],
+    ['Manual ISO', '50–6400'],
+    ['RAW capture', 'Supported'],
+    ['Zoom', '1× – 10×'],
+  ]
+    .map(
+      ([a, b]) =>
+        `<div class="lrow"><div style="flex:1" class="strongt">${a}</div><div class="callout t2">${b}</div></div>`,
+    )
+    .join('')}</div>
   <div class="overline t3" style="margin-top:18px">Planned for later phases</div><div class="title3" style="margin:2px 0 10px">On-device AI models</div>
-  <div class="glass r-lg">${[['Subject segmentation (HQ)', 'Background removal · GPU', true], ['Garment transfer', 'Clothing transformation · GPU', true]].map(([a, b, ok]) => `<div class="lrow"><div style="flex:1"><div class="strongt">${a}</div><div class="caption t2">${b}</div></div><span class="badge ${ok ? 'b-ok' : 'b-warn'}">${ok ? 'Ready' : 'Limited'}</span></div>`).join('')}</div>
+  <div class="glass r-lg">${[
+    ['Subject segmentation (HQ)', 'Background removal · GPU', true],
+    ['Garment transfer', 'Clothing transformation · GPU', true],
+  ]
+    .map(
+      ([a, b, ok]) =>
+        `<div class="lrow"><div style="flex:1"><div class="strongt">${a}</div><div class="caption t2">${b}</div></div><span class="badge ${ok ? 'b-ok' : 'b-warn'}">${ok ? 'Ready' : 'Limited'}</span></div>`,
+    )
+    .join('')}</div>
 </div>`;
 
 // ------------------------------------------------------------- brand sheet --
-const sw = (n, c, t = '#fff') => `<div style="flex:1;border-radius:18px;height:110px;padding:12px;display:flex;flex-direction:column;justify-content:flex-end;background:${c};color:${t}"><div style="font-weight:700;font-size:13px">${n}</div><div style="font-size:11px;opacity:.8;font-family:monospace">${c.startsWith('linear') ? 'gradient' : c}</div></div>`;
+const sw = (n, c, t = '#fff') =>
+  `<div style="flex:1;border-radius:18px;height:110px;padding:12px;display:flex;flex-direction:column;justify-content:flex-end;background:${c};color:${t}"><div style="font-weight:700;font-size:13px">${n}</div><div style="font-size:11px;opacity:.8;font-family:monospace">${c.startsWith('linear') ? 'gradient' : c}</div></div>`;
 const brand = `<div style="width:1200px;padding:56px;background:#07060c;position:relative;overflow:hidden">
  <div class="blob" style="width:600px;height:600px;top:-260px;left:-200px;opacity:.5;background-image:radial-gradient(circle,#FF7A45 0%,#FF7A45 18%,transparent 70%)"></div>
  <div class="blob" style="width:600px;height:600px;bottom:-300px;right:-200px;opacity:.45;background-image:radial-gradient(circle,#5B5BF7 0%,#5B5BF7 18%,transparent 70%)"></div>
@@ -213,8 +270,18 @@ const brand = `<div style="width:1200px;padding:56px;background:#07060c;position
  <div class="overline acc">Photo Plus · Brand</div><div class="title1" style="font-size:40px;line-height:46px;margin:6px 0 6px">Aperture Plus</div>
  <div class="body t2" style="max-width:720px">Six aperture blades in the golden-hour → blue-hour spectrum close around a lens holding a plus: photography, a shutter in motion, and the promise of <i>more</i> from the phone you already own. A glass sheen ties the mark to the app's glass UI.</div>
  <div class="row" style="gap:40px;margin-top:36px;align-items:flex-end">
-  <div style="text-align:center">${logoSvg({ size: 260, background: true }).replace(/id="(\w+)"/g, 'id="$1_icon"').replace(/url\(#(\w+)\)/g, 'url(#$1_icon)')}<div class="caption t3" style="margin-top:10px">App icon</div></div>
-  <div style="text-align:center"><div style="width:180px;height:180px;border-radius:50%;overflow:hidden">${logoSvg({ size: 180, background: true }).replace(/id="(\w+)"/g, 'id="$1_round"').replace(/url\(#(\w+)\)/g, 'url(#$1_round)')}</div><div class="caption t3" style="margin-top:10px">Adaptive (circle mask)</div></div>
+  <div style="text-align:center">${logoSvg({ size: 260, background: true })
+    .replace(/id="(\w+)"/g, 'id="$1_icon"')
+    .replace(/url\(#(\w+)\)/g, 'url(#$1_icon)')}<div class="caption t3" style="margin-top:10px">App icon</div></div>
+  <div style="text-align:center"><div style="width:180px;height:180px;border-radius:50%;overflow:hidden">${logoSvg({
+    size: 180,
+    background: true,
+  })
+    .replace(/id="(\w+)"/g, 'id="$1_round"')
+    .replace(
+      /url\(#(\w+)\)/g,
+      'url(#$1_round)',
+    )}</div><div class="caption t3" style="margin-top:10px">Adaptive (circle mask)</div></div>
   <div style="text-align:center"><div style="width:180px;height:180px;border-radius:40px;background:#F3F1F8;display:flex;align-items:center;justify-content:center">${mark(140)}</div><div class="caption t3" style="margin-top:10px">Mark on light</div></div>
   <div style="text-align:center"><div style="display:flex;gap:18px;align-items:flex-end">${[64, 40, 24].map(s => mark(s)).join('')}</div><div class="caption t3" style="margin-top:10px">Small sizes</div></div>
  </div>
@@ -226,12 +293,21 @@ const brand = `<div style="width:1200px;padding:56px;background:#07060c;position
  </div></div>`;
 
 // ------------------------------------------------------------------ render --
-const page = (inner, w, h) => `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body style="width:${w}px;height:${h}px">${inner}</body></html>`;
+const page = (inner, w, h) =>
+  `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body style="width:${w}px;height:${h}px">${inner}</body></html>`;
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ deviceScaleFactor: 2 });
 const p = await ctx.newPage();
 
-const order = [['onboarding', 'Welcome'], ['studio', 'Studio'], ['camera', 'Camera'], ['projects', 'Projects'], ['packs', 'Packs'], ['settings', 'Settings'], ['device', 'Device']];
+const order = [
+  ['onboarding', 'Welcome'],
+  ['studio', 'Studio'],
+  ['camera', 'Camera'],
+  ['projects', 'Projects'],
+  ['packs', 'Packs'],
+  ['settings', 'Settings'],
+  ['device', 'Device'],
+];
 for (const [key] of order) {
   await p.setViewportSize({ width: 390, height: 844 });
   await p.setContent(page(`<div class="phone" style="border-radius:0">${screens[key]}</div>`, 390, 844));
@@ -239,10 +315,20 @@ for (const [key] of order) {
 }
 
 // Overview: all screens side by side in device frames.
-const frames = order.map(([key, label]) => `<div style="display:flex;flex-direction:column;align-items:center;gap:14px"><div style="padding:10px;border-radius:54px;background:linear-gradient(160deg,#2a2638,#0d0b14);box-shadow:0 30px 60px -20px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.08)"><div class="phone">${screens[key]}</div></div><div class="overline t2">${label}</div></div>`);
-const overview = (items, title) => `<div style="padding:48px 56px 56px;background:radial-gradient(ellipse at 20% 0%, #24172f 0%, #0b0a10 55%)"><div class="row" style="justify-content:space-between;margin-bottom:34px">${wordmark(40)}<div class="callout t2">${title}</div></div><div style="display:flex;gap:36px">${items.join('')}</div></div>`;
+const frames = order.map(
+  ([key, label]) =>
+    `<div style="display:flex;flex-direction:column;align-items:center;gap:14px"><div style="padding:10px;border-radius:54px;background:linear-gradient(160deg,#2a2638,#0d0b14);box-shadow:0 30px 60px -20px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.08)"><div class="phone">${screens[key]}</div></div><div class="overline t2">${label}</div></div>`,
+);
+const overview = (items, title) =>
+  `<div style="padding:48px 56px 56px;background:radial-gradient(ellipse at 20% 0%, #24172f 0%, #0b0a10 55%)"><div class="row" style="justify-content:space-between;margin-bottom:34px">${wordmark(40)}<div class="callout t2">${title}</div></div><div style="display:flex;gap:36px">${items.join('')}</div></div>`;
 await p.setViewportSize({ width: 4 * 410 + 3 * 36 + 112, height: 1050 });
-await p.setContent(page(overview(frames.slice(0, 4), 'Phase 1 · Design preview (1/2) · Dark theme · "Darkroom Aurora"'), 4 * 410 + 3 * 36 + 112, 1050));
+await p.setContent(
+  page(
+    overview(frames.slice(0, 4), 'Phase 1 · Design preview (1/2) · Dark theme · "Darkroom Aurora"'),
+    4 * 410 + 3 * 36 + 112,
+    1050,
+  ),
+);
 await p.screenshot({ path: join(out, 'overview-1.png'), fullPage: true });
 await p.setViewportSize({ width: 3 * 410 + 2 * 36 + 112, height: 1050 });
 await p.setContent(page(overview(frames.slice(4), 'Phase 1 · Design preview (2/2)'), 3 * 410 + 2 * 36 + 112, 1050));

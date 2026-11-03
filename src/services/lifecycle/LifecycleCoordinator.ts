@@ -14,7 +14,7 @@ export interface LifecycleHandlers {
 }
 
 interface AppStateLike {
-  currentState: AppStateStatus | string | null | undefined;
+  currentState: string | null | undefined;
   addEventListener(type: 'change', listener: (state: AppStateStatus) => void): { remove(): void };
 }
 

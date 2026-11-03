@@ -3,18 +3,20 @@ buildscript {
         buildToolsVersion = "37.0.0"
         minSdkVersion = 29 // Android 10 — product spec minimum
         compileSdkVersion = 37
-        targetSdkVersion = 36
-        ndkVersion = "27.1.12297006"
-        kotlinVersion = "2.2.0"
+        targetSdkVersion = 37
+        ndkVersion = "30.0.16248370"
+        kotlinVersion = "2.4.21"
     }
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle")
+        // Pinned to the latest stable releases (React Native's catalog defaults
+        // to older ones: AGP 9.2.1 / Kotlin 2.2.0).
+        classpath("com.android.tools.build:gradle:9.5.0")
         classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
     }
 }
 

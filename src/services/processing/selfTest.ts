@@ -32,7 +32,14 @@ interface Options {
   history?: HistoryRepository;
 }
 
-export async function runSelfTest({ service, outputDir, iterations = 10, signal, onProgress, history }: Options): Promise<SelfTestReport> {
+export async function runSelfTest({
+  service,
+  outputDir,
+  iterations = 10,
+  signal,
+  onProgress,
+  history,
+}: Options): Promise<SelfTestReport> {
   service.resetProfiler();
   const input = await service.generateTestImage(1600, 1200);
   // Measure this run only, not whatever an earlier export peaked at.
@@ -48,18 +55,42 @@ export async function runSelfTest({ service, outputDir, iterations = 10, signal,
     const jobId = `selftest-${Date.now()}-${i}`;
     try {
       const result = await service.process(
-        { inputPath: input, outputPath: joinPath(outputDir, 'selftest.jpg'), operations: SELF_TEST_PIPELINE, format: 'jpeg', quality: 90 },
+        {
+          inputPath: input,
+          outputPath: joinPath(outputDir, 'selftest.jpg'),
+          operations: SELF_TEST_PIPELINE,
+          format: 'jpeg',
+          quality: 90,
+        },
         { jobId, signal },
       );
       processSum += result.timings.processMs;
       totalSum += result.timings.totalMs;
       outputPath = result.outputPath;
       if (i === iterations - 1) {
-        await history?.record({ imageId: null, jobId, operations: SELF_TEST_PIPELINE, status: 'succeeded', errorCode: null, durationMs: result.timings.totalMs, outputPath });
+        await history?.record({
+          imageId: null,
+          jobId,
+          operations: SELF_TEST_PIPELINE,
+          status: 'succeeded',
+          errorCode: null,
+          durationMs: result.timings.totalMs,
+          outputPath,
+        });
       }
     } catch (error) {
       if (error instanceof ProcessingError) {
-        await history?.record({ imageId: null, jobId, operations: SELF_TEST_PIPELINE, status: error.cancelled ? 'cancelled' : 'failed', errorCode: error.code, durationMs: null, outputPath: null }).catch(() => undefined);
+        await history
+          ?.record({
+            imageId: null,
+            jobId,
+            operations: SELF_TEST_PIPELINE,
+            status: error.cancelled ? 'cancelled' : 'failed',
+            errorCode: error.code,
+            durationMs: null,
+            outputPath: null,
+          })
+          .catch(() => undefined);
       }
       throw error;
     }
@@ -81,7 +112,11 @@ export async function runSelfTest({ service, outputDir, iterations = 10, signal,
     memoryReturnedToBaseline: stats.currentBytes <= baseline,
     operations: Object.entries(profile)
       .filter(([name]) => name.startsWith('op.') || name === 'pipeline.total')
-      .map(([name, e]) => ({ name: name.replace('op.', '').replace('pipeline.total', 'full pipeline'), calls: e.calls, avgMs: e.avgMs }))
+      .map(([name, e]) => ({
+        name: name.replace('op.', '').replace('pipeline.total', 'full pipeline'),
+        calls: e.calls,
+        avgMs: e.avgMs,
+      }))
       .sort((a, b) => b.avgMs - a.avgMs),
   };
 }

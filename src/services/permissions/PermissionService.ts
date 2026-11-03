@@ -67,9 +67,8 @@ export function createAndroidBackend(): PermissionsBackend {
   return {
     sdkInt: typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10),
     check: p => PermissionsAndroid.check(p as Permission),
-    request: (p, rationale) => PermissionsAndroid.request(p as Permission, rationale) as Promise<RequestResult>,
-    requestMultiple: ps =>
-      PermissionsAndroid.requestMultiple(ps as Permission[]) as Promise<Record<string, RequestResult>>,
+    request: (p, rationale) => PermissionsAndroid.request(p as Permission, rationale),
+    requestMultiple: ps => PermissionsAndroid.requestMultiple(ps as Permission[]),
     openSettings: () => Linking.openSettings(),
   };
 }

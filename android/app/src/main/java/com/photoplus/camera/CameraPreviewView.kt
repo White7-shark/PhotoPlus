@@ -1,5 +1,6 @@
 package com.photoplus.camera
 
+import android.annotation.SuppressLint
 import android.view.Choreographer
 import android.widget.FrameLayout
 import androidx.camera.view.PreviewView
@@ -10,7 +11,12 @@ import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
 
-/** Native view backing <PhotoPlusCameraPreview />. */
+/**
+ * Native view backing <PhotoPlusCameraPreview />. Only ever created by
+ * CameraPreviewManager (never inflated from XML), so the XML constructors
+ * Lint asks for would be unusable: the view needs a ThemedReactContext.
+ */
+@SuppressLint("ViewConstructor")
 class CameraPreviewView(private val reactContext: ThemedReactContext) : FrameLayout(reactContext), CameraSession.Callbacks {
 
   private val previewView = PreviewView(reactContext).apply {

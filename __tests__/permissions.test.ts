@@ -1,6 +1,15 @@
-import { ANDROID_PERMISSIONS as P, PermissionService, permissionsFor, type PermissionsBackend } from '../src/services/permissions/PermissionService';
+import {
+  ANDROID_PERMISSIONS as P,
+  PermissionService,
+  permissionsFor,
+  type PermissionsBackend,
+} from '../src/services/permissions/PermissionService';
 
-function backend(sdkInt: number, initial: Record<string, boolean> = {}, answers: Record<string, 'granted' | 'denied' | 'never_ask_again'> = {}): PermissionsBackend & { granted: Record<string, boolean> } {
+function backend(
+  sdkInt: number,
+  initial: Record<string, boolean> = {},
+  answers: Record<string, 'granted' | 'denied' | 'never_ask_again'> = {},
+): PermissionsBackend & { granted: Record<string, boolean> } {
   const granted = { ...initial };
   return {
     sdkInt,
@@ -11,7 +20,7 @@ function backend(sdkInt: number, initial: Record<string, boolean> = {}, answers:
       if (a === 'granted') granted[p] = true;
       return a;
     },
-    requestMultiple: async ps => Object.fromEntries(ps.map(p => [p, answers[p] ?? 'denied'])) as Record<string, 'granted' | 'denied' | 'never_ask_again'>,
+    requestMultiple: async ps => Object.fromEntries(ps.map(p => [p, answers[p] ?? 'denied'])),
     openSettings: jest.fn(async () => undefined),
   };
 }

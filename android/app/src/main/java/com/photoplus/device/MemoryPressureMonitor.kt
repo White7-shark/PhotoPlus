@@ -19,6 +19,7 @@ object MemoryPressureMonitor : ComponentCallbacks2 {
 
   private val listeners = CopyOnWriteArraySet<Listener>()
   @Volatile private var installed = false
+  @Volatile private var appContext: Context? = null
   @Volatile var lastLevel: Level = Level.NORMAL
     private set
 
@@ -26,6 +27,7 @@ object MemoryPressureMonitor : ComponentCallbacks2 {
     if (installed) return
     synchronized(this) {
       if (installed) return
+      appContext = context.applicationContext
       context.applicationContext.registerComponentCallbacks(this)
       installed = true
     }
@@ -39,14 +41,15 @@ object MemoryPressureMonitor : ComponentCallbacks2 {
     listeners.remove(listener)
   }
 
-  /** Maps trim levels; visible for unit tests. */
-  @Suppress("DEPRECATION")
-  fun levelFor(trimLevel: Int): Level = when {
-    trimLevel >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> Level.CRITICAL
+  /**
+   * Maps trim levels using only the signals Android still supports: since
+   * API 34 every level except UI_HIDDEN and BACKGROUND is deprecated (and no
+   * longer delivered), so severity comes from ActivityManager's live
+   * `lowMemory` flag instead of the old RUNNING_* levels. Visible for tests.
+   */
+  fun levelFor(trimLevel: Int, systemLowOnMemory: Boolean): Level = when {
+    systemLowOnMemory -> Level.CRITICAL
     trimLevel >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> Level.MODERATE
-    trimLevel == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> Level.NORMAL
-    trimLevel >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> Level.CRITICAL
-    trimLevel >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> Level.MODERATE
     else -> Level.NORMAL
   }
 
@@ -56,12 +59,15 @@ object MemoryPressureMonitor : ComponentCallbacks2 {
   }
 
   override fun onTrimMemory(level: Int) {
-    if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) return // not pressure, just backgrounded
-    dispatch(levelFor(level))
+    if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) return // backgrounded, not pressure
+    val context = appContext ?: return
+    dispatch(levelFor(level, DeviceInfo.memoryInfo(context).lowMemory))
   }
 
-  @Deprecated("Deprecated in Android API")
-  override fun onLowMemory() = dispatch(Level.CRITICAL)
+  // Required by the ComponentCallbacks interface; the platform deprecated it
+  // in favour of onTrimMemory, which is what this monitor relies on.
+  @Deprecated("Superseded by onTrimMemory")
+  override fun onLowMemory() = Unit
 
   override fun onConfigurationChanged(newConfig: Configuration) = Unit
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { useTheme } from '../theme';
 
@@ -90,20 +90,20 @@ export const ICONS = {
   ),
   grid: (
     <>
-      <Rect x={4} y={4} width={16} height={16} rx={2} />
+      <Path d="M6 4H18A2 2 0 0 1 20 6V18A2 2 0 0 1 18 20H6A2 2 0 0 1 4 18V6A2 2 0 0 1 6 4Z" />
       <Path d="M9.33 4v16M14.67 4v16M4 9.33h16M4 14.67h16" />
     </>
   ),
   cpu: (
     <>
-      <Rect x={6.5} y={6.5} width={11} height={11} rx={2} />
-      <Rect x={9.5} y={9.5} width={5} height={5} rx={1} />
+      <Path d="M8.5 6.5H15.5A2 2 0 0 1 17.5 8.5V15.5A2 2 0 0 1 15.5 17.5H8.5A2 2 0 0 1 6.5 15.5V8.5A2 2 0 0 1 8.5 6.5Z" />
+      <Path d="M10.5 9.5H13.5A1 1 0 0 1 14.5 10.5V13.5A1 1 0 0 1 13.5 14.5H10.5A1 1 0 0 1 9.5 13.5V10.5A1 1 0 0 1 10.5 9.5Z" />
       <Path d="M9.5 3.5v3M14.5 3.5v3M9.5 17.5v3M14.5 17.5v3M3.5 9.5h3M3.5 14.5h3M17.5 9.5h3M17.5 14.5h3" />
     </>
   ),
   memory: (
     <>
-      <Rect x={3.5} y={7} width={17} height={10} rx={1.5} />
+      <Path d="M5 7H19A1.5 1.5 0 0 1 20.5 8.5V15.5A1.5 1.5 0 0 1 19 17H5A1.5 1.5 0 0 1 3.5 15.5V8.5A1.5 1.5 0 0 1 5 7Z" />
       <Path d="M7 7v10M11 7v10M15 7v10M6 17v2.5M18 17v2.5" />
     </>
   ),
@@ -115,14 +115,14 @@ export const ICONS = {
   ),
   lock: (
     <>
-      <Rect x={5} y={10.5} width={14} height={10} rx={2.5} />
+      <Path d="M7.5 10.5H16.5A2.5 2.5 0 0 1 19 13V18A2.5 2.5 0 0 1 16.5 20.5H7.5A2.5 2.5 0 0 1 5 18V13A2.5 2.5 0 0 1 7.5 10.5Z" />
       <Path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2.5" />
     </>
   ),
   crown: <Path d="M4 8.5 8 12l4-6 4 6 4-3.5-1.5 10h-13z" />,
   image: (
     <>
-      <Rect x={3.5} y={4.5} width={17} height={15} rx={2.5} />
+      <Path d="M6 4.5H18A2.5 2.5 0 0 1 20.5 7V17A2.5 2.5 0 0 1 18 19.5H6A2.5 2.5 0 0 1 3.5 17V7A2.5 2.5 0 0 1 6 4.5Z" />
       <Circle cx={9} cy={10} r={1.8} />
       <Path d="M20.5 15.5 15.5 10.5 6 19.5" />
     </>
@@ -134,7 +134,9 @@ export const ICONS = {
     </>
   ),
   play: <Path d="M8 5.5v13l11-6.5z" />,
-  stop: <Rect x={6.5} y={6.5} width={11} height={11} rx={2} />,
+  stop: (
+    <Path d="M8.5 6.5H15.5A2 2 0 0 1 17.5 8.5V15.5A2 2 0 0 1 15.5 17.5H8.5A2 2 0 0 1 6.5 15.5V8.5A2 2 0 0 1 8.5 6.5Z" />
+  ),
   moon: <Path d="M19.5 14.5A7.5 7.5 0 1 1 9.5 4.5a6 6 0 0 0 10 10z" />,
   sun: (
     <>

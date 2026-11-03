@@ -52,9 +52,7 @@ function parseCamera(v: unknown): CameraInfo | null {
   return {
     id: v.id,
     lensFacing: (LENS as readonly string[]).includes(lens) ? (lens as CameraInfo['lensFacing']) : 'unknown',
-    hardwareLevel: (LEVELS as readonly string[]).includes(level)
-      ? (level as CameraInfo['hardwareLevel'])
-      : 'unknown',
+    hardwareLevel: (LEVELS as readonly string[]).includes(level) ? (level as CameraInfo['hardwareLevel']) : 'unknown',
     sensorMegapixels: numOrNull(v.sensorMegapixels),
     maxJpegSize: jpeg ? { width: num(jpeg.width), height: num(jpeg.height) } : null,
     controls: parseControls(v.controls),

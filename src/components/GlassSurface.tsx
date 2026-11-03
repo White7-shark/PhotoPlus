@@ -21,11 +21,23 @@ export interface GlassSurfaceProps extends ViewProps {
  * the effect is built from layered translucency; the aurora behind it is
  * itself pre-blurred (see AuroraBackground), giving the frosted look.
  */
-export function GlassSurface({ intensity = 'regular', radius, padding, glow, style, children, ...rest }: GlassSurfaceProps) {
+export function GlassSurface({
+  intensity = 'regular',
+  radius,
+  padding,
+  glow,
+  style,
+  children,
+  ...rest
+}: GlassSurfaceProps) {
   const theme = useTheme();
   const isDark = theme.mode === 'dark';
   const fill =
-    intensity === 'strong' ? theme.colors.glassFillStrong : intensity === 'subtle' ? 'rgba(255,255,255,0.035)' : theme.colors.glassFill;
+    intensity === 'strong'
+      ? theme.colors.glassFillStrong
+      : intensity === 'subtle'
+        ? 'rgba(255,255,255,0.035)'
+        : theme.colors.glassFill;
   const r = radius ?? theme.radii.lg;
   return (
     <View

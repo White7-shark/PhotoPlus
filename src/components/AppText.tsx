@@ -16,7 +16,14 @@ export interface AppTextProps extends TextProps {
  * Font scaling is allowed (accessibility) but capped so dense controls
  * never overflow their glass containers.
  */
-export function AppText({ variant = 'body', tone = 'primary', align, style, maxFontSizeMultiplier, ...rest }: AppTextProps) {
+export function AppText({
+  variant = 'body',
+  tone = 'primary',
+  align,
+  style,
+  maxFontSizeMultiplier,
+  ...rest
+}: AppTextProps) {
   const theme = useTheme();
   const colors: Record<Tone, string> = {
     primary: theme.colors.textPrimary,

@@ -42,11 +42,21 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
         <View style={{ flex: 1 }}>
           <Logo size={34} />
         </View>
-        <IconButton icon="cpu" label="Device and engine diagnostics" onPress={() => navigation.navigate('DeviceInfo')} size={44} />
+        <IconButton
+          icon="cpu"
+          label="Device and engine diagnostics"
+          onPress={() => navigation.navigate('DeviceInfo')}
+          size={44}
+        />
       </View>
 
       {warnings.map((w, i) => (
-        <GlassSurface key={w} radius={theme.radii.md} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, marginBottom: 12 }} accessibilityLiveRegion="polite">
+        <GlassSurface
+          key={w}
+          radius={theme.radii.md}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, marginBottom: 12 }}
+          accessibilityLiveRegion="polite"
+        >
           <Icon name="info" size={18} color={theme.colors.warning} />
           <AppText variant="callout" tone="secondary" style={{ flex: 1 }}>
             {w}
@@ -64,7 +74,13 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
 
       {/* Hero */}
       <GlassSurface radius={theme.radii.xl} glow="rgba(242,71,126,0.35)" style={{ padding: 0, marginBottom: 28 }}>
-        <View style={{ padding: 22, backgroundImage: 'linear-gradient(120deg, rgba(255,122,69,0.30) 0%, rgba(242,71,126,0.18) 45%, rgba(139,92,246,0.10) 100%)' }}>
+        <View
+          style={{
+            padding: 22,
+            backgroundImage:
+              'linear-gradient(120deg, rgba(255,122,69,0.30) 0%, rgba(242,71,126,0.18) 45%, rgba(139,92,246,0.10) 100%)',
+          }}
+        >
           <Badge label="New shoot" tone="accent" icon="sparkles" />
           <AppText variant="title2" style={{ marginTop: 14 }}>
             Start a photoshoot
@@ -91,7 +107,18 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
           >
             <View style={{ flex: 1, padding: 16, backgroundImage: p.gradient }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <View style={{ width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' }}>
+                <View
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(255,255,255,0.14)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.22)',
+                  }}
+                >
                   <Icon name={p.icon} size={22} color="#FFFFFF" />
                 </View>
                 {p.premium ? <PremiumBadge /> : null}
@@ -111,7 +138,11 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
       <SectionHeader
         overline="Library"
         title="Recent projects"
-        action={projects.length ? <Button label="See all" variant="ghost" onPress={() => navigation.navigate('Projects')} /> : undefined}
+        action={
+          projects.length ? (
+            <Button label="See all" variant="ghost" onPress={() => navigation.navigate('Projects')} />
+          ) : undefined
+        }
       />
       {projectsStatus === 'loading' && projects.length === 0 ? (
         <View style={{ flexDirection: 'row', gap }}>
@@ -119,13 +150,31 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
           <Skeleton height={150} width="48%" radius={20} />
         </View>
       ) : projects.length === 0 ? (
-        <EmptyState icon="image" title="No projects yet" message="Your captures land in a Captures project automatically." actionLabel="Take your first photo" onAction={() => navigation.navigate('Camera')} />
+        <EmptyState
+          icon="image"
+          title="No projects yet"
+          message="Your captures land in a Captures project automatically."
+          actionLabel="Take your first photo"
+          onAction={() => navigation.navigate('Camera')}
+        />
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
           {projects.slice(0, r.columns * 2).map(p => (
-            <Pressable key={p.id} onPress={() => navigation.navigate('Projects')} accessibilityRole="button" accessibilityLabel={`${p.name}, ${p.imageCount} photos`} style={{ width: cardWidth }}>
+            <Pressable
+              key={p.id}
+              onPress={() => navigation.navigate('Projects')}
+              accessibilityRole="button"
+              accessibilityLabel={`${p.name}, ${p.imageCount} photos`}
+              style={{ width: cardWidth }}
+            >
               <GlassSurface radius={theme.radii.lg} style={{ height: 150, justifyContent: 'flex-end' }}>
-                {p.coverPath ? <Image source={{ uri: `file://${p.coverPath}` }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" /> : null}
+                {p.coverPath ? (
+                  <Image
+                    source={{ uri: `file://${p.coverPath}` }}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                    resizeMode="cover"
+                  />
+                ) : null}
                 <View style={{ padding: 12, backgroundImage: theme.gradients.scrim }}>
                   <AppText variant="bodyStrong" numberOfLines={1} style={{ color: '#FFFFFF' }}>
                     {p.name}
@@ -140,15 +189,34 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
         </View>
       )}
 
-      <Pressable onPress={() => navigation.navigate('DeviceInfo')} accessibilityRole="button" accessibilityLabel={`Device readiness: ${tierLabel[tier]}. View details`} style={{ marginTop: 28 }}>
-        <GlassSurface radius={theme.radii.lg} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}>
-          <View style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundImage: theme.gradients.lagoon }}>
+      <Pressable
+        onPress={() => navigation.navigate('DeviceInfo')}
+        accessibilityRole="button"
+        accessibilityLabel={`Device readiness: ${tierLabel[tier]}. View details`}
+        style={{ marginTop: 28 }}
+      >
+        <GlassSurface
+          radius={theme.radii.lg}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}
+        >
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundImage: theme.gradients.lagoon,
+            }}
+          >
             <Icon name="shield" size={22} color="#FFFFFF" />
           </View>
           <View style={{ flex: 1 }}>
             <AppText variant="bodyStrong">Device readiness</AppText>
             <AppText variant="caption" tone="secondary">
-              {tier === 'unsupported' ? 'Below the recommended specs — heavy features will be limited.' : `${tierLabel[tier]} tier · all core features available offline`}
+              {tier === 'unsupported'
+                ? 'Below the recommended specs — heavy features will be limited.'
+                : `${tierLabel[tier]} tier · all core features available offline`}
             </AppText>
           </View>
           <Icon name="chevronRight" size={18} color={theme.colors.textTertiary} />

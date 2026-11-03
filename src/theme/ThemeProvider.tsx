@@ -5,10 +5,7 @@ import { createTheme, type Theme, type ThemeMode, type ThemePreference } from '.
 
 const ThemeContext = createContext<Theme>(createTheme('dark'));
 
-export function resolveThemeMode(
-  preference: ThemePreference,
-  systemScheme: string | null | undefined,
-): ThemeMode {
+export function resolveThemeMode(preference: ThemePreference, systemScheme: string | null | undefined): ThemeMode {
   if (preference === 'system') {
     return systemScheme === 'light' ? 'light' : 'dark';
   }

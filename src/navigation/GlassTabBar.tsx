@@ -34,7 +34,10 @@ export function GlassTabBar({ state, navigation }: BottomTabBarProps) {
       <GlassSurface
         intensity="strong"
         radius={theme.radii.xl}
-        style={[styles.bar, { backgroundColor: theme.mode === 'dark' ? 'rgba(16,14,25,0.86)' : 'rgba(251,250,253,0.9)' }]}
+        style={[
+          styles.bar,
+          { backgroundColor: theme.mode === 'dark' ? 'rgba(16,14,25,0.86)' : 'rgba(251,250,253,0.9)' },
+        ]}
         accessibilityRole="tablist"
       >
         {state.routes.map((route, index) => {
@@ -56,7 +59,15 @@ export function GlassTabBar({ state, navigation }: BottomTabBarProps) {
                 accessibilityState={{ selected: focused }}
                 style={styles.shutterSlot}
               >
-                <View style={[styles.shutter, { backgroundImage: theme.gradients.spectrum, boxShadow: `0 8px 24px -6px ${theme.colors.accentAlt}` }]}>
+                <View
+                  style={[
+                    styles.shutter,
+                    {
+                      backgroundImage: theme.gradients.spectrum,
+                      boxShadow: `0 8px 24px -6px ${theme.colors.accentAlt}`,
+                    },
+                  ]}
+                >
                   <View style={styles.shutterInner}>
                     <Icon name="camera" size={24} color="#FFFFFF" strokeWidth={2} />
                   </View>
@@ -75,7 +86,11 @@ export function GlassTabBar({ state, navigation }: BottomTabBarProps) {
               style={styles.tab}
             >
               <Icon name={meta.icon} size={22} color={color} strokeWidth={focused ? 2.1 : 1.75} />
-              <AppText variant="caption" style={{ color, fontWeight: focused ? '700' : '500', fontSize: 11 }} maxFontSizeMultiplier={1.2}>
+              <AppText
+                variant="caption"
+                style={{ color, fontWeight: focused ? '700' : '500', fontSize: 11 }}
+                maxFontSizeMultiplier={1.2}
+              >
                 {meta.label}
               </AppText>
               <View style={[styles.dot, { backgroundColor: focused ? theme.colors.accent : 'transparent' }]} />

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neutral native background for EditText: the visible field (glass fill,
+     border, radius) is drawn by the React components in src/screens. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="0dp"
+    android:insetRight="0dp"
+    android:insetTop="0dp"
+    android:insetBottom="0dp">
+    <shape android:shape="rectangle">
+        <solid android:color="@android:color/transparent" />
+    </shape>
+</inset>

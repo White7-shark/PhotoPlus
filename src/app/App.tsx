@@ -27,7 +27,11 @@ function BootGate() {
       <AuroraBackground />
       {status === 'error' ? (
         <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
-          <ErrorState title="Something went wrong at startup" message={bootError ?? undefined} onRetry={() => start()} />
+          <ErrorState
+            title="Something went wrong at startup"
+            message={bootError ?? undefined}
+            onRetry={() => void start()}
+          />
         </View>
       ) : (
         <SplashState label="Preparing your studio…" />
@@ -41,7 +45,7 @@ function ThemedApp() {
   return (
     <ThemeProvider preference={preference}>
       <ThemedStatusBar />
-      <ErrorBoundary area="Photo Plus" onReset={() => useAppStore.getState().start()}>
+      <ErrorBoundary area="Photo Plus" onReset={() => void useAppStore.getState().start()}>
         <BootGate />
       </ErrorBoundary>
     </ThemeProvider>
@@ -50,12 +54,12 @@ function ThemedApp() {
 
 function ThemedStatusBar() {
   const theme = useTheme();
-  return <StatusBar barStyle={theme.mode === "dark" ? "light-content" : "dark-content"} />;
+  return <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />;
 }
 
 export default function App() {
   useEffect(() => {
-    useAppStore.getState().start();
+    void useAppStore.getState().start();
     return startLifecycleCoordinator({
       onForeground: () => useAppStore.getState().setForeground(true),
       onBackground: () => {

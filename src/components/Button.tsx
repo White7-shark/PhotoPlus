@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -25,7 +25,7 @@ export interface ButtonProps {
 export function usePressScale() {
   const reduced = useReducedMotion();
   const theme = useTheme();
-  const scale = useRef(new Animated.Value(1)).current;
+  const [scale] = useState(() => new Animated.Value(1));
   const animate = (to: number) =>
     reduced
       ? undefined
@@ -66,7 +66,8 @@ export function Button({
     ghost: { backgroundColor: 'transparent' },
     danger: { backgroundColor: 'rgba(255,107,107,0.14)', borderWidth: 1, borderColor: 'rgba(255,107,107,0.45)' },
   };
-  const labelTone = variant === 'premium' ? 'inverse' : variant === 'danger' ? 'danger' : variant === 'ghost' ? 'accent' : 'primary';
+  const labelTone =
+    variant === 'premium' ? 'inverse' : variant === 'danger' ? 'danger' : variant === 'ghost' ? 'accent' : 'primary';
   const labelColor =
     variant === 'premium'
       ? '#1A1206'

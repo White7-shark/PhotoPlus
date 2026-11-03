@@ -27,7 +27,19 @@ interface ScreenProps {
  * Page scaffold: aurora backdrop, safe areas, centred max-width column and
  * responsive gutters. Every screen uses it so spacing is consistent.
  */
-export function Screen({ title, overline, headerRight, onBack, children, scroll = true, aurora = 'default', refreshing, onRefresh, bottomInset, contentStyle }: ScreenProps) {
+export function Screen({
+  title,
+  overline,
+  headerRight,
+  onBack,
+  children,
+  scroll = true,
+  aurora = 'default',
+  refreshing,
+  onRefresh,
+  bottomInset,
+  contentStyle,
+}: ScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const r = useResponsive();
@@ -68,7 +80,15 @@ export function Screen({ title, overline, headerRight, onBack, children, scroll 
           contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: bottom }}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} colors={[theme.colors.accent]} progressBackgroundColor={theme.colors.surface} /> : undefined
+            onRefresh ? (
+              <RefreshControl
+                refreshing={!!refreshing}
+                onRefresh={onRefresh}
+                tintColor={theme.colors.accent}
+                colors={[theme.colors.accent]}
+                progressBackgroundColor={theme.colors.surface}
+              />
+            ) : undefined
           }
         >
           {inner}

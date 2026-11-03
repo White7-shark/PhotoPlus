@@ -1,4 +1,4 @@
-import type { CodegenTypes, HostComponent, ViewProps } from 'react-native';
+import type { CodegenTypes, ViewProps } from 'react-native';
 import { codegenNativeComponent } from 'react-native';
 
 type CameraReadyEvent = Readonly<{
@@ -17,6 +17,4 @@ export interface NativeProps extends ViewProps {
   onCameraError?: CodegenTypes.DirectEventHandler<CameraErrorEvent>;
 }
 
-export default codegenNativeComponent<NativeProps>(
-  'PhotoPlusCameraPreview',
-) as HostComponent<NativeProps>;
+export default codegenNativeComponent<NativeProps>('PhotoPlusCameraPreview');

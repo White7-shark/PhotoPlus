@@ -24,7 +24,6 @@ export function parseColor(input: string): Rgba {
     }
     const n = parseInt(h.slice(0, 6), 16);
     const a = h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1;
-    // eslint-disable-next-line no-bitwise -- unpacking RGB channels from a 24-bit int
     return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a };
   }
   const rgb = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(value);

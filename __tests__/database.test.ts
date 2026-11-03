@@ -15,8 +15,12 @@ describe('migrations', () => {
     const db = await SqlJsExecutor.create();
     const result = await runMigrations(db);
     expect(result).toEqual({ from: 0, to: MIGRATIONS.length, applied: MIGRATIONS.map(m => m.version) });
-    const tables = (await db.query<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")).map(t => t.name);
-    expect(tables).toEqual(expect.arrayContaining(['settings', 'projects', 'images', 'processing_history', 'assets', 'schema_migrations']));
+    const tables = (
+      await db.query<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+    ).map(t => t.name);
+    expect(tables).toEqual(
+      expect.arrayContaining(['settings', 'projects', 'images', 'processing_history', 'assets', 'schema_migrations']),
+    );
   });
 
   it('is idempotent', async () => {
@@ -31,7 +35,11 @@ describe('migrations', () => {
     const db = await SqlJsExecutor.create();
     const broken: Migration[] = [
       ...MIGRATIONS,
-      { version: MIGRATIONS.length + 1, name: 'broken', statements: ['CREATE TABLE extra (id TEXT)', 'THIS IS NOT SQL'] },
+      {
+        version: MIGRATIONS.length + 1,
+        name: 'broken',
+        statements: ['CREATE TABLE extra (id TEXT)', 'THIS IS NOT SQL'],
+      },
     ];
     await expect(runMigrations(db, broken)).rejects.toThrow();
     expect(await currentSchemaVersion(db)).toBe(MIGRATIONS.length);
@@ -104,8 +112,27 @@ describe('ProjectsRepository & ImagesRepository', () => {
     const b = await projects.create('Beach');
     expect((await projects.list()).map(p => p.name)).toEqual(['Beach', 'Studio portraits']);
 
-    await repos.images.add({ projectId: a.id, path: '/x/1.jpg', source: 'camera', width: 4000, height: 3000, sizeBytes: 2_000_000, mimeType: 'image/jpeg', capturedAt: 1, metadata: { iso: 100 } });
-    await repos.images.add({ projectId: a.id, path: '/x/2.jpg', source: 'camera', width: 4000, height: 3000, sizeBytes: 1_000_000, mimeType: 'image/jpeg', capturedAt: 2 });
+    await repos.images.add({
+      projectId: a.id,
+      path: '/x/1.jpg',
+      source: 'camera',
+      width: 4000,
+      height: 3000,
+      sizeBytes: 2_000_000,
+      mimeType: 'image/jpeg',
+      capturedAt: 1,
+      metadata: { iso: 100 },
+    });
+    await repos.images.add({
+      projectId: a.id,
+      path: '/x/2.jpg',
+      source: 'camera',
+      width: 4000,
+      height: 3000,
+      sizeBytes: 1_000_000,
+      mimeType: 'image/jpeg',
+      capturedAt: 2,
+    });
     const reloaded = await projects.get(a.id);
     expect(reloaded?.imageCount).toBe(2);
     expect(reloaded?.coverPath).toBeTruthy();
@@ -126,7 +153,16 @@ describe('ProjectsRepository & ImagesRepository', () => {
     const { repos } = await freshRepos();
     await expect(repos.projects.create('   ')).rejects.toThrow(/empty/);
     const p = await repos.projects.create('A');
-    const img = { projectId: p.id, path: '/dup.jpg', source: 'import' as const, width: 1, height: 1, sizeBytes: 1, mimeType: null, capturedAt: null };
+    const img = {
+      projectId: p.id,
+      path: '/dup.jpg',
+      source: 'import' as const,
+      width: 1,
+      height: 1,
+      sizeBytes: 1,
+      mimeType: null,
+      capturedAt: null,
+    };
     await repos.images.add(img);
     await expect(repos.images.add(img)).rejects.toThrow();
   });
@@ -151,7 +187,16 @@ describe('ProjectsRepository & ImagesRepository', () => {
 
   it('removes single images and returns their path', async () => {
     const { repos } = await freshRepos();
-    const img = await repos.images.add({ projectId: null, path: '/a.jpg', source: 'test', width: 1, height: 1, sizeBytes: 1, mimeType: null, capturedAt: null });
+    const img = await repos.images.add({
+      projectId: null,
+      path: '/a.jpg',
+      source: 'test',
+      width: 1,
+      height: 1,
+      sizeBytes: 1,
+      mimeType: null,
+      capturedAt: null,
+    });
     expect(await repos.images.remove(img.id)).toBe('/a.jpg');
     expect(await repos.images.remove(img.id)).toBeNull();
   });
@@ -161,7 +206,15 @@ describe('HistoryRepository', () => {
   it('records and prunes to the retention limit', async () => {
     const { repos } = await freshRepos();
     for (let i = 0; i < 12; i++) {
-      await repos.history.record({ imageId: null, jobId: `j${i}`, operations: [{ type: 'grayscale' }], status: i % 3 === 0 ? 'failed' : 'succeeded', errorCode: null, durationMs: i * 10.4, outputPath: null });
+      await repos.history.record({
+        imageId: null,
+        jobId: `j${i}`,
+        operations: [{ type: 'grayscale' }],
+        status: i % 3 === 0 ? 'failed' : 'succeeded',
+        errorCode: null,
+        durationMs: i * 10.4,
+        outputPath: null,
+      });
     }
     expect(await repos.history.prune(5)).toBe(7);
     const recent = await repos.history.listRecent();
@@ -172,8 +225,25 @@ describe('HistoryRepository', () => {
 
   it('keeps history when the image is deleted (ON DELETE SET NULL)', async () => {
     const { repos } = await freshRepos();
-    const img = await repos.images.add({ projectId: null, path: '/h.jpg', source: 'test', width: 1, height: 1, sizeBytes: 1, mimeType: null, capturedAt: null });
-    await repos.history.record({ imageId: img.id, jobId: 'j', operations: [], status: 'succeeded', errorCode: null, durationMs: 5, outputPath: '/o.jpg' });
+    const img = await repos.images.add({
+      projectId: null,
+      path: '/h.jpg',
+      source: 'test',
+      width: 1,
+      height: 1,
+      sizeBytes: 1,
+      mimeType: null,
+      capturedAt: null,
+    });
+    await repos.history.record({
+      imageId: img.id,
+      jobId: 'j',
+      operations: [],
+      status: 'succeeded',
+      errorCode: null,
+      durationMs: 5,
+      outputPath: '/o.jpg',
+    });
     await repos.images.remove(img.id);
     expect((await repos.history.listRecent())[0].imageId).toBeNull();
   });
@@ -184,10 +254,46 @@ describe('AssetRegistry', () => {
     const { repos } = await freshRepos();
     let t = 0;
     (repos.assets as unknown as { now: () => number }).now = () => ++t;
-    await repos.assets.register({ id: 'pack.golden', kind: 'pack', name: 'Golden Coast', version: '1.0.0', path: '/p/golden', sizeBytes: 50_000_000, checksum: 'abc', source: 'download' });
-    await repos.assets.register({ id: 'model.pose', kind: 'model', name: 'Pose', version: '1', path: '/m/pose', sizeBytes: 6_000_000, checksum: null, source: 'download' });
-    await repos.assets.register({ id: 'lut.base', kind: 'lut', name: 'Base', version: '1', path: '/l/base', sizeBytes: 1000, checksum: null, source: 'bundled' });
-    await repos.assets.register({ id: 'pack.golden', kind: 'pack', name: 'Golden Coast', version: '1.1.0', path: '/p/golden', sizeBytes: 52_000_000, checksum: 'def', source: 'download' });
+    await repos.assets.register({
+      id: 'pack.golden',
+      kind: 'pack',
+      name: 'Golden Coast',
+      version: '1.0.0',
+      path: '/p/golden',
+      sizeBytes: 50_000_000,
+      checksum: 'abc',
+      source: 'download',
+    });
+    await repos.assets.register({
+      id: 'model.pose',
+      kind: 'model',
+      name: 'Pose',
+      version: '1',
+      path: '/m/pose',
+      sizeBytes: 6_000_000,
+      checksum: null,
+      source: 'download',
+    });
+    await repos.assets.register({
+      id: 'lut.base',
+      kind: 'lut',
+      name: 'Base',
+      version: '1',
+      path: '/l/base',
+      sizeBytes: 1000,
+      checksum: null,
+      source: 'bundled',
+    });
+    await repos.assets.register({
+      id: 'pack.golden',
+      kind: 'pack',
+      name: 'Golden Coast',
+      version: '1.1.0',
+      path: '/p/golden',
+      sizeBytes: 52_000_000,
+      checksum: 'def',
+      source: 'download',
+    });
     expect(await repos.assets.list()).toHaveLength(3);
     expect((await repos.assets.get('pack.golden'))?.version).toBe('1.1.0');
     expect(await repos.assets.totalBytes('pack')).toBe(52_000_000);
@@ -200,8 +306,19 @@ describe('AssetRegistry', () => {
 
   it('enforces asset kinds at the schema level', async () => {
     const { repos } = await freshRepos();
-    // @ts-expect-error invalid on purpose
-    await expect(repos.assets.register({ id: 'x', kind: 'virus', name: 'x', version: '1', path: '/x', sizeBytes: 1, checksum: null, source: 'user' })).rejects.toThrow();
+    await expect(
+      repos.assets.register({
+        id: 'x',
+        // @ts-expect-error invalid on purpose
+        kind: 'virus',
+        name: 'x',
+        version: '1',
+        path: '/x',
+        sizeBytes: 1,
+        checksum: null,
+        source: 'user',
+      }),
+    ).rejects.toThrow();
   });
 });
 
