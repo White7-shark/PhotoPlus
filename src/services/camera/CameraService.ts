@@ -110,8 +110,12 @@ export class CameraService {
     return this.native.setTorch(enabled);
   }
 
-  /** color is 0xAARRGGBB. */
-  setFocusPeaking(enabled: boolean, color = 0xffff3b6b, threshold = 0.16): void {
+  /**
+   * color is 0xAARRGGBB. The default threshold marks ~10–15% of a sharp,
+   * textured frame (measured on the Kodak set at analysis size); 0.16 lit up
+   * over half of it, which hides where focus actually is.
+   */
+  setFocusPeaking(enabled: boolean, color = 0xffff3b6b, threshold = 0.4): void {
     this.native.setFocusPeaking(enabled, color, threshold);
   }
 

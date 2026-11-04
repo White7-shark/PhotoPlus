@@ -1,4 +1,4 @@
-# Photo Plus — Architecture (Phase 1)
+# Photo Plus — Architecture (Phases 1–2)
 
 ```
 ┌──────────────────────────── React Native (TypeScript) ────────────────────────────┐
@@ -12,13 +12,16 @@
 │ DeviceModule (CapabilityProbe, MemoryPressureMonitor)                              │
 │ EngineModule (JobManager, ImageCodec, MemoryBudgetPolicy)  ── JNI ──┐              │
 │ DatabaseModule (SQLite)   StorageModule (AppPaths)                  │              │
-│ CameraModule + PhotoPlusCameraPreview (CameraX, lifecycle-bound)    │              │
+│ CameraModule · CameraController (CameraX + Camera2 interop)         │              │
+│ CaptureProcessor · FocusPeakingAnalyzer · PhotoPlusCameraPreview ───┤              │
 └─────────────────────────────────────────────────────────────────────┼─────────────┘
 ┌─────────────────────────────── C/C++ engine (native/engine) ────────▼─────────────┐
 │ pp_engine.h — stable C ABI                                                         │
 │ ImageBuffer (RAII, 64-byte aligned) · MemoryTracker (budget) · CancellationToken   │
 │ Pipeline · Operations (tone, grayscale, saturation, flip, rotate, crop, resize,    │
 │ sharpen) · Profiler                                                                │
+│ Enhance: align · robust merge · super-resolution · denoise · deconvolve · tone     │
+│ pp_enhance_into (writes into a caller bitmap) · pp_focus_peaking (reads Y in place)│
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -34,7 +37,9 @@
 | Concurrency | Bounded worker pool (1–2 by tier), per-job cancel tokens, cleanup before completion callbacks | Predictable peak memory; prompt cancel |
 | Storage | SQLite via a thin native bridge; schema/migrations/repositories in TS | Migrations tested against real SQLite (sql.js) on CI |
 | Files | All app data in app-private storage; JS-supplied paths are sandbox-checked | No storage permission needed; path traversal blocked |
-| Camera | CameraX bound to the Activity lifecycle; preview active only when focused and foregrounded | Interruptions (calls, app switches) release and reacquire the camera automatically |
+| Camera | CameraX bound to the Activity lifecycle; preview active only when focused and foregrounded; Camera2 interop only for manual controls and metadata | Interruptions (calls, app switches) release and reacquire the camera automatically; CameraX handles device quirks |
+| Camera capabilities | Pure `CameraCapabilities.build()` (Kotlin) → validated by `parse.ts` → `availableModes`/`availablePresets` | Only real features are shown; product rules are unit-tested off-device |
+| Capture pipeline | Decode from the CameraX direct buffer (crop + scale in the decoder) → `pp_enhance_into` into the output bitmap → EXIF orientation | No avoidable copies; memory bounded per device tier |
 | Device tiers | Same thresholds in TS (`tiering.ts`) and Kotlin (`MemoryBudgetPolicy.kt`), pinned by tests on both sides | UI features and native budgets never disagree |
 | Entitlements | Feature catalogue mirrors spec §2; `ENFORCEMENT_ENABLED = false` | Infrastructure now, enforcement with Play Billing later |
 | Design system | Tokens → components; glass built from layered translucency + pre-blurred aurora; contrast verified by tests | RN has no backdrop blur on Android; legibility is enforced, not eyeballed |
@@ -52,3 +57,20 @@
 - **Foreground:** camera permission is re-checked (it may have changed in Settings) and memory-pressure budgets are restored.
 - **Memory pressure:** `onTrimMemory` → engine budget halves or quarters → JS is notified.
 - **Process death:** `MainActivity.onCreate(null)` avoids react-native-screens restore crashes; state rehydrates from SQLite.
+
+## Camera (Phase 2)
+
+```
+CameraScreen (JS) ── configure / setManual / capturePhoto ──► CameraModule ──► CameraController
+     ▲                                                                            │ CameraX use cases
+     │ DeviceEventEmitter: state · zoom · focus · metadata · orientation ·        │ Camera2 interop options
+     │ peaking · shutter · progress                                               ▼
+     └───────────────────────────────────────────────────────────────── CaptureProcessor
+                                                                 standard │ RAW+JPEG │ burst ──► ImageDecoder
+                                                                                              ──► pp_enhance_into
+```
+
+- **Session config** (aspect ratio, resolution, RAW) lives natively and is applied on every bind; a change rebinds only when the streams differ.
+- **Manual controls** are stored as the user asked for them; every apply derives what the hardware can do right now (clamped to sensor ranges), so a temporary downgrade is never remembered.
+- **Recovery:** `CameraState` critical errors → rebind with backoff (0.5 s, 1 s, 2 s) → `CAMERA_UNAVAILABLE`.
+- **Orientation:** the UI is portrait-locked; the photo's rotation follows the device (±10° hysteresis), analysis keeps the display rotation so overlays line up.

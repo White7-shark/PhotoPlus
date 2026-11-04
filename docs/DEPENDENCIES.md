@@ -88,6 +88,10 @@ The build is clean for **our** code: 0 Kotlin/Java compiler warnings, 0 Gradle d
 
 Those need fixing upstream. They don't affect the app, and we'll pick up fixes as new versions are released.
 
+## Experimental API opt-in
+
+- **CameraX Camera2 interop** (`@ExperimentalCamera2Interop`) is still marked experimental in CameraX 1.6.2. It is the only supported route to manual ISO, shutter, focus distance and white-balance gains, and to per-frame metadata, so `CameraController` opts in explicitly (scoped to that one class, documented in its KDoc). `ImageProxyTransformFactory` is also experimental and is **not** used: overlay geometry is computed in `OverlayGeometry` instead.
+
 ## Platform-required deprecated member
 
 - `MemoryPressureMonitor.onLowMemory()`: the `ComponentCallbacks` interface requires us to implement this method, even though Android deprecates it. Our override is an annotated no-op. Pressure handling uses only non-deprecated signals: `TRIM_MEMORY_BACKGROUND` and `ActivityManager.MemoryInfo.lowMemory`.

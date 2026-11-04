@@ -320,7 +320,7 @@ describe('CameraService', () => {
     service.configure({ aspectRatio: '1:1', raw: true });
     expect(native.configure).toHaveBeenCalledWith({ aspectRatio: '1:1', raw: true });
     service.setFocusPeaking(true);
-    expect(native.setFocusPeaking).toHaveBeenCalledWith(true, 0xffff3b6b, 0.16);
+    expect(native.setFocusPeaking).toHaveBeenCalledWith(true, 0xffff3b6b, 0.4);
     expect(await service.setZoom(20)).toBe(10);
     expect(await service.setManual({ iso: 400 })).toEqual({ iso: 400 });
     service.cancelCapture('c');

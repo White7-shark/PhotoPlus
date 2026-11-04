@@ -36,7 +36,7 @@ object FocusPeakingAnalyzer : ImageAnalysis.Analyzer {
   @Volatile var mirrored = false
 
   /** Edge-strength threshold (0..1); lower marks more edges. */
-  @Volatile var threshold = 0.16f
+  @Volatile var threshold = 0.4f
   /** Peaking colour as 0xAARRGGBB. */
   @Volatile var color: Int = 0xFFFF3B6B.toInt()
 

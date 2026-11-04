@@ -7,6 +7,8 @@ Your photoshoot studio on Android: a pro camera, an AI director and a darkroom, 
 - **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - **Toolchain & dependency versions (latest-stable policy):** [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md)
 - **Phase 1 report (testing & review evidence):** [`docs/PHASE1_REPORT.md`](docs/PHASE1_REPORT.md)
+- **Phase 2 report: professional camera:** [`docs/PHASE2_REPORT.md`](docs/PHASE2_REPORT.md)
+- **Enhancement benchmark (weak camera → strong photo):** [`docs/benchmarks/README.md`](docs/benchmarks/README.md)
 
 ## Getting started
 
@@ -48,14 +50,14 @@ src/                 React Native app (TypeScript)
   assets/brand/      logo images bundled in the app (emblem + full logo)
   components/        design-system components (glass, buttons, states…)
   navigation/        stack + glass tab bar
-  screens/           Studio, Camera, Projects, Packs, Settings, Device, Engine Lab
+  screens/           Studio, Camera (camera/), Photo preview, Projects, Packs, Settings, Device, Engine Lab
   services/          capabilities, permissions, database, processing, storage…
   state/             zustand store
   theme/             tokens, contrast utilities, ThemeProvider
   native/specs/      TurboModule / Fabric codegen specs
 android/             Kotlin native layer + JNI bridge
 native/engine/       platform-agnostic C/C++ processing engine (+ host tests)
-scripts/             dev tooling (brand asset/icon generation, design preview)
+scripts/             dev tooling (brand assets, design previews, enhancement benchmark)
 assets/brand/        master logo artwork (source/) and exported brand assets
 docs/                spec, architecture, phase reports
 ```

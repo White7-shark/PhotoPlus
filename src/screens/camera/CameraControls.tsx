@@ -135,6 +135,7 @@ export function ModeSwitcher({
             {premium ? <Icon name="crown" size={11} color={theme.colors.premium} strokeWidth={2.2} /> : null}
             <AppText
               variant="overline"
+              numberOfLines={1}
               style={{ color: selected ? theme.colors.premium : 'rgba(255,255,255,0.78)', letterSpacing: 1.4 }}
               maxFontSizeMultiplier={1.3}
             >
