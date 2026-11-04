@@ -99,8 +99,11 @@ object CameraController {
 
   var sessionConfig = SessionConfig()
     private set
+  /** What the user asked for; [applyManualControls] derives what the hardware can do now. */
   var manual = ManualSettings()
     private set
+  /** Kelvin needs the live colour matrix, which arrives with the first frame. */
+  @Volatile private var kelvinWaitingForTransform = false
   private var flash = FlashSetting.OFF
   private var peakingEnabled = false
   @Volatile var targetRotation = Surface.ROTATION_0
@@ -228,7 +231,7 @@ object CameraController {
         val capture = captureBuilder.build()
 
         val groupBuilder = UseCaseGroup.Builder().addUseCase(preview).addUseCase(capture)
-        val peaking = if (peakingEnabled) buildAnalysis(aspect).also { groupBuilder.addUseCase(it) } else null
+        val peaking = if (peakingEnabled) buildAnalysis(aspect, view.display?.rotation ?: Surface.ROTATION_0).also { groupBuilder.addUseCase(it) } else null
         // What-you-see-is-what-you-get: crop every output to the chosen ratio
         // (this is also how 1:1 is produced from a 4:3 stream).
         groupBuilder.setViewPort(buildViewPort(view))
@@ -261,7 +264,7 @@ object CameraController {
     return ViewPort.Builder(rational, rotation).setScaleType(ViewPort.FILL_CENTER).build()
   }
 
-  private fun buildAnalysis(aspect: AspectRatioStrategy): ImageAnalysis {
+  private fun buildAnalysis(aspect: AspectRatioStrategy, displayRotation: Int): ImageAnalysis {
     val selector = ResolutionSelector.Builder()
       .setAspectRatioStrategy(aspect)
       .setResolutionStrategy(ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
@@ -269,7 +272,7 @@ object CameraController {
     return ImageAnalysis.Builder()
       .setResolutionSelector(selector)
       .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-      .setTargetRotation(targetRotation)
+      .setTargetRotation(displayRotation)
       .build()
       .also { it.setAnalyzer(analysisExecutor, FocusPeakingAnalyzer) }
   }
@@ -335,8 +338,10 @@ object CameraController {
         val rotation = OrientationMath.rotationForDegrees(degrees, targetRotation)
         if (rotation != targetRotation) {
           targetRotation = rotation
+          // Only the photo follows the device. Analysis frames feed the peaking
+          // overlay drawn over the portrait-locked preview, so they keep the
+          // display rotation (set in buildAnalysis).
           imageCapture?.targetRotation = rotation
-          analysis?.targetRotation = rotation
           events?.emit("PhotoPlusCameraOrientation", mapOf("degrees" to OrientationMath.uiDegrees(rotation)))
         }
       }
@@ -426,11 +431,13 @@ object CameraController {
 
   fun resetManual() {
     manual = ManualSettings()
+    kelvinWaitingForTransform = false
     val cam = camera ?: return
     Camera2CameraControl.from(cam.cameraControl).clearCaptureRequestOptions()
   }
 
   private fun applyManualControls(): ManualSettings {
+    kelvinWaitingForTransform = false
     val cam = camera ?: return manual
     val inputs = capabilityInputs ?: return manual
     val control = Camera2CameraControl.from(cam.cameraControl)
@@ -464,7 +471,8 @@ object CameraController {
       WhiteBalance.Auto -> if (manual.awbLock && inputs.awbLockAvailable) options.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, true)
       is WhiteBalance.Kelvin -> {
         val transform = Live.colorTransform
-        if (inputs.manualPostProcessing && trusted && transform != null) {
+        kelvinWaitingForTransform = transform == null
+        if (inputs.manualPostProcessing && inputs.hardwareLevel != "legacy" && transform != null) {
           val g = ManualMath.kelvinToRggbGains(wb.kelvin)
           options.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_OFF)
           options.setCaptureRequestOption(CaptureRequest.COLOR_CORRECTION_MODE, CameraMetadata.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
@@ -482,7 +490,8 @@ object CameraController {
       }
     }
     control.setCaptureRequestOptions(options.build())
-    manual = applied
+    // The request is kept as asked: a downgrade today (e.g. Kelvin before the
+    // first frame) is retried on the next apply instead of being remembered.
     return applied
   }
 
@@ -509,7 +518,13 @@ object CameraController {
       Live.exposureNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
       Live.focusDiopters = result.get(CaptureResult.LENS_FOCUS_DISTANCE)
       Live.aperture = result.get(CaptureResult.LENS_APERTURE)
-      result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let { Live.colorTransform = it }
+      result.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let {
+        Live.colorTransform = it
+        if (kelvinWaitingForTransform) {
+          kelvinWaitingForTransform = false
+          main.post { applyManualControls() }
+        }
+      }
       val now = SystemClock.elapsedRealtime()
       if (now - Live.lastEmit >= 250L) {
         Live.lastEmit = now

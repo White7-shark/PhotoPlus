@@ -96,14 +96,21 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
   shifts[0].valid = true;
   int32_t used = 1;
   const float maxResidual = 0.03f + 6.0f * quality->noiseSigma;
+  std::vector<Plane> refPyramid;
+  if (data.size() > 1) {
+    auto pyr = alignmentPyramid(data[0].y, token);  // built once for the whole burst
+    if (!pyr) return failure(pyr.error());
+    refPyramid = std::move(pyr).value();
+  }
   for (size_t i = 1; i < data.size(); ++i) {
-    auto s = alignTranslation(data[0].y, data[i].y, token);
+    auto s = alignTranslation(refPyramid, data[i].y, token);
     if (!s) return failure(s.error());
     shifts[i] = *s;
     if (shifts[i].valid && shifts[i].residual > maxResidual) shifts[i].valid = false;
     if (shifts[i].valid) ++used;
   }
   rep.framesUsed = used;
+  refPyramid.clear();
 
   // 4. Fuse luma (burst denoise or multi-frame super-resolution) and chroma.
   const int32_t ow = w * scale, oh = h * scale;
@@ -113,14 +120,21 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
     std::vector<const Plane*> ys;
     for (const auto& d : data) ys.push_back(&d.y);
     if (used > 1) {
+      const bool backProject = scale == 2 && params.sharpen > 0.0f;
+      // Back-projection needs the same robustness maps as the merge: compute once.
+      std::vector<Plane> maps;
+      if (backProject) {
+        auto m = robustnessMaps(ys, shifts, quality->noiseSigma, token);
+        if (!m) return failure(m.error());
+        maps = std::move(m).value();
+      }
       // Narrow kernel when super-resolving: back-projection refines it.
-      auto fused = fuse(ys, shifts, scale, quality->noiseSigma, token, scale == 2 ? 0.5f : 0.0f);
+      auto fused = fuse(ys, shifts, scale, quality->noiseSigma, token, scale == 2 ? 0.5f : 0.0f,
+                        backProject ? &maps : nullptr);
       if (!fused) return failure(fused.error());
-      if (scale == 2 && params.sharpen > 0.0f) {
-        auto maps = robustnessMaps(ys, shifts, quality->noiseSigma, token);
-        if (!maps) return failure(maps.error());
+      if (backProject) {
         std::vector<const Plane*> weights;
-        for (const auto& m : *maps) weights.push_back(m.empty() ? nullptr : &m);
+        for (const auto& m : maps) weights.push_back(m.empty() ? nullptr : &m);
         // Optical blur in output pixels (the sensor's pixel integration is
         // modelled separately by the back-projection).
         const float lrBlur = quality->blurSigma > 0.0f ? quality->blurSigma : 0.6f;
@@ -185,7 +199,6 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
     if (!fusedBlur) return failure(fusedBlur.error());
     if (*fusedBlur > 0.0f) measuredBlur = *fusedBlur;
   }
-  rep.noiseAfter = residualNoise;
   // A sharp, well-focused capture still measures ~0.4 px; only the excess is
   // treated as removable optical blur.
   const float optical = std::sqrt(std::max(measuredBlur * measuredBlur - 0.16f, 0.04f));
@@ -214,6 +227,10 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
     rep.deblurSigma = psf;
     if (Error e = deconvolve(out.y, psf, iterations, tv, token); e.status != PP_OK) return failure(e);
   }
+
+  // Measured on the restored luma (before tone, which rescales levels) so it
+  // is comparable with noiseBefore and reflects denoising and deconvolution.
+  rep.noiseAfter = estimateNoise(out.y);
 
   // 7. Tone.
   ToneParams tp;

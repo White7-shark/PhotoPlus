@@ -17,7 +17,14 @@ import { errorMessage } from '../native';
 import type { ImageRecord } from '../services/database/repositories/ImagesRepository';
 import { createLogger } from '../services/logging/logger';
 import { getProcessingService, ProcessingError } from '../services/processing/ImageProcessingService';
-import { enhancedPathFor, enhanceSuggestion, formatMegapixels, noiseReduction } from '../services/processing/quality';
+import {
+  enhancedCopyMetadata,
+  enhancedPathFor,
+  enhanceSuggestion,
+  filesToDelete,
+  formatMegapixels,
+  noiseReduction,
+} from '../services/processing/quality';
 import type { EnhanceResult, QualityReport } from '../services/processing/types';
 import { formatBytes, getStorageService } from '../services/storage/StorageService';
 import { useAppStore } from '../state/store';
@@ -169,12 +176,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         sizeBytes: result.sizeBytes,
         mimeType: 'image/jpeg',
         capturedAt: image.capturedAt,
-        metadata: {
-          ...image.metadata,
-          captureMode: upscale === 2 ? 'superres' : 'enhance',
-          originalPath: image.path,
-          report: result.report,
-        },
+        metadata: enhancedCopyMetadata(image, upscale, result.report),
       });
       void loadProjects();
       navigation.replace('PhotoPreview', { imageId: record.id });
@@ -206,13 +208,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           try {
             await repos.images.remove(image.id);
             const storage = getStorageService();
-            // A capture's own "_original" companion goes with it; an original
-            // that is its own library photo (Keep after Enhance) stays.
-            const companions = [
-              str(image.metadata.rawPath),
-              image.metadata.originalOwned === true ? str(image.metadata.originalPath) : null,
-            ].filter((p): p is string => !!p);
-            await Promise.allSettled([image.path, ...companions].map(p => storage.deleteFile(p)));
+            await Promise.allSettled(filesToDelete(image).map(p => storage.deleteFile(p)));
             void loadProjects();
             navigation.goBack();
           } catch (e) {

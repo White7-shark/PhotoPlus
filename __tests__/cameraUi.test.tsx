@@ -218,3 +218,24 @@ describe('dials and compare', () => {
     expect(clampSplit(2)).toBe(0.98);
   });
 });
+
+describe('camera session state', () => {
+  it('re-selecting the current aspect ratio keeps the camera ready', async () => {
+    await renderReadyCamera();
+    await fireEvent.press(screen.getByLabelText('Aspect ratio 4:3'));
+    const chips = screen.getAllByLabelText('Aspect ratio 4:3');
+    await fireEvent.press(chips[chips.length - 1]); // the menu entry
+    expect(screen.getByTestId('shutter').props.accessibilityState.disabled).toBe(false);
+    expect(screen.queryByText('Starting camera…')).toBeNull();
+  });
+
+  it('choosing a new aspect ratio waits for the rebind', async () => {
+    await renderReadyCamera();
+    await fireEvent.press(screen.getByLabelText('Aspect ratio 4:3'));
+    await fireEvent.press(screen.getByLabelText('Aspect ratio 16:9'));
+    expect(screen.getByTestId('shutter').props.accessibilityState.disabled).toBe(true);
+    await waitFor(() =>
+      expect(mockCamera.configure).toHaveBeenLastCalledWith({ aspectRatio: '16:9', resolution: 'max', raw: false }),
+    );
+  });
+});

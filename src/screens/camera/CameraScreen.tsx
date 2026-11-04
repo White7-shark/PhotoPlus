@@ -326,6 +326,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       setMode(preset.mode);
       setTuning(preset.tuning ?? {});
       if (preset.aspectRatio && preset.aspectRatio !== aspect) {
+        setState('starting');
         updateSetting('cameraAspectRatio', preset.aspectRatio).catch(() => undefined);
       }
       if (preset.shutterNs !== undefined) {
@@ -520,8 +521,11 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
                   accessibilityLabel={`Aspect ratio ${a}`}
                   onPress={() => {
                     setMenu(null);
-                    setState('starting');
-                    updateSetting('cameraAspectRatio', a).catch(() => undefined);
+                    // Only a real change rebinds natively (and fires onReady again).
+                    if (a !== aspect) {
+                      setState('starting');
+                      updateSetting('cameraAspectRatio', a).catch(() => undefined);
+                    }
                   }}
                 />
               ))
@@ -533,8 +537,10 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
                   accessibilityLabel={`Resolution ${resolutionLabel(r)}, ${r.width} by ${r.height}`}
                   onPress={() => {
                     setMenu(null);
-                    setState('starting');
-                    updateSetting('cameraResolution', r.id).catch(() => undefined);
+                    if (r.id !== resolution) {
+                      setState('starting');
+                      updateSetting('cameraResolution', r.id).catch(() => undefined);
+                    }
                   }}
                 />
               ))}

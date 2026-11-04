@@ -206,7 +206,10 @@ class EngineModule(reactContext: ReactApplicationContext) :
           promise.resolve(
             mapOf(
               "noise" to q[0].toDouble(),
-              "blurPx" to q[1].toDouble() / decoded.scale, // in source pixels
+              // At the analysis size (longest edge ANALYSIS_DIMENSION): softness
+              // as seen on screen. Scaling up to source pixels would also scale
+              // the estimator's ~0.5 px floor and flag every large photo as soft.
+              "blurPx" to q[1].toDouble(),
               "sharpness" to q[2].toDouble(),
               "meanLuma" to q[3].toDouble(),
               "highlightsClipped" to q[4].toDouble(),

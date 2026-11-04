@@ -62,7 +62,8 @@ Result<std::vector<Plane>> robustnessMaps(const std::vector<const Plane*>& frame
 // each output row gathers from the input rows that can reach it, which is
 // embarrassingly parallel and cache friendly.
 Result<Plane> fuse(const std::vector<const Plane*>& frames, const std::vector<Shift>& shifts, int32_t scale,
-                   float noiseSigma, const CancellationToken* token, float kernelSigma) {
+                   float noiseSigma, const CancellationToken* token, float kernelSigma,
+                   const std::vector<Plane>* robustness) {
   ScopedTimer timer("enh.fuse");
   if (frames.empty() || frames.size() != shifts.size()) {
     return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "fuse: frames and shifts must match"));
@@ -93,9 +94,14 @@ Result<Plane> fuse(const std::vector<const Plane*>& frames, const std::vector<Sh
   const float inv2k = 1.0f / (2.0f * kSigma * kSigma);
   constexpr float kPriorWeight = 0.08f;
 
-  auto maps = robustnessMaps(frames, shifts, noiseSigma, token);
-  if (!maps) return failure(maps.error());
-  const std::vector<Plane>& weights = *maps;
+  std::vector<Plane> computed;
+  if (robustness == nullptr || robustness->size() != frames.size()) {
+    auto maps = robustnessMaps(frames, shifts, noiseSigma, token);
+    if (!maps) return failure(maps.error());
+    computed = std::move(maps).value();
+    robustness = &computed;
+  }
+  const std::vector<Plane>& weights = *robustness;
 
   const bool done = parallelFor(oh, token, [&](int32_t begin, int32_t end) {
     std::vector<float> acc(static_cast<size_t>(ow)), wsum(static_cast<size_t>(ow));

@@ -45,6 +45,12 @@ struct Shift {
 // Coarse-to-fine Lucas–Kanade translation estimate with sub-pixel accuracy.
 Result<Shift> alignTranslation(const Plane& reference, const Plane& frame, const CancellationToken* token);
 
+// Same, with the reference pyramid built once by alignmentPyramid() and
+// reused for every frame of a burst.
+Result<std::vector<Plane>> alignmentPyramid(const Plane& base, const CancellationToken* token);
+Result<Shift> alignTranslation(const std::vector<Plane>& referencePyramid, const Plane& frame,
+                               const CancellationToken* token);
+
 // Per-frame weights in [0,1] (index 0, the reference, is left empty):
 // low where a frame disagrees with the reference beyond the noise level
 // (moving subjects, failed alignment), so those regions are not merged.
@@ -55,8 +61,11 @@ Result<std::vector<Plane>> robustnessMaps(const std::vector<const Plane*>& frame
 // larger than the reference. scale == 1 is burst denoising; scale == 2 is
 // multi-frame super-resolution (hand-shake supplies sub-pixel samples).
 // `kernelSigma` (output pixels) <= 0 selects the default footprint.
+// `robustness` may pass maps already computed by robustnessMaps() for the
+// same frames, so callers that need them again do not compute them twice.
 Result<Plane> fuse(const std::vector<const Plane*>& frames, const std::vector<Shift>& shifts, int32_t scale,
-                   float noiseSigma, const CancellationToken* token, float kernelSigma = 0.0f);
+                   float noiseSigma, const CancellationToken* token, float kernelSigma = 0.0f,
+                   const std::vector<Plane>* robustness = nullptr);
 
 // Iterative back-projection super-resolution. `robustness` holds optional
 // per-frame weight maps (nullptr = 1). `psfSigma` is the optical blur in

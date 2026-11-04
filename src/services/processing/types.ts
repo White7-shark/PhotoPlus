@@ -90,6 +90,7 @@ export interface EnhanceResult {
 
 export interface QualityReport {
   noise: number;
+  /** Estimated blur in pixels at the analysis size (1600 px longest edge). */
   blurPx: number;
   sharpness: number;
   meanLuma: number;

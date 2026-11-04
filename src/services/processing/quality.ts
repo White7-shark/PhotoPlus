@@ -48,3 +48,35 @@ export function formatMegapixels(width: number, height: number): string {
   const mp = (width * height) / 1e6;
   return `${mp >= 10 ? Math.round(mp) : Math.round(mp * 10) / 10} MP`;
 }
+
+type Metadata = Record<string, unknown>;
+const pathOf = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
+
+/**
+ * Metadata for an enhanced copy kept as a new library photo. Deliberately
+ * fresh: inheriting the source's companions (its RAW file or its owned
+ * "_original") would make deleting the copy delete the source's files.
+ */
+export function enhancedCopyMetadata(
+  source: { id: string; path: string; metadata: Metadata },
+  upscale: 1 | 2,
+  report: unknown,
+): Metadata {
+  return {
+    captureMode: upscale === 2 ? 'superres' : 'enhance',
+    lens: source.metadata.lens ?? null,
+    sourceImageId: source.id,
+    originalPath: source.path,
+    originalOwned: false,
+    report,
+  };
+}
+
+/** Every file to remove with a photo: itself, its DNG, and an original only it owns. */
+export function filesToDelete(image: { path: string; metadata: Metadata }): string[] {
+  return [
+    image.path,
+    pathOf(image.metadata.rawPath),
+    image.metadata.originalOwned === true ? pathOf(image.metadata.originalPath) : null,
+  ].filter((p): p is string => p !== null);
+}

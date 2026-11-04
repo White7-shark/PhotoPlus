@@ -24,8 +24,10 @@ import { parseCameraCapabilities } from '../src/services/camera/parse';
 import { CameraEvents, type CameraCapabilities } from '../src/services/camera/types';
 import { rawCameraCaps } from './helpers/fixtures';
 import {
+  enhancedCopyMetadata,
   enhancedPathFor,
   enhanceSuggestion,
+  filesToDelete,
   formatMegapixels,
   noiseReduction,
 } from '../src/services/processing/quality';
@@ -203,6 +205,27 @@ describe('enhancement helpers', () => {
     expect(enhancedPathFor('/data/captures/PP_1.jpg', 1)).toBe('/data/captures/PP_1_enhanced.jpg');
     expect(enhancedPathFor('/data/captures/PP_1.jpg', 2, 3)).toBe('/data/captures/PP_1_superres_3.jpg');
     expect(enhancedPathFor('/data/v1.2/photo', 1)).toBe('/data/v1.2/photo_enhanced.jpg');
+  });
+
+  it('never lets an enhanced copy own its source files', () => {
+    const night = {
+      id: 'img_1',
+      path: '/c/PP_1.jpg',
+      metadata: {
+        captureMode: 'night',
+        rawPath: '/c/PP_1.dng',
+        originalPath: '/c/PP_1_original.jpg',
+        originalOwned: true,
+      },
+    };
+    // Deleting the capture removes its own companions...
+    expect(filesToDelete(night)).toEqual(['/c/PP_1.jpg', '/c/PP_1.dng', '/c/PP_1_original.jpg']);
+    // ...but a kept enhanced copy points at the source without owning it.
+    const copy = { path: '/c/PP_1_enhanced.jpg', metadata: enhancedCopyMetadata(night, 1, { noiseBefore: 1 }) };
+    expect(copy.metadata).toMatchObject({ originalPath: '/c/PP_1.jpg', originalOwned: false, sourceImageId: 'img_1' });
+    expect(copy.metadata.rawPath).toBeUndefined();
+    expect(filesToDelete(copy)).toEqual(['/c/PP_1_enhanced.jpg']);
+    expect(enhancedCopyMetadata(night, 2, null).captureMode).toBe('superres');
   });
 
   it('summarises results', () => {

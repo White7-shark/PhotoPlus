@@ -8,10 +8,8 @@
 
 namespace photoplus::enhance {
 
-namespace {
-
 // Gaussian-ish pyramid: level 0 is full resolution.
-Result<std::vector<Plane>> pyramid(const Plane& base, const CancellationToken* token) {
+Result<std::vector<Plane>> alignmentPyramid(const Plane& base, const CancellationToken* token) {
   std::vector<Plane> levels;
   auto first = clonePlane(base);
   if (!first) return failure(first.error());
@@ -28,16 +26,22 @@ Result<std::vector<Plane>> pyramid(const Plane& base, const CancellationToken* t
   return levels;
 }
 
-}  // namespace
-
 Result<Shift> alignTranslation(const Plane& reference, const Plane& frame, const CancellationToken* token) {
+  auto refPyr = alignmentPyramid(reference, token);
+  if (!refPyr) return failure(refPyr.error());
+  return alignTranslation(*refPyr, frame, token);
+}
+
+Result<Shift> alignTranslation(const std::vector<Plane>& referencePyramid, const Plane& frame,
+                               const CancellationToken* token) {
   ScopedTimer timer("enh.align");
+  if (referencePyramid.empty()) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Empty reference pyramid"));
+  const Plane& reference = referencePyramid.front();
   if (reference.width() != frame.width() || reference.height() != frame.height()) {
     return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Frames must share the same size"));
   }
-  auto refPyr = pyramid(reference, token);
-  if (!refPyr) return failure(refPyr.error());
-  auto frmPyr = pyramid(frame, token);
+  const std::vector<Plane>* refPyr = &referencePyramid;
+  auto frmPyr = alignmentPyramid(frame, token);
   if (!frmPyr) return failure(frmPyr.error());
 
   double dx = 0.0, dy = 0.0;
@@ -64,9 +68,9 @@ Result<Shift> alignTranslation(const Plane& reference, const Plane& frame, const
       }
     }
     const double det = hxx * hyy - hxy * hxy;
-    if (det <= 1e-12) continue;  // textureless level; keep previous estimate
-
-    for (int iter = 0; iter < 12; ++iter) {
+    // A textureless level keeps the coarser estimate, but it must still be
+    // rescaled below for the next (finer) level.
+    for (int iter = 0; det > 1e-12 && iter < 12; ++iter) {
       double bx = 0.0, by = 0.0, err2 = 0.0;
       size_t n = 0;
       for (int32_t y = margin; y < h - margin; y += step) {
