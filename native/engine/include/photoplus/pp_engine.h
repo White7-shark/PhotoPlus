@@ -140,6 +140,55 @@ void pp_memory_reset_peak(void);
 size_t pp_profiler_report_json(char* buffer, size_t capacity);
 void pp_profiler_reset(void);
 
+/* ---- Computational photography ------------------------------------------ */
+
+typedef struct pp_enhance_params {
+  int32_t upscale;   /* 1, or 2 for super-resolution (multi-frame when count > 1) */
+  float denoise;     /* 0..1 multiplier on the automatic noise reduction (0 = off) */
+  float sharpen;     /* 0..1 multiplier on the automatic deblur (0 = off) */
+  float detail;      /* 0..1 local contrast ("clarity") */
+  int32_t auto_tone; /* 1 = automatic white balance and levels */
+  float vibrance;    /* 0..1 */
+} pp_enhance_params;
+
+typedef struct pp_quality_report {
+  float noise_sigma; /* estimated noise std-dev (luma, 0..1 scale) */
+  float blur_sigma;  /* estimated Gaussian blur in pixels (0 = undetermined) */
+  float sharpness;   /* normalised variance of the Laplacian */
+  float mean_luma;
+  float highlights_clipped; /* fraction of pixels */
+  float shadows_clipped;
+} pp_quality_report;
+
+typedef struct pp_enhance_report {
+  int32_t frames_input;
+  int32_t frames_used;     /* frames that aligned well enough to merge */
+  int32_t reference_index; /* sharpest frame, used as the alignment anchor */
+  float noise_before;
+  float noise_after;
+  float blur_before;
+  float deblur_sigma;
+} pp_enhance_report;
+
+void pp_enhance_default_params(pp_enhance_params* out);
+
+/* Enhances one frame, or fuses a burst of `count` same-sized frames (handheld
+ * shots of the same scene) into a single cleaner, sharper image. `report` may
+ * be NULL. */
+pp_status pp_enhance(const pp_image* const* frames, size_t count, const pp_enhance_params* params,
+                     const pp_cancel_token* token, pp_image** out, pp_enhance_report* report);
+
+pp_status pp_analyze_quality(const pp_image* image, pp_quality_report* out);
+
+/* Focus peaking on a camera luma (Y) plane, read in place (e.g. a direct
+ * ByteBuffer from CameraX), so no frame copy is made. Writes `argb` into
+ * pixels of `out` (out_width x out_height, a downscaled overlay) whose edge
+ * strength exceeds `threshold` (0..1), transparent elsewhere. `sharpness`
+ * (optional) receives a 0..1 focus score for the frame centre. */
+pp_status pp_focus_peaking(const uint8_t* luma, int32_t width, int32_t height, int32_t row_stride,
+                           int32_t pixel_stride, float threshold, uint32_t argb, uint32_t* out, int32_t out_width,
+                           int32_t out_height, float* sharpness);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
