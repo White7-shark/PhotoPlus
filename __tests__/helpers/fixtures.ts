@@ -107,3 +107,49 @@ export function rawCapabilities(
     },
   };
 }
+
+/** What the Kotlin CameraCapabilities.build() produces for a capable phone. */
+export function rawCameraCaps(overrides: Record<string, unknown> = {}) {
+  return {
+    lensFacing: 'back',
+    hardwareLevel: 'full',
+    zoom: { min: 0.6, max: 10 },
+    exposureCompensation: { minIndex: -12, maxIndex: 12, step: 1 / 6 },
+    flash: true,
+    torch: true,
+    tapToFocus: true,
+    manual: {
+      exposure: true,
+      iso: [50, 3200],
+      exposureTimeNs: [100000, 500000000],
+      isoStops: [50, 100, 200, 400, 800, 1600, 3200],
+      shutterStops: [125000, 1000000, 4000000, 16666667, 33333333, 250000000],
+      focus: true,
+      minFocusDiopters: 10,
+      whiteBalanceModes: ['auto', 'incandescent', 'daylight', 'cloudy'],
+      kelvin: true,
+      aeLock: true,
+      awbLock: true,
+    },
+    raw: true,
+    aspectRatios: ['4:3', '16:9', '1:1'],
+    resolutions: {
+      '4:3': [
+        { id: 'max', width: 4032, height: 3024, megapixels: 12.2 },
+        { id: '8mp', width: 3264, height: 2448, megapixels: 8 },
+      ],
+      '16:9': [{ id: 'max', width: 4032, height: 2268, megapixels: 9.1 }],
+      '1:1': [{ id: 'max', width: 3024, height: 3024, megapixels: 9.1 }],
+    },
+    captureModes: ['standard', 'enhance', 'night', 'superres', 'raw'],
+    focusPeaking: true,
+    captureSize: { width: 4032, height: 3024 },
+    tier: 'standard',
+    capturePlans: {
+      standard: { frames: 1, workingDimension: 0, upscale: 1 },
+      night: { frames: 6, workingDimension: 2400, upscale: 1 },
+      superres: { frames: 8, workingDimension: 1280, upscale: 2 },
+    },
+    ...overrides,
+  };
+}

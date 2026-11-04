@@ -86,7 +86,7 @@ object ImageCodec {
    * ARGB_8888. getPixels/setPixels always use non-premultiplied colours, so a
    * row-at-a-time copy is correct and keeps the extra memory to one row.
    */
-  private fun toStraightArgb8888(src: Bitmap): Bitmap {
+  fun toStraightArgb8888(src: Bitmap): Bitmap {
     val out = try {
       createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
     } catch (e: OutOfMemoryError) {

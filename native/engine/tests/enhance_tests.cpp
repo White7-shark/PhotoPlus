@@ -321,3 +321,23 @@ TEST(focus_peaking_marks_edges_in_place) {
   EXPECT_TRUE(sharp > 0.0f);
   EXPECT_EQ(pp_focus_peaking(y.data(), w, h, 100, 1, 0.1f, 0, out.data(), 60, 40, nullptr), PP_ERROR_INVALID_ARGUMENT);
 }
+
+TEST(enhance_into_writes_caller_buffer_without_extra_allocation) {
+  Burst burst;
+  burst.frames.push_back(toImage(scene::degrade(scene::makeScene(128, 96), 0, 0, 1.0f, 1, 0.02f, 3)));
+  pp_enhance_params p = restorationOnly(2);
+  std::vector<uint8_t> host(256 * 192 * 4 + 64, 0);
+  pp_image* dst = nullptr;
+  ASSERT_OK(pp_image_wrap(host.data(), 256, 192, 256 * 4, PP_FORMAT_RGBA8, &dst));
+  pp_image* ref = nullptr;
+  ASSERT_OK(pp_enhance(burst.frames.data(), 1, &p, nullptr, &ref, nullptr));
+  ASSERT_OK(pp_enhance_into(burst.frames.data(), 1, &p, nullptr, dst, nullptr));
+  // Same pixels as the allocating variant.
+  EXPECT_TRUE(std::memcmp(pp_image_pixels(ref), host.data(), 256 * 192 * 4) == 0);
+  pp_image_destroy(ref);
+  pp_image* wrong = nullptr;
+  ASSERT_OK(pp_image_wrap(host.data(), 128, 96, 128 * 4, PP_FORMAT_RGBA8, &wrong));
+  EXPECT_EQ(pp_enhance_into(burst.frames.data(), 1, &p, nullptr, wrong, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(wrong);
+  pp_image_destroy(dst);
+}

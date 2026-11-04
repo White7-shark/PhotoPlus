@@ -94,6 +94,43 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
           onChange={v => save('cameraGrid', v)}
         />
         <ToggleRow
+          icon="flip"
+          title="Mirror selfies"
+          subtitle="Save front-camera photos as the preview shows them"
+          value={settings.mirrorFrontCamera}
+          onChange={v => save('mirrorFrontCamera', v)}
+        />
+        <View style={{ padding: 16, gap: 10 }}>
+          <AppText variant="bodyStrong">Capture resolution</AppText>
+          <SegmentedControl
+            label="Capture resolution"
+            value={settings.cameraResolution}
+            onChange={v => save('cameraResolution', v)}
+            options={[
+              { value: 'max', label: 'Max' },
+              { value: '12mp', label: '12 MP' },
+              { value: '8mp', label: '8 MP' },
+              { value: '5mp', label: '5 MP' },
+            ]}
+          />
+          <AppText variant="caption" tone="tertiary">
+            The camera uses the closest size its sensor offers. Smaller photos save space.
+          </AppText>
+        </View>
+        <View style={{ padding: 16, gap: 10 }}>
+          <AppText variant="bodyStrong">Aspect ratio</AppText>
+          <SegmentedControl
+            label="Aspect ratio"
+            value={settings.cameraAspectRatio}
+            onChange={v => save('cameraAspectRatio', v)}
+            options={[
+              { value: '4:3', label: '4:3' },
+              { value: '16:9', label: '16:9' },
+              { value: '1:1', label: '1:1' },
+            ]}
+          />
+        </View>
+        <ToggleRow
           icon="sparkles"
           title="Haptic feedback"
           value={settings.haptics}

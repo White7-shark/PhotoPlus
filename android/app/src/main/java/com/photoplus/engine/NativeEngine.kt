@@ -44,4 +44,39 @@ object NativeEngine {
   external fun nativeProfileReport(): String
   external fun nativeResetProfiler()
   external fun nativeResetMemoryPeak()
+
+  /**
+   * Enhances one frame, or fuses a burst, writing into [dst] (ARGB_8888,
+   * unpremultiplied, size = frame size × [upscale]). Frames and [dst] are
+   * locked and processed in place. [params] = denoise, sharpen, detail,
+   * vibrance. [reportOut] (7) receives the engine report.
+   */
+  external fun nativeEnhance(
+    frames: Array<Bitmap>,
+    upscale: Int,
+    params: FloatArray,
+    autoTone: Boolean,
+    dst: Bitmap,
+    token: Long,
+    reportOut: FloatArray,
+  )
+
+  /** [noise, blur px, sharpness, mean luma, highlights clipped, shadows clipped] */
+  external fun nativeAnalyzeQuality(bitmap: Bitmap): FloatArray
+
+  /**
+   * Focus peaking from a camera Y plane read in place (direct buffer) into the
+   * [overlay] bitmap. [rgbaColor] is packed in memory order (R in the low
+   * byte). Returns a 0..1 centre sharpness score.
+   */
+  external fun nativeFocusPeaking(
+    luma: java.nio.ByteBuffer,
+    width: Int,
+    height: Int,
+    rowStride: Int,
+    pixelStride: Int,
+    threshold: Float,
+    rgbaColor: Int,
+    overlay: Bitmap,
+  ): Float
 }

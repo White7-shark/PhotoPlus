@@ -53,3 +53,46 @@ export interface EngineMemoryStats {
 }
 
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+/** Restore a saved photo with the enhancement engine (pp_enhance). */
+export interface EnhanceRequest {
+  inputPath: string;
+  outputPath: string;
+  /** 2 = single-image super-resolution (doubles each side). */
+  upscale?: 1 | 2;
+  denoise?: number;
+  sharpen?: number;
+  detail?: number;
+  vibrance?: number;
+  autoTone?: boolean;
+  /** Longest output edge; clamped natively to the device budget. */
+  maxDimension?: number;
+  quality?: number;
+}
+
+export interface EnhanceResult {
+  outputPath: string;
+  width: number;
+  height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  sizeBytes: number;
+  report: {
+    noiseBefore: number;
+    noiseAfter: number;
+    blurBefore: number;
+    deblurSigma: number;
+    sharpnessAfter: number;
+    upscale: number;
+  };
+  timings: { totalMs: number };
+}
+
+export interface QualityReport {
+  noise: number;
+  blurPx: number;
+  sharpness: number;
+  meanLuma: number;
+  highlightsClipped: number;
+  shadowsClipped: number;
+}

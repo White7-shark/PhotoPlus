@@ -23,9 +23,14 @@ class CameraPreviewManager : SimpleViewManager<CameraPreviewView>(), PhotoPlusCa
     view.active = value
   }
 
+  override fun setGesturesEnabled(view: CameraPreviewView, value: Boolean) {
+    view.gesturesEnabled = value
+  }
+
   override fun getExportedCustomDirectEventTypeConstants(): Map<String, Any> = mapOf(
     CameraEvent.READY to mapOf("registrationName" to "onCameraReady"),
     CameraEvent.ERROR to mapOf("registrationName" to "onCameraError"),
+    CameraEvent.FOCUS_TAP to mapOf("registrationName" to "onFocusTap"),
   )
 
   companion object {

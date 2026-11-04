@@ -3,7 +3,16 @@ import { DeviceEventEmitter, type EventSubscription } from 'react-native';
 import { errorCode, errorMessage, nativeModules, NativeEvents, requireNative, type EngineSpec } from '../../native';
 import { createId } from '../database/ids';
 import { createLogger } from '../logging/logger';
-import type { EngineInfo, EngineMemoryStats, JobState, ProcessRequest, ProcessResult } from './types';
+import type {
+  EngineInfo,
+  EngineMemoryStats,
+  EnhanceRequest,
+  EnhanceResult,
+  JobState,
+  ProcessRequest,
+  ProcessResult,
+  QualityReport,
+} from './types';
 import { validateRequest } from './validate';
 
 const log = createLogger('processing');
@@ -111,6 +120,41 @@ export class ImageProcessingService {
       this.active.delete(jobId);
       options.signal?.removeEventListener('abort', onAbort);
       subscription?.remove();
+    }
+  }
+
+  /** Restores an existing photo (denoise, deblur, tone, optional 2x). Cancellable like process(). */
+  async enhance(request: EnhanceRequest, options: Omit<ProcessOptions, 'onState'> = {}): Promise<EnhanceResult> {
+    if (!request.inputPath || !request.outputPath || request.inputPath === request.outputPath) {
+      throw new ProcessingError('Enhance needs distinct input and output paths', 'INVALID_ARGUMENT');
+    }
+    if (options.signal?.aborted) {
+      throw new ProcessingError('Processing was cancelled', 'CANCELLED');
+    }
+    const jobId = options.jobId ?? createId('enh');
+    const onAbort = () => this.cancel(jobId);
+    options.signal?.addEventListener('abort', onAbort);
+    this.active.add(jobId);
+    try {
+      return (await this.engine.enhance(jobId, request)) as unknown as EnhanceResult;
+    } catch (error) {
+      throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
+    } finally {
+      this.active.delete(jobId);
+      options.signal?.removeEventListener('abort', onAbort);
+    }
+  }
+
+  /** EXIF + display size of a stored photo. */
+  async metadata(path: string): Promise<Record<string, unknown>> {
+    return (await this.engine.readImageMetadata(path)) as unknown as Record<string, unknown>;
+  }
+
+  async analyzeQuality(path: string): Promise<QualityReport> {
+    try {
+      return (await this.engine.analyzeQuality(path)) as unknown as QualityReport;
+    } catch (error) {
+      throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
     }
   }
 

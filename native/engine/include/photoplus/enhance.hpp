@@ -100,7 +100,14 @@ struct Report {
   float deblurSigma = 0.0f;
 };
 
+// Output size is (width·upscale) x (height·upscale) of the frames.
+int32_t outputWidth(const ImageBuffer& frame, const Params& params);
+int32_t outputHeight(const ImageBuffer& frame, const Params& params);
+
+// When `destination` is given (RGBA8/BGRA8 of the output size, e.g. a locked
+// Android Bitmap) the result is written straight into it and an empty
+// buffer is returned, saving a full-image copy.
 Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Params& params,
-                        const CancellationToken* token, Report* report);
+                        const CancellationToken* token, Report* report, ImageBuffer* destination = nullptr);
 
 }  // namespace photoplus::enhance

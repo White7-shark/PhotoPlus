@@ -1,0 +1,150 @@
+/**
+ * Shapes exchanged with the Kotlin camera layer (com.photoplus.camera).
+ * Native maps are validated by `parseCameraCapabilities` before use, so a
+ * malformed or older native build degrades to "feature hidden" rather than
+ * crashing the camera screen.
+ */
+
+export type LensFacing = 'back' | 'front';
+export type FlashMode = 'off' | 'on' | 'auto';
+export type AspectRatio = '4:3' | '16:9' | '1:1';
+export type ResolutionId = 'max' | '12mp' | '8mp' | '5mp' | '2mp';
+export type CaptureModeId = 'standard' | 'raw' | 'enhance' | 'night' | 'superres';
+export type WhiteBalanceId = 'auto' | 'incandescent' | 'fluorescent' | 'daylight' | 'cloudy' | 'shade' | 'kelvin';
+export type DeviceClass = 'entry' | 'standard' | 'performance';
+
+export interface ResolutionOption {
+  id: ResolutionId;
+  width: number;
+  height: number;
+  megapixels: number;
+}
+
+export interface CapturePlan {
+  frames: number;
+  workingDimension: number;
+  upscale: number;
+}
+
+export interface ManualCapabilities {
+  exposure: boolean;
+  iso: [number, number] | null;
+  exposureTimeNs: [number, number] | null;
+  isoStops: number[];
+  shutterStops: number[];
+  focus: boolean;
+  minFocusDiopters: number | null;
+  whiteBalanceModes: WhiteBalanceId[];
+  kelvin: boolean;
+  aeLock: boolean;
+  awbLock: boolean;
+}
+
+export interface CameraCapabilities {
+  lensFacing: LensFacing;
+  hardwareLevel: string;
+  zoom: { min: number; max: number };
+  exposureCompensation: { minIndex: number; maxIndex: number; step: number } | null;
+  flash: boolean;
+  torch: boolean;
+  tapToFocus: boolean;
+  manual: ManualCapabilities;
+  raw: boolean;
+  aspectRatios: AspectRatio[];
+  resolutions: Partial<Record<AspectRatio, ResolutionOption[]>>;
+  captureModes: CaptureModeId[];
+  focusPeaking: boolean;
+  captureSize: { width: number; height: number } | null;
+  tier: DeviceClass;
+  capturePlans: Partial<Record<CaptureModeId, CapturePlan>>;
+}
+
+export interface ManualSettings {
+  iso?: number | null;
+  exposureTimeNs?: number | null;
+  focusDiopters?: number | null;
+  whiteBalance?: WhiteBalanceId;
+  kelvin?: number | null;
+  aeLock?: boolean;
+  awbLock?: boolean;
+}
+
+export interface SessionConfig {
+  aspectRatio?: AspectRatio;
+  resolution?: ResolutionId;
+  raw?: boolean;
+}
+
+export interface CaptureOptions {
+  mode: CaptureModeId;
+  flash: FlashMode;
+  mirrorFront?: boolean;
+  denoise?: number;
+  sharpen?: number;
+  detail?: number;
+  vibrance?: number;
+  autoTone?: boolean;
+}
+
+export interface EnhanceReport {
+  framesInput?: number;
+  framesUsed?: number;
+  referenceIndex?: number;
+  noiseBefore: number;
+  noiseAfter: number;
+  blurBefore: number;
+  deblurSigma: number;
+  upscale: number;
+}
+
+export interface CaptureResult {
+  captureId: string;
+  path: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  capturedAt: number;
+  mode: CaptureModeId;
+  rawPath?: string | null;
+  originalPath?: string;
+  originalWidth?: number;
+  originalHeight?: number;
+  report?: EnhanceReport;
+  timings?: { captureMs?: number; processMs?: number; totalMs: number };
+}
+
+// ---- events (DeviceEventEmitter)
+
+export const CameraEvents = {
+  state: 'PhotoPlusCameraState',
+  zoom: 'PhotoPlusCameraZoom',
+  torch: 'PhotoPlusCameraTorch',
+  orientation: 'PhotoPlusCameraOrientation',
+  focus: 'PhotoPlusCameraFocus',
+  metadata: 'PhotoPlusCameraMetadata',
+  peaking: 'PhotoPlusCameraPeaking',
+  shutter: 'PhotoPlusCaptureShutter',
+  progress: 'PhotoPlusCaptureProgress',
+} as const;
+
+export type CameraStateName = 'pendingOpen' | 'opening' | 'open' | 'closing' | 'closed' | 'recovering';
+
+export interface CameraEventPayloads {
+  [CameraEvents.state]: { state: CameraStateName; error?: string | null; critical?: boolean; attempt?: number };
+  [CameraEvents.zoom]: { ratio: number; linear: number; min: number; max: number };
+  [CameraEvents.torch]: { on: boolean };
+  [CameraEvents.orientation]: { degrees: 0 | 90 | 180 | 270 };
+  [CameraEvents.focus]: { x: number; y: number; success: boolean };
+  [CameraEvents.metadata]: {
+    iso: number | null;
+    exposureTimeNs: number | null;
+    focusDiopters: number | null;
+    aperture: number | null;
+    focusLocked: boolean;
+  };
+  [CameraEvents.peaking]: { sharpness: number };
+  [CameraEvents.shutter]: { captureId: string };
+  [CameraEvents.progress]: { captureId: string; stage: 'capturing' | 'processing' | 'saving'; progress: number };
+}
+
+export type CameraEventName = keyof CameraEventPayloads;

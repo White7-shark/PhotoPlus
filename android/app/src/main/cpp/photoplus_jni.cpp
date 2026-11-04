@@ -7,6 +7,7 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -223,6 +224,138 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeResetProfile
 
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeResetMemoryPeak(JNIEnv*, jobject) {
   pp_memory_reset_peak();
+}
+
+// ---- Computational photography -------------------------------------------
+
+namespace {
+// Locks every frame of a burst and wraps it for the engine without copying.
+struct LockedBurst {
+  std::vector<std::unique_ptr<BitmapLock>> locks;
+  std::vector<pp_image*> images;
+  ~LockedBurst() {
+    for (pp_image* i : images) pp_image_destroy(i);
+  }
+};
+}  // namespace
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeEnhance(
+    JNIEnv* env, jobject, jobjectArray frames, jint upscale, jfloatArray params, jboolean autoTone, jobject dst,
+    jlong token, jfloatArray reportOut) {
+  const jsize count = env->GetArrayLength(frames);
+  if (count <= 0 || env->GetArrayLength(params) < 4 || env->GetArrayLength(reportOut) < 7) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad enhance arguments");
+    return;
+  }
+  jfloat p[4];
+  env->GetFloatArrayRegion(params, 0, 4, p);
+  pp_enhance_params ep{};
+  pp_enhance_default_params(&ep);
+  ep.upscale = upscale;
+  ep.denoise = p[0];
+  ep.sharpen = p[1];
+  ep.detail = p[2];
+  ep.vibrance = p[3];
+  ep.auto_tone = autoTone ? 1 : 0;
+
+  LockedBurst burst;
+  for (jsize i = 0; i < count; ++i) {
+    jobject bmp = env->GetObjectArrayElement(frames, i);
+    auto lock = std::make_unique<BitmapLock>(env, bmp);
+    if (!lock->ok()) {
+      throwEngineException(env, "UNSUPPORTED_FORMAT", lock->error());
+      return;
+    }
+    pp_image* img = nullptr;
+    const pp_status st = pp_image_wrap(lock->pixels(), static_cast<int32_t>(lock->info().width),
+                                       static_cast<int32_t>(lock->info().height),
+                                       static_cast<int32_t>(lock->info().stride), PP_FORMAT_RGBA8, &img);
+    if (st != PP_OK) {
+      throwStatus(env, st);
+      return;
+    }
+    burst.locks.push_back(std::move(lock));
+    burst.images.push_back(img);
+  }
+  BitmapLock out(env, dst);
+  if (!out.ok()) {
+    throwEngineException(env, "UNSUPPORTED_FORMAT", out.error());
+    return;
+  }
+  pp_image* dstImage = nullptr;
+  pp_status st = pp_image_wrap(out.pixels(), static_cast<int32_t>(out.info().width),
+                               static_cast<int32_t>(out.info().height), static_cast<int32_t>(out.info().stride),
+                               PP_FORMAT_RGBA8, &dstImage);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  pp_enhance_report report{};
+  st = pp_enhance_into(burst.images.data(), burst.images.size(), &ep,
+                       reinterpret_cast<const pp_cancel_token*>(token), dstImage, &report);
+  pp_image_destroy(dstImage);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat values[7] = {static_cast<jfloat>(report.frames_input), static_cast<jfloat>(report.frames_used),
+                            static_cast<jfloat>(report.reference_index), report.noise_before,
+                            report.noise_after, report.blur_before, report.deblur_sigma};
+  env->SetFloatArrayRegion(reportOut, 0, 7, values);
+}
+
+JNIEXPORT jfloatArray JNICALL Java_com_photoplus_engine_NativeEngine_nativeAnalyzeQuality(JNIEnv* env, jobject,
+                                                                                           jobject bitmap) {
+  BitmapLock lock(env, bitmap);
+  if (!lock.ok()) {
+    throwEngineException(env, "UNSUPPORTED_FORMAT", lock.error());
+    return nullptr;
+  }
+  pp_image* img = nullptr;
+  pp_status st = pp_image_wrap(lock.pixels(), static_cast<int32_t>(lock.info().width),
+                               static_cast<int32_t>(lock.info().height), static_cast<int32_t>(lock.info().stride),
+                               PP_FORMAT_RGBA8, &img);
+  pp_quality_report q{};
+  if (st == PP_OK) st = pp_analyze_quality(img, &q);
+  pp_image_destroy(img);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return nullptr;
+  }
+  const jfloat values[6] = {q.noise_sigma, q.blur_sigma, q.sharpness, q.mean_luma, q.highlights_clipped,
+                            q.shadows_clipped};
+  jfloatArray out = env->NewFloatArray(6);
+  if (out != nullptr) env->SetFloatArrayRegion(out, 0, 6, values);
+  return out;
+}
+
+// Reads the camera's Y plane in place (direct ByteBuffer) and writes the
+// peaking mask straight into the locked overlay Bitmap: zero frame copies.
+JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeFocusPeaking(
+    JNIEnv* env, jobject, jobject lumaBuffer, jint width, jint height, jint rowStride, jint pixelStride,
+    jfloat threshold, jint rgbaColor, jobject overlay) {
+  auto* luma = static_cast<const uint8_t*>(env->GetDirectBufferAddress(lumaBuffer));
+  const jlong capacity = env->GetDirectBufferCapacity(lumaBuffer);
+  if (luma == nullptr || capacity < static_cast<jlong>(rowStride) * (height - 1) + static_cast<jlong>(width) * pixelStride) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Luma buffer must be a direct buffer covering the frame");
+    return 0.0f;
+  }
+  BitmapLock lock(env, overlay);
+  if (!lock.ok()) {
+    throwEngineException(env, "UNSUPPORTED_FORMAT", lock.error());
+    return 0.0f;
+  }
+  if (lock.info().stride != lock.info().width * 4) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Overlay bitmap must be tightly packed");
+    return 0.0f;
+  }
+  float sharpness = 0.0f;
+  const pp_status st = pp_focus_peaking(luma, width, height, rowStride, pixelStride, threshold,
+                                        static_cast<uint32_t>(rgbaColor), static_cast<uint32_t*>(lock.pixels()),
+                                        static_cast<int32_t>(lock.info().width),
+                                        static_cast<int32_t>(lock.info().height), &sharpness);
+  if (st != PP_OK) throwStatus(env, st);
+  return sharpness;
 }
 
 }  // extern "C"

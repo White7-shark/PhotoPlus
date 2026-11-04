@@ -4,7 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React, { useMemo } from 'react';
 
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { CameraScreen } from '../screens/CameraScreen';
+import { CameraScreen } from '../screens/camera/CameraScreen';
+import { PhotoPreviewScreen } from '../screens/PhotoPreviewScreen';
 import { DeviceInfoScreen } from '../screens/DeviceInfoScreen';
 import { DiagnosticsScreen } from '../screens/DiagnosticsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -39,6 +40,7 @@ const Settings = guarded(SettingsScreen, 'Settings');
 const Onboarding = guarded(OnboardingScreen, 'Welcome');
 const DeviceInfo = guarded(DeviceInfoScreen, 'Device');
 const Diagnostics = guarded(DiagnosticsScreen, 'Engine Lab');
+const PhotoPreview = guarded(PhotoPreviewScreen, 'Photo');
 
 const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 
@@ -89,6 +91,7 @@ export function RootNavigator() {
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="DeviceInfo" component={DeviceInfo} options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Diagnostics" component={Diagnostics} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="PhotoPreview" component={PhotoPreview} options={{ animation: 'fade' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

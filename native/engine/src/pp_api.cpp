@@ -207,45 +207,61 @@ void pp_enhance_default_params(pp_enhance_params* out) {
   out->vibrance = d.vibrance;
 }
 
+namespace {
+pp_status enhanceImpl(const pp_image* const* frames, size_t count, const pp_enhance_params* params,
+                      const pp_cancel_token* token, pp_image** out, pp_image* destination, pp_enhance_report* report) {
+  if (frames == nullptr || count == 0) return fail(PP_ERROR_INVALID_ARGUMENT, "No frames supplied");
+  photoplus::enhance::Params p;
+  if (params != nullptr) {
+    if (!std::isfinite(params->denoise) || !std::isfinite(params->sharpen) || !std::isfinite(params->detail) ||
+        !std::isfinite(params->vibrance)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Enhancement parameters must be finite");
+    }
+    p.upscale = params->upscale;
+    p.denoise = params->denoise;
+    p.sharpen = params->sharpen;
+    p.detail = params->detail;
+    p.autoTone = params->auto_tone != 0;
+    p.vibrance = params->vibrance;
+  }
+  std::vector<const photoplus::ImageBuffer*> buffers;
+  buffers.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    if (frames[i] == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null frame in burst");
+    buffers.push_back(&frames[i]->buffer);
+  }
+  photoplus::enhance::Report r;
+  auto result = photoplus::enhance::run(buffers, p, token ? &token->token : nullptr, &r,
+                                        destination != nullptr ? &destination->buffer : nullptr);
+  if (!result) return fail(result.error());
+  if (out != nullptr) *out = new pp_image{std::move(result).value()};
+  if (report != nullptr) {
+    report->frames_input = r.framesInput;
+    report->frames_used = r.framesUsed;
+    report->reference_index = r.referenceIndex;
+    report->noise_before = r.noiseBefore;
+    report->noise_after = r.noiseAfter;
+    report->blur_before = r.blurBefore;
+    report->deblur_sigma = r.deblurSigma;
+  }
+  return succeed();
+}
+}  // namespace
+
 pp_status pp_enhance(const pp_image* const* frames, size_t count, const pp_enhance_params* params,
                      const pp_cancel_token* token, pp_image** out, pp_enhance_report* report) {
   return guarded([&]() -> pp_status {
     if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
     *out = nullptr;
-    if (frames == nullptr || count == 0) return fail(PP_ERROR_INVALID_ARGUMENT, "No frames supplied");
-    photoplus::enhance::Params p;
-    if (params != nullptr) {
-      if (!std::isfinite(params->denoise) || !std::isfinite(params->sharpen) || !std::isfinite(params->detail) ||
-          !std::isfinite(params->vibrance)) {
-        return fail(PP_ERROR_INVALID_ARGUMENT, "Enhancement parameters must be finite");
-      }
-      p.upscale = params->upscale;
-      p.denoise = params->denoise;
-      p.sharpen = params->sharpen;
-      p.detail = params->detail;
-      p.autoTone = params->auto_tone != 0;
-      p.vibrance = params->vibrance;
-    }
-    std::vector<const photoplus::ImageBuffer*> buffers;
-    buffers.reserve(count);
-    for (size_t i = 0; i < count; ++i) {
-      if (frames[i] == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null frame in burst");
-      buffers.push_back(&frames[i]->buffer);
-    }
-    photoplus::enhance::Report r;
-    auto result = photoplus::enhance::run(buffers, p, token ? &token->token : nullptr, &r);
-    if (!result) return fail(result.error());
-    *out = new pp_image{std::move(result).value()};
-    if (report != nullptr) {
-      report->frames_input = r.framesInput;
-      report->frames_used = r.framesUsed;
-      report->reference_index = r.referenceIndex;
-      report->noise_before = r.noiseBefore;
-      report->noise_after = r.noiseAfter;
-      report->blur_before = r.blurBefore;
-      report->deblur_sigma = r.deblurSigma;
-    }
-    return succeed();
+    return enhanceImpl(frames, count, params, token, out, nullptr, report);
+  });
+}
+
+pp_status pp_enhance_into(const pp_image* const* frames, size_t count, const pp_enhance_params* params,
+                          const pp_cancel_token* token, pp_image* destination, pp_enhance_report* report) {
+  return guarded([&]() -> pp_status {
+    if (destination == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "destination is null");
+    return enhanceImpl(frames, count, params, token, nullptr, destination, report);
   });
 }
 

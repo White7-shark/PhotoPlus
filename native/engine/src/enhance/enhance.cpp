@@ -29,8 +29,11 @@ Result<FrameData> prepare(const ImageBuffer& img, const CancellationToken* token
 
 }  // namespace
 
+int32_t outputWidth(const ImageBuffer& frame, const Params& params) { return frame.width() * params.upscale; }
+int32_t outputHeight(const ImageBuffer& frame, const Params& params) { return frame.height() * params.upscale; }
+
 Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Params& params,
-                        const CancellationToken* token, Report* report) {
+                        const CancellationToken* token, Report* report, ImageBuffer* destination) {
   ScopedTimer timer("enh.total");
   if (frames.empty() || frames.size() > 16) {
     return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Enhancement needs between 1 and 16 frames"));
@@ -47,6 +50,11 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
   const int32_t scale = params.upscale;
   const int32_t w = frames[0]->width(), h = frames[0]->height();
   if (w < 16 || h < 16) return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Image is too small to enhance"));
+  if (destination != nullptr &&
+      (destination->width() != w * scale || destination->height() != h * scale ||
+       bytesPerPixel(destination->format()) != 4)) {
+    return failure(makeError(PP_ERROR_INVALID_ARGUMENT, "Destination must be 4-channel and match the output size"));
+  }
   Report rep;
   rep.framesInput = static_cast<int32_t>(frames.size());
 
@@ -215,7 +223,12 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
   tp.vibrance = params.vibrance;
   if (Error e = tone(out, tp, token); e.status != PP_OK) return failure(e);
 
-  // 8. Back to 8-bit RGBA.
+  // 8. Back to 8-bit RGBA, straight into the caller's buffer when provided.
+  if (destination != nullptr) {
+    if (Error e = fromYcc(out, *destination, token); e.status != PP_OK) return failure(e);
+    if (report != nullptr) *report = rep;
+    return ImageBuffer{};
+  }
   auto result = ImageBuffer::allocate(ow, oh, PixelFormat::RGBA8);
   if (!result) return failure(result.error());
   if (Error e = fromYcc(out, *result, token); e.status != PP_OK) return failure(e);

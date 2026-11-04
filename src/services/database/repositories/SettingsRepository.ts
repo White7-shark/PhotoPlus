@@ -13,6 +13,11 @@ export interface AppSettings {
   defaultExportQuality: number;
   /** Longest edge for editing previews/exports; 0 = choose by device tier. */
   processingMaxDimension: number;
+  cameraAspectRatio: '4:3' | '16:9' | '1:1';
+  /** Capture resolution preset; unavailable presets fall back to the largest. */
+  cameraResolution: 'max' | '12mp' | '8mp' | '5mp' | '2mp';
+  /** Save selfies mirrored, as the preview shows them. */
+  mirrorFrontCamera: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -24,6 +29,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultExportFormat: 'jpeg',
   defaultExportQuality: 92,
   processingMaxDimension: 0,
+  cameraAspectRatio: '4:3',
+  cameraResolution: 'max',
+  mirrorFrontCamera: true,
 };
 
 type Validators = { [K in keyof AppSettings]: (v: unknown) => v is AppSettings[K] };
@@ -43,6 +51,9 @@ const VALIDATORS: Validators = {
   defaultExportFormat: oneOf('jpeg', 'png', 'webp'),
   defaultExportQuality: (v): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 60 && v <= 100,
   processingMaxDimension: (v): v is number => v === 0 || v === 2048 || v === 4096 || v === 8192,
+  cameraAspectRatio: oneOf('4:3', '16:9', '1:1'),
+  cameraResolution: oneOf('max', '12mp', '8mp', '5mp', '2mp'),
+  mirrorFrontCamera: isBool,
 };
 
 export function isValidSetting<K extends keyof AppSettings>(key: K, value: unknown): value is AppSettings[K] {

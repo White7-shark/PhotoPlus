@@ -2,66 +2,153 @@ package com.photoplus.camera
 
 import android.os.Handler
 import android.os.Looper
-import androidx.camera.core.ImageCapture
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.module.annotations.ReactModule
-import com.photoplus.engine.ImageCodec
+import com.photoplus.device.DeviceInfo
+import com.photoplus.engine.MemoryBudgetPolicy
+import com.photoplus.engine.NativeEngine
 import com.photoplus.specs.NativePhotoPlusCameraSpec
 import com.photoplus.storage.AppPaths
+import com.photoplus.util.emitSafely
 import com.photoplus.util.toWritableMap
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
+/**
+ * JavaScript surface of the camera. CameraX requires its calls on the main
+ * thread, so every method hops there; capture processing runs on
+ * CaptureProcessor's own threads and reports back through events.
+ */
 @ReactModule(name = CameraModule.NAME)
 class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCameraSpec(reactContext) {
-  private val paths = AppPaths(reactContext)
   private val main = Handler(Looper.getMainLooper())
+  private val budget = MemoryBudgetPolicy.forTotalRam(
+    DeviceInfo.totalRamBytes(reactContext),
+    DeviceInfo.isLowRamDevice(reactContext),
+  )
+  private val tier = CapturePolicy.tierFor(budget.engineBytes)
+  private val processor = CaptureProcessor(AppPaths(reactContext).captures, tier)
+
+  init {
+    // The engine budget is process-wide; set it here too in case the engine
+    // module has not been created yet.
+    if (NativeEngine.ensureLoaded()) NativeEngine.nativeSetMemoryBudget(budget.engineBytes)
+    CameraController.events = CameraController.EventSink { name, payload -> reactApplicationContext.emitSafely(name, payload) }
+  }
 
   override fun getName() = NAME
 
   override fun isSessionReady(promise: Promise) {
-    main.post { promise.resolve(CameraSession.isReady) }
+    main.post { promise.resolve(CameraController.isReady) }
+  }
+
+  override fun getCapabilities(promise: Promise) {
+    main.post {
+      val caps = CameraController.capabilities()
+      if (caps == null) {
+        promise.resolve(null)
+        return@post
+      }
+      val plans = CaptureMode.entries.associate { mode ->
+        val plan = CapturePolicy.plan(mode, tier)
+        mode.id to mapOf("frames" to plan.frames, "workingDimension" to plan.decodeDimension, "upscale" to plan.upscale)
+      }
+      promise.resolve((caps + mapOf("tier" to tier.name.lowercase(), "capturePlans" to plans)).toWritableMap())
+    }
+  }
+
+  override fun configure(config: ReadableMap) {
+    val map = config.toHashMap()
+    main.post { CameraController.configure(SessionConfig.fromMap(map, CameraController.sessionConfig)) }
   }
 
   override fun capturePhoto(options: ReadableMap, promise: Promise) {
-    val flash = when (if (options.hasKey("flash")) options.getString("flash") else null) {
-      "on" -> ImageCapture.FLASH_MODE_ON
-      "auto" -> ImageCapture.FLASH_MODE_AUTO
-      else -> ImageCapture.FLASH_MODE_OFF
-    }
-    val stamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
-    val target = File(paths.captures, "PP_$stamp.jpg")
+    val request = CaptureOptions.fromMap(options.toHashMap())
     main.post {
-      CameraSession.capture(
-        target,
-        flash,
-        onSaved = { file ->
-          // Display orientation, consistent with how the engine decodes it.
-          val bounds = ImageCodec.readDisplayBounds(file)
-          promise.resolve(
-            mapOf(
-              "path" to file.absolutePath,
-              "width" to bounds.width,
-              "height" to bounds.height,
-              "sizeBytes" to file.length().toDouble(),
-              "capturedAt" to System.currentTimeMillis().toDouble(),
-            ).toWritableMap(),
-          )
-        },
-        onError = { code, message -> promise.reject(code, message) },
-      )
+      val capture = CameraController.imageCapture
+      if (capture == null || !CameraController.isReady) {
+        promise.reject("NOT_READY", "Camera is not ready")
+        return@post
+      }
+      CameraController.setFlash(request.flash)
+      processor.capture(capture, request, CameraController.activeLensFacing == "front", object : CaptureProcessor.Listener {
+        override fun onShutter(captureId: String) = emit(EVENT_SHUTTER, mapOf("captureId" to captureId))
+        override fun onProgress(captureId: String, stage: String, progress: Double) =
+          emit(EVENT_PROGRESS, mapOf("captureId" to captureId, "stage" to stage, "progress" to progress))
+        override fun onSuccess(captureId: String, result: Map<String, Any?>) =
+          promise.resolve((result + ("captureId" to captureId)).toWritableMap())
+        override fun onFailure(captureId: String, code: String, message: String) = promise.reject(code, message)
+      })
     }
+  }
+
+  override fun cancelCapture(captureId: String) {
+    processor.cancel(captureId)
+  }
+
+  override fun setZoom(ratio: Double, promise: Promise) {
+    main.post { CameraController.setZoomRatio(ratio.toFloat()) { promise.resolve(it.toDouble()) } }
+  }
+
+  override fun setExposureCompensation(index: Double, promise: Promise) {
+    main.post { CameraController.setExposureIndex(index.toInt()) { promise.resolve(it) } }
+  }
+
+  override fun focusAt(x: Double, y: Double, promise: Promise) {
+    main.post { CameraController.focusAt(x.toFloat().coerceIn(0f, 1f), y.toFloat().coerceIn(0f, 1f)) { promise.resolve(it) } }
+  }
+
+  override fun cancelFocus() {
+    main.post { CameraController.cancelFocus() }
+  }
+
+  override fun setFlash(mode: String) {
+    main.post { CameraController.setFlash(FlashSetting.parse(mode)) }
   }
 
   override fun setTorch(enabled: Boolean, promise: Promise) {
-    main.post { promise.resolve(CameraSession.setTorch(enabled)) }
+    main.post { promise.resolve(CameraController.setTorch(enabled)) }
   }
+
+  override fun setFocusPeaking(enabled: Boolean, color: Double, threshold: Double) {
+    FocusPeakingAnalyzer.color = color.toLong().toInt()
+    FocusPeakingAnalyzer.threshold = threshold.toFloat().coerceIn(0.02f, 1f)
+    main.post { CameraController.setFocusPeaking(enabled) }
+  }
+
+  override fun setManual(settings: ReadableMap, promise: Promise) {
+    val parsed = ManualSettings.fromMap(settings.toHashMap())
+    main.post { promise.resolve(manualToMap(CameraController.setManual(parsed)).toWritableMap()) }
+  }
+
+  override fun resetManual() {
+    main.post { CameraController.resetManual() }
+  }
+
+  override fun addListener(eventName: String) = Unit
+  override fun removeListeners(count: Double) = Unit
+
+  override fun invalidate() {
+    processor.shutdown()
+    CameraController.events = null
+    super.invalidate()
+  }
+
+  private fun emit(name: String, payload: Map<String, Any?>) = reactApplicationContext.emitSafely(name, payload)
 
   companion object {
     const val NAME = "PhotoPlusCamera"
+    const val EVENT_SHUTTER = "PhotoPlusCaptureShutter"
+    const val EVENT_PROGRESS = "PhotoPlusCaptureProgress"
+
+    fun manualToMap(m: ManualSettings): Map<String, Any?> = mapOf(
+      "iso" to m.iso,
+      "exposureTimeNs" to m.exposureTimeNs?.toDouble(),
+      "focusDiopters" to m.focusDiopters?.toDouble(),
+      "whiteBalance" to m.whiteBalance.id,
+      "kelvin" to (m.whiteBalance as? WhiteBalance.Kelvin)?.kelvin,
+      "aeLock" to m.aeLock,
+      "awbLock" to m.awbLock,
+    )
   }
 }

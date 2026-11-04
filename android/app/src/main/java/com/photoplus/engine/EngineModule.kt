@@ -126,6 +126,104 @@ class EngineModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  /**
+   * Restores an existing photo (Enhance / Super-res on a saved image): one
+   * frame, decoded straight into the engine's input, written in place into
+   * the output bitmap. Resolves with the engine's before/after report.
+   */
+  override fun enhance(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val input: File
+    val output: File
+    try {
+      input = paths.resolve(map["inputPath"] as? String ?: "")
+      output = paths.resolve(map["outputPath"] as? String ?: "")
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    val upscale = if ((map["upscale"] as? Number)?.toInt() == 2) 2 else 1
+    fun unit(key: String, default: Float) = ((map[key] as? Number)?.toFloat() ?: default).coerceIn(0f, 1f)
+    val params = floatArrayOf(unit("denoise", 1f), unit("sharpen", 1f), unit("detail", 0.35f), unit("vibrance", 0.25f))
+    val autoTone = map["autoTone"] as? Boolean ?: true
+    val requestedMax = (map["maxDimension"] as? Number)?.toInt() ?: budget.maxDecodeDimension
+    // Output size is bounded by the budget's decode limit whatever the upscale.
+    val maxDim = minOf(requestedMax, budget.maxDecodeDimension) / upscale
+
+    jobs.submit(jobId, object : JobListener<Map<String, Any?>> {
+      override fun onStateChanged(jobId: String, state: JobState) {
+        reactApplicationContext.emitSafely(EVENT_JOB_STATE, mapOf("jobId" to jobId, "state" to state.name.lowercase()))
+      }
+      override fun onSuccess(jobId: String, result: Map<String, Any?>) = promise.resolve(result.toWritableMap())
+      override fun onFailure(jobId: String, error: EngineException) = promise.reject(error.code, error.message, error)
+    }) { token ->
+      val started = SystemClock.elapsedRealtime()
+      val decoded = ImageCodec.decode(input, maxDim)
+      var result: Bitmap? = null
+      try {
+        val frame = decoded.bitmap
+        result = createBitmap(frame.width * upscale, frame.height * upscale, Bitmap.Config.ARGB_8888).apply {
+          isPremultiplied = false
+          setHasAlpha(false)
+        }
+        val report = FloatArray(7)
+        NativeEngine.nativeEnhance(arrayOf(frame), upscale, params, autoTone, result, token, report)
+        val after = NativeEngine.nativeAnalyzeQuality(result)
+        ImageCodec.encode(result, output, OutputFormat.JPEG, (map["quality"] as? Number)?.toInt()?.coerceIn(50, 100) ?: 95)
+        mapOf(
+          "outputPath" to output.absolutePath,
+          "width" to result.width,
+          "height" to result.height,
+          "sourceWidth" to decoded.sourceWidth,
+          "sourceHeight" to decoded.sourceHeight,
+          "sizeBytes" to output.length().toDouble(),
+          "report" to mapOf(
+            "noiseBefore" to report[3].toDouble(),
+            "noiseAfter" to report[4].toDouble(),
+            "blurBefore" to report[5].toDouble(),
+            "deblurSigma" to report[6].toDouble(),
+            "sharpnessAfter" to after[2].toDouble(),
+            "upscale" to upscale,
+          ),
+          "timings" to mapOf("totalMs" to (SystemClock.elapsedRealtime() - started).toDouble()),
+        )
+      } finally {
+        result?.recycle()
+        decoded.bitmap.recycle()
+      }
+    }
+  }
+
+  /** Measures noise, blur and exposure of a photo (drives the "Enhance suggested" hint). */
+  override fun analyzeQuality(path: String, promise: Promise) {
+    if (!requireEngine(promise)) return
+    ioExecutor.execute {
+      try {
+        val decoded = ImageCodec.decode(paths.resolve(path), ANALYSIS_DIMENSION)
+        try {
+          val q = NativeEngine.nativeAnalyzeQuality(decoded.bitmap)
+          promise.resolve(
+            mapOf(
+              "noise" to q[0].toDouble(),
+              "blurPx" to q[1].toDouble() / decoded.scale, // in source pixels
+              "sharpness" to q[2].toDouble(),
+              "meanLuma" to q[3].toDouble(),
+              "highlightsClipped" to q[4].toDouble(),
+              "shadowsClipped" to q[5].toDouble(),
+            ).toWritableMap(),
+          )
+        } finally {
+          decoded.bitmap.recycle()
+        }
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+      } catch (e: Exception) {
+        promise.reject(EngineException.INTERNAL, e.message, e)
+      }
+    }
+  }
+
   override fun cancel(jobId: String) {
     jobs.cancel(jobId)
   }
@@ -225,6 +323,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
   companion object {
     const val NAME = "PhotoPlusEngine"
     const val EVENT_JOB_STATE = "PhotoPlusJobState"
+    private const val ANALYSIS_DIMENSION = 1600
 
     private fun namedThreads(prefix: String): ThreadFactory {
       val counter = AtomicInteger()

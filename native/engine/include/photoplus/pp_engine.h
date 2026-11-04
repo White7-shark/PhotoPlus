@@ -178,6 +178,12 @@ void pp_enhance_default_params(pp_enhance_params* out);
 pp_status pp_enhance(const pp_image* const* frames, size_t count, const pp_enhance_params* params,
                      const pp_cancel_token* token, pp_image** out, pp_enhance_report* report);
 
+/* As pp_enhance, but writes into `destination` (a 4-channel image of exactly
+ * frames' size x upscale, typically a wrapped Android Bitmap) instead of
+ * allocating, which saves a full-image copy. */
+pp_status pp_enhance_into(const pp_image* const* frames, size_t count, const pp_enhance_params* params,
+                          const pp_cancel_token* token, pp_image* destination, pp_enhance_report* report);
+
 pp_status pp_analyze_quality(const pp_image* image, pp_quality_report* out);
 
 /* Focus peaking on a camera luma (Y) plane, read in place (e.g. a direct

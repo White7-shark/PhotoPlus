@@ -8,6 +8,9 @@ import { TurboModuleRegistry } from 'react-native';
 export interface Spec extends TurboModule {
   getEngineInfo(): Promise<Object>;
   process(jobId: string, request: Object): Promise<Object>;
+  /** Restores a saved photo (denoise, deblur, tone; upscale 2 = super-resolution). */
+  enhance(jobId: string, request: Object): Promise<Object>;
+  analyzeQuality(path: string): Promise<Object>;
   cancel(jobId: string): void;
   cancelAll(): void;
   getMemoryStats(): Promise<Object>;

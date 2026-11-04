@@ -15,6 +15,7 @@ export type RootStackParamList = {
   Main: NavigatorScreenParams<TabParamList> | undefined;
   DeviceInfo: undefined;
   Diagnostics: undefined;
+  PhotoPreview: { imageId: string };
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
