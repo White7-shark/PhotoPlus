@@ -74,3 +74,17 @@ CameraScreen (JS) ── configure / setManual / capturePhoto ──► CameraMo
 - **Manual controls** are stored as the user asked for them; every apply derives what the hardware can do right now (clamped to sensor ranges), so a temporary downgrade is never remembered.
 - **Recovery:** `CameraState` critical errors → rebind with backoff (0.5 s, 1 s, 2 s) → `CAMERA_UNAVAILABLE`.
 - **Orientation:** the UI is portrait-locked; the photo's rotation follows the device (±10° hysteresis), analysis keeps the display rotation so overlays line up.
+
+## Spotlight, Glow and Vibe Match
+
+```
+capture / saved photo ─▶ decode (bounded size) ─▶ [Clarity] ─▶ PortraitProcessor ─▶ pp_portrait ─▶ [pp_style_apply] ─▶ JPEG + EXIF
+                                                                 │ ML Kit subject segmentation (taps choose subjects)
+                                                                 │ ML Kit face contours (faces + protected features)
+                                                                 └ fallbacks: person segmentation ▸ pp_subject_mask (taps)
+```
+
+- Masks are small ALPHA_8 bitmaps passed to the engine without copies (the JNI wraps locked pixels); the photo is processed in place.
+- The engine never allocates full-size scratch planes for portraits (~30 MB working set at any size).
+- Premium checks go through `useFeature` / `checkFeature` (enforcement stays off until Play Billing ships); the feature catalogue lists Clarity, Spotlight and Share as free, and multi-shot modes and Vibe Match as Premium.
+- User-facing text uses brand names only; native error codes map to plain sentences in `services/errors.ts`.

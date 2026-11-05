@@ -36,6 +36,10 @@
 | androidx.exifinterface | **1.4.2** | 1.4.2 |
 | androidx.core:core-ktx | **1.19.1** | 1.19.1 |
 | androidx.appcompat | **1.8.0** | 1.8.0 |
+| androidx.activity:activity-ktx | **1.13.0** | 1.13.0 (1.14 is alpha) |
+| ML Kit face detection (bundled) | **16.1.7** | 16.1.7 |
+| ML Kit selfie segmentation (bundled) | **16.0.0-beta6** | 16.0.0-beta6 (Google ships it only as beta) |
+| ML Kit subject segmentation (Play services) | **16.0.0-beta1** | 16.0.0-beta1 (Google ships it only as beta) |
 | JUnit (Jupiter, via BOM) | **6.1.3** | 6.1.3 (migrated from JUnit 4, which is maintenance-only) |
 | org.json (tests) | **20260814** | 20260814 |
 
@@ -87,6 +91,10 @@ The build is clean for **our** code: 0 Kotlin/Java compiler warnings, 0 Gradle d
 - **react-native-svg 15.16.0**: Groovy space-assignment in its `build.gradle`.
 
 Those need fixing upstream. They don't affect the app, and we'll pick up fixes as new versions are released.
+
+## On-device vision choice
+
+ML Kit was chosen over MediaPipe Tasks Vision 1.2.2 for Spotlight. MediaPipe 1.2.2 was released two days before this work with a reworked API that could not be exercised on a device here, and it adds ~35 MB of native code plus a transitive ~20 MB LLM runtime. ML Kit's APIs are stable. The two segmentation artifacts are Google's latest releases, which Google only publishes as betas, and both have robust fallbacks (the bundled person model, then the engine's own tap cut-out). MediaPipe is used only by the preview script (`scripts/make-spotlight-assets.py`), never by the app.
 
 ## Experimental API opt-in
 

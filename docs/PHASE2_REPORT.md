@@ -112,3 +112,81 @@ The design preview also exposed a usability problem: the default focus-peaking t
 - Verify Camera2 manual controls on representative LIMITED/FULL/LEVEL_3 devices (vendor HAL quirks), and the RAW pair delivery (handled with a 15 s timeout fallback).
 - Measure burst and processing times on entry and standard tiers, and tune the `CapturePolicy` sizes if needed.
 - Peaking overlay alignment assumes the preview view has the selected aspect ratio, which the camera screen guarantees. Check it on very tall screens with 16:9.
+
+---
+
+# Phase 2 additions: Spotlight, Glow, Vibe Match, Share
+
+Design preview: [`design/spotlight-overview.png`](design/spotlight-overview.png). Every photo in it is real engine output on Kodak test photos, and every number is that run's own report.
+
+## What changed for people
+
+| Feature | Plan | What it does |
+|---|---|---|
+| **Clarity** (single-photo enhance) | Free, **default mode** | Sharper, cleaner, brighter in one tap. |
+| **Moonlight** (multi-shot low light) | Premium | Blends a few quick shots for bright, clean night photos. |
+| **Ultra Detail** (multi-shot 2× detail) | Premium | Twice the detail from a few quick shots. |
+| **Spotlight** | Free | The subject stands out while the background melts into a lens-like blur. Tap the preview, or a saved photo, to choose what shines; untapped, it picks the people (or the main subjects). Blur: Light / Medium / Strong. |
+| **Glow** (part of Spotlight) | Free | Skin retouch: smooths, clears spots and blemishes, evens and brightens tone, and keeps each person's own skin colour. Natural / Smooth / Flawless. |
+| **Vibe Match** | Premium | Pick any photo whose style you love. The camera adjusts exposure and white balance toward it, and every shot (and any saved photo) is finished in that style. Subtle / Balanced / Full. |
+| **Share** | Free | System share sheet from the photo preview. |
+| **Edit a photo** | Free | Bring a gallery photo in (system photo picker, no permission) and use every tool on it. |
+
+**Names and wording.** The app uses brand names only and never shows technical terms. Error codes map to plain sentences (`services/errors.ts`), and the developer screens (device report, self-test) are hidden in release builds. A test checks that no mode or tool label contains words such as "engine", "frame", "burst", "noise" or "model".
+
+## How it works
+
+**Engine (C++, `native/engine/src/portrait`)**
+- **Matte.** A coarse subject mask is aligned to the photo's own edges with a fast guided filter. Its coefficients live on a ~1024 px grid, and alpha is evaluated per pixel, so no full-size mask is ever stored.
+- **Lens blur.** Disc ("bokeh") blur in linear light with highlight bloom, on a reduced grid. Subject pixels are excluded from the background average (normalised convolution), so there is no halo of subject colour. Grain matching the photo is re-added, slightly lighter, so blurred areas don't look plastic.
+- **Glow.** It runs where the face is about 180 px across, then applies through frequency separation in one streaming pass:
+  - The skin model is calibrated to each face's **own** colour (robust median and spread).
+  - Spots are found against surrounding *skin only*, then healed by inpainting from clean skin.
+  - Edge-preserving smoothing keeps 10–55% of real texture, depending on the Glow level.
+  - Blotches are evened toward the person's own median tone.
+  - The lift scales colour with brightness, so hue and saturation hold.
+  - Eyes, brows, lips and nostrils are protected, and strength fades for small faces (group and full-length shots).
+- **Tap cut-out (fallback).** Colour models seeded by the taps are refined along edges, and only regions connected to a tap are kept. A reliability check swaps a patchy result for a soft, deliberate focus fall-off.
+- **Look transfer.** A monotone, slope-bounded tone curve (luma quantiles), colour by tonal zone (split toning), saturation, vignette and grain. The camera-side mapping (`lookCameraSettings`) turns the look into exposure compensation and white balance (Kelvin where available, otherwise the nearest preset).
+- **Cost.** 12 MP Spotlight takes ~0.5 s on 4 desktop cores, with a ~30 MB working set whatever the photo size. Look transfer on 12 MP takes ~0.2 s.
+
+**Android (`studio/PortraitProcessor.kt`)**
+- **Subject.** ML Kit subject segmentation (people and objects; Play services module, downloaded once) chooses the tapped subjects. Fallbacks, in order: the bundled ML Kit person segmentation, then the engine's tap cut-out.
+- **Faces.** ML Kit face contours (bundled) give face areas plus protected features. Face detection and subject segmentation run concurrently, and every wait is bounded.
+- **Geometry.** Taps map from the portrait-locked (mirrored, for selfies) preview to the upright photo, then to the decoded bitmap, in any phone orientation (`MaskGeometry`, unit-tested).
+
+## Testing
+
+| Suite | Result |
+|---|---|
+| Engine (ASan+UBSan, TSan) | **56 passed**. New, social-media-oriented checks: background clearly blurred (−86% texture) with the subject crisp; no colour halo; spots −86% with texture kept (not plastic); **hue within 0.1° and saturation within 1% for deep, medium and light skin tones**; side-light shading 95% kept; eyes, brows and lips stay sharp; no retouching without faces; neutral settings change nothing; deterministic and leak-free; cancellation is reported as cancellation; tap chooses the right subject (IoU 0.98–0.99); look transfer cuts the distance to the reference by 81%; ~28 MB working set on a large face |
+| Kotlin JVM | **72 passed**. New: tap mapping in all orientations and for selfies, mask rotation, Spotlight and look option parsing |
+| Jest | **165 passed**. New: plans (Clarity and Spotlight free, multi-shot and Vibe Match Premium, with enforcement on), no-jargon check, Spotlight tap and settings flow to capture, Vibe Match camera settings and capture, exposure reset when Vibe Match is turned off, photo-preview tools, Share, Spotlight on before/after photos, edits never overwrite originals, old style photos removed, "Edit a photo" import |
+| Static | tsc, ESLint (no-deprecated), Prettier, Kotlin 0 warnings, Android Lint "No issues found" |
+
+## Real-photo checks, and what they changed
+
+Synthetic tests were not enough on their own, so the tools were run on Kodak portraits:
+- **A full-length shot with a small face looked ashy.** Retouch strength wasn't tied to face size, and the lift didn't scale colour. Fixed, and a saturation test was added for every skin tone.
+- **The colour-only tap cut-out confused dark clothing with a dark sculpture, and skin with a pink backdrop.** It now detects this and falls back to a harmonious soft-focus look. On phones, ML Kit's segmentation is the primary mask. With a person mask (MediaPipe's selfie segmenter standing in for ML Kit on this machine), Spotlight gives clean hair edges with no halo.
+- **The spot count was inflated** by stray pixels; only blemish-sized clusters are counted now.
+
+## Code review
+
+Ten findings, all fixed with regression tests:
+- A cancel during retouch was misreported as low memory, then retried.
+- A plain photo with Vibe Match on was decoded at full sensor size; it is now bounded.
+- Spotlight taps were ignored on before/after photos.
+- Turning Vibe Match off left its exposure offset.
+- The photo picker could hang if the activity went away.
+- NaN checks in looks.
+- Edits could overwrite the original.
+- Old style photos were never deleted.
+- A per-pixel matte evaluation in the blur grid (now per cell).
+- Face and subject models now run concurrently.
+
+## Open items for the device pass
+
+- Check subject segmentation's first-use download and the fallback path on devices without Google Play services.
+- Tune Glow levels on a range of real selfies, in varied lighting and across skin tones.
+- Measure Spotlight time on entry-tier phones.
