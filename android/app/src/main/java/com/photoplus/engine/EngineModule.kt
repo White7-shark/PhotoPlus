@@ -7,7 +7,17 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.module.annotations.ReactModule
+import android.content.ContentValues
+import android.provider.MediaStore
 import com.photoplus.device.DeviceInfo
+import com.photoplus.edit.EditDocument
+import com.photoplus.edit.EditRenderer
+import com.photoplus.edit.ExportPolicy
+import com.photoplus.edit.Plan
+import com.photoplus.edit.ResolvedWatermark
+import com.photoplus.edit.WatermarkSpec
+import com.photoplus.entitlement.Entitlements
+import com.photoplus.studio.FaceFinder
 import com.photoplus.device.MemoryPressureMonitor
 import com.photoplus.specs.NativePhotoPlusEngineSpec
 import com.photoplus.studio.PortraitParams
@@ -173,8 +183,10 @@ class EngineModule(reactContext: ReactApplicationContext) :
         NativeEngine.nativeEnhance(arrayOf(frame), upscale, params, autoTone, result, token, report)
         val after = NativeEngine.nativeAnalyzeQuality(result)
         ImageCodec.encode(result, output, OutputFormat.JPEG, (map["quality"] as? Number)?.toInt()?.coerceIn(50, 100) ?: 95)
+        val clean = markIfFree(map, output)
         mapOf(
           "outputPath" to output.absolutePath,
+          "cleanPath" to clean,
           "width" to result.width,
           "height" to result.height,
           "sourceWidth" to decoded.sourceWidth,
@@ -233,8 +245,10 @@ class EngineModule(reactContext: ReactApplicationContext) :
         val r = portraitProcessor.apply(work, 0, points, params, token)
         look?.let { NativeEngine.nativeStyleApply(work, it, lookStrength, token) }
         ImageCodec.encode(work, io.second, OutputFormat.JPEG, 95)
+        val clean = markIfFree(map, io.second)
         mapOf(
           "outputPath" to io.second.absolutePath,
+          "cleanPath" to clean,
           "width" to work.width,
           "height" to work.height,
           "sizeBytes" to io.second.length().toDouble(),
@@ -288,8 +302,10 @@ class EngineModule(reactContext: ReactApplicationContext) :
         }
         look?.let { NativeEngine.nativeStyleApply(output, it, lookStrength, token) }
         ImageCodec.encode(output, io.second, OutputFormat.JPEG, 95)
+        val clean = markIfFree(map, io.second)
         mapOf(
           "outputPath" to io.second.absolutePath,
+          "cleanPath" to clean,
           "width" to output.width,
           "height" to output.height,
           "sizeBytes" to io.second.length().toDouble(),
@@ -349,6 +365,236 @@ class EngineModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  // ---- Editor ---------------------------------------------------------------
+
+  /**
+   * Photos saved to the library on the free plan carry the Photo Plus mark
+   * (the user's chosen style), with a clean companion kept for editing.
+   * Returns the clean path, or null when no mark applies.
+   */
+  private fun markIfFree(map: Map<String, Any?>, file: File): String? {
+    if (map["watermark"] == null) return null
+    return com.photoplus.edit.PhotoWatermark.applyToFile(file, watermarkOf(map), Entitlements.plan)
+  }
+
+  private val editRenderer by lazy { EditRenderer(reactApplicationContext.assets) { portraitProcessor } }
+  private val previewLock = Any()
+  private var previewSource: Pair<String, Bitmap>? = null
+
+  /** The decoded photo for previews, kept while the same photo is being edited. */
+  private fun previewBitmap(file: File, maxDim: Int): Bitmap = synchronized(previewLock) {
+    val key = "${file.absolutePath}|${file.lastModified()}|$maxDim"
+    previewSource?.takeIf { it.first == key && !it.second.isRecycled }?.let { return it.second }
+    previewSource?.second?.recycle()
+    val decoded = ImageCodec.decode(file, maxDim).bitmap
+    previewSource = key to decoded
+    decoded
+  }
+
+  @Suppress("UNCHECKED_CAST")
+  private fun docOf(map: Map<String, Any?>) = EditDocument.fromMap(map["doc"] as? Map<String, Any?>)
+
+  @Suppress("UNCHECKED_CAST")
+  private fun watermarkOf(map: Map<String, Any?>) = WatermarkSpec.fromMap(map["watermark"] as? Map<String, Any?>)
+
+  /**
+   * Renders a photo with its edits: previews (small, cached stages) and
+   * copies saved to the library. With `watermark`, shows the mark exactly as
+   * an export would draw it for the current plan.
+   */
+  override fun renderEdit(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val io = resolveIo(map, promise) ?: return
+    val doc: EditDocument
+    val mark: ResolvedWatermark?
+    try {
+      doc = docOf(map)
+      mark = if (map["watermark"] != null) ExportPolicy.resolve(watermarkOf(map), Entitlements.plan) else null
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    val preview = map["preview"] as? Boolean ?: true
+    val maxDim = minOf((map["maxDimension"] as? Number)?.toInt() ?: if (preview) 1280 else budget.maxDecodeDimension, budget.maxDecodeDimension, 8192)
+    val skipProps = (map["skipProps"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }?.toSet() ?: emptySet()
+    val skipFrame = map["skipFrame"] as? Boolean ?: false
+    // Saving to the library on the free plan: the copy carries the mark and a
+    // clean companion is kept for editing again (as with camera photos).
+    val cleanOut = (map["cleanOutputPath"] as? String)?.let {
+      try {
+        paths.resolve(it)
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+        return
+      }
+    }
+    val plan = Entitlements.plan
+    val bake = !preview && cleanOut != null && plan == Plan.FREE
+    val saveMark = if (bake) ExportPolicy.resolve(watermarkOf(map), plan) else null
+    jobs.submit(jobId, jobListener(promise)) { token ->
+      val started = SystemClock.elapsedRealtime()
+      val source = if (preview) previewBitmap(io.first, maxDim) else ImageCodec.decode(io.first, maxDim).bitmap
+      try {
+        val r = editRenderer.render(
+          source, doc,
+          EditRenderer.Options(skipProps, skipFrame, if (preview) mark else null, maxDim, if (preview) io.first.absolutePath else null),
+          token,
+        )
+        try {
+          var cleanPath: String? = null
+          if (saveMark != null && cleanOut != null) {
+            ImageCodec.encode(r.bitmap, cleanOut, OutputFormat.JPEG, 95)
+            cleanPath = cleanOut.absolutePath
+            val visible = com.photoplus.edit.WatermarkRenderer.apply(r.bitmap, saveMark)
+            ExportPolicy.verify(saveMark, plan, visible, r.bitmap.width, r.bitmap.height)
+          }
+          ImageCodec.encode(r.bitmap, io.second, OutputFormat.JPEG, if (preview) 88 else 95)
+          mapOf(
+            "outputPath" to io.second.absolutePath,
+            "cleanPath" to cleanPath,
+            "width" to r.bitmap.width,
+            "height" to r.bitmap.height,
+            "sizeBytes" to io.second.length().toDouble(),
+            "photoRect" to r.photoRect.map { it.toDouble() },
+            "portrait" to r.portrait?.let { mapOf("people" to it.people, "spots" to it.spots, "skin" to it.skinCoverage.toDouble(), "subject" to it.subjectCoverage.toDouble()) },
+            "timings" to mapOf("totalMs" to (SystemClock.elapsedRealtime() - started).toDouble()),
+          )
+        } finally {
+          r.bitmap.recycle()
+        }
+      } finally {
+        if (!preview) source.recycle()
+      }
+    }
+  }
+
+  /**
+   * Everything that leaves the app goes through here. The plan is read
+   * natively: on the free plan the Photo Plus mark is always drawn (whatever
+   * the request says) and verified visible before the file is written.
+   * Writes to the exports folder (the only place sharing accepts files from)
+   * and, for the gallery, into Pictures/Photo Plus.
+   */
+  override fun exportImage(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val input = try {
+      paths.resolve(map["inputPath"] as? String ?: "")
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    val plan = Entitlements.plan
+    val doc: EditDocument
+    val mark: ResolvedWatermark?
+    val format: OutputFormat
+    try {
+      doc = docOf(map)
+      mark = ExportPolicy.resolve(watermarkOf(map), plan)
+      format = OutputFormat.parse(map["format"] as? String)
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    val quality = ((map["quality"] as? Number)?.toInt() ?: 92).coerceIn(60, 100)
+    val toGallery = map["destination"] == "gallery"
+    jobs.submit(jobId, jobListener(promise)) { token ->
+      val source = ImageCodec.decode(input, minOf(budget.maxDecodeDimension, 8192)).bitmap
+      try {
+        val r = editRenderer.render(source, doc, EditRenderer.Options(watermark = mark, maxEdge = minOf(budget.maxDecodeDimension, 8192)), token)
+        try {
+          ExportPolicy.verify(mark, plan, r.watermarkVisible, r.bitmap.width, r.bitmap.height)
+          paths.exports.mkdirs()
+          pruneExports()
+          val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.US).format(java.util.Date())
+          val out = File(paths.exports, "PhotoPlus_$stamp.${format.extension}")
+          ImageCodec.encode(r.bitmap, out, format, quality)
+          val galleryUri = if (toGallery) saveToGallery(out, format) else null
+          mapOf(
+            "outputPath" to out.absolutePath,
+            "width" to r.bitmap.width,
+            "height" to r.bitmap.height,
+            "sizeBytes" to out.length().toDouble(),
+            "galleryUri" to galleryUri,
+            "watermark" to mapOf(
+              "applied" to (mark != null),
+              "enforced" to (mark?.enforced ?: false),
+              "plan" to plan.name.lowercase(),
+            ),
+          )
+        } finally {
+          r.bitmap.recycle()
+        }
+      } finally {
+        source.recycle()
+      }
+    }
+  }
+
+  /** Exports are hand-offs, not a library: keep them a day. */
+  private fun pruneExports() {
+    val cutoff = System.currentTimeMillis() - 24 * 3600 * 1000L
+    paths.exports.listFiles()?.filter { it.isFile && it.lastModified() < cutoff }?.forEach { it.delete() }
+  }
+
+  /** Adds the export to the device gallery (Pictures/Photo Plus); no permission needed. */
+  private fun saveToGallery(file: File, format: OutputFormat): String {
+    val resolver = reactApplicationContext.contentResolver
+    val values = ContentValues().apply {
+      put(MediaStore.Images.Media.DISPLAY_NAME, file.name)
+      put(MediaStore.Images.Media.MIME_TYPE, format.mime)
+      put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Photo Plus")
+      put(MediaStore.Images.Media.IS_PENDING, 1)
+    }
+    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+      ?: throw EngineException(EngineException.IO_ERROR, "The gallery is not available")
+    try {
+      resolver.openOutputStream(uri).use { out ->
+        if (out == null) throw EngineException(EngineException.IO_ERROR, "The gallery is not available")
+        file.inputStream().use { it.copyTo(out) }
+      }
+      resolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+    } catch (e: Exception) {
+      resolver.delete(uri, null, null)
+      throw e
+    }
+    return uri.toString()
+  }
+
+  /** Faces in the photo as edited (turned, straightened, cropped), for fitting props. */
+  override fun detectFaces(request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    ioExecutor.execute {
+      try {
+        val full = docOf(map)
+        val doc = EditDocument(quarterTurns = full.quarterTurns, flipH = full.flipH, straighten = full.straighten, crop = full.crop)
+        val source = ImageCodec.decode(paths.resolve(map["inputPath"] as? String ?: ""), 1600).bitmap
+        try {
+          val r = EditRenderer(reactApplicationContext.assets) { portraitProcessor }.render(source, doc, EditRenderer.Options(), 0L)
+          try {
+            promise.resolve(mapOf("faces" to FaceFinder.find(r.bitmap)).toWritableMap())
+          } finally {
+            r.bitmap.recycle()
+          }
+        } finally {
+          source.recycle()
+        }
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+      } catch (e: Exception) {
+        promise.reject(EngineException.INTERNAL, e.message, e)
+      }
+    }
+  }
+
+  override fun getPlan(promise: Promise) = promise.resolve(Entitlements.plan.name.lowercase())
+
+  override fun setDebugPlan(plan: String, promise: Promise) {
+    promise.resolve(Entitlements.setDebugPlan(if (plan == "premium") Plan.PREMIUM else Plan.FREE))
+  }
+
   /** Applies a look ("Vibe Match") to a saved photo. */
   override fun applyLook(jobId: String, request: ReadableMap, promise: Promise) {
     if (!requireEngine(promise)) return
@@ -366,7 +612,8 @@ class EngineModule(reactContext: ReactApplicationContext) :
       try {
         NativeEngine.nativeStyleApply(work, look, strength, token)
         ImageCodec.encode(work, io.second, OutputFormat.JPEG, 95)
-        mapOf("outputPath" to io.second.absolutePath, "width" to work.width, "height" to work.height, "sizeBytes" to io.second.length().toDouble())
+        val clean = markIfFree(map, io.second)
+        mapOf("outputPath" to io.second.absolutePath, "cleanPath" to clean, "width" to work.width, "height" to work.height, "sizeBytes" to io.second.length().toDouble())
       } finally {
         if (work !== decoded.bitmap) work.recycle()
         decoded.bitmap.recycle()

@@ -123,6 +123,15 @@ object NativeEngine {
    */
   external fun nativeTransform(src: Bitmap, dst: Bitmap, params: FloatArray, token: Long, reportOut: FloatArray)
 
+  /** Places a prop on [image]; [params] = cx, cy, width, rotation, flip, opacity, blend, shadow. Returns covered px. */
+  external fun nativePlaceProp(image: Bitmap, prop: Bitmap, params: FloatArray, token: Long): Long
+
+  /** Renders [photo] framed into [canvas] (see FrameStyle.floats() / ints()). */
+  external fun nativeFrame(photo: Bitmap, canvas: Bitmap, floats: FloatArray, ints: IntArray, token: Long)
+
+  /** Composites [stamp] at (x, y); returns the stamp pixels left clearly visible. */
+  external fun nativeOverlay(image: Bitmap, stamp: Bitmap, x: Int, y: Int, opacity: Float): Long
+
   /** Tap-seeded cut-out; [points] = x0,y0,x1,y1… (0..1). Returns mask bytes, size in [sizeOut]. */
   external fun nativeSubjectMask(bitmap: Bitmap, points: FloatArray, sizeOut: IntArray): ByteArray
 

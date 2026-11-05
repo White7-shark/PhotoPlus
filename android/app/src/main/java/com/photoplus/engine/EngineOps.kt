@@ -42,6 +42,34 @@ sealed class EngineOp(val typeId: Int) {
   data class Saturation(val amount: Float) : EngineOp(8) {
     override fun params() = floatArrayOf(amount, 0f, 0f, 0f)
   }
+  /** Straighten by [degrees] (clockwise, -45..45), cropping to photo only. */
+  data class Straighten(val degrees: Float) : EngineOp(9) {
+    override fun params() = floatArrayOf(degrees)
+  }
+  data class Warmth(val temperature: Float, val tint: Float) : EngineOp(10) {
+    override fun params() = floatArrayOf(temperature, tint)
+  }
+  /** A look preset (pp_filter_id 1..12) at [strength] 0..1. */
+  data class Filter(val engineId: Int, val strength: Float) : EngineOp(11) {
+    override fun params() = floatArrayOf(engineId.toFloat(), strength)
+  }
+  /** Focus effect: [kind] 1 radial, 2 tilt; centre in 0..1; size of the shorter side. */
+  data class Focus(
+    val kind: Int,
+    val cx: Float,
+    val cy: Float,
+    val size: Float,
+    val angle: Float,
+    val strength: Float,
+    val feather: Float,
+  ) : EngineOp(12) {
+    override fun params() = floatArrayOf(kind.toFloat(), cx, cy, size, angle, strength, feather)
+  }
+
+  companion object {
+    /** Floats per operation (PP_OP_PARAMS). */
+    const val PARAMS = 8
+  }
 }
 
 enum class OutputFormat(val extension: String, val mime: String) {
@@ -71,8 +99,8 @@ data class ProcessRequest(
   fun typeIds(ops: List<EngineOp> = operations): IntArray = ops.map { it.typeId }.toIntArray()
 
   fun packedParams(ops: List<EngineOp> = operations): FloatArray {
-    val out = FloatArray(ops.size * 4)
-    ops.forEachIndexed { i, op -> op.params().copyInto(out, i * 4) }
+    val out = FloatArray(ops.size * EngineOp.PARAMS)
+    ops.forEachIndexed { i, op -> op.params().copyInto(out, i * EngineOp.PARAMS) }
     return out
   }
 
@@ -134,6 +162,9 @@ data class ProcessRequest(
         "resize" -> EngineOp.Resize(num("width").toInt(), num("height").toInt())
         "sharpen" -> EngineOp.Sharpen(num("amount").toFloat())
         "saturation" -> EngineOp.Saturation(num("amount").toFloat())
+        "straighten" -> EngineOp.Straighten(num("degrees").toFloat())
+        "warmth" -> EngineOp.Warmth(num("temperature", 0.0).toFloat(), num("tint", 0.0).toFloat())
+        "filter" -> EngineOp.Filter(num("look").toInt(), num("strength", 1.0).toFloat())
         else -> invalid("Operation #$index: unknown type '$type'")
       }
     }

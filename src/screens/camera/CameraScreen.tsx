@@ -292,6 +292,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           portrait: shot.portrait ?? null,
           originalPath: shot.originalPath ?? null,
           originalOwned: !!shot.originalPath,
+          cleanPath: shot.cleanPath ?? null,
           rawPath: shot.rawPath ?? null,
           report: shot.report ?? null,
           timings: shot.timings ?? null,
@@ -335,6 +336,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             ? { points: flattenPoints(spotPoints), ...spotlightSettings(blurLevel, glowLevel) }
             : {}),
           ...(look ? { look: look.look, lookStrength: look.strength } : {}),
+          // Free-plan photos carry the user's chosen watermark (signature style by default).
+          watermark: settings.watermark,
         },
         captureId,
       );
@@ -368,6 +371,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     caps,
     flash,
     settings.mirrorFrontCamera,
+    settings.watermark,
     tuning,
     spotPoints,
     blurLevel,

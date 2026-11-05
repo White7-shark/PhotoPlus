@@ -68,12 +68,41 @@ typedef enum pp_op_type {
   /* p[0] = amount (0..2), unsharp mask with 3x3 box blur */
   PP_OP_SHARPEN = 7,
   /* p[0] = saturation multiplier delta (-1..1) */
-  PP_OP_SATURATION = 8
+  PP_OP_SATURATION = 8,
+  /* p[0] = straighten angle in degrees (-45..45, clockwise); crops to the
+   * largest same-aspect rectangle holding only photo */
+  PP_OP_STRAIGHTEN = 9,
+  /* p[0] = temperature (-1 cool .. 1 warm), p[1] = tint (-1 green .. 1 magenta) */
+  PP_OP_WARMTH = 10,
+  /* p[0] = look id (pp_filter_id), p[1] = strength (0..1) */
+  PP_OP_FILTER = 11,
+  /* p[0] = kind (1 radial, 2 tilt), p[1..2] = centre x, y (0..1), p[3] = size
+   * (fraction of the shorter side), p[4] = tilt angle (deg), p[5] = strength
+   * (0..1), p[6] = feather (0..1) */
+  PP_OP_FOCUS = 12
 } pp_op_type;
+
+/* Looks for PP_OP_FILTER. */
+typedef enum pp_filter_id {
+  PP_FILTER_NATURAL = 1,
+  PP_FILTER_VIVID = 2,
+  PP_FILTER_WARM = 3,
+  PP_FILTER_COOL = 4,
+  PP_FILTER_MONO = 5,
+  PP_FILTER_FADE = 6,
+  PP_FILTER_SOFT = 7,
+  PP_FILTER_NOIR = 8,
+  PP_FILTER_CINEMA = 9,
+  PP_FILTER_GOLDEN = 10,
+  PP_FILTER_FILM = 11,
+  PP_FILTER_LUSH = 12
+} pp_filter_id;
+
+#define PP_OP_PARAMS 8
 
 typedef struct pp_op {
   int32_t type; /* pp_op_type */
-  float p[4];
+  float p[PP_OP_PARAMS];
 } pp_op;
 
 typedef struct pp_image pp_image;
@@ -185,6 +214,54 @@ pp_status pp_enhance_into(const pp_image* const* frames, size_t count, const pp_
                           const pp_cancel_token* token, pp_image* destination, pp_enhance_report* report);
 
 pp_status pp_analyze_quality(const pp_image* image, pp_quality_report* out);
+
+/* ---- Editor: props, frames, watermark --------------------------------------- */
+
+/* A prop (hat, glasses, accessory; straight-alpha RGBA) placed on the photo
+ * so it looks part of the scene: lit and tinted like the scene, with a soft
+ * contact shadow, and as sharp and grainy as the photo. */
+typedef struct pp_prop_params {
+  float cx, cy;        /* centre, image pixels */
+  float width;         /* width, image pixels */
+  float rotation_deg;  /* clockwise */
+  int32_t flip;        /* mirror horizontally */
+  float opacity;       /* 0..1 */
+  float blend;         /* 0..1: takes on the photo's light, colour, sharpness, grain */
+  float shadow;        /* 0..1: contact shadow */
+} pp_prop_params;
+
+pp_status pp_place_prop(pp_image* image, const pp_image* prop, const pp_prop_params* params,
+                        const pp_cancel_token* token, int64_t* covered_pixels);
+
+/* Frames: the photo inside a shape on a designed card. Colours are 0xAARRGGBB. */
+typedef struct pp_frame_params {
+  int32_t shape;        /* 0 rect, 1 ellipse, 2 arch, 3 star, 4 heart, 5 hexagon, 6 diamond */
+  float shape_param;    /* rect corner radius (fraction) / star inner ratio */
+  float rotation_deg;
+  float window[4];      /* x, y, w, h: where the photo sits, canvas fractions */
+  int32_t backdrop;     /* 0 solid, 1 gradient, 2 blurred photo, 3 paper */
+  uint32_t color_a, color_b;
+  float border;         /* fraction of the window's shorter side */
+  uint32_t border_color;
+  int32_t metallic_border;
+  float outline_gap, outline_width;
+  uint32_t outline_color;
+  float shadow, shadow_offset, shadow_blur;
+  float glow;
+  uint32_t glow_color;
+  float zoom, offset_x, offset_y;
+  int32_t decoration;   /* 1 = film sprocket holes */
+} pp_frame_params;
+
+/* `canvas` (4-channel, the final size) is fully overwritten. */
+pp_status pp_frame(const pp_image* photo, pp_image* canvas, const pp_frame_params* params,
+                   const pp_cancel_token* token);
+
+/* Composites a straight-alpha stamp (e.g. the watermark) at (x, y). Reports
+ * how many stamp pixels landed in the image with real visibility (effective
+ * alpha >= 0.25), so exports can verify a watermark was rendered. */
+pp_status pp_overlay(pp_image* image, const pp_image* stamp, int32_t x, int32_t y, float opacity,
+                     int64_t* visible_pixels);
 
 /* ---- Lens quality ("Transform") ------------------------------------------
  * Measures what a basic phone lens leaves in a photo, on the full-resolution

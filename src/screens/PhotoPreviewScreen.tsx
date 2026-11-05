@@ -50,6 +50,7 @@ import {
   type LensReport,
 } from '../services/processing/lens';
 import {
+  cleanOf,
   editedPathFor,
   enhancedCopyMetadata,
   enhanceSuggestion,
@@ -110,6 +111,8 @@ interface EditResult {
   height: number;
   sizeBytes: number;
   report: unknown;
+  /** The result without the Photo Plus mark (free plan). */
+  cleanPath: string | null;
   /** Spotlight result of a Transform that re-applied it. */
   portrait?: unknown;
   /** What this edit did, for the kept photo's recipe. */
@@ -181,6 +184,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
   const repos = useAppStore(s => s.repos);
   const loadProjects = useAppStore(s => s.loadProjects);
   const vibeLook = useAppStore(s => s.settings.vibeLook);
+  const watermark = useAppStore(s => s.settings.watermark);
   const updateSetting = useAppStore(s => s.updateSetting);
   const can = useFeatureCheck();
   const [image, setImage] = useState<ImageRecord | null>(null);
@@ -314,6 +318,8 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
       }
       const processing = getProcessingService();
       const signal = abort.current.signal;
+      // Edits start from the photo without the mark (it is drawn once, on the result).
+      const source = cleanOf(image);
       let r: EditResult;
       if (tool === 'transform') {
         if (!transformAccess.allowed) {
@@ -323,7 +329,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         const plan = transformPlan(image);
         // The untouched photo may have been removed: then Transform works on
         // this photo as it is, keeping its effects.
-        const baseKept = plan.inputPath === image.path || (await storage.exists(plan.inputPath));
+        const baseKept = plan.inputPath === source || (await storage.exists(plan.inputPath));
         const out = await processing.transform(
           baseKept
             ? {
@@ -334,9 +340,11 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
                 spotlight: plan.spotlight,
                 look: plan.look?.look ?? null,
                 lookStrength: plan.look?.strength,
+                watermark,
               }
             : {
-                inputPath: image.path,
+                inputPath: source,
+                watermark,
                 outputPath,
                 upscale: transformDetail === 'double' ? 2 : 1,
                 keepStyle: plan.keepStyle || plan.replayed > 0,
@@ -347,16 +355,24 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         const nextUsage = recordUse(usage, 'transform', openedAt);
         setUsage(nextUsage);
         repos?.settings.setInternal(USAGE_KEY, nextUsage).catch(() => undefined);
-        r = { kind: tool, ...out, report: out.transform, portrait: out.portrait, step: null };
+        r = {
+          kind: tool,
+          ...out,
+          cleanPath: out.cleanPath ?? null,
+          report: out.transform,
+          portrait: out.portrait,
+          step: null,
+        };
       } else if (tool === 'spotlight') {
         const settings = spotlightSettings(blur, glow);
         const out = await processing.spotlight(
-          { inputPath: image.path, outputPath, points: flattenPoints(points), ...settings },
+          { inputPath: source, outputPath, points: flattenPoints(points), ...settings, watermark },
           { signal },
         );
         r = {
           kind: tool,
           ...out,
+          cleanPath: out.cleanPath ?? null,
           report: out.portrait,
           step: { kind: 'spotlight', points: flattenPoints(points), ...settings },
         };
@@ -366,21 +382,22 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           return;
         }
         const out = await processing.applyLook(
-          { inputPath: image.path, outputPath, look: vibeLook.look, strength: vibeLook.strength },
+          { inputPath: source, outputPath, look: vibeLook.look, strength: vibeLook.strength, watermark },
           { signal },
         );
         r = {
           kind: tool,
           ...out,
+          cleanPath: out.cleanPath ?? null,
           report: null,
           step: { kind: 'look', look: vibeLook.look, strength: vibeLook.strength },
         };
       } else {
         const out = await processing.enhance(
-          { inputPath: image.path, outputPath, upscale: tool === 'superres' ? 2 : 1, autoTone: true },
+          { inputPath: source, outputPath, upscale: tool === 'superres' ? 2 : 1, autoTone: true, watermark },
           { signal },
         );
-        r = { kind: tool, ...out, report: out.report, step: { kind: 'clarity' } };
+        r = { kind: tool, ...out, cleanPath: out.cleanPath ?? null, report: out.report, step: { kind: 'clarity' } };
       }
       setResult(r);
       setView('compare');
@@ -391,7 +408,20 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
     } finally {
       setWorking(false);
     }
-  }, [image, tool, points, blur, glow, vibeLook, transformAccess.allowed, transformDetail, usage, repos, openedAt]);
+  }, [
+    image,
+    tool,
+    points,
+    blur,
+    glow,
+    vibeLook,
+    watermark,
+    transformAccess.allowed,
+    transformDetail,
+    usage,
+    repos,
+    openedAt,
+  ]);
 
   const keepResult = useCallback(async () => {
     if (!image || !result || !repos) {
@@ -408,7 +438,12 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         mimeType: 'image/jpeg',
         capturedAt: image.capturedAt,
         metadata: {
-          ...enhancedCopyMetadata(image, result.kind, result.kind === 'spotlight' ? null : result.report),
+          ...enhancedCopyMetadata(
+            image,
+            result.kind,
+            result.kind === 'spotlight' ? null : result.report,
+            result.cleanPath,
+          ),
           ...(result.kind === 'spotlight' ? { portrait: result.report } : {}),
           ...(result.kind === 'transform' && result.portrait ? { portrait: result.portrait } : {}),
           ...(result.kind === 'look' || (result.kind === 'transform' && transformPlan(image).look)
@@ -427,25 +462,29 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
 
   const discardResult = useCallback(async () => {
     if (result) {
-      await getStorageService()
-        .deleteFile(result.outputPath)
-        .catch(() => undefined);
+      const storage = getStorageService();
+      await Promise.allSettled(
+        [result.outputPath, result.cleanPath].filter((p): p is string => !!p).map(p => storage.deleteFile(p)),
+      );
     }
     setResult(null);
     setView(image && str(image.metadata.originalPath) ? 'compare' : 'photo');
   }, [result, image]);
 
+  // Sharing goes through export: the photo leaves the app with the watermark
+  // its plan requires (drawn natively, once, on the clean photo).
   const share = useCallback(async () => {
-    const path = result?.outputPath ?? image?.path;
+    const path = result ? (result.cleanPath ?? result.outputPath) : image ? cleanOf(image) : null;
     if (!path) {
       return;
     }
     try {
-      await getStorageService().share([path], 'Share your photo');
+      const out = await getProcessingService().exportImage({ inputPath: path, watermark, destination: 'share' });
+      await getStorageService().share([out.outputPath], 'Share your photo');
     } catch (e) {
       Alert.alert('Couldn’t share', friendlyMessage(errorCode(e), friendlyMessage('SHARE_FAILED')));
     }
-  }, [result, image]);
+  }, [result, image, watermark]);
 
   const confirmDelete = () => {
     if (!image || !repos) {
@@ -795,6 +834,12 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           ) : null}
         </View>
 
+        <Button
+          label="Edit photo"
+          icon="sliders"
+          onPress={() => navigation.navigate('Editor', { imageId: image.id })}
+          testID="edit-photo"
+        />
         <Button label="Share" variant="glass" icon="share" onPress={() => void share()} />
         <Button label="Delete photo" variant="danger" icon="trash" onPress={confirmDelete} />
       </View>

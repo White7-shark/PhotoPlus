@@ -69,6 +69,8 @@ export function modeLabel(mode: string): string {
       return 'Pro';
     case 'transform':
       return 'Transform';
+    case 'edit':
+      return 'Edited';
     default:
       return 'Photo';
   }

@@ -19,8 +19,18 @@ export interface Spec extends TurboModule {
   analyzeLook(path: string): Promise<Object>;
   /** Measures what the camera's lens left in a photo (full resolution). */
   analyzeLens(path: string): Promise<Object>;
-  /** Transform: high-end lens quality, then the photo's effects re-applied. */
+  /** Transform: high-end lens look, then the photo's effects re-applied. */
   transform(jobId: string, request: Object): Promise<Object>;
+  /** Editor: renders a photo with its edit document (preview or saved copy). */
+  renderEdit(jobId: string, request: Object): Promise<Object>;
+  /** Export for sharing or the gallery: the watermark follows the native plan. */
+  exportImage(jobId: string, request: Object): Promise<Object>;
+  /** Faces (for fitting props) in the photo after its turn/straighten/crop. */
+  detectFaces(request: Object): Promise<Object>;
+  /** The plan held natively ("free" | "premium"). */
+  getPlan(): Promise<string>;
+  /** Debug builds only: switch plan to test Premium. */
+  setDebugPlan(plan: string): Promise<boolean>;
   cancel(jobId: string): void;
   cancelAll(): void;
   getMemoryStats(): Promise<Object>;

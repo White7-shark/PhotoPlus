@@ -27,6 +27,14 @@ const mockEngine = {
     sizeBytes: 1_500_000,
     portrait: { people: 1, spots: 3, skin: 0.04, subject: 0.35 },
   })),
+  exportImage: jest.fn(async () => ({
+    outputPath: '/data/exports/PhotoPlus_1.jpg',
+    width: 3000,
+    height: 4000,
+    sizeBytes: 1_000_000,
+    galleryUri: null,
+    watermark: { applied: true, enforced: false, plan: 'free' },
+  })),
   enhance: jest.fn(),
   applyLook: jest.fn(),
   analyzeLook: jest.fn(),
@@ -94,7 +102,7 @@ beforeEach(() => {
 });
 
 describe('photo preview', () => {
-  it('shares the photo to other apps', async () => {
+  it('shares the photo to other apps through export (with the watermark the plan requires)', async () => {
     const { repos } = fakeRepos();
     useAppStore.setState({ repos, settings: { ...DEFAULT_SETTINGS } });
     const navigation = { goBack: jest.fn(), replace: jest.fn() };
@@ -103,7 +111,17 @@ describe('photo preview', () => {
     );
     await screen.findByText('Make it shine');
     await fireEvent.press(screen.getByTestId('share'));
-    expect(mockStorage.shareImages).toHaveBeenCalledWith(['/data/captures/PP_1.jpg'], 'Share your photo');
+    await waitFor(() => expect(mockStorage.shareImages).toHaveBeenCalled());
+    expect(mockEngine.exportImage).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        inputPath: '/data/captures/PP_1.jpg',
+        destination: 'share',
+        watermark: expect.objectContaining({ style: 'signature', position: 'br' }),
+      }),
+    );
+    // Only the exported file leaves the app, never the library photo itself.
+    expect(mockStorage.shareImages).toHaveBeenCalledWith(['/data/exports/PhotoPlus_1.jpg'], 'Share your photo');
   });
 
   it('Spotlight: tap what should shine, apply, and keep it', async () => {

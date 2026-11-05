@@ -12,6 +12,8 @@ import androidx.camera.core.ImageProxy
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import androidx.exifinterface.media.ExifInterface
+import com.photoplus.edit.PhotoWatermark
+import com.photoplus.entitlement.Entitlements
 import com.photoplus.engine.EngineException
 import com.photoplus.engine.ImageCodec
 import com.photoplus.engine.JobListener
@@ -102,7 +104,8 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
     capture.takePicture(fileOptions(file, mirror), captureExecutor, object : ImageCapture.OnImageSavedCallback {
       override fun onCaptureStarted() = listener.onShutter(request.captureId)
       override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-        listener.onSuccess(request.captureId, photoResult(file, request.mode, started))
+        val clean = markForPlan(file, request)
+        listener.onSuccess(request.captureId, photoResult(file, request.mode, started) + mapOf("cleanPath" to clean))
       }
       override fun onError(exception: ImageCaptureException) {
         file.delete()
@@ -408,6 +411,7 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
       listener.onProgress(request.captureId, "saving", 0.9)
       ImageCodec.encode(work, target, OutputFormat.JPEG, OUTPUT_QUALITY)
       writeExif(target, burst.exif, geometry.remainingRotation, burst.mirror)
+      val clean = markForPlan(target, request)
       if (enhance) {
         // Keep the reference frame so the user can compare before and after.
         ImageCodec.encode(reference, original, OutputFormat.JPEG, ORIGINAL_QUALITY)
@@ -417,6 +421,7 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
       val (w, h) = CaptureGeometry.displaySize(work.width, work.height, geometry.remainingRotation)
       return mapOf(
         "path" to target.absolutePath,
+        "cleanPath" to clean,
         "width" to w,
         "height" to h,
         "sizeBytes" to target.length().toDouble(),
@@ -466,6 +471,19 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
   }
 
   // ---------------------------------------------------------------- helpers
+
+  /**
+   * Free plan: the photo carries the Photo Plus mark (signature style by
+   * default); the untouched photo is kept as its clean companion. A failure
+   * here never loses the photo: it is kept as captured (exports still apply
+   * the mark).
+   */
+  private fun markForPlan(file: File, request: CaptureOptions): String? = try {
+    PhotoWatermark.applyToFile(file, request.watermark, Entitlements.plan)
+  } catch (e: Exception) {
+    android.util.Log.w("PhotoPlusCapture", "watermark failed; photo kept as captured", e)
+    null
+  }
 
   private fun fileOptions(file: File, mirror: Boolean): ImageCapture.OutputFileOptions {
     file.parentFile?.mkdirs()

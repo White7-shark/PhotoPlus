@@ -94,6 +94,8 @@ export function captureRecipe(shot: {
   path: string;
   mode: string;
   originalPath?: string | null;
+  /** The photo without the Photo Plus mark (free plan). */
+  cleanPath?: string | null;
   spotlight?: { points: number[]; blur: number; retouch: number; brighten: number; pop: number } | null;
   look?: { look: number[]; strength: number } | null;
 }): Recipe | null {
@@ -104,7 +106,7 @@ export function captureRecipe(shot: {
   const original = str(shot.originalPath);
   const recipe: Recipe =
     MULTI_SHOT.has(shot.mode) || !original
-      ? { basePath: shot.path, baseStyled: steps.some(s => s.kind !== 'clarity'), steps: [] }
+      ? { basePath: str(shot.cleanPath) ?? shot.path, baseStyled: steps.some(s => s.kind !== 'clarity'), steps: [] }
       : { basePath: original, baseStyled: false, steps };
   return isRecipe(recipe) ? recipe : null;
 }
@@ -125,7 +127,7 @@ export function effectiveRecipe(image: { path: string; metadata: Metadata }): Re
   if (mode === 'enhance' && original && !looksStyled(image.metadata)) {
     return { basePath: original, baseStyled: false, steps: [{ kind: 'clarity' }] };
   }
-  return { basePath: image.path, baseStyled: looksStyled(image.metadata), steps: [] };
+  return { basePath: str(image.metadata.cleanPath) ?? image.path, baseStyled: looksStyled(image.metadata), steps: [] };
 }
 
 /** Recipe for an edited copy: the source's recipe plus this edit. */

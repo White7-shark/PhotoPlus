@@ -7,6 +7,7 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -116,21 +117,22 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeDestroyToken
 JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeProcess(
     JNIEnv* env, jobject, jobject bitmap, jintArray types, jfloatArray params, jlong token) {
   const jsize count = env->GetArrayLength(types);
-  if (env->GetArrayLength(params) != count * 4) {
-    throwEngineException(env, "INVALID_ARGUMENT", "params must contain 4 floats per operation");
+  constexpr jsize kParams = PP_OP_PARAMS;
+  if (env->GetArrayLength(params) != count * kParams) {
+    throwEngineException(env, "INVALID_ARGUMENT", "params must contain 8 floats per operation");
     return 0;
   }
 
   std::vector<pp_op> ops(static_cast<size_t>(count));
   if (count > 0) {
     std::vector<jint> t(static_cast<size_t>(count));
-    std::vector<jfloat> p(static_cast<size_t>(count) * 4);
+    std::vector<jfloat> p(static_cast<size_t>(count) * kParams);
     env->GetIntArrayRegion(types, 0, count, t.data());
-    env->GetFloatArrayRegion(params, 0, count * 4, p.data());
+    env->GetFloatArrayRegion(params, 0, count * kParams, p.data());
     if (env->ExceptionCheck()) return 0;
     for (jsize i = 0; i < count; ++i) {
       ops[i].type = t[i];
-      for (int k = 0; k < 4; ++k) ops[i].p[k] = p[i * 4 + k];
+      for (int k = 0; k < kParams; ++k) ops[i].p[k] = p[i * kParams + k];
     }
   }
 
@@ -474,6 +476,119 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeTransform(JN
   const jfloat values[kReport] = {r.fringe_fixed_px, r.deblur_centre, r.deblur_corner, r.noise_before,
                                   r.noise_after,     r.before.grade,  static_cast<jfloat>(r.before.measured_tiles)};
   env->SetFloatArrayRegion(reportOut, 0, kReport, values);
+}
+
+// ---- Editor: props, frames, watermark ----------------------------------------
+
+// Places a prop (straight-alpha ARGB_8888) on `image`. params (8) = cx, cy,
+// width, rotation, flip, opacity, blend, shadow. Returns covered pixels.
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativePlaceProp(JNIEnv* env, jobject, jobject image,
+                                                                              jobject prop, jfloatArray params,
+                                                                              jlong token) {
+  if (env->GetArrayLength(params) < 8) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Prop needs 8 parameters");
+    return 0;
+  }
+  jfloat p[8];
+  env->GetFloatArrayRegion(params, 0, 8, p);
+  WrappedBitmap img, pr;
+  if (!img.open(env, image, false) || !pr.open(env, prop, false)) return 0;
+  const pp_prop_params pp{p[0], p[1], p[2], p[3], p[4] > 0.5f ? 1 : 0, p[5], p[6], p[7]};
+  int64_t covered = 0;
+  const pp_status st = pp_place_prop(img.image, pr.image, &pp, reinterpret_cast<const pp_cancel_token*>(token), &covered);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return static_cast<jlong>(covered);
+}
+
+// Renders `photo` framed into `canvas`. f (19) = shape param, rotation,
+// window x, y, w, h, border, outline gap, outline width, shadow, shadow
+// offset, shadow blur, glow, zoom, offset x, offset y, and three spare.
+// ints (9) = shape, backdrop, colour A, colour B, border colour, metallic,
+// outline colour, glow colour, decoration.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeFrame(JNIEnv* env, jobject, jobject photo,
+                                                                         jobject canvas, jfloatArray floats,
+                                                                         jintArray ints, jlong token) {
+  if (env->GetArrayLength(floats) < 16 || env->GetArrayLength(ints) < 9) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad frame arguments");
+    return;
+  }
+  jfloat f[16];
+  jint n[9];
+  env->GetFloatArrayRegion(floats, 0, 16, f);
+  env->GetIntArrayRegion(ints, 0, 9, n);
+  WrappedBitmap ph, cv;
+  if (!ph.open(env, photo, false) || !cv.open(env, canvas, false)) return;
+  pp_frame_params fp{};
+  fp.shape = n[0];
+  fp.shape_param = f[0];
+  fp.rotation_deg = f[1];
+  for (int i = 0; i < 4; ++i) fp.window[i] = f[2 + i];
+  fp.backdrop = n[1];
+  fp.color_a = static_cast<uint32_t>(n[2]);
+  fp.color_b = static_cast<uint32_t>(n[3]);
+  fp.border = f[6];
+  fp.border_color = static_cast<uint32_t>(n[4]);
+  fp.metallic_border = n[5];
+  fp.outline_gap = f[7];
+  fp.outline_width = f[8];
+  fp.outline_color = static_cast<uint32_t>(n[6]);
+  fp.shadow = f[9];
+  fp.shadow_offset = f[10];
+  fp.shadow_blur = f[11];
+  fp.glow = f[12];
+  fp.glow_color = static_cast<uint32_t>(n[7]);
+  fp.zoom = f[13];
+  fp.offset_x = f[14];
+  fp.offset_y = f[15];
+  fp.decoration = n[8];
+  const pp_status st = pp_frame(ph.image, cv.image, &fp, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+// Composites `stamp` (e.g. the watermark, drawn with Canvas) onto `image`
+// at (x, y). Canvas output is premultiplied: it is converted to straight
+// alpha first. Returns the visible stamp pixels (the export check).
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeOverlay(JNIEnv* env, jobject, jobject image,
+                                                                            jobject stamp, jint x, jint y,
+                                                                            jfloat opacity) {
+  WrappedBitmap img;
+  if (!img.open(env, image, false)) return 0;
+  BitmapLock lock(env, stamp);
+  if (!lock.ok()) {
+    throwEngineException(env, "UNSUPPORTED_FORMAT", lock.error());
+    return 0;
+  }
+  const auto w = static_cast<int32_t>(lock.info().width), h = static_cast<int32_t>(lock.info().height);
+  pp_image* straight = nullptr;
+  pp_status st = pp_image_create(w, h, PP_FORMAT_RGBA8, &straight);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  const bool premul = (lock.info().flags & ANDROID_BITMAP_FLAGS_ALPHA_MASK) == ANDROID_BITMAP_FLAGS_ALPHA_PREMUL;
+  auto* dst = static_cast<uint8_t*>(pp_image_pixels(straight));
+  for (int32_t row = 0; row < h; ++row) {
+    const auto* src = static_cast<const uint8_t*>(lock.pixels()) + static_cast<size_t>(row) * lock.info().stride;
+    uint8_t* d = dst + static_cast<size_t>(row) * static_cast<size_t>(w) * 4;
+    for (int32_t col = 0; col < w; ++col, src += 4, d += 4) {
+      const uint8_t a = src[3];
+      for (int c = 0; c < 3; ++c) {
+        d[c] = premul && a > 0 && a < 255 ? static_cast<uint8_t>(std::min(255, (src[c] * 255 + a / 2) / a)) : src[c];
+      }
+      d[3] = a;
+    }
+  }
+  int64_t visible = 0;
+  st = pp_overlay(img.image, straight, x, y, opacity, &visible);
+  pp_image_destroy(straight);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return static_cast<jlong>(visible);
 }
 
 // Tap-seeded cut-out. Returns the mask bytes; dims are written to sizeOut.

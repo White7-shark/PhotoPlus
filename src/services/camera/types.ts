@@ -1,3 +1,4 @@
+import type { WatermarkSpec } from '../edit/watermark';
 /**
  * Shapes exchanged with the Kotlin camera layer (com.photoplus.camera).
  * Native maps are validated by `parseCameraCapabilities` before use, so a
@@ -101,6 +102,8 @@ export interface CaptureOptions {
   /** Vibe Match look numbers and how strongly to apply them. */
   look?: number[];
   lookStrength?: number;
+  /** The watermark free-plan photos carry (WatermarkSpec). */
+  watermark?: WatermarkSpec;
 }
 
 export interface SpotlightReport {
@@ -130,6 +133,8 @@ export interface CaptureResult {
   capturedAt: number;
   mode: CaptureModeId;
   rawPath?: string | null;
+  /** The photo without the Photo Plus mark (free plan). */
+  cleanPath?: string | null;
   originalPath?: string;
   originalWidth?: number;
   originalHeight?: number;

@@ -1,3 +1,10 @@
+import {
+  DEFAULT_WATERMARK,
+  isBrandingPresets,
+  isWatermarkSpec,
+  type BrandingPreset,
+  type WatermarkSpec,
+} from '../../edit/watermark';
 import { isVibeLook, type VibeLook } from '../../looks/types';
 import type { SqlExecutor } from '../SqlExecutor';
 
@@ -21,6 +28,10 @@ export interface AppSettings {
   mirrorFrontCamera: boolean;
   /** Vibe Match look in use (premium), or null. */
   vibeLook: VibeLook | null;
+  /** The watermark design (free plan: always the Photo Plus mark). */
+  watermark: WatermarkSpec;
+  /** Saved branding looks (Premium). */
+  brandingPresets: BrandingPreset[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -36,6 +47,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraResolution: 'max',
   mirrorFrontCamera: true,
   vibeLook: null,
+  watermark: DEFAULT_WATERMARK,
+  brandingPresets: [],
 };
 
 type Validators = { [K in keyof AppSettings]: (v: unknown) => v is AppSettings[K] };
@@ -59,6 +72,8 @@ const VALIDATORS: Validators = {
   cameraResolution: oneOf('max', '12mp', '8mp', '5mp', '2mp'),
   mirrorFrontCamera: isBool,
   vibeLook: (v): v is VibeLook | null => v === null || isVibeLook(v),
+  watermark: isWatermarkSpec,
+  brandingPresets: isBrandingPresets,
 };
 
 export function isValidSetting<K extends keyof AppSettings>(key: K, value: unknown): value is AppSettings[K] {

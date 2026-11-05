@@ -1,3 +1,5 @@
+import type { WatermarkSpec } from '../edit/watermark';
+
 /** Mirrors ProcessRequest.kt / pp_op_type. */
 export type EditOperation =
   | { type: 'tone'; exposure?: number; brightness?: number; contrast?: number }
@@ -68,10 +70,13 @@ export interface EnhanceRequest {
   /** Longest output edge; clamped natively to the device budget. */
   maxDimension?: number;
   quality?: number;
+  /** Free plan: the result carries this watermark; its clean copy is reported. */
+  watermark?: WatermarkSpec;
 }
 
 export interface EnhanceResult {
   outputPath: string;
+  cleanPath?: string | null;
   width: number;
   height: number;
   sourceWidth: number;
@@ -101,10 +106,12 @@ export interface SpotlightRequest {
   enhance?: boolean;
   look?: number[];
   lookStrength?: number;
+  watermark?: WatermarkSpec;
 }
 
 export interface SpotlightResult {
   outputPath: string;
+  cleanPath?: string | null;
   width: number;
   height: number;
   sizeBytes: number;
@@ -125,6 +132,7 @@ export interface TransformRequest {
   look?: number[] | null;
   lookStrength?: number;
   maxDimension?: number;
+  watermark?: WatermarkSpec;
 }
 
 export interface TransformReport {
@@ -139,6 +147,7 @@ export interface TransformReport {
 
 export interface TransformResult {
   outputPath: string;
+  cleanPath?: string | null;
   width: number;
   height: number;
   sizeBytes: number;
@@ -148,6 +157,7 @@ export interface TransformResult {
 
 export interface LookResult {
   outputPath: string;
+  cleanPath?: string | null;
   width: number;
   height: number;
   sizeBytes: number;

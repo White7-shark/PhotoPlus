@@ -9,6 +9,7 @@ import type { MemoryPressure } from '../services/lifecycle/LifecycleCoordinator'
 import { createLogger } from '../services/logging/logger';
 import type { EngineInfo } from '../services/processing/types';
 import { FREE_STATE, type EntitlementState } from '../services/entitlements/EntitlementService';
+import { getProcessingService } from '../services/processing/ImageProcessingService';
 import { errorMessage } from '../native';
 
 const log = createLogger('store');
@@ -92,6 +93,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
         warnings: result.warnings,
       });
       void get().loadProjects();
+      // The plan the native side holds (it decides watermarks on exports).
+      // Best effort: without the engine everyone stays on the free plan.
+      try {
+        void getProcessingService()
+          .plan()
+          .then(plan => set(s => ({ entitlements: { ...s.entitlements, plan } })))
+          .catch(() => undefined);
+      } catch {
+        // No engine (e.g. an unsupported device): keep the free plan.
+      }
     } catch (error) {
       log.error('Bootstrap failed', error);
       set({

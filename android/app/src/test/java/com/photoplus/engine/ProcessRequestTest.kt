@@ -27,12 +27,12 @@ class ProcessRequestTest {
     )
     assertArrayEquals(intArrayOf(1, 2, 3, 4, 5, 6, 7, 8), req.typeIds())
     val params = req.packedParams()
-    assertEquals(32, params.size)
+    assertEquals(8 * EngineOp.PARAMS, params.size)
     assertEquals(0.5f, params[0])
     assertEquals(0.0f, params[1]) // brightness default
     assertEquals(0.2f, params[2])
-    assertEquals(1f, params[12]) // flip horizontal
-    assertEquals(30f, params[18]) // crop width
+    assertEquals(1f, params[3 * EngineOp.PARAMS]) // flip horizontal
+    assertEquals(30f, params[4 * EngineOp.PARAMS + 2]) // crop width
     assertEquals(OutputFormat.JPEG, req.format)
     assertEquals(92, req.quality)
   }

@@ -144,7 +144,8 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
     try {
       val authority = "${reactApplicationContext.packageName}.files"
       val uris = (0 until paths.size()).mapNotNull { i -> paths.getString(i) }.map { p ->
-        val file = this.paths.resolve(p)
+        // Only exports leave the app: they are where the watermark policy was applied.
+        val file = AppPaths.resolveWithin(p, listOf(this.paths.exports))
         if (!file.isFile) throw EngineException(EngineException.IO_ERROR, "Photo not found")
         FileProvider.getUriForFile(reactApplicationContext, authority, file)
       }

@@ -327,6 +327,7 @@ describe('spotlight and vibe match', () => {
       mode: o.mode,
       look: true,
       originalPath: `/captures/${o.captureId}_original.jpg`,
+      cleanPath: `/captures/${o.captureId}_clean.jpg`,
       portrait: { people: 1, spots: 0, skin: 0.02, subject: 0.3 },
       spotlight: { points: [0.6, 0.3], blur: 0.6, retouch: 0.75, brighten: 0.4, pop: 0.5 },
     }));
@@ -335,6 +336,11 @@ describe('spotlight and vibe match', () => {
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(added).toHaveLength(1));
     const id = (mockCamera.capturePhoto.mock.calls[0][0] as { captureId: string }).captureId;
+    // Free-plan photos carry the chosen watermark (signature, bottom right); the clean copy is kept.
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({
+      watermark: expect.objectContaining({ style: 'signature', position: 'br' }),
+    });
+    expect(added[0].metadata.cleanPath).toBe(`/captures/${id}_clean.jpg`);
     expect(added[0].metadata.recipe).toEqual({
       basePath: `/captures/${id}_original.jpg`,
       baseStyled: false,

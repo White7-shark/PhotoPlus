@@ -16,6 +16,7 @@
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
 #include "photoplus/plane.hpp"
+#include "photoplus/edit.hpp"
 #include "photoplus/image.hpp"
 #include "photoplus/lens.hpp"
 #include "photoplus/memory.hpp"
@@ -296,6 +297,78 @@ void fillLens(const photoplus::lens::Analysis& a, pp_lens_report* out) {
   out->reliable = a.reliable ? 1 : 0;
 }
 }  // namespace
+
+pp_status pp_place_prop(pp_image* image, const pp_image* prop, const pp_prop_params* params,
+                        const pp_cancel_token* token, int64_t* covered_pixels) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || prop == nullptr || params == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::edit::PropParams pp;
+    pp.cx = params->cx;
+    pp.cy = params->cy;
+    pp.width = params->width;
+    pp.rotationDeg = params->rotation_deg;
+    pp.flip = params->flip != 0;
+    pp.opacity = params->opacity;
+    pp.blend = params->blend;
+    pp.shadow = params->shadow;
+    photoplus::edit::PropReport r;
+    if (photoplus::Error e = photoplus::edit::placeProp(image->buffer, prop->buffer, pp, token ? &token->token : nullptr, &r);
+        e.status != PP_OK) {
+      return fail(e);
+    }
+    if (covered_pixels != nullptr) *covered_pixels = r.coveredPixels;
+    return succeed();
+  });
+}
+
+pp_status pp_frame(const pp_image* photo, pp_image* canvas, const pp_frame_params* params,
+                   const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (photo == nullptr || canvas == nullptr || params == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    if (params->backdrop < 0 || params->backdrop > 3) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown backdrop");
+    photoplus::edit::FrameParams f;
+    f.shape = static_cast<photoplus::edit::Shape>(params->shape);
+    f.shapeParam = params->shape_param;
+    f.rotationDeg = params->rotation_deg;
+    for (int i = 0; i < 4; ++i) f.window[i] = params->window[i];
+    f.backdrop = static_cast<photoplus::edit::Backdrop>(params->backdrop);
+    f.colorA = params->color_a;
+    f.colorB = params->color_b;
+    f.border = params->border;
+    f.borderColor = params->border_color;
+    f.metallicBorder = params->metallic_border != 0;
+    f.outlineGap = params->outline_gap;
+    f.outlineWidth = params->outline_width;
+    f.outlineColor = params->outline_color;
+    f.shadow = params->shadow;
+    f.shadowOffset = params->shadow_offset;
+    f.shadowBlur = params->shadow_blur;
+    f.glow = params->glow;
+    f.glowColor = params->glow_color;
+    f.zoom = params->zoom;
+    f.offsetX = params->offset_x;
+    f.offsetY = params->offset_y;
+    f.decoration = params->decoration;
+    if (photoplus::Error e = photoplus::edit::frame(photo->buffer, canvas->buffer, f, token ? &token->token : nullptr);
+        e.status != PP_OK) {
+      return fail(e);
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_overlay(pp_image* image, const pp_image* stamp, int32_t x, int32_t y, float opacity,
+                     int64_t* visible_pixels) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || stamp == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::edit::OverlayReport r;
+    if (photoplus::Error e = photoplus::edit::overlay(image->buffer, stamp->buffer, x, y, opacity, &r); e.status != PP_OK) {
+      return fail(e);
+    }
+    if (visible_pixels != nullptr) *visible_pixels = r.visiblePixels;
+    return succeed();
+  });
+}
 
 pp_status pp_lens_analyze(const pp_image* image, const pp_cancel_token* token, pp_lens_report* out) {
   return guarded([&]() -> pp_status {

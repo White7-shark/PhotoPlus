@@ -104,6 +104,11 @@ android {
         }
     }
 
+    buildFeatures {
+        // Native entitlement checks need to know debug vs release builds.
+        buildConfig = true
+    }
+
     androidResources {
         // The depth model is memory-mapped straight from the APK.
         noCompress.add("tflite")

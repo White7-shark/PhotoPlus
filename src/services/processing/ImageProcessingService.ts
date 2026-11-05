@@ -18,7 +18,54 @@ import type {
   TransformRequest,
   TransformResult,
 } from './types';
+import type { EditDocument } from '../edit/document';
+import type { FaceGeometry } from '../edit/placement';
+import type { WatermarkSpec } from '../edit/watermark';
 import { isLensReport, type LensReport } from './lens';
+
+export interface RenderEditRequest {
+  inputPath: string;
+  outputPath: string;
+  doc: EditDocument;
+  /** Show the watermark as an export would draw it. */
+  watermark?: WatermarkSpec | null;
+  preview?: boolean;
+  maxDimension?: number;
+  /** Props shown live on top while being moved (not drawn into the preview). */
+  skipProps?: number[];
+  skipFrame?: boolean;
+  /** Saving on the free plan: the copy carries the mark; this keeps it clean. */
+  cleanOutputPath?: string;
+}
+
+export interface RenderEditResult {
+  outputPath: string;
+  cleanPath: string | null;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  /** Where the photo sits in the result (x, y, w, h): all of it unless framed. */
+  photoRect: [number, number, number, number];
+  portrait: { people: number; spots: number; skin: number; subject: number } | null;
+}
+
+export interface ExportRequest {
+  inputPath: string;
+  doc?: EditDocument | null;
+  watermark: WatermarkSpec;
+  format?: 'jpeg' | 'png' | 'webp';
+  quality?: number;
+  destination: 'share' | 'gallery';
+}
+
+export interface ExportResult {
+  outputPath: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  galleryUri: string | null;
+  watermark: { applied: boolean; enforced: boolean; plan: 'free' | 'premium' };
+}
 import { validateRequest } from './validate';
 
 const log = createLogger('processing');
@@ -148,6 +195,45 @@ export class ImageProcessingService {
     ) as Promise<TransformResult>;
   }
 
+  /** Editor: renders a photo with its edits (a preview, or a copy for the library). */
+  renderEdit(request: RenderEditRequest, options: Omit<ProcessOptions, 'onState'> = {}): Promise<RenderEditResult> {
+    return this.runJob('edit', request, options, jobId =>
+      this.engine.renderEdit(jobId, request),
+    ) as Promise<RenderEditResult>;
+  }
+
+  /**
+   * Prepares a photo to leave the app (share sheet or gallery). The native
+   * side applies the watermark for the plan it holds, whatever is asked.
+   */
+  async exportImage(request: ExportRequest, options: Omit<ProcessOptions, 'onState'> = {}): Promise<ExportResult> {
+    const jobId = options.jobId ?? createId('export');
+    try {
+      return (await this.engine.exportImage(jobId, request)) as unknown as ExportResult;
+    } catch (error) {
+      throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
+    }
+  }
+
+  /** Faces in the photo as edited (for fitting props). */
+  async detectFaces(inputPath: string, doc: EditDocument | null): Promise<FaceGeometry[]> {
+    try {
+      const r = (await this.engine.detectFaces({ inputPath, doc })) as unknown as { faces?: FaceGeometry[] };
+      return Array.isArray(r.faces) ? r.faces : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** The plan held natively (decides watermarks on everything that leaves the app). */
+  async plan(): Promise<'free' | 'premium'> {
+    try {
+      return (await this.engine.getPlan()) === 'premium' ? 'premium' : 'free';
+    } catch {
+      return 'free';
+    }
+  }
+
   /** What the camera's lens left in a photo. */
   async analyzeLens(path: string): Promise<LensReport> {
     let r: unknown;
@@ -164,7 +250,7 @@ export class ImageProcessingService {
 
   /** Vibe Match on a saved photo. */
   applyLook(
-    request: { inputPath: string; outputPath: string; look: number[]; strength?: number },
+    request: { inputPath: string; outputPath: string; look: number[]; strength?: number; watermark?: WatermarkSpec },
     options: Omit<ProcessOptions, 'onState'> = {},
   ): Promise<LookResult> {
     return this.runJob('look', request, options, jobId => this.engine.applyLook(jobId, request)) as Promise<LookResult>;

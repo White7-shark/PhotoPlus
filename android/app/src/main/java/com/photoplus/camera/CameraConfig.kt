@@ -99,6 +99,8 @@ data class CaptureOptions(
   /** A look to apply ("Vibe Match"), as engine look numbers; null = none. */
   val look: FloatArray? = null,
   val lookStrength: Float = 0.8f,
+  /** The watermark free-plan photos carry (the user's chosen style). */
+  val watermark: com.photoplus.edit.WatermarkSpec = com.photoplus.edit.WatermarkSpec(),
 ) {
   /** RAW stays untouched; every other capture with a look is decoded and graded. */
   val needsProcessing: Boolean get() = mode != CaptureMode.RAW && (mode.processed || look != null)
@@ -124,6 +126,10 @@ data class CaptureOptions(
           ?.takeIf { it.size == com.photoplus.engine.NativeEngine.STYLE_FLOATS && it.all { v -> v.isFinite() } }
           ?.toFloatArray(),
         lookStrength = unit("lookStrength", 0.8f),
+        watermark = runCatching {
+          @Suppress("UNCHECKED_CAST")
+          com.photoplus.edit.WatermarkSpec.fromMap(map["watermark"] as? Map<String, Any?>)
+        }.getOrDefault(com.photoplus.edit.WatermarkSpec()),
       )
     }
   }

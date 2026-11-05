@@ -30,6 +30,8 @@ export const FEATURES = {
   basicPortrait: f('editing.basicPortrait', 'Basic focus & portrait effects', 'editing', 'free'),
   basicSharpen: f('editing.basicSharpen', 'Basic sharpening', 'editing', 'free'),
   watermarkStyles: f('editing.watermarkStyles', 'Watermark styles & positioning', 'editing', 'free'),
+  props: f('editing.props', 'Props: hats, glasses and outfit pieces', 'editing', 'free'),
+  frames: f('editing.frames', 'Photo frames', 'editing', 'free'),
   marketplaceBrowse: f('marketplace.browse', 'Browse photoshoot packs', 'marketplace', 'free'),
   packPreview: f('marketplace.preview', 'Pack previews & descriptions', 'marketplace', 'free'),
   premiumDemos: f('marketplace.premiumDemos', 'Premium feature demonstrations', 'marketplace', 'free'),
@@ -47,6 +49,8 @@ export const FEATURES = {
   advancedRetouchGrade: f('editing.advancedRetouchGrade', 'Advanced retouching & colour grading', 'editing', 'premium'),
   premiumExport: f('editing.premiumExport', 'Premium export options', 'editing', 'premium'),
   customWatermark: f('editing.customWatermark', 'Custom watermark & branding', 'editing', 'premium'),
+  premiumProps: f('editing.premiumProps', 'The full props collection', 'editing', 'premium'),
+  premiumFrames: f('editing.premiumFrames', 'Signature frame designs', 'editing', 'premium'),
   packAccess: f('marketplace.packAccess', 'Unlock, download & apply photoshoot packs', 'marketplace', 'premium'),
   clothingTransform: f('replication.clothing', 'Clothing transformation (compatible packs)', 'replication', 'premium'),
 } as const;

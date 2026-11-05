@@ -7,6 +7,8 @@ import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.photoplus.device.MemoryPressureMonitor
+import com.photoplus.edit.WatermarkRenderer
+import com.photoplus.entitlement.Entitlements
 import com.photoplus.studio.DepthEstimator
 
 class MainApplication : Application(), ReactApplication {
@@ -26,6 +28,8 @@ class MainApplication : Application(), ReactApplication {
     // Install before React starts so early memory pressure is never missed.
     MemoryPressureMonitor.install(this)
     DepthEstimator.install(this)
+    Entitlements.install(this)
+    WatermarkRenderer.install(this)
     loadReactNative(this)
   }
 }

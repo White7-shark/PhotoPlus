@@ -52,7 +52,7 @@ export function formatMegapixels(width: number, height: number): string {
 type Metadata = Record<string, unknown>;
 const pathOf = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
-export type EditKind = 'enhance' | 'superres' | 'spotlight' | 'look' | 'transform';
+export type EditKind = 'enhance' | 'superres' | 'spotlight' | 'look' | 'transform' | 'edit';
 
 /**
  * Metadata for an edited copy kept as a new library photo. Deliberately
@@ -63,14 +63,16 @@ export function enhancedCopyMetadata(
   source: { id: string; path: string; metadata: Metadata },
   kind: EditKind | 1 | 2,
   report: unknown,
+  cleanPath: string | null = null,
 ): Metadata {
   const mode = kind === 1 ? 'enhance' : kind === 2 ? 'superres' : kind;
   return {
     captureMode: mode,
     lens: source.metadata.lens ?? null,
     sourceImageId: source.id,
-    originalPath: source.path,
+    originalPath: cleanOf(source),
     originalOwned: false,
+    cleanPath,
     report,
   };
 }
@@ -85,10 +87,19 @@ export function editedPathFor(path: string, kind: EditKind, attempt = 0): string
   return `${stem}_${kind}${attempt > 0 ? `_${attempt}` : ''}.jpg`;
 }
 
-/** Every file to remove with a photo: itself, its DNG, and an original only it owns. */
+/**
+ * The photo without the Photo Plus mark (free-plan photos keep one beside
+ * them): every edit and export starts from it, so the mark is never doubled.
+ */
+export function cleanOf(image: { path: string; metadata: Metadata }): string {
+  return pathOf(image.metadata.cleanPath) ?? image.path;
+}
+
+/** Every file to remove with a photo: itself, its clean copy, its DNG, and an original only it owns. */
 export function filesToDelete(image: { path: string; metadata: Metadata }): string[] {
   return [
     image.path,
+    pathOf(image.metadata.cleanPath),
     pathOf(image.metadata.rawPath),
     image.metadata.originalOwned === true ? pathOf(image.metadata.originalPath) : null,
   ].filter((p): p is string => p !== null);

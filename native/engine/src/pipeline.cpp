@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 
+#include "photoplus/edit.hpp"
 #include "photoplus/operations.hpp"
 #include "photoplus/profiler.hpp"
 
@@ -89,6 +90,26 @@ Result<ImageBuffer> runPipeline(const ImageBuffer& input, const pp_op* ops, std:
         replaced = ops::sharpen(current, op.p[0], token);
         replaces = true;
         break;
+      case PP_OP_STRAIGHTEN:
+        if (op.p[0] == 0.0f) break;
+        replaced = edit::straighten(current, op.p[0], token);
+        replaces = true;
+        break;
+      case PP_OP_WARMTH:
+        err = edit::warmth(current, op.p[0], op.p[1], token);
+        break;
+      case PP_OP_FILTER: {
+        int32_t id = 0;
+        if (!toInt(op.p[0], &id)) return failure(invalidOp(i, "look must be finite"));
+        err = edit::filter(current, id, op.p[1], token);
+        break;
+      }
+      case PP_OP_FOCUS: {
+        int32_t kind = 0;
+        if (!toInt(op.p[0], &kind)) return failure(invalidOp(i, "focus kind must be finite"));
+        err = edit::focus(current, {kind, op.p[1], op.p[2], op.p[3], op.p[4], op.p[5], op.p[6]}, token);
+        break;
+      }
       default:
         return failure(invalidOp(i, "unknown operation type " + std::to_string(op.type)));
     }
