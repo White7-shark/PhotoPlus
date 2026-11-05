@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.UiThreadUtil
 import com.facebook.react.bridge.Promise
@@ -84,18 +86,34 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
       return
     }
     UiThreadUtil.runOnUiThread {
-      // Registered without a lifecycle owner so it survives configuration
-      // changes; it unregisters itself after one result.
+      // Registered late (after onStart), so without a lifecycle owner; it
+      // unregisters after one result. If the activity is destroyed while the
+      // picker is open, the result cannot be delivered: settle the promise as
+      // "cancelled" so the UI never waits forever.
       val key = "pp-pick-${pickCounter.incrementAndGet()}"
+      val settled = java.util.concurrent.atomic.AtomicBoolean(false)
       var launcher: androidx.activity.result.ActivityResultLauncher<PickVisualMediaRequest>? = null
-      launcher = activity.activityResultRegistry.register(key, ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+      var observer: LifecycleEventObserver? = null
+      val finish = {
         launcher?.unregister()
+        observer?.let { activity.lifecycle.removeObserver(it) }
+      }
+      launcher = activity.activityResultRegistry.register(key, ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+        if (!settled.compareAndSet(false, true)) return@register
+        finish()
         if (uri == null) {
           promise.resolve(null)
           return@register
         }
         run(promise) { copyIn(uri, target).absolutePath }
       }
+      observer = LifecycleEventObserver { _, event ->
+        if (event == Lifecycle.Event.ON_DESTROY && settled.compareAndSet(false, true)) {
+          finish()
+          promise.resolve(null)
+        }
+      }
+      activity.lifecycle.addObserver(observer)
       launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
   }

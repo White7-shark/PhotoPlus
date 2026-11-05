@@ -55,7 +55,7 @@ import {
 import { CameraEvents, type CaptureStage } from '../../services/camera/types';
 import type { FeatureKey } from '../../services/entitlements/features';
 import { friendlyMessage } from '../../services/errors';
-import type { VibeLook } from '../../services/looks/LookService';
+import { saveVibeLook, type VibeLook } from '../../services/looks/LookService';
 import { createLogger } from '../../services/logging/logger';
 import { getPermissionService, type PermissionStatus } from '../../services/permissions/PermissionService';
 import { useAppStore } from '../../state/store';
@@ -219,12 +219,25 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     camera.setManual(m).catch(e => log.warn('manual controls rejected', e));
   }, [camera, sessionReady, manualKey]);
 
-  // Vibe Match brightness, as exposure compensation (re-applied after rebinds).
+  // Vibe Match brightness, as exposure compensation (re-applied after rebinds,
+  // and reset to neutral when Vibe Match is turned off).
   const vibeEv = vibeCamera?.evIndex ?? null;
+  const vibeEvApplied = useRef(false);
   useEffect(() => {
-    if (!sessionReady || vibeEv === null || mode === 'pro') {
+    if (!sessionReady || mode === 'pro') {
       return;
     }
+    if (vibeEv === null) {
+      if (vibeEvApplied.current) {
+        vibeEvApplied.current = false;
+        camera
+          .setExposureCompensation(0)
+          .then(setEvIndex)
+          .catch(() => undefined);
+      }
+      return;
+    }
+    vibeEvApplied.current = true;
     camera
       .setExposureCompensation(vibeEv)
       .then(setEvIndex)
@@ -793,7 +806,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         visible={vibeOpen}
         look={settings.vibeLook}
         onChange={look => {
-          updateSetting('vibeLook', look).catch(() => undefined);
+          saveVibeLook(look, settings.vibeLook).catch(() => undefined);
           if (!look) {
             setVibeOpen(false);
           }

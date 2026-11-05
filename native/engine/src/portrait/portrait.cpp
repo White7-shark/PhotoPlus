@@ -283,8 +283,9 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
     if (!num) return failure(num.error());
     for (size_t i = 0; i < num->size(); ++i) num->data()[i] = v.data()[i] * S->data()[i];
     auto nb = blurLarge(*num, healSigma, token);
+    if (!nb) return failure(nb.error());
     auto sb = blurLarge(*S, healSigma, token);
-    if (!nb || !sb) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory to retouch"));
+    if (!sb) return failure(sb.error());
     for (size_t i = 0; i < num->size(); ++i) {
       num->data()[i] = sb->data()[i] > 0.05f ? nb->data()[i] / sb->data()[i] : v.data()[i];
     }
@@ -316,8 +317,9 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
       num->data()[i] = ch_.data()[i] * w;
     }
     auto nb = blurLarge(*num, healSigma, token);
+    if (!nb) return nb.error();
     auto wb = blurLarge(*wgt, healSigma, token);
-    if (!nb || !wb) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory to retouch");
+    if (!wb) return wb.error();
     const float m = std::min(1.0f, strength * 2.0f);
     for (size_t i = 0; i < ch_.size(); ++i) {
       const float healed = wb->data()[i] > 1e-3f ? nb->data()[i] / wb->data()[i] : ch_.data()[i];
@@ -345,8 +347,9 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
 
   // 3. Even blotches toward the person's own tone (never a different tone).
   auto CbS = blurLarge(*Cbh, 2.0f * static_cast<float>(rs), token);
+  if (!CbS) return failure(CbS.error());
   auto CrS2 = blurLarge(*Crh, 2.0f * static_cast<float>(rs), token);
-  if (!CbS || !CrS2) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory to retouch"));
+  if (!CrS2) return failure(CrS2.error());
   const float even = 0.65f * strength;
   const float lift = 0.055f * std::clamp(p.brighten, 0.0f, 1.0f);
 
@@ -408,7 +411,7 @@ Result<Bokeh> lensBlur(const ImageBuffer& image, const Matte& matte, float radiu
   bool done = parallelFor(h, token, [&](int32_t begin, int32_t end) {
     for (int32_t y = begin; y < end; ++y)
       for (int32_t x = 0; x < w; ++x) {
-        float r = 0, g = 0, b = 0, a = 0;
+        float r = 0, g = 0, b = 0, luma = 0;
         int32_t n = 0;
         for (int32_t yy = y * d; yy < std::min(H, (y + 1) * d); ++yy) {
           const uint8_t* row = image.row(yy);
@@ -417,14 +420,15 @@ Result<Bokeh> lensBlur(const ImageBuffer& image, const Matte& matte, float radiu
             r += lut[px[o.r]];
             g += lut[px[o.g]];
             b += lut[px[o.b]];
-            a += matte.at(xx, yy, (0.299f * px[o.r] + 0.587f * px[o.g] + 0.114f * px[o.b]) / 255.0f);
+            luma += 0.299f * px[o.r] + 0.587f * px[o.g] + 0.114f * px[o.b];
           }
         }
         const float inv = 1.0f / static_cast<float>(n);
         r *= inv;
         g *= inv;
         b *= inv;
-        a *= inv;
+        // One matte evaluation per cell (at its centre, from the cell's luma).
+        const float a = matte.at(std::min(W - 1, x * d + d / 2), std::min(H - 1, y * d + d / 2), luma * inv / 255.0f);
         // Highlights bloom into "bokeh" discs, as they do through a real lens.
         const float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
         const float s = smoothstep(0.7f, 1.0f, lum);

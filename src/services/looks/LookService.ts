@@ -1,6 +1,7 @@
 import { describeLook, summariseLook, type LookSummary } from '../camera/model';
 import { getProcessingService } from '../processing/ImageProcessingService';
 import { getStorageService } from '../storage/StorageService';
+import { useAppStore } from '../../state/store';
 import type { VibeLook } from './types';
 
 export { isVibeLook, type VibeLook } from './types';
@@ -18,10 +19,29 @@ export function lookDescription(look: VibeLook): { summary: LookSummary; text: s
 
 /** Lets the user pick a reference photo and measures its look. Null if cancelled. */
 export async function pickVibeLook(strength = 0.8): Promise<VibeLook | null> {
-  const referencePath = await getStorageService().pickImage('looks');
+  const storage = getStorageService();
+  const referencePath = await storage.pickImage('looks');
   if (!referencePath) {
     return null;
   }
-  const look = await getProcessingService().analyzeLook(referencePath);
-  return { referencePath, look, strength };
+  try {
+    const look = await getProcessingService().analyzeLook(referencePath);
+    return { referencePath, look, strength };
+  } catch (e) {
+    await storage.deleteFile(referencePath).catch(() => undefined); // don't keep an unusable copy
+    throw e;
+  }
+}
+
+/**
+ * Saves the look in use and removes the previous reference photo's copy
+ * when it is no longer needed (changed or turned off).
+ */
+export async function saveVibeLook(next: VibeLook | null, previous: VibeLook | null): Promise<void> {
+  await useAppStore.getState().updateSetting('vibeLook', next);
+  if (previous && previous.referencePath !== next?.referencePath) {
+    await getStorageService()
+      .deleteFile(previous.referencePath)
+      .catch(() => undefined);
+  }
 }

@@ -297,6 +297,22 @@ describe('spotlight and vibe match', () => {
     expect(screen.getByLabelText('Vibe Match on. Change style')).toBeTruthy();
   });
 
+  it('turning Vibe Match off brings exposure back to neutral', async () => {
+    const bright = [
+      0.1, 0.2, 0.35, 0.5, 0.7, 0.8, 0.88, 0.94, 0.98, 0, 0, 0, 0.02, 0.02, 0.02, 0.06, 0.06, 0.9, 0.004, 0.6,
+    ];
+    useAppStore.setState(st => ({
+      settings: { ...st.settings, vibeLook: { referencePath: '/looks/ref.jpg', look: bright, strength: 0.8 } },
+    }));
+    await renderReadyCamera();
+    await waitFor(() => expect(mockCamera.setExposureCompensation).toHaveBeenCalled());
+    expect(mockCamera.setExposureCompensation.mock.calls.at(-1)?.[0]).toBeGreaterThan(0);
+    await act(async () => {
+      useAppStore.setState(st => ({ settings: { ...st.settings, vibeLook: null } }));
+    });
+    await waitFor(() => expect(mockCamera.setExposureCompensation).toHaveBeenLastCalledWith(0));
+  });
+
   it('the Vibe Match chip explains the feature when no look is set', async () => {
     await renderReadyCamera();
     await fireEvent.press(screen.getByTestId('vibe-chip'));

@@ -536,6 +536,10 @@ TEST(portrait_rejects_bad_input_and_honours_cancel) {
   pp_cancel_token* t = pp_cancel_token_create();
   pp_cancel_token_cancel(t);
   EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, &p, t, nullptr), PP_ERROR_CANCELLED);
+  // ...also with skin retouching in play (never misreported as low memory).
+  pp_image* faces = s.mask(s.face, 2);
+  EXPECT_EQ(pp_portrait(img, subj, faces, nullptr, &p, t, nullptr), PP_ERROR_CANCELLED);
+  pp_image_destroy(faces);
   pp_cancel_token_destroy(t);
   float pts[2] = {0.5f, 0.5f};
   pp_image* out = nullptr;
@@ -722,6 +726,11 @@ TEST(look_of_itself_or_zero_strength_changes_nothing) {
   pp_style broken = other;
   broken.luma[3] = NAN;
   EXPECT_EQ(pp_style_apply(img2, &broken, 1.0f, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  for (float* field : {&broken.zone_cb[1], &broken.zone_cr[0], &broken.chroma_std[1], &broken.mean_luma}) {
+    broken = other;
+    *field = NAN;
+    EXPECT_EQ(pp_style_apply(img2, &broken, 1.0f, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  }
   pp_image_destroy(img);
   pp_image_destroy(img2);
   pp_image_destroy(orig);

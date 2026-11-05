@@ -208,7 +208,9 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
       listener.onFailure(request.captureId, "BUSY", "Still processing the previous photo")
       return
     }
-    val plan = CapturePolicy.plan(request.mode, tier)
+    // A look on a plain photo is still decoded: size it like Clarity so it is
+    // bounded and can step down on low memory (never a full-sensor decode).
+    val plan = CapturePolicy.plan(if (request.mode.processed) request.mode else CaptureMode.ENHANCE, tier)
     val burst = Burst(request, plan, mirror, SystemClock.elapsedRealtime(), points)
     cancelledBursts.remove(request.captureId)
     listener.onProgress(request.captureId, "capturing", 0.0)

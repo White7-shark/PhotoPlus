@@ -423,9 +423,16 @@ pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength
       if (!std::isfinite(v) || v < 0.0f || v > 1.0f) return fail(PP_ERROR_INVALID_ARGUMENT, "Invalid look");
       s.luma[static_cast<size_t>(i)] = v;
     }
+    // std::clamp passes NaN through, so every field is checked first.
     for (int i = 0; i < 3; ++i) {
+      if (!std::isfinite(target->zone_cb[i]) || !std::isfinite(target->zone_cr[i])) {
+        return fail(PP_ERROR_INVALID_ARGUMENT, "Invalid look");
+      }
       s.zoneCb[static_cast<size_t>(i)] = std::clamp(target->zone_cb[i], -0.5f, 0.5f);
       s.zoneCr[static_cast<size_t>(i)] = std::clamp(target->zone_cr[i], -0.5f, 0.5f);
+    }
+    if (!std::isfinite(target->chroma_std[0]) || !std::isfinite(target->chroma_std[1]) || !std::isfinite(target->mean_luma)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Invalid look");
     }
     s.chromaStd = {std::clamp(target->chroma_std[0], 0.0f, 0.5f), std::clamp(target->chroma_std[1], 0.0f, 0.5f)};
     s.vignette = std::isfinite(target->vignette) ? std::clamp(target->vignette, 0.05f, 2.0f) : 1.0f;

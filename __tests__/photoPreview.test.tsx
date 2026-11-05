@@ -5,6 +5,8 @@ import { PILLARS } from '../src/screens/pillars';
 import { HomeScreen } from '../src/screens/HomeScreen';
 import { PhotoPreviewScreen } from '../src/screens/PhotoPreviewScreen';
 import { DEFAULT_SETTINGS } from '../src/services/database/repositories/SettingsRepository';
+import { saveVibeLook } from '../src/services/looks/LookService';
+import { getProcessingService } from '../src/services/processing/ImageProcessingService';
 import { useAppStore } from '../src/state/store';
 import { ThemeProvider } from '../src/theme';
 
@@ -67,13 +69,13 @@ const photo = {
   createdAt: 1,
 };
 
-function fakeRepos() {
+function fakeRepos(record: typeof photo & { metadata: Record<string, unknown> } = photo) {
   const added: unknown[] = [];
   return {
     added,
     repos: {
       images: {
-        get: jest.fn(async () => photo),
+        get: jest.fn(async () => record),
         add: jest.fn(async (img: object) => {
           added.push(img);
           return { ...img, id: 'img_2', createdAt: 2, metadata: {} };
@@ -172,5 +174,51 @@ describe('home', () => {
       expect(['Available now', 'Coming soon']).toContain(p.availability);
       expect(JSON.stringify(p)).not.toMatch(/phase/i);
     }
+  });
+});
+
+describe('review regressions', () => {
+  it('Spotlight taps work on a photo that opens in before/after', async () => {
+    const { repos } = fakeRepos({
+      ...photo,
+      metadata: { captureMode: 'enhance', originalPath: '/data/captures/PP_1_original.jpg' },
+    });
+    useAppStore.setState({ repos, settings: { ...DEFAULT_SETTINGS } });
+    await wrap(
+      <PhotoPreviewScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{ params: { imageId: 'img_1' } } as never}
+      />,
+    );
+    expect(await screen.findByRole('adjustable', { name: 'Before and after comparison' })).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('tool-spotlight'));
+    const photoView = screen.getByLabelText('Photo. Tap what should shine');
+    await act(async () => {
+      fireEvent(photoView, 'layout', { nativeEvent: { layout: { width: 200, height: 200 } } });
+    });
+    await fireEvent(photoView, 'press', { nativeEvent: { locationX: 100, locationY: 50 } });
+    expect(screen.getByText('1 chosen · tap again to remove')).toBeTruthy();
+  });
+
+  it('an edit can never overwrite the original photo', async () => {
+    await expect(
+      getProcessingService().spotlight({ inputPath: '/data/a.jpg', outputPath: '/data/a.jpg' }),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+    expect(mockEngine.portrait).not.toHaveBeenCalled();
+  });
+
+  it('changing or turning off Vibe Match removes the old style photo', async () => {
+    const look = Array.from({ length: 20 }, () => 0.1);
+    const settings = { ...DEFAULT_SETTINGS };
+    useAppStore.setState({ repos: null, settings });
+    const first = { referencePath: '/data/looks/a.jpg', look, strength: 0.8 };
+    const second = { referencePath: '/data/looks/b.jpg', look, strength: 0.8 };
+    await saveVibeLook(second, first);
+    expect(mockStorage.deleteFile).toHaveBeenCalledWith('/data/looks/a.jpg');
+    expect(useAppStore.getState().settings.vibeLook).toEqual(second);
+    await saveVibeLook({ ...second, strength: 1 }, second); // same photo, new strength: kept
+    expect(mockStorage.deleteFile).toHaveBeenCalledTimes(1);
+    await saveVibeLook(null, second);
+    expect(mockStorage.deleteFile).toHaveBeenLastCalledWith('/data/looks/b.jpg');
   });
 });

@@ -294,7 +294,10 @@ class EngineModule(reactContext: ReactApplicationContext) :
   }
 
   private fun resolveIo(map: Map<String, Any?>, promise: Promise): Pair<File, File>? = try {
-    paths.resolve(map["inputPath"] as? String ?: "") to paths.resolve(map["outputPath"] as? String ?: "")
+    val io = paths.resolve(map["inputPath"] as? String ?: "") to paths.resolve(map["outputPath"] as? String ?: "")
+    // Edits always go to a new file: the original photo is never overwritten.
+    if (io.first == io.second) throw EngineException(EngineException.INVALID_ARGUMENT, "Output must differ from the original")
+    io
   } catch (e: EngineException) {
     promise.reject(e.code, e.message, e)
     null

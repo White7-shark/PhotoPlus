@@ -18,6 +18,7 @@ import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentationResult
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import com.photoplus.engine.NativeEngine
 import java.nio.ByteBuffer
@@ -110,9 +111,14 @@ class PortraitProcessor {
     val upright = scaledUpright(bitmap, rot, ANALYSIS_EDGE)
     try {
       val image = InputImage.fromBitmap(upright, 0)
-      val faces = runCatching { Tasks.await(faceDetector.process(image), ML_TIMEOUT_S, TimeUnit.SECONDS) }
-        .onFailure { Log.w(TAG, "face detection unavailable", it) }.getOrDefault(emptyList())
-      val (subjectBytes, source) = subjectMask(image, upright.width, upright.height, points, faces)
+      // Both models start at once; each wait is bounded.
+      val faceTask = runCatching { faceDetector.process(image) }.getOrNull()
+      val subjectTask = runCatching { subjectSegmenter.process(image) }.getOrNull()
+      val faces = runCatching { faceTask?.let { Tasks.await(it, ML_TIMEOUT_S, TimeUnit.SECONDS) } }
+        .onFailure { Log.w(TAG, "face detection unavailable", it) }.getOrNull() ?: emptyList()
+      val subjects = runCatching { subjectTask?.let { Tasks.await(it, ML_TIMEOUT_S, TimeUnit.SECONDS) } }
+        .onFailure { Log.i(TAG, "subject segmentation unavailable, using fallbacks", it) }.getOrNull()
+      val (subjectBytes, source) = subjectMask(image, upright.width, upright.height, points, faces, subjects)
         ?: (null to "")
       val subject = if (subjectBytes != null) {
         val (b, w, h) = MaskGeometry.rotateMask(subjectBytes, upright.width, upright.height, -rot)
@@ -138,9 +144,8 @@ class PortraitProcessor {
     h: Int,
     points: List<Pair<Float, Float>>,
     faces: List<Face>,
+    result: SubjectSegmentationResult?,
   ): Pair<ByteArray, String>? {
-    val result = runCatching { Tasks.await(subjectSegmenter.process(image), ML_TIMEOUT_S, TimeUnit.SECONDS) }
-      .onFailure { Log.i(TAG, "subject segmentation unavailable, using fallbacks", it) }.getOrNull()
     if (result != null) {
       val subjects = result.subjects
       val chosen = subjects.indices.filter { i ->

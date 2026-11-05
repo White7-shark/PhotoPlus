@@ -30,7 +30,7 @@ import {
 import type { ImageRecord } from '../services/database/repositories/ImagesRepository';
 import type { FeatureKey } from '../services/entitlements/features';
 import { friendlyMessage } from '../services/errors';
-import { lookDescription, VIBE_STRENGTHS } from '../services/looks/LookService';
+import { lookDescription, saveVibeLook, VIBE_STRENGTHS } from '../services/looks/LookService';
 import { createLogger } from '../services/logging/logger';
 import { getProcessingService, ProcessingError } from '../services/processing/ImageProcessingService';
 import {
@@ -202,6 +202,9 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
       return;
     }
     setTool(cur => (cur === t.id ? null : t.id));
+    if (t.id === 'spotlight') {
+      setView('photo'); // choosing happens on the photo itself
+    }
     if (t.id === 'look' && !vibeLook) {
       setVibeOpen(true);
     }
@@ -595,7 +598,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         visible={vibeOpen}
         look={vibeLook}
         onChange={look => {
-          updateSetting('vibeLook', look).catch(() => undefined);
+          saveVibeLook(look, vibeLook).catch(() => undefined);
           setVibeOpen(false);
         }}
         onClose={() => setVibeOpen(false)}

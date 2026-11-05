@@ -127,30 +127,15 @@ export class ImageProcessingService {
   }
 
   /** Restores an existing photo (denoise, deblur, tone, optional 2x). Cancellable like process(). */
-  async enhance(request: EnhanceRequest, options: Omit<ProcessOptions, 'onState'> = {}): Promise<EnhanceResult> {
-    if (!request.inputPath || !request.outputPath || request.inputPath === request.outputPath) {
-      throw new ProcessingError('Enhance needs distinct input and output paths', 'INVALID_ARGUMENT');
-    }
-    if (options.signal?.aborted) {
-      throw new ProcessingError('Processing was cancelled', 'CANCELLED');
-    }
-    const jobId = options.jobId ?? createId('enh');
-    const onAbort = () => this.cancel(jobId);
-    options.signal?.addEventListener('abort', onAbort);
-    this.active.add(jobId);
-    try {
-      return (await this.engine.enhance(jobId, request)) as unknown as EnhanceResult;
-    } catch (error) {
-      throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
-    } finally {
-      this.active.delete(jobId);
-      options.signal?.removeEventListener('abort', onAbort);
-    }
+  enhance(request: EnhanceRequest, options: Omit<ProcessOptions, 'onState'> = {}): Promise<EnhanceResult> {
+    return this.runJob('enh', request, options, jobId => this.engine.enhance(jobId, request)) as Promise<EnhanceResult>;
   }
 
   /** Spotlight on a saved photo. Cancellable like process(). */
   spotlight(request: SpotlightRequest, options: Omit<ProcessOptions, 'onState'> = {}): Promise<SpotlightResult> {
-    return this.runJob('spot', options, jobId => this.engine.portrait(jobId, request)) as Promise<SpotlightResult>;
+    return this.runJob('spot', request, options, jobId =>
+      this.engine.portrait(jobId, request),
+    ) as Promise<SpotlightResult>;
   }
 
   /** Vibe Match on a saved photo. */
@@ -158,7 +143,7 @@ export class ImageProcessingService {
     request: { inputPath: string; outputPath: string; look: number[]; strength?: number },
     options: Omit<ProcessOptions, 'onState'> = {},
   ): Promise<LookResult> {
-    return this.runJob('look', options, jobId => this.engine.applyLook(jobId, request)) as Promise<LookResult>;
+    return this.runJob('look', request, options, jobId => this.engine.applyLook(jobId, request)) as Promise<LookResult>;
   }
 
   /** Measures a reference photo's look. */
@@ -171,11 +156,17 @@ export class ImageProcessingService {
     }
   }
 
+  /** Shared job plumbing for edits of saved photos: ids, cancel, errors. */
   private async runJob(
     prefix: string,
+    io: { inputPath: string; outputPath: string },
     options: Omit<ProcessOptions, 'onState'>,
     start: (jobId: string) => Promise<Object>,
   ): Promise<unknown> {
+    // Edits always go to a new file: the original is never overwritten.
+    if (!io.inputPath || !io.outputPath || io.inputPath === io.outputPath) {
+      throw new ProcessingError('Edits need distinct input and output paths', 'INVALID_ARGUMENT');
+    }
     if (options.signal?.aborted) {
       throw new ProcessingError('Processing was cancelled', 'CANCELLED');
     }
