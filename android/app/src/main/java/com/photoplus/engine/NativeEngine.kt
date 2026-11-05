@@ -102,6 +102,27 @@ object NativeEngine {
     reportOut: FloatArray,
   )
 
+  /** Size of [nativeLensAnalyze]'s report and of [nativeTransform]'s. */
+  const val LENS_REPORT_SIZE = 7
+  const val TRANSFORM_REPORT_SIZE = 7
+
+  /**
+   * Lens analysis of [bitmap] (ARGB_8888, full resolution for a fair
+   * reading). [out] ([LENS_REPORT_SIZE]) = detail blur, corner blur, fringe
+   * px, noise, grade (0 basic … 1 flagship-like), measured regions, reliable
+   * (0/1).
+   */
+  external fun nativeLensAnalyze(bitmap: Bitmap, token: Long, out: FloatArray)
+
+  /**
+   * Transform: restores [src] into [dst] (ARGB_8888, src size × upscale) as
+   * if a high-end lens had taken it. [params] = upscale, enrich, strength,
+   * detail. [reportOut] ([TRANSFORM_REPORT_SIZE]) = fringe fixed px, deblur
+   * centre, deblur corner, noise before, noise after, grade before, measured
+   * regions.
+   */
+  external fun nativeTransform(src: Bitmap, dst: Bitmap, params: FloatArray, token: Long, reportOut: FloatArray)
+
   /** Tap-seeded cut-out; [points] = x0,y0,x1,y1… (0..1). Returns mask bytes, size in [sizeOut]. */
   external fun nativeSubjectMask(bitmap: Bitmap, points: FloatArray, sizeOut: IntArray): ByteArray
 

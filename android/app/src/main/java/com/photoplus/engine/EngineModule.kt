@@ -248,6 +248,107 @@ class EngineModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  /**
+   * Transform: the photo restored as if a high-end lens had taken it (colour
+   * fringes, soft corners, lens blur, noise), optionally at twice the
+   * detail, then its effects re-applied on top (Spotlight with the same taps
+   * and settings, Vibe Match with the same look), so nothing the person chose
+   * is lost. `keepStyle` is for photos whose effects are already baked in:
+   * their colours are left exactly as they are.
+   */
+  override fun transform(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val io = resolveIo(map, promise) ?: return
+    val upscale = if ((map["upscale"] as? Number)?.toInt() == 2) 2 else 1
+    val keepStyle = map["keepStyle"] as? Boolean ?: false
+    @Suppress("UNCHECKED_CAST")
+    val spotlight = map["spotlight"] as? Map<String, Any?>
+    val look = lookOf(map["look"])
+    val lookStrength = ((map["lookStrength"] as? Number)?.toFloat() ?: 0.8f).coerceIn(0f, 1f)
+    // The output (not the input) is what the budget bounds.
+    val maxOut = minOf((map["maxDimension"] as? Number)?.toInt() ?: budget.maxDecodeDimension, budget.maxDecodeDimension, 4096)
+    jobs.submit(jobId, jobListener(promise)) { token ->
+      val started = SystemClock.elapsedRealtime()
+      val decoded = ImageCodec.decode(io.first, maxOut / upscale)
+      var output: Bitmap? = null
+      try {
+        val src = decoded.bitmap
+        output = createBitmap(src.width * upscale, src.height * upscale, Bitmap.Config.ARGB_8888).apply {
+          isPremultiplied = false // the engine writes straight alpha
+          setHasAlpha(false)
+        }
+        val report = FloatArray(NativeEngine.TRANSFORM_REPORT_SIZE)
+        val params = floatArrayOf(upscale.toFloat(), if (keepStyle) 0f else 1f, 1f, if (keepStyle) 0.2f else 0.4f)
+        NativeEngine.nativeTransform(src, output, params, token, report)
+        decoded.bitmap.recycle() // free the input before the effects run
+        // Decoding applied EXIF orientation, so the bitmap is already upright.
+        val portrait = spotlight?.let {
+          portraitProcessor.apply(output, 0, PortraitParams.points(it["points"]), PortraitParams.fromMap(it), token)
+        }
+        look?.let { NativeEngine.nativeStyleApply(output, it, lookStrength, token) }
+        ImageCodec.encode(output, io.second, OutputFormat.JPEG, 95)
+        mapOf(
+          "outputPath" to io.second.absolutePath,
+          "width" to output.width,
+          "height" to output.height,
+          "sizeBytes" to io.second.length().toDouble(),
+          "transform" to mapOf(
+            "fringesFixedPx" to report[0].toDouble(),
+            "deblur" to report[1].toDouble(),
+            "deblurCorners" to report[2].toDouble(),
+            "noiseBefore" to report[3].toDouble(),
+            "noiseAfter" to report[4].toDouble(),
+            "gradeBefore" to report[5].toDouble(),
+            "upscale" to upscale,
+          ),
+          "portrait" to portrait?.let {
+            mapOf("people" to it.people, "spots" to it.spots, "skin" to it.skinCoverage.toDouble(), "subject" to it.subjectCoverage.toDouble())
+          },
+          "timings" to mapOf("totalMs" to (SystemClock.elapsedRealtime() - started).toDouble()),
+        )
+      } finally {
+        output?.recycle()
+        if (!decoded.bitmap.isRecycled) decoded.bitmap.recycle()
+      }
+    }
+  }
+
+  /**
+   * What the camera's lens left in a photo. Read at full resolution (lens
+   * softness is a matter of single pixels), within the device's budget.
+   */
+  override fun analyzeLens(path: String, promise: Promise) {
+    if (!requireEngine(promise)) return
+    ioExecutor.execute {
+      try {
+        val decoded = ImageCodec.decode(paths.resolve(path), minOf(budget.maxDecodeDimension, 4096))
+        try {
+          val r = FloatArray(NativeEngine.LENS_REPORT_SIZE)
+          NativeEngine.nativeLensAnalyze(decoded.bitmap, 0L, r)
+          promise.resolve(
+            mapOf(
+              "detailBlur" to r[0].toDouble(),
+              "cornerBlur" to r[1].toDouble(),
+              "fringePx" to r[2].toDouble(),
+              "noise" to r[3].toDouble(),
+              "grade" to r[4].toDouble(),
+              "reliable" to (r[6] > 0.5f),
+              "width" to decoded.bitmap.width,
+              "height" to decoded.bitmap.height,
+            ).toWritableMap(),
+          )
+        } finally {
+          decoded.bitmap.recycle()
+        }
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+      } catch (e: Exception) {
+        promise.reject(EngineException.INTERNAL, e.message, e)
+      }
+    }
+  }
+
   /** Applies a look ("Vibe Match") to a saved photo. */
   override fun applyLook(jobId: String, request: ReadableMap, promise: Promise) {
     if (!requireEngine(promise)) return

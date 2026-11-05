@@ -38,6 +38,7 @@ export const FEATURES = {
   advancedCamera: f('camera.advanced', 'Advanced camera & manual controls', 'camera', 'premium'),
   multiShot: f('camera.multiShot', 'Moonlight & Ultra Detail multi-shot modes', 'camera', 'premium'),
   vibeMatch: f('camera.vibeMatch', 'Vibe Match: shoot in the style of any photo', 'camera', 'premium'),
+  transform: f('camera.transform', 'Transform: the look of a high-end camera lens', 'camera', 'premium'),
   advancedEditing: f('editing.advanced', 'Advanced editing tools', 'editing', 'premium'),
   backgroundReplace: f('replication.background', 'Advanced background removal & replacement', 'replication', 'premium'),
   poseGuidance: f('assistant.pose', 'Pose guidance & matching', 'assistant', 'premium'),
@@ -51,5 +52,13 @@ export const FEATURES = {
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;
+
+/**
+ * Premium features the free plan may still try a few times a day (the count
+ * resets at local midnight). Premium has no limit.
+ */
+export const FREE_DAILY_ALLOWANCE: Partial<Record<FeatureKey, number>> = {
+  transform: 2,
+};
 
 export const PREMIUM_PRICE = { amount: 50, currency: 'GHS', period: 'month' } as const;

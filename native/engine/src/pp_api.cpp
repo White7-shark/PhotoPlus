@@ -17,6 +17,7 @@
 #include "photoplus/enhance.hpp"
 #include "photoplus/plane.hpp"
 #include "photoplus/image.hpp"
+#include "photoplus/lens.hpp"
 #include "photoplus/memory.hpp"
 #include "photoplus/pipeline.hpp"
 #include "photoplus/portrait.hpp"
@@ -280,6 +281,66 @@ pp_status pp_analyze_quality(const pp_image* image, pp_quality_report* out) {
     out->mean_luma = q->meanLuma;
     out->highlights_clipped = q->highlightsClipped;
     out->shadows_clipped = q->shadowsClipped;
+    return succeed();
+  });
+}
+
+namespace {
+void fillLens(const photoplus::lens::Analysis& a, pp_lens_report* out) {
+  out->detail_blur = a.detailBlur;
+  out->corner_blur = a.cornerBlur;
+  out->fringe_px = a.fringePx;
+  out->noise = a.noise;
+  out->grade = a.grade;
+  out->measured_tiles = a.measuredTiles;
+  out->reliable = a.reliable ? 1 : 0;
+}
+}  // namespace
+
+pp_status pp_lens_analyze(const pp_image* image, const pp_cancel_token* token, pp_lens_report* out) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image or out is null");
+    auto a = photoplus::lens::analyze(image->buffer, token != nullptr ? &token->token : nullptr);
+    if (!a) return fail(a.error());
+    fillLens(*a, out);
+    return succeed();
+  });
+}
+
+void pp_transform_default_params(pp_transform_params* out) {
+  if (out == nullptr) return;
+  *out = pp_transform_params{1, 1, 1.0f, 0.4f};
+}
+
+pp_status pp_transform(const pp_image* input, pp_image* output, const pp_transform_params* params,
+                       const pp_cancel_token* token, pp_transform_report* report) {
+  return guarded([&]() -> pp_status {
+    if (input == nullptr || output == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "input or output is null");
+    pp_transform_params p{};
+    pp_transform_default_params(&p);
+    if (params != nullptr) p = *params;
+    if (!std::isfinite(p.strength) || !std::isfinite(p.detail)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "strength and detail must be finite");
+    }
+    photoplus::lens::Params lp;
+    lp.upscale = p.upscale;
+    lp.enrich = p.enrich != 0;
+    lp.strength = p.strength;
+    lp.detail = std::clamp(p.detail, 0.0f, 1.0f);
+    photoplus::lens::Report r;
+    if (photoplus::Error e = photoplus::lens::restore(input->buffer, output->buffer, lp,
+                                                      token != nullptr ? &token->token : nullptr, &r);
+        e.status != PP_OK) {
+      return fail(e);
+    }
+    if (report != nullptr) {
+      fillLens(r.before, &report->before);
+      report->fringe_fixed_px = r.fringeFixedPx;
+      report->deblur_centre = r.deblurCentre;
+      report->deblur_corner = r.deblurCorner;
+      report->noise_before = r.noiseBefore;
+      report->noise_after = r.noiseAfter;
+    }
     return succeed();
   });
 }

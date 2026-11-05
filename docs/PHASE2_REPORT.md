@@ -200,3 +200,58 @@ Ten findings, all fixed with regression tests:
 - Check subject segmentation's first-use download and the fallback path on devices without Google Play services.
 - Tune Glow levels on a range of real selfies, in varied lighting and across skin tones.
 - Measure Spotlight time on entry-tier phones, including the depth estimate (~0.2 s on 4 desktop cores; GPU or NPU acceleration can be added later).
+
+# Transform: the look of a high-end camera
+
+Previews: [`design/transform-notice.png`](design/transform-notice.png), [`design/transform-result.png`](design/transform-result.png) and [`design/transform-detail.png`](design/transform-detail.png). They show real engine output on a Kodak photo taken through a simulated basic phone lens (`scripts/make-transform-assets.py`).
+
+## What changed for people
+
+| Feature | Plan | What it does |
+|---|---|---|
+| **Lens notice** | Free | When a photo shows signs of a basic camera lens, a card says so in plain words, lists what it sees (soft fine detail, blurry edges, colour fringes on edges, grain, low resolution), and offers Transform. One soft photo only speaks about "this photo", since it could be missed focus. Once most recent photos from the same camera agree, the card says the camera's lens is holding the photos back. |
+| **Transform** | Premium; **2 photos a day on the free plan** | Re-makes the photo as if a high-end lens took it: restores fine detail and sharp edges, removes colour fringes and grain, and gives twice the detail for small photos. **Effects are kept:** a Spotlight or Vibe Match photo is restored from its untouched original, then the same Spotlight (same taps and settings) and the same look are applied again. The free plan sees how many Transforms are left today. The count resets at local midnight, and a Transform counts once it has made a photo. |
+
+## How it works
+
+**Engine (`native/engine/src/lens`, C API `pp_lens_analyze` / `pp_transform`)**
+- **Lens blur across the frame.** The edge-based blur estimate runs on 20 full-resolution regions. A lens model, blur² = a + b·r², is fitted to them, so a lens is softer towards the corners. The fit starts from the inner regions and drops only regions far *above* it, so an out-of-focus background never counts against the lens. Regions at or below the model always count, which keeps the fit unbiased.
+- **Colour fringes.** For strong edges facing the centre, the edge positions of red and blue are matched to green's over candidate radial scales, then refined to sub-pixel accuracy. On a test chart this measures 1.97 px for a true 2.0 px. Correction resamples red and blue about the centre.
+- **Restoration.** Fringe re-alignment comes first. Then enhancement runs at the photo's own resolution, with the deblur set by the lens model: the centre pass uses the blur across the central area, and a second deconvolution is blended in towards the corners. Pre-denoising stays at full strength, so enlarged photos stay clean. For 2× detail, the restored photo is enlarged with Catmull-Rom resampling and a gentle, edge-limited sharpen.
+- **Colours are left alone.** Transform never re-balances white balance or exposure, so golden hour stays golden and blacks stay black. It only adds an optional touch of vibrance, which is off for photos whose effects are already baked in.
+- **Grade.** The grade (0 basic … 1 flagship-like) weighs detail 40%, corner softness 15%, fringes 15%, grain 15% and resolution 15%. Below 0.55 is a basic lens.
+
+**Android.**
+- `EngineModule.analyzeLens` reads a photo at full resolution (within the device budget) on the I/O thread.
+- `EngineModule.transform` runs as a cancellable job: decode the base, `nativeTransform`, then replay Spotlight through `PortraitProcessor` (depth included), then the look.
+- Captures now report the Spotlight taps they used, in the upright photo, so a replay lands where the person tapped even if the phone was turned or the selfie mirrored.
+
+**App.**
+- Every capture and edit records a **recipe**: the untouched base photo plus the effects applied to it (`services/processing/recipe.ts`). A kept Transform result carries its source's recipe, so Transform can always start over from the untouched photo.
+- Multi-shot photos (Moonlight, Ultra Detail) can't be re-made from one frame, so they are their own base, with their colours kept.
+- Photos saved before recipes existed: a Clarity photo restarts from its original, and other styled photos keep their style.
+- Daily allowances live in `services/entitlements/allowance.ts` (Transform: 2 a day on the free plan). Lens readings are remembered per camera lens, one reading per photo (`services/processing/lens.ts`).
+
+## Testing
+
+| Suite | Result |
+|---|---|
+| Engine (ASan+UBSan, TSan) | **72 passed**. Transform checks: the analysis separates a basic lens (grade 0.40) from a good one (0.85), and is not fooled by an out-of-focus background. Against the true scene, **Transform beats Clarity alone by 2.0 dB in the corners and 1.2 dB overall and ties it in the centre (25.3 dB)**, with fringes 1.98 → 0.00 px. A good lens's photo gets better (+1.8 dB) with nothing re-aligned. A styled photo keeps its colours (shift 0.11/255) and its vignette. Golden hour keeps its hue (150.7° → 150.4°) and blacks stay black. 2× detail, in-place use, determinism, no leaks, bad input and cancellation are covered. Clarity's white balance keeps skin warm and still halves a real blue cast. |
+| Kotlin JVM | 77 passed |
+| Jest | **178 passed**. New: 2 a day on the free plan, then blocked (enforcement on), resetting at local midnight; Premium has no limit; with enforcement off nothing is blocked but the count stays honest. Recipes from captures and edits, latest effects winning, multi-shot and legacy photos, corrupt recipes ignored. The lens notice speaks about the photo vs the lens, and each photo counts once. Full flow: notice → Try Transform → the untouched original is restored with Spotlight and Vibe Match re-applied → badges → use counted → Keep stores the recipe. A capture records its recipe from the taps native used. No technical words in the copy. |
+| Static | tsc, ESLint, Prettier, Android Lint "No issues found" |
+
+## Real-photo checks, and what they changed
+
+- **Dark-corner correction was removed.** The radial-gradient estimate scattered widely with scene content. Several untouched Kodak photos would have had their corners "corrected" (kodim23 by 39%), and any rule strict enough to avoid that would still brighten the dark surroundings of night shots. Phones already correct lens shading themselves, so Transform leaves corner brightness alone.
+- **A shared white-balance bug.** On a golden-hour portrait (a dark-skinned man in a black shirt), Clarity and the first Transform turned the shirt navy and cooled the skin. The white-balance shift was added evenly to every pixel, black included. It is now a gain proportional to brightness. Transform no longer touches white balance at all.
+- **Clarity turned skin-filled portraits cyan.** Plain grey-world white balance treated skin as "should be grey" (kodim04). It now balances on grey pixels only (whites, greys, blacks) and leaves photos without enough of them alone.
+- **2× detail showed blotchy grain.** Restoring after enlarging grew leftover noise into blobs. Restoring first, then enlarging, keeps it fine.
+- On the simulated basic lens, Transform recovers lashes, iris detail and the hat's mesh, removes the brim's fringes and cleans the grain, keeping the photo's own colours.
+
+## Open items for the device pass
+
+- Measure Transform time on entry-tier phones. On 4 desktop cores, a 0.8 MP photo at 2× takes ~0.7 s, and a 1.6 MP photo at 1× takes ~1.7 s.
+- Check lens grades on photos from real budget phones, then tune the 0.55 threshold.
+- Consider learned detail synthesis on devices with a fast GPU or NPU, on top of the restoration.
+

@@ -111,6 +111,41 @@ export interface SpotlightResult {
   portrait: { people: number; spots: number; skin: number; subject: number };
 }
 
+/** Transform: high-end lens quality, then the photo's effects re-applied. */
+export interface TransformRequest {
+  /** The photo to restore (the untouched base when it has one). */
+  inputPath: string;
+  outputPath: string;
+  /** 2 = twice the detail. */
+  upscale?: 1 | 2;
+  /** The base already carries effects: keep its colours and any vignette. */
+  keepStyle?: boolean;
+  /** Spotlight to re-apply (taps in the upright photo). */
+  spotlight?: { points: number[]; blur: number; retouch: number; brighten: number; pop: number } | null;
+  look?: number[] | null;
+  lookStrength?: number;
+  maxDimension?: number;
+}
+
+export interface TransformReport {
+  fringesFixedPx: number;
+  deblur: number;
+  deblurCorners: number;
+  noiseBefore: number;
+  noiseAfter: number;
+  gradeBefore: number;
+  upscale: number;
+}
+
+export interface TransformResult {
+  outputPath: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  transform: TransformReport;
+  portrait: { people: number; spots: number; skin: number; subject: number } | null;
+}
+
 export interface LookResult {
   outputPath: string;
   width: number;

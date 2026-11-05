@@ -82,6 +82,7 @@ Free users can access:
 - Photoshoot-pack marketplace browsing
 - Pack previews and descriptions
 - Premium feature demonstrations
+- Transform (the look of a high-end camera lens): 2 photos a day
 
 **Free users cannot unlock, download for use, or apply photoshoot packs.** They may browse the marketplace to discover what Photo Plus offers; unlocking a pack requires an active Premium entitlement.
 
@@ -99,6 +100,7 @@ Premium users receive:
 - Custom watermark creation and branding
 - Access to eligible photoshoot packs
 - Clothing transformation for compatible packs
+- Transform (the look of a high-end camera lens) without a daily limit
 - New premium tools and capabilities as they are released
 
 ### 2.3 Subscription vs. pack ownership

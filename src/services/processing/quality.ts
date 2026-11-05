@@ -52,7 +52,7 @@ export function formatMegapixels(width: number, height: number): string {
 type Metadata = Record<string, unknown>;
 const pathOf = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
-export type EditKind = 'enhance' | 'superres' | 'spotlight' | 'look';
+export type EditKind = 'enhance' | 'superres' | 'spotlight' | 'look' | 'transform';
 
 /**
  * Metadata for an edited copy kept as a new library photo. Deliberately

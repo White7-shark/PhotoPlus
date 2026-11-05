@@ -439,6 +439,17 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
         "portrait" to portrait?.let {
           mapOf("people" to it.people, "spots" to it.spots, "skin" to it.skinCoverage.toDouble(), "subject" to it.subjectCoverage.toDouble())
         },
+        // What Spotlight used, in the upright photo, so the effect can be
+        // re-applied exactly later (e.g. after Transform restores the original).
+        "spotlight" to portrait?.let {
+          mapOf(
+            "points" to burst.points.flatMap { (x, y) -> listOf(x.toDouble(), y.toDouble()) },
+            "blur" to request.portrait.blur.toDouble(),
+            "retouch" to request.portrait.retouch.toDouble(),
+            "brighten" to request.portrait.brighten.toDouble(),
+            "pop" to request.portrait.pop.toDouble(),
+          )
+        },
         "timings" to mapOf(
           "captureMs" to (processStarted - burst.started).toDouble(),
           "processMs" to processMs.toDouble(),

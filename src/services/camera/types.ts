@@ -135,6 +135,8 @@ export interface CaptureResult {
   originalHeight?: number;
   report?: EnhanceReport | null;
   portrait?: SpotlightReport | null;
+  /** The Spotlight settings used, with taps in the upright photo (re-applied by Transform). */
+  spotlight?: { points: number[]; blur: number; retouch: number; brighten: number; pop: number } | null;
   look?: boolean;
   timings?: { captureMs?: number; processMs?: number; totalMs: number };
 }

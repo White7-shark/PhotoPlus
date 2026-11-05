@@ -62,6 +62,7 @@ import { useAppStore } from '../../state/store';
 import { ThemeProvider, useTheme } from '../../theme';
 import { Chip, LastShot, ModeSwitcher, ShutterButton, uprightStyle, ZoomPills } from './CameraControls';
 import { Countdown, FocusRing, GridOverlay, ShutterFlash, StatusPill } from './Overlays';
+import { captureRecipe } from '../../services/processing/recipe';
 import { ProPanel } from './ProPanel';
 import { StopDial } from './StopDial';
 import { SpotlightMarkers, SpotlightPanel } from './SpotlightControls';
@@ -270,7 +271,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   }, [camera]);
 
   const saveRecord = useCallback(
-    async (shot: CaptureResult) => {
+    async (shot: CaptureResult, shotLook: { look: number[]; strength: number } | null) => {
       if (!repos) {
         return null;
       }
@@ -294,6 +295,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           rawPath: shot.rawPath ?? null,
           report: shot.report ?? null,
           timings: shot.timings ?? null,
+          // What was done, so Transform can re-make it from the untouched frame.
+          recipe: captureRecipe({ ...shot, look: shotLook }),
         },
       });
       void loadProjects();
@@ -335,7 +338,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         },
         captureId,
       );
-      const imageId = await saveRecord(shot);
+      const imageId = await saveRecord(shot, shot.look && look ? { look: look.look, strength: look.strength } : null);
       setLastShot({ path: shot.path, imageId });
       setToast({
         text: shot.rawPath ? 'Saved with RAW' : `${look ? 'Vibe Match · ' : ''}${modeLabel(shot.mode)} photo saved`,

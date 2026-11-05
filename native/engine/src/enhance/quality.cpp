@@ -128,6 +128,12 @@ float sigmaForRatio(float ratio) {
 }  // namespace
 
 Result<float> estimateBlurSigma(const Plane& luma, float noiseSigma, const CancellationToken* token) {
+  auto e = estimateBlur(luma, noiseSigma, token);
+  if (!e) return failure(e.error());
+  return e->sigma;
+}
+
+Result<BlurEstimate> estimateBlur(const Plane& luma, float noiseSigma, const CancellationToken* token) {
   ScopedTimer timer("enh.blurEstimate");
   // Measure on a lightly pre-smoothed copy: noise otherwise inflates the
   // selected gradient peaks (biasing blur low). The known pre-blur is removed
@@ -189,7 +195,9 @@ Result<float> estimateBlurSigma(const Plane& luma, float noiseSigma, const Cance
       samples.push_back({g, g / gr});
     }
   }
-  if (samples.size() < 32) return 0.0f;  // too few edges to judge
+  BlurEstimate result;
+  result.edges = static_cast<int32_t>(samples.size());
+  if (samples.size() < 32) return result;  // too few edges to judge
   // Object boundaries dominate the strongest gradients; texture and shading
   // (which violate the step-edge model) fall below. Keep the top quartile.
   auto cut = samples.begin() + static_cast<std::ptrdiff_t>(samples.size() * 3 / 4);
@@ -199,7 +207,8 @@ Result<float> estimateBlurSigma(const Plane& luma, float noiseSigma, const Cance
   for (auto it = cut; it != samples.end(); ++it) sigmas.push_back(sigmaForRatio(it->ratio));
   auto mid = sigmas.begin() + static_cast<std::ptrdiff_t>(sigmas.size() / 2);
   std::nth_element(sigmas.begin(), mid, sigmas.end());
-  return std::sqrt(std::max(*mid * *mid - kPreBlur * kPreBlur, 0.0f));
+  result.sigma = std::sqrt(std::max(*mid * *mid - kPreBlur * kPreBlur, 0.0f));
+  return result;
 }
 
 Result<QualityReport> analyze(const Plane& luma, const CancellationToken* token) {

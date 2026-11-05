@@ -85,6 +85,17 @@ capture / saved photo ─▶ decode (bounded size) ─▶ [Clarity] ─▶ Portr
                                                                  └ fallbacks: person segmentation ▸ pp_subject_mask (taps)
 ```
 
+### Transform
+
+```
+photo ─▶ recipe (untouched base + effects) ─▶ decode base ─▶ pp_transform ─▶ [Spotlight replay] ─▶ [look replay] ─▶ JPEG
+                                                    │ lens model fit (blur², fringes) ▸ fringe re-alignment
+                                                    └ enhance at native size (lens-set deblur + corner pass) ▸ optional 2× Catmull-Rom
+```
+
+- `pp_lens_analyze` feeds the plain-language lens notice. Readings are remembered per camera lens in an internal settings row.
+- Daily allowances (Transform: 2 a day on the free plan) are checked with `checkAllowance` and counted in an internal settings row.
+
 - Masks are small ALPHA_8 bitmaps passed to the engine without copies (the JNI wraps locked pixels); the photo is processed in place.
 - The engine never allocates full-size scratch planes for portraits (~30 MB working set at any size).
 - Premium checks go through `useFeature` / `checkFeature` (enforcement stays off until Play Billing ships); the feature catalogue lists Clarity, Spotlight and Share as free, and multi-shot modes and Vibe Match as Premium.

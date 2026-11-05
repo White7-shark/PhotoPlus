@@ -297,6 +297,54 @@ describe('spotlight and vibe match', () => {
     expect(screen.getByLabelText('Vibe Match on. Change style')).toBeTruthy();
   });
 
+  it('a Spotlight + Vibe Match shot records how it was made, so Transform can re-make it', async () => {
+    const look = [
+      0.1, 0.2, 0.35, 0.5, 0.7, 0.8, 0.88, 0.94, 0.98, 0, 0, 0, 0.02, 0.02, 0.02, 0.06, 0.06, 0.9, 0.004, 0.6,
+    ];
+    useAppStore.setState(st => ({
+      settings: { ...st.settings, vibeLook: { referencePath: '/looks/ref.jpg', look, strength: 0.6 } },
+    }));
+    const added: { metadata: Record<string, unknown> }[] = [];
+    useAppStore.setState({
+      repos: {
+        projects: { ensureInbox: jest.fn(async () => ({ id: 'inbox' })) },
+        images: {
+          add: jest.fn(async (img: { metadata: Record<string, unknown> }) => {
+            added.push(img);
+            return { ...img, id: 'img_9' };
+          }),
+        },
+      } as never,
+      loadProjects: jest.fn(async () => undefined),
+    });
+    // Native reports the taps it used in the upright photo (here: phone turned).
+    mockCamera.capturePhoto.mockImplementationOnce(async (o: { mode: string; captureId: string }) => ({
+      path: `/captures/${o.captureId}.jpg`,
+      width: 4032,
+      height: 3024,
+      sizeBytes: 1000,
+      capturedAt: 1,
+      mode: o.mode,
+      look: true,
+      originalPath: `/captures/${o.captureId}_original.jpg`,
+      portrait: { people: 1, spots: 0, skin: 0.02, subject: 0.3 },
+      spotlight: { points: [0.6, 0.3], blur: 0.6, retouch: 0.75, brighten: 0.4, pop: 0.5 },
+    }));
+    await renderReadyCamera();
+    await fireEvent.press(screen.getByTestId('mode-spotlight'));
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(added).toHaveLength(1));
+    const id = (mockCamera.capturePhoto.mock.calls[0][0] as { captureId: string }).captureId;
+    expect(added[0].metadata.recipe).toEqual({
+      basePath: `/captures/${id}_original.jpg`,
+      baseStyled: false,
+      steps: [
+        { kind: 'spotlight', points: [0.6, 0.3], blur: 0.6, retouch: 0.75, brighten: 0.4, pop: 0.5 },
+        { kind: 'look', look, strength: 0.6 },
+      ],
+    });
+  });
+
   it('turning Vibe Match off brings exposure back to neutral', async () => {
     const bright = [
       0.1, 0.2, 0.35, 0.5, 0.7, 0.8, 0.88, 0.94, 0.98, 0, 0, 0, 0.02, 0.02, 0.02, 0.06, 0.06, 0.9, 0.004, 0.6,

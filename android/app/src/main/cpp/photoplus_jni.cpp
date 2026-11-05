@@ -7,6 +7,7 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -422,6 +423,56 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePortrait(
                                   report.blur_radius,
                                   report.focus_depth,
                                   static_cast<jfloat>(report.depth_estimated)};
+  env->SetFloatArrayRegion(reportOut, 0, kReport, values);
+}
+
+// Lens analysis ("Transform"): fills `out` (7) with detail blur, corner blur,
+// fringe px, noise, grade, measured regions, reliable (0/1).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLensAnalyze(JNIEnv* env, jobject, jobject bitmap,
+                                                                               jlong token, jfloatArray out) {
+  constexpr jsize kOut = 7;
+  if (env->GetArrayLength(out) < kOut) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Lens report needs 7 slots");
+    return;
+  }
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  pp_lens_report r{};
+  const pp_status st = pp_lens_analyze(img.image, reinterpret_cast<const pp_cancel_token*>(token), &r);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat values[kOut] = {r.detail_blur, r.corner_blur, r.fringe_px, r.noise, r.grade,
+                               static_cast<jfloat>(r.measured_tiles), static_cast<jfloat>(r.reliable)};
+  env->SetFloatArrayRegion(out, 0, kOut, values);
+}
+
+// Transform: `src` restored into `dst` (src size x upscale). params (4) =
+// upscale, enrich (0/1), strength, detail. reportOut (7) = fringe fixed px,
+// deblur centre, deblur corner, noise before, noise after, grade before,
+// measured regions.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeTransform(JNIEnv* env, jobject, jobject src,
+                                                                             jobject dst, jfloatArray params,
+                                                                             jlong token, jfloatArray reportOut) {
+  constexpr jsize kReport = 7;
+  if (env->GetArrayLength(params) < 4 || env->GetArrayLength(reportOut) < kReport || src == nullptr || dst == nullptr) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad transform arguments");
+    return;
+  }
+  jfloat p[4];
+  env->GetFloatArrayRegion(params, 0, 4, p);
+  WrappedBitmap in, out;
+  if (!in.open(env, src, false) || !out.open(env, dst, false)) return;
+  const pp_transform_params tp{static_cast<int32_t>(std::lround(p[0])), p[1] > 0.5f ? 1 : 0, p[2], p[3]};
+  pp_transform_report r{};
+  const pp_status st = pp_transform(in.image, out.image, &tp, reinterpret_cast<const pp_cancel_token*>(token), &r);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat values[kReport] = {r.fringe_fixed_px, r.deblur_centre, r.deblur_corner, r.noise_before,
+                                  r.noise_after,     r.before.grade,  static_cast<jfloat>(r.before.measured_tiles)};
   env->SetFloatArrayRegion(reportOut, 0, kReport, values);
 }
 

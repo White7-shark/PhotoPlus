@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 
 #include "test_harness.hpp"
 
@@ -20,9 +21,14 @@ void reportFailure(const char* file, int line, const std::string& message) {
 
 }  // namespace pptest
 
-int main() {
+// Optional argument: run only tests whose name contains it.
+int main(int argc, char** argv) {
+  const char* filter = argc > 1 ? argv[1] : nullptr;
   int failedTests = 0;
+  size_t ran = 0;
   for (const auto& test : pptest::registry()) {
+    if (filter != nullptr && std::strstr(test.name, filter) == nullptr) continue;
+    ++ran;
     const int before = pptest::g_failures;
     std::printf("[ RUN  ] %s\n", test.name);
     test.fn();
@@ -30,6 +36,6 @@ int main() {
     std::printf("[ %s ] %s\n", passed ? " OK " : "FAIL", test.name);
     if (!passed) ++failedTests;
   }
-  std::printf("\n%zu tests, %d failed\n", pptest::registry().size(), failedTests);
+  std::printf("\n%zu tests, %d failed\n", ran, failedTests);
   return failedTests == 0 ? 0 : 1;
 }

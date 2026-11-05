@@ -4,7 +4,9 @@
  * (docs/design/spotlight-*.png) from real engine output:
  *
  *   python3 scripts/make-spotlight-assets.py KODAK_DIR portrait_demo MASK_DIR /tmp/pp-spot
+ *   python3 scripts/make-transform-assets.py KODAK_DIR transform_demo enhance_bench /tmp/pp-spot
  *   node scripts/render-spotlight-preview.mjs /tmp/pp-spot
+ * (Transform screens are rendered when their assets are present.)
  *
  * Layout, sizes and colours mirror src/screens/camera/* (chip 36 dp, shutter
  * 82 dp, preview frame sized to the aspect ratio below a 56 dp top bar) and
@@ -12,7 +14,7 @@
  * viewfinder is a Kodak test image, and the before/after screen shows a
  * simulated weak-camera burst and the engine's actual output for it.
  */
-import { readFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -249,5 +251,67 @@ const depthPage = `<div style="padding:40px 48px;background:radial-gradient(elli
 await p.setViewportSize({ width: 1430, height: 640 });
 await p.setContent(page(depthPage, 1430, 640));
 await p.screenshot({ path: join(out, 'spotlight-depth.png'), fullPage: true });
+
+// ---- Transform (assets from scripts/make-transform-assets.py) ----
+if (existsSync(join(assets, 't_report.json'))) {
+  const T = JSON.parse(readFileSync(join(assets, 't_report.json'), 'utf8'));
+  const BASIC = uri('t_basic.png');
+  const FACE_B = uri('t_face_basic.png');
+  const FACE_T = uri('t_face_tf.png');
+  const signs = [
+    T.lens.detail >= 1.1 ? 'soft fine detail' : null,
+    Math.sqrt(Math.max(T.lens.corner ** 2 - T.lens.detail ** 2, 0)) >= 0.8 ? 'blurry edges' : null,
+    T.lens.fringe >= 1 ? 'colour fringes on edges' : null,
+    T.lens.noise >= 0.014 ? 'grain' : null,
+    'low resolution',
+  ].filter(Boolean);
+  const grain = Math.round((1 - T.transform.noise[1] / T.transform.noise[0]) * 100);
+  const button = (label, ic, premium) =>
+    `<div style="height:48px;border-radius:24px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;${premium ? `background:linear-gradient(135deg,#F5C66B,#E8A23A);color:#1A1206` : `background-image:${ACTION}`}">${icon(ic, 18, premium ? '#1A1206' : '#fff')}${label}</div>`;
+  const notice = `${status}${aurora}<div style="position:absolute;inset:0;padding:58px 16px 0">${header('Photo', 'Clarity')}
+    <div style="width:358px;height:300px;margin:0 auto 14px;border-radius:18px;overflow:hidden"><img src="${BASIC}" style="width:100%;height:100%;object-fit:cover;object-position:50% 40%"></div>
+    <div class="glass" style="border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:10px">
+      <div class="row" style="gap:8px">${icon('aperture', 20, GOLD)}<div style="font-size:18px;line-height:24px;font-weight:700;flex:1">This photo could look sharper</div></div>
+      <div style="font-size:15px;line-height:21px;color:rgba(247,245,251,.74)">It shows signs of a basic camera lens, so it may not reach top quality as it is. Transform gives it the look of a high-end camera, and keeps your effects.</div>
+      <div class="caption" style="color:rgba(247,245,251,.6)">Seen in this photo: ${signs.join(', ')}.</div>
+      ${button('Try Transform', 'aperture', true)}
+      <div class="caption" style="text-align:center;color:rgba(247,245,251,.6)">2 free Transforms left today</div>
+    </div></div>`;
+  const tfBadges = [
+    badge('High-end lens look', 'aperture', 'gold'),
+    T.transform.fringeFixed >= 0.5 ? badge('Colour fringes removed', 'check', 'ok') : '',
+    badge('Sharper detail', 'sparkles', 'ok'),
+    badge('2× detail', 'crown', 'gold'),
+    grain >= 5 ? badge(`Grain −${grain}%`, 'sparkles', 'ok') : '',
+  ];
+  const result = `${status}${aurora}<div style="position:absolute;inset:0;padding:58px 16px 0">${header('Transform', 'Zoomed in')}
+    ${compareBox(FACE_B, FACE_T, 358, 358, 0.5)}
+    ${improved(tfBadges)}${actions}</div>`;
+  for (const [key, html] of [
+    ['notice', notice],
+    ['result', result],
+  ]) {
+    await p.setViewportSize({ width: 390, height: 844 });
+    await p.setContent(page(`<div class="phone" style="border-radius:0">${html}</div>`, 390, 844));
+    await p.screenshot({ path: join(out, `transform-${key}.png`) });
+  }
+  // Detail sheet: the same regions from the basic lens, Clarity alone and Transform.
+  const cell = (src, label) =>
+    `<div style="display:flex;flex-direction:column;gap:8px"><img src="${src}" style="width:300px;height:300px;border-radius:14px;image-rendering:auto"><div class="overline" style="color:rgba(247,245,251,.74)">${label}</div></div>`;
+  const rows = ['face', 'hat']
+    .map(
+      r =>
+        `<div style="display:flex;gap:18px">${cell(uri(`t_${r}_basic.png`), 'Basic lens')}${cell(uri(`t_${r}_clarity.png`), 'Clarity')}${cell(uri(`t_${r}_tf.png`), 'Transform · 2× detail')}</div>`,
+    )
+    .join('');
+  const sheet = `<div style="padding:36px 44px;background:radial-gradient(ellipse at 20% 0%, #24172f 0%, #0b0a10 55%)">
+    <div style="font-size:24px;font-weight:800;margin-bottom:6px">Transform: the look of a high-end camera</div>
+    <div class="caption" style="color:rgba(247,245,251,.74);margin-bottom:22px">A photo taken through a simulated basic phone lens, zoomed in. Transform restores fine detail and sharp edges, removes colour fringes and grain, and keeps the photo's own colours.</div>
+    <div style="display:flex;flex-direction:column;gap:20px">${rows}</div></div>`;
+  await p.setViewportSize({ width: 1040, height: 900 });
+  await p.setContent(page(sheet, 1040, 900));
+  await p.screenshot({ path: join(out, 'transform-detail.png'), fullPage: true });
+}
+
 await browser.close();
 console.log('Spotlight preview rendered to docs/design');

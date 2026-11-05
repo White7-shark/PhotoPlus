@@ -186,6 +186,44 @@ pp_status pp_enhance_into(const pp_image* const* frames, size_t count, const pp_
 
 pp_status pp_analyze_quality(const pp_image* image, pp_quality_report* out);
 
+/* ---- Lens quality ("Transform") ------------------------------------------
+ * Measures what a basic phone lens leaves in a photo, on the full-resolution
+ * image, and removes it so the photo looks as if a high-end lens took it. */
+
+typedef struct pp_lens_report {
+  float detail_blur;     /* lens blur (px) where the photo is sharpest */
+  float corner_blur;     /* lens blur (px) at the corners */
+  float fringe_px;       /* colour fringe width at the corners (px) */
+  float noise;           /* noise std-dev, luma 0..1 */
+  float grade;           /* 0 basic ... 1 flagship-like */
+  int32_t measured_tiles;/* regions with enough edges to judge sharpness */
+  int32_t reliable;      /* 1 when the photo had enough detail to judge */
+} pp_lens_report;
+
+pp_status pp_lens_analyze(const pp_image* image, const pp_cancel_token* token, pp_lens_report* out);
+
+typedef struct pp_transform_params {
+  int32_t upscale;         /* 1, or 2 for twice the detail */
+  int32_t enrich;          /* a touch of vibrance (0 keeps a styled photo's colours exactly) */
+  float strength;          /* 0..1 */
+  float detail;            /* finishing local contrast 0..1 (default 0.4) */
+} pp_transform_params;
+
+void pp_transform_default_params(pp_transform_params* out);
+
+typedef struct pp_transform_report {
+  pp_lens_report before;
+  float fringe_fixed_px;
+  float deblur_centre;   /* PSF sigma removed (px, output scale) */
+  float deblur_corner;   /* extra PSF sigma removed at the corners */
+  float noise_before;
+  float noise_after;
+} pp_transform_report;
+
+/* `output` (4-channel, input size x upscale) may be `input` when upscale = 1. */
+pp_status pp_transform(const pp_image* input, pp_image* output, const pp_transform_params* params,
+                       const pp_cancel_token* token, pp_transform_report* report);
+
 /* Focus peaking on a camera luma (Y) plane, read in place (e.g. a direct
  * ByteBuffer from CameraX), so no frame copy is made. Writes `argb` into
  * pixels of `out` (out_width x out_height, a downscaled overlay) whose edge

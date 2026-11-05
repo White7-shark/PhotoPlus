@@ -32,7 +32,14 @@ struct QualityReport {
 float estimateNoise(const Plane& luma);
 float laplacianSharpness(const Plane& luma);
 // Edge-based defocus estimate using the re-blur gradient ratio (Zhuo & Sim).
+// Returns 0 both for a perfectly sharp image and for one with too few edges
+// to judge; estimateBlur() tells the two apart.
 Result<float> estimateBlurSigma(const Plane& luma, float noiseSigma, const CancellationToken* token);
+struct BlurEstimate {
+  float sigma = 0.0f;
+  int32_t edges = 0;  // isolated step edges measured (fewer than 32: no estimate)
+};
+Result<BlurEstimate> estimateBlur(const Plane& luma, float noiseSigma, const CancellationToken* token);
 Result<QualityReport> analyze(const Plane& luma, const CancellationToken* token);
 
 struct Shift {
@@ -97,6 +104,17 @@ struct Params {
   float detail = 0.35f;    // local contrast
   bool autoTone = true;
   float vibrance = 0.25f;
+  // Lens-aware deblur (Transform): when > 0, this measured blur (px, input
+  // scale) replaces the whole-image estimate, so the PSF follows the lens
+  // where the photo is in focus rather than an out-of-focus background.
+  float measuredBlur = 0.0f;
+  // Extra blur (px, input scale) at the frame corners, removed by a second
+  // deconvolution blended in with the squared distance from the centre.
+  float cornerBlur = 0.0f;
+  // Keep the full pre-denoise even when a strong deblur follows (by default
+  // it backs off, leaving noise to the deconvolution's regulariser): for
+  // photos that will be viewed enlarged, where leftover grain shows.
+  bool fullDenoise = false;
 };
 
 struct Report {

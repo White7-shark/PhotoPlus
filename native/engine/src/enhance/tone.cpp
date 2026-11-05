@@ -32,29 +32,39 @@ Error tone(YccImage& img, const ToneParams& params, const CancellationToken* tok
   const int32_t w = img.width(), h = img.height();
 
   if (params.autoWhiteBalance) {
-    // Grey-world on mid-tones only (ignore near-black/white and strongly
-    // saturated pixels, which bias the estimate). Correction is partial and
-    // bounded so intentional colour casts (sunsets) are softened, not erased.
-    double sb = 0.0, sr = 0.0;
-    size_t n = 0;
+    // Grey pixels only: things that are really white, grey or black in the
+    // scene (low colour for their brightness) show the cast of the light.
+    // Skin, foliage or a warm wall are not grey, so a portrait full of skin
+    // is never pushed towards cyan (plain grey-world does exactly that).
+    // Too few grey pixels: no correction. The correction is partial and
+    // bounded, so intentional colour (sunsets, golden hour) stays.
+    double sb = 0.0, sr = 0.0, sy = 0.0;
+    size_t n = 0, seen = 0;
     for (int32_t y = 0; y < h; y += 2) {
       const float* py = img.y.row(y);
       const float* pb = img.cb.row(y);
       const float* pr = img.cr.row(y);
       for (int32_t x = 0; x < w; x += 2) {
-        if (py[x] < 0.15f || py[x] > 0.9f) continue;
-        if (std::fabs(pb[x]) + std::fabs(pr[x]) > 0.25f) continue;
+        if (py[x] < 0.15f || py[x] > 0.95f) continue;
+        ++seen;
+        if (std::hypot(pb[x], pr[x]) > 0.06f * (0.3f + py[x])) continue;
         sb += pb[x];
         sr += pr[x];
+        sy += py[x];
         ++n;
       }
     }
-    if (n > 256) {
-      const float shiftB = std::clamp(-static_cast<float>(sb / static_cast<double>(n)) * 0.6f, -0.05f, 0.05f);
-      const float shiftR = std::clamp(-static_cast<float>(sr / static_cast<double>(n)) * 0.6f, -0.05f, 0.05f);
+    if (n > 256 && n * 50 > seen) {
+      const float shiftB = std::clamp(-static_cast<float>(sb / static_cast<double>(n)) * 0.6f, -0.03f, 0.03f);
+      const float shiftR = std::clamp(-static_cast<float>(sr / static_cast<double>(n)) * 0.6f, -0.03f, 0.03f);
+      // White balance is a gain on the light, so the shift is proportional
+      // to each pixel's brightness: blacks stay black (an even shift would
+      // tint dark clothing and hair).
+      const float inv = 1.0f / std::max(static_cast<float>(sy / static_cast<double>(n)), 0.1f);
       for (size_t i = 0; i < img.cb.size(); ++i) {
-        img.cb.data()[i] += shiftB;
-        img.cr.data()[i] += shiftR;
+        const float k = std::min(img.y.data()[i] * inv, 1.6f);
+        img.cb.data()[i] += shiftB * k;
+        img.cr.data()[i] += shiftR * k;
       }
     }
   }

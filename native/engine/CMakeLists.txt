@@ -31,6 +31,7 @@ add_library(photoplus_engine STATIC
   src/portrait/matte.cpp
   src/portrait/portrait.cpp
   src/portrait/style.cpp
+  src/lens/lens.cpp
 )
 target_include_directories(photoplus_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_options(photoplus_engine PRIVATE
@@ -44,7 +45,7 @@ endif()
 if(PP_ENGINE_BUILD_TESTS)
   enable_testing()
   find_package(Threads REQUIRED)
-  add_executable(photoplus_engine_tests tests/test_main.cpp tests/engine_tests.cpp tests/enhance_tests.cpp tests/portrait_tests.cpp)
+  add_executable(photoplus_engine_tests tests/test_main.cpp tests/engine_tests.cpp tests/enhance_tests.cpp tests/portrait_tests.cpp tests/lens_tests.cpp)
   target_link_libraries(photoplus_engine_tests PRIVATE photoplus_engine Threads::Threads)
   add_test(NAME photoplus_engine_tests COMMAND photoplus_engine_tests)
 endif()
@@ -53,6 +54,8 @@ if(PP_ENGINE_BUILD_TOOLS)
   find_package(Threads REQUIRED)
   add_executable(enhance_bench tools/enhance_bench.cpp)
   add_executable(portrait_demo tools/portrait_demo.cpp)
+  add_executable(transform_demo tools/transform_demo.cpp)
+  target_link_libraries(transform_demo PRIVATE photoplus_engine Threads::Threads)
   target_link_libraries(portrait_demo PRIVATE photoplus_engine Threads::Threads)
   target_link_libraries(enhance_bench PRIVATE photoplus_engine Threads::Threads)
 endif()

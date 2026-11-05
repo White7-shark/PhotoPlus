@@ -190,8 +190,8 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
   //      edge-preserving denoise followed by noise-regularised deconvolution
   //      beats a strong denoise, which erases the detail deblurring needs.
   float residualNoise = quality->noiseSigma / std::sqrt(static_cast<float>(used));
-  float measuredBlur = quality->blurSigma > 0.0f ? quality->blurSigma : 0.6f;
-  if (used > 1 && scale == 1) {
+  float measuredBlur = params.measuredBlur > 0.0f ? params.measuredBlur : quality->blurSigma > 0.0f ? quality->blurSigma : 0.6f;
+  if (used > 1 && scale == 1 && params.measuredBlur <= 0.0f) {
     // Re-measure on the merged image: far less noise means a more reliable
     // blur estimate, and it includes the merge's own slight softening.
     residualNoise = estimateNoise(out.y);
@@ -207,7 +207,8 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
   if (params.denoise > 0.0f && residualNoise > 0.002f) {
     // When deconvolution follows, its TV term also suppresses noise, so the
     // pre-denoise backs off for blurry captures.
-    const float k = 1.5f * std::clamp(params.denoise, 0.0f, 1.0f) * (willDeblur && optical >= 1.2f ? 0.5f : 1.0f);
+    const float k = 1.5f * std::clamp(params.denoise, 0.0f, 1.0f) *
+                    (willDeblur && optical >= 1.2f && !params.fullDenoise ? 0.5f : 1.0f);
     const float eps = (k * residualNoise) * (k * residualNoise);
     if (eps > 0.0f) {
       if (Error e = denoiseGuided(out.y, scale == 2 ? 3 : 2, eps, 0.12f, token); e.status != PP_OK) return failure(e);
@@ -225,7 +226,31 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
     const auto iterations = static_cast<int32_t>(std::lround(6.0f + 14.0f * std::clamp(params.sharpen, 0.0f, 1.0f)));
     const float tv = 0.15f * residualNoise;  // regularise only as much as the noise requires
     rep.deblurSigma = psf;
-    if (Error e = deconvolve(out.y, psf, iterations, tv, token); e.status != PP_OK) return failure(e);
+    if (params.cornerBlur > 0.25f) {
+      // A basic lens is softer towards the corners: Gaussian blurs compose,
+      // so after removing the centre blur everywhere, the corners still hold
+      // an extra blur. Remove it on a copy and blend that in by radius².
+      auto corner = clonePlane(out.y);
+      if (!corner) return failure(corner.error());
+      if (Error e = deconvolve(out.y, psf, iterations, tv, token); e.status != PP_OK) return failure(e);
+      const float extra = std::min(params.cornerBlur, 2.0f) * s;
+      const float full = std::sqrt(psf * psf + extra * extra);
+      if (Error e = deconvolve(*corner, full, iterations, tv, token); e.status != PP_OK) return failure(e);
+      const float cx = 0.5f * static_cast<float>(ow - 1), cy = 0.5f * static_cast<float>(oh - 1);
+      const float inv = 1.0f / (cx * cx + cy * cy);
+      for (int32_t y = 0; y < oh; ++y) {
+        float* dst = out.y.row(y);
+        const float* src = corner->row(y);
+        const float dy2 = (static_cast<float>(y) - cy) * (static_cast<float>(y) - cy);
+        for (int32_t x = 0; x < ow; ++x) {
+          const float dx = static_cast<float>(x) - cx;
+          const float wr = std::min(1.0f, (dx * dx + dy2) * inv);
+          dst[x] += wr * (src[x] - dst[x]);
+        }
+      }
+    } else if (Error e = deconvolve(out.y, psf, iterations, tv, token); e.status != PP_OK) {
+      return failure(e);
+    }
   }
 
   // Measured on the restored luma (before tone, which rescales levels) so it

@@ -17,6 +17,10 @@ export interface Spec extends TurboModule {
   applyLook(jobId: string, request: Object): Promise<Object>;
   /** Measures a reference photo's look. */
   analyzeLook(path: string): Promise<Object>;
+  /** Measures what the camera's lens left in a photo (full resolution). */
+  analyzeLens(path: string): Promise<Object>;
+  /** Transform: high-end lens quality, then the photo's effects re-applied. */
+  transform(jobId: string, request: Object): Promise<Object>;
   cancel(jobId: string): void;
   cancelAll(): void;
   getMemoryStats(): Promise<Object>;

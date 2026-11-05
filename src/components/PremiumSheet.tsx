@@ -9,7 +9,16 @@ import { GlassSurface } from './GlassSurface';
 import { Icon } from './Icon';
 
 /** Explains a Premium feature when the free plan can't use it. */
-export function PremiumSheet({ feature, onClose }: { feature: FeatureKey | null; onClose: () => void }) {
+export function PremiumSheet({
+  feature,
+  onClose,
+  message,
+}: {
+  feature: FeatureKey | null;
+  onClose: () => void;
+  /** Extra context shown above the plan line (e.g. a used-up daily allowance). */
+  message?: string | null;
+}) {
   const theme = useTheme();
   if (!feature) {
     return null;
@@ -25,6 +34,11 @@ export function PremiumSheet({ feature, onClose }: { feature: FeatureKey | null;
             <AppText variant="title2" align="center" accessibilityRole="header">
               {FEATURES[feature].title}
             </AppText>
+            {message ? (
+              <AppText variant="bodyStrong" align="center">
+                {message}
+              </AppText>
+            ) : null}
             <AppText variant="body" tone="secondary" align="center">
               Part of Photo Plus Premium — {PREMIUM_PRICE.currency} {PREMIUM_PRICE.amount} a {PREMIUM_PRICE.period}.
               Premium arrives in a coming update.

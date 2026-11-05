@@ -28,11 +28,27 @@ import {
   type GlowLevel,
 } from '../services/camera/model';
 import type { ImageRecord } from '../services/database/repositories/ImagesRepository';
-import type { FeatureKey } from '../services/entitlements/features';
+import {
+  allowanceLabel,
+  checkAllowance,
+  isDailyUsage,
+  recordUse,
+  USAGE_KEY,
+  type DailyUsage,
+} from '../services/entitlements/allowance';
+import { FREE_DAILY_ALLOWANCE, type FeatureKey } from '../services/entitlements/features';
 import { friendlyMessage } from '../services/errors';
 import { lookDescription, saveVibeLook, VIBE_STRENGTHS } from '../services/looks/LookService';
 import { createLogger } from '../services/logging/logger';
 import { getProcessingService, ProcessingError } from '../services/processing/ImageProcessingService';
+import {
+  isLensProfiles,
+  lensNotice,
+  LENS_PROFILES_KEY,
+  rememberReading,
+  type LensProfiles,
+  type LensReport,
+} from '../services/processing/lens';
 import {
   editedPathFor,
   enhancedCopyMetadata,
@@ -42,6 +58,7 @@ import {
   noiseReduction,
   type EditKind,
 } from '../services/processing/quality';
+import { editRecipe, effectiveRecipe, transformPlan, type RecipeStep } from '../services/processing/recipe';
 import type { QualityReport } from '../services/processing/types';
 import { formatBytes, getStorageService } from '../services/storage/StorageService';
 import { useAppStore } from '../state/store';
@@ -74,7 +91,17 @@ export const TOOLS: readonly Tool[] = [
     feature: 'vibeMatch',
   },
   { id: 'superres', label: 'Ultra Detail', description: 'Twice the detail', icon: 'layers', feature: 'multiShot' },
+  {
+    id: 'transform',
+    label: 'Transform',
+    description: 'The look of a high-end camera',
+    icon: 'aperture',
+    feature: 'transform',
+  },
 ];
+
+/** Photos up to this long edge can get twice the detail from Transform. */
+const TRANSFORM_2X_MAX_EDGE = 2048;
 
 interface EditResult {
   kind: EditKind;
@@ -83,6 +110,10 @@ interface EditResult {
   height: number;
   sizeBytes: number;
   report: unknown;
+  /** Spotlight result of a Transform that re-applied it. */
+  portrait?: unknown;
+  /** What this edit did, for the kept photo's recipe. */
+  step: RecipeStep | null;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
@@ -108,6 +139,15 @@ export function improvementBadges(
   }
   if (num(r?.upscale) === 2 || mode === 'superres') {
     out.push({ label: '2× detail', icon: 'crown', tone: 'premium' });
+  }
+  if (mode === 'transform') {
+    out.unshift({ label: 'High-end lens look', icon: 'aperture', tone: 'premium' });
+    if ((num(r?.fringesFixedPx) ?? 0) >= 0.5) {
+      out.push({ label: 'Colour fringes removed', icon: 'check', tone: 'success' });
+    }
+    if ((num(r?.deblur) ?? 0) >= 0.6) {
+      out.push({ label: 'Sharper detail', icon: 'sparkles', tone: 'success' });
+    }
   }
   const p = portrait && typeof portrait === 'object' ? (portrait as Record<string, unknown>) : null;
   if (p || mode === 'spotlight') {
@@ -157,6 +197,14 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
   const [vibeOpen, setVibeOpen] = useState(false);
   const [premiumFor, setPremiumFor] = useState<FeatureKey | null>(null);
   const [photoSize, setPhotoSize] = useState({ width: 0, height: 0 });
+  const [lens, setLens] = useState<LensReport | null>(null);
+  const [lensProfiles, setLensProfiles] = useState<LensProfiles>({});
+  const [usage, setUsage] = useState<DailyUsage | null>(null);
+  const [premiumMessage, setPremiumMessage] = useState<string | null>(null);
+  const [transformDetail, setTransformDetail] = useState<'standard' | 'double'>('standard');
+  const entitlements = useAppStore(s => s.entitlements);
+  // The day the allowance is counted on: when the screen opened.
+  const [openedAt] = useState(() => Date.now());
   const abort = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -183,6 +231,41 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         if (str(record.metadata.originalPath)) {
           setView('compare');
         }
+        if (record.width > 0 && Math.max(record.width, record.height) <= TRANSFORM_2X_MAX_EDGE) {
+          setTransformDetail('double');
+        }
+        // What the camera's lens left in the photo: read on the untouched
+        // photo (effects such as a blurred background would mislead it).
+        const settingsRepo = repos?.settings;
+        const recipe = effectiveRecipe(record);
+        const lensId = str(record.metadata.lens);
+        const [profiles, used] = await Promise.all([
+          settingsRepo?.getInternal<unknown>(LENS_PROFILES_KEY).catch(() => null),
+          settingsRepo?.getInternal<unknown>(USAGE_KEY).catch(() => null),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        const known = isLensProfiles(profiles) ? profiles : {};
+        setLensProfiles(known);
+        setUsage(isDailyUsage(used) ? used : null);
+        if (str(record.metadata.captureMode) !== 'transform') {
+          processing
+            .analyzeLens(recipe.basePath)
+            .then(async r => {
+              if (cancelled) {
+                return;
+              }
+              setLens(r);
+              // Remember readings of this camera's own untouched photos.
+              if (record.source === 'camera' && lensId && !recipe.baseStyled && settingsRepo) {
+                const next = rememberReading(known, lensId, record.id, r);
+                setLensProfiles(next);
+                await settingsRepo.setInternal(LENS_PROFILES_KEY, next);
+              }
+            })
+            .catch(() => undefined);
+        }
       }
     })().catch(e => {
       log.error('load failed', e);
@@ -196,8 +279,15 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
     };
   }, [repos, route.params.imageId]);
 
+  const transformAccess = checkAllowance('transform', entitlements, usage, openedAt);
   const chooseTool = (t: Tool) => {
-    if (!can(t.feature).allowed) {
+    const access = t.id === 'transform' ? transformAccess : can(t.feature);
+    if (!access.allowed) {
+      setPremiumMessage(
+        t.id === 'transform' && FREE_DAILY_ALLOWANCE.transform
+          ? `You’ve used today’s ${FREE_DAILY_ALLOWANCE.transform} free Transforms. Premium makes Transform unlimited.`
+          : null,
+      );
       setPremiumFor(t.feature);
       return;
     }
@@ -225,12 +315,51 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
       const processing = getProcessingService();
       const signal = abort.current.signal;
       let r: EditResult;
-      if (tool === 'spotlight') {
-        const out = await processing.spotlight(
-          { inputPath: image.path, outputPath, points: flattenPoints(points), ...spotlightSettings(blur, glow) },
+      if (tool === 'transform') {
+        if (!transformAccess.allowed) {
+          setPremiumFor('transform');
+          return;
+        }
+        const plan = transformPlan(image);
+        // The untouched photo may have been removed: then Transform works on
+        // this photo as it is, keeping its effects.
+        const baseKept = plan.inputPath === image.path || (await storage.exists(plan.inputPath));
+        const out = await processing.transform(
+          baseKept
+            ? {
+                inputPath: plan.inputPath,
+                outputPath,
+                upscale: transformDetail === 'double' ? 2 : 1,
+                keepStyle: plan.keepStyle,
+                spotlight: plan.spotlight,
+                look: plan.look?.look ?? null,
+                lookStrength: plan.look?.strength,
+              }
+            : {
+                inputPath: image.path,
+                outputPath,
+                upscale: transformDetail === 'double' ? 2 : 1,
+                keepStyle: plan.keepStyle || plan.replayed > 0,
+              },
           { signal },
         );
-        r = { kind: tool, ...out, report: out.portrait };
+        // A Transform counts once it has made a photo.
+        const nextUsage = recordUse(usage, 'transform', openedAt);
+        setUsage(nextUsage);
+        repos?.settings.setInternal(USAGE_KEY, nextUsage).catch(() => undefined);
+        r = { kind: tool, ...out, report: out.transform, portrait: out.portrait, step: null };
+      } else if (tool === 'spotlight') {
+        const settings = spotlightSettings(blur, glow);
+        const out = await processing.spotlight(
+          { inputPath: image.path, outputPath, points: flattenPoints(points), ...settings },
+          { signal },
+        );
+        r = {
+          kind: tool,
+          ...out,
+          report: out.portrait,
+          step: { kind: 'spotlight', points: flattenPoints(points), ...settings },
+        };
       } else if (tool === 'look') {
         if (!vibeLook) {
           setVibeOpen(true);
@@ -240,13 +369,18 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           { inputPath: image.path, outputPath, look: vibeLook.look, strength: vibeLook.strength },
           { signal },
         );
-        r = { kind: tool, ...out, report: null };
+        r = {
+          kind: tool,
+          ...out,
+          report: null,
+          step: { kind: 'look', look: vibeLook.look, strength: vibeLook.strength },
+        };
       } else {
         const out = await processing.enhance(
           { inputPath: image.path, outputPath, upscale: tool === 'superres' ? 2 : 1, autoTone: true },
           { signal },
         );
-        r = { kind: tool, ...out, report: out.report };
+        r = { kind: tool, ...out, report: out.report, step: { kind: 'clarity' } };
       }
       setResult(r);
       setView('compare');
@@ -257,7 +391,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
     } finally {
       setWorking(false);
     }
-  }, [image, tool, points, blur, glow, vibeLook]);
+  }, [image, tool, points, blur, glow, vibeLook, transformAccess.allowed, transformDetail, usage, repos, openedAt]);
 
   const keepResult = useCallback(async () => {
     if (!image || !result || !repos) {
@@ -276,7 +410,12 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         metadata: {
           ...enhancedCopyMetadata(image, result.kind, result.kind === 'spotlight' ? null : result.report),
           ...(result.kind === 'spotlight' ? { portrait: result.report } : {}),
-          ...(result.kind === 'look' ? { look: true } : {}),
+          ...(result.kind === 'transform' && result.portrait ? { portrait: result.portrait } : {}),
+          ...(result.kind === 'look' || (result.kind === 'transform' && transformPlan(image).look)
+            ? { look: true }
+            : {}),
+          // What was done, so Transform can always start over from the untouched photo.
+          recipe: result.step ? editRecipe(image, result.step) : effectiveRecipe(image),
         },
       });
       void loadProjects();
@@ -354,13 +493,17 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
     ? improvementBadges(
         result.kind,
         result.kind === 'spotlight' ? null : result.report,
-        result.kind === 'spotlight' ? result.report : null,
+        result.kind === 'spotlight' ? result.report : (result.portrait ?? null),
         result.kind === 'look',
       )
     : improvementBadges(mode, image.metadata.report, image.metadata.portrait, image.metadata.look === true);
   const before = result ? image.path : original;
   const after = result ? result.outputPath : image.path;
   const suggestion = enhanceSuggestion(original ? null : quality);
+  const notice = result ? null : lensNotice(lens, lensProfiles[str(image.metadata.lens) ?? ''] ?? undefined);
+  const plan = transformPlan(image);
+  const kept = [plan.spotlight ? 'Spotlight' : null, plan.look ? 'Vibe Match' : null].filter(Boolean);
+  const transformTool = TOOLS.find(t => t.id === 'transform');
   const exposureTime = num(exif?.exposureTime);
   const choosing = tool === 'spotlight' && !result;
 
@@ -434,6 +577,37 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           </GlassSurface>
         ) : null}
 
+        {notice && tool !== 'transform' ? (
+          <GlassSurface style={{ padding: 16, gap: 10 }} testID="lens-notice">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Icon name="aperture" size={20} color={theme.colors.premium} />
+              <AppText variant="title3" style={{ flex: 1 }} accessibilityRole="header">
+                {notice.title}
+              </AppText>
+            </View>
+            <AppText variant="body" tone="secondary">
+              {notice.body}
+            </AppText>
+            {notice.signs.length ? (
+              <AppText variant="caption" tone="secondary">
+                Seen in this photo: {notice.signs.join(', ')}.
+              </AppText>
+            ) : null}
+            <Button
+              label="Try Transform"
+              variant="premium"
+              icon="aperture"
+              onPress={() => transformTool && chooseTool(transformTool)}
+              testID="try-transform"
+            />
+            {allowanceLabel(transformAccess, 'Transform') ? (
+              <AppText variant="caption" tone="secondary" align="center">
+                {allowanceLabel(transformAccess, 'Transform')}
+              </AppText>
+            ) : null}
+          </GlassSurface>
+        ) : null}
+
         {result ? (
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button label="Keep" icon="check" onPress={() => void keepResult()} style={{ flex: 1 }} />
@@ -454,7 +628,11 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }} accessibilityRole="tablist">
               {TOOLS.map(t => {
                 const selected = tool === t.id;
-                const premium = !can(t.feature).allowed || t.feature === 'vibeMatch' || t.feature === 'multiShot';
+                const premium =
+                  !can(t.feature).allowed ||
+                  t.feature === 'vibeMatch' ||
+                  t.feature === 'multiShot' ||
+                  t.feature === 'transform';
                 return (
                   <Pressable
                     key={t.id}
@@ -531,6 +709,32 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
               </View>
             ) : null}
 
+            {tool === 'transform' ? (
+              <View style={{ gap: 10 }}>
+                <AppText variant="body" tone="secondary">
+                  Restores fine detail, sharpens soft edges, removes colour fringes and grain, as if a high-end camera
+                  took it.
+                  {kept.length
+                    ? ` Your ${kept.join(' and ')} ${kept.length > 1 ? 'effects are' : 'effect is'} re-applied on top.`
+                    : ''}
+                </AppText>
+                {Math.max(image.width, image.height) <= TRANSFORM_2X_MAX_EDGE ? (
+                  <SegmentedControl
+                    label="Detail"
+                    value={transformDetail}
+                    onChange={setTransformDetail}
+                    options={[
+                      { value: 'standard', label: 'Standard' },
+                      { value: 'double', label: '2× detail' },
+                    ]}
+                  />
+                ) : null}
+                {allowanceLabel(transformAccess, 'Transform') ? (
+                  <Badge label={allowanceLabel(transformAccess, 'Transform') ?? ''} tone="premium" icon="crown" />
+                ) : null}
+              </View>
+            ) : null}
+
             {tool ? (
               working ? (
                 <View style={{ gap: 10 }}>
@@ -603,7 +807,14 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         }}
         onClose={() => setVibeOpen(false)}
       />
-      <PremiumSheet feature={premiumFor} onClose={() => setPremiumFor(null)} />
+      <PremiumSheet
+        feature={premiumFor}
+        message={premiumMessage}
+        onClose={() => {
+          setPremiumFor(null);
+          setPremiumMessage(null);
+        }}
+      />
     </Screen>
   );
 }

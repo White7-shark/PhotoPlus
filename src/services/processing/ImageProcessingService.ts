@@ -15,7 +15,10 @@ import type {
   QualityReport,
   SpotlightRequest,
   SpotlightResult,
+  TransformRequest,
+  TransformResult,
 } from './types';
+import { isLensReport, type LensReport } from './lens';
 import { validateRequest } from './validate';
 
 const log = createLogger('processing');
@@ -136,6 +139,27 @@ export class ImageProcessingService {
     return this.runJob('spot', request, options, jobId =>
       this.engine.portrait(jobId, request),
     ) as Promise<SpotlightResult>;
+  }
+
+  /** Transform on a saved photo (its effects are re-applied). Cancellable like process(). */
+  transform(request: TransformRequest, options: Omit<ProcessOptions, 'onState'> = {}): Promise<TransformResult> {
+    return this.runJob('tf', request, options, jobId =>
+      this.engine.transform(jobId, request),
+    ) as Promise<TransformResult>;
+  }
+
+  /** What the camera's lens left in a photo. */
+  async analyzeLens(path: string): Promise<LensReport> {
+    let r: unknown;
+    try {
+      r = await this.engine.analyzeLens(path);
+    } catch (error) {
+      throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
+    }
+    if (!isLensReport(r)) {
+      throw new ProcessingError('Unexpected lens report', 'INTERNAL');
+    }
+    return r;
   }
 
   /** Vibe Match on a saved photo. */
