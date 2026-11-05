@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Folders whose photos may be shared to other apps (read-only grants). -->
+<paths>
+    <files-path name="captures" path="captures/" />
+    <files-path name="exports" path="exports/" />
+    <files-path name="imports" path="imports/" />
+</paths>

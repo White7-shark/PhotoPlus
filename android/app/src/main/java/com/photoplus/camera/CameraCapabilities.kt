@@ -62,6 +62,7 @@ object CameraCapabilities {
     val modes = buildList {
       add(CaptureMode.STANDARD.id)
       add(CaptureMode.ENHANCE.id)
+      add(CaptureMode.PORTRAIT.id)
       add(CaptureMode.NIGHT.id)
       add(CaptureMode.SUPER_RES.id)
       if (inputs.rawSupported) add(CaptureMode.RAW.id)
@@ -81,8 +82,8 @@ object CameraCapabilities {
       "tapToFocus" to inputs.focusMeteringSupported,
       "manual" to mapOf(
         "exposure" to manualExposure,
-        "iso" to if (manualExposure) inputs.isoRange?.toList() else null,
-        "exposureTimeNs" to if (manualExposure) inputs.exposureRangeNs?.let { listOf(it.first.toDouble(), it.second.toDouble()) } else null,
+        "iso" to if (manualExposure) inputs.isoRange.toList() else null,
+        "exposureTimeNs" to if (manualExposure) inputs.exposureRangeNs.let { listOf(it.first.toDouble(), it.second.toDouble()) } else null,
         "isoStops" to if (manualExposure && ranges != null) ManualMath.isoStops(ranges) else emptyList<Int>(),
         "shutterStops" to if (manualExposure && ranges != null) ManualMath.shutterStops(ranges).map { it.toDouble() } else emptyList<Double>(),
         "focus" to manualFocus,

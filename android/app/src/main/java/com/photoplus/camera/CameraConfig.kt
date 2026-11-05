@@ -48,6 +48,8 @@ enum class FlashSetting(val id: String) {
  *  - ENHANCE: one frame restored by the engine (denoise, deblur, tone).
  *  - NIGHT: a burst fused to remove noise, then restored.
  *  - SUPER_RES: a burst fused onto a 2x grid (multi-frame super-resolution).
+ *  - PORTRAIT: one frame enhanced, then the subject made to stand out
+ *    (background blur, subject clarity, natural skin retouching).
  *
  * Frame counts and working sizes depend on the device tier (CapturePolicy).
  */
@@ -56,7 +58,8 @@ enum class CaptureMode(val id: String, val upscale: Int, val processed: Boolean,
   RAW("raw", 1, false, false),
   ENHANCE("enhance", 1, true, false),
   NIGHT("night", 1, true, true),
-  SUPER_RES("superres", 2, true, true);
+  SUPER_RES("superres", 2, true, true),
+  PORTRAIT("spotlight", 1, true, false);
 
   companion object {
     fun parse(value: String?): CaptureMode = entries.firstOrNull { it.id == value } ?: STANDARD
@@ -89,7 +92,16 @@ data class CaptureOptions(
   val autoTone: Boolean = true,
   /** Save front-camera photos as the preview shows them (mirrored), like a mirror. */
   val mirrorFront: Boolean = true,
+  /** Spotlight settings (PORTRAIT mode). */
+  val portrait: com.photoplus.studio.PortraitParams = com.photoplus.studio.PortraitParams(),
+  /** What to make stand out: taps on the preview (0..1), as the user saw them. */
+  val previewPoints: List<Pair<Float, Float>> = emptyList(),
+  /** A look to apply ("Vibe Match"), as engine look numbers; null = none. */
+  val look: FloatArray? = null,
+  val lookStrength: Float = 0.8f,
 ) {
+  /** RAW stays untouched; every other capture with a look is decoded and graded. */
+  val needsProcessing: Boolean get() = mode != CaptureMode.RAW && (mode.processed || look != null)
   /** Bursts never fire the flash: repeated flashes would differ frame to frame and break the merge. */
   val effectiveFlash: FlashSetting get() = if (mode.burst) FlashSetting.OFF else flash
 
@@ -106,6 +118,12 @@ data class CaptureOptions(
         vibrance = unit("vibrance", 0.25f),
         autoTone = map["autoTone"] as? Boolean ?: true,
         mirrorFront = map["mirrorFront"] as? Boolean ?: true,
+        portrait = com.photoplus.studio.PortraitParams.fromMap(map),
+        previewPoints = com.photoplus.studio.PortraitParams.points(map["points"]),
+        look = (map["look"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
+          ?.takeIf { it.size == com.photoplus.engine.NativeEngine.STYLE_FLOATS && it.all { v -> v.isFinite() } }
+          ?.toFloatArray(),
+        lookStrength = unit("lookStrength", 0.8f),
       )
     }
   }

@@ -9,9 +9,12 @@ import type {
   EnhanceRequest,
   EnhanceResult,
   JobState,
+  LookResult,
   ProcessRequest,
   ProcessResult,
   QualityReport,
+  SpotlightRequest,
+  SpotlightResult,
 } from './types';
 import { validateRequest } from './validate';
 
@@ -137,6 +140,51 @@ export class ImageProcessingService {
     this.active.add(jobId);
     try {
       return (await this.engine.enhance(jobId, request)) as unknown as EnhanceResult;
+    } catch (error) {
+      throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
+    } finally {
+      this.active.delete(jobId);
+      options.signal?.removeEventListener('abort', onAbort);
+    }
+  }
+
+  /** Spotlight on a saved photo. Cancellable like process(). */
+  spotlight(request: SpotlightRequest, options: Omit<ProcessOptions, 'onState'> = {}): Promise<SpotlightResult> {
+    return this.runJob('spot', options, jobId => this.engine.portrait(jobId, request)) as Promise<SpotlightResult>;
+  }
+
+  /** Vibe Match on a saved photo. */
+  applyLook(
+    request: { inputPath: string; outputPath: string; look: number[]; strength?: number },
+    options: Omit<ProcessOptions, 'onState'> = {},
+  ): Promise<LookResult> {
+    return this.runJob('look', options, jobId => this.engine.applyLook(jobId, request)) as Promise<LookResult>;
+  }
+
+  /** Measures a reference photo's look. */
+  async analyzeLook(path: string): Promise<number[]> {
+    try {
+      const r = (await this.engine.analyzeLook(path)) as unknown as { look: number[] };
+      return r.look;
+    } catch (error) {
+      throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
+    }
+  }
+
+  private async runJob(
+    prefix: string,
+    options: Omit<ProcessOptions, 'onState'>,
+    start: (jobId: string) => Promise<Object>,
+  ): Promise<unknown> {
+    if (options.signal?.aborted) {
+      throw new ProcessingError('Processing was cancelled', 'CANCELLED');
+    }
+    const jobId = options.jobId ?? createId(prefix);
+    const onAbort = () => this.cancel(jobId);
+    options.signal?.addEventListener('abort', onAbort);
+    this.active.add(jobId);
+    try {
+      return await start(jobId);
     } catch (error) {
       throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
     } finally {

@@ -11,6 +11,12 @@ export interface Spec extends TurboModule {
   /** Restores a saved photo (denoise, deblur, tone; upscale 2 = super-resolution). */
   enhance(jobId: string, request: Object): Promise<Object>;
   analyzeQuality(path: string): Promise<Object>;
+  /** Spotlight on a saved photo (subject stands out, natural skin retouching). */
+  portrait(jobId: string, request: Object): Promise<Object>;
+  /** Applies a look ("Vibe Match") to a saved photo. */
+  applyLook(jobId: string, request: Object): Promise<Object>;
+  /** Measures a reference photo's look. */
+  analyzeLook(path: string): Promise<Object>;
   cancel(jobId: string): void;
   cancelAll(): void;
   getMemoryStats(): Promise<Object>;

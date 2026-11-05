@@ -141,7 +141,7 @@ export function rawCameraCaps(overrides: Record<string, unknown> = {}) {
       '16:9': [{ id: 'max', width: 4032, height: 2268, megapixels: 9.1 }],
       '1:1': [{ id: 'max', width: 3024, height: 3024, megapixels: 9.1 }],
     },
-    captureModes: ['standard', 'enhance', 'night', 'superres', 'raw'],
+    captureModes: ['standard', 'enhance', 'spotlight', 'night', 'superres', 'raw'],
     focusPeaking: true,
     captureSize: { width: 4032, height: 3024 },
     tier: 'standard',

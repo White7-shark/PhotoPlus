@@ -7,7 +7,8 @@ export interface PillarInfo {
   icon: IconName;
   gradient: string;
   premium: boolean;
-  phase: string;
+  /** Shown to people: never internal milestones. */
+  availability: 'Available now' | 'Coming soon';
 }
 
 /** The four pillars from the product spec, as presented on the Studio home. */
@@ -19,7 +20,7 @@ export const PILLARS: PillarInfo[] = [
     icon: 'aperture',
     gradient: 'linear-gradient(140deg, rgba(255,122,69,0.55) 0%, rgba(255,122,69,0.0) 70%)',
     premium: false,
-    phase: 'Phase 2',
+    availability: 'Available now',
   },
   {
     id: 'assistant',
@@ -28,7 +29,7 @@ export const PILLARS: PillarInfo[] = [
     icon: 'sparkles',
     gradient: 'linear-gradient(140deg, rgba(192,77,255,0.55) 0%, rgba(192,77,255,0.0) 70%)',
     premium: true,
-    phase: 'Phase 3',
+    availability: 'Coming soon',
   },
   {
     id: 'replication',
@@ -37,7 +38,7 @@ export const PILLARS: PillarInfo[] = [
     icon: 'layers',
     gradient: 'linear-gradient(140deg, rgba(91,91,247,0.6) 0%, rgba(91,91,247,0.0) 70%)',
     premium: true,
-    phase: 'Phase 4',
+    availability: 'Coming soon',
   },
   {
     id: 'editing',
@@ -46,7 +47,7 @@ export const PILLARS: PillarInfo[] = [
     icon: 'sliders',
     gradient: 'linear-gradient(140deg, rgba(45,212,191,0.5) 0%, rgba(45,212,191,0.0) 70%)',
     premium: false,
-    phase: 'Phase 5',
+    availability: 'Coming soon',
   },
 ];
 

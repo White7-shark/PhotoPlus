@@ -102,8 +102,9 @@ describe('camera screen', () => {
     await fireEvent.press(screen.getByLabelText('Flash off. Double tap to change'));
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(1));
+    // The camera opens in Clarity, the free single-photo enhancement.
     expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({
-      mode: 'standard',
+      mode: 'enhance',
       flash: 'auto',
       mirrorFront: true,
     });
@@ -112,7 +113,7 @@ describe('camera screen', () => {
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(2));
     expect(mockCamera.capturePhoto.mock.calls[1][0]).toMatchObject({ mode: 'night' });
-    await screen.findByText('Enhanced photo saved');
+    await screen.findByText('Moonlight photo saved');
   });
 
   it('shows the Pro panel and applies manual controls only in Pro', async () => {
@@ -131,7 +132,9 @@ describe('camera screen', () => {
     });
     await renderReadyCamera();
     await fireEvent.press(screen.getByTestId('shutter'));
-    expect(await screen.findByText('Capture failed: Camera is not ready')).toBeTruthy();
+    // People see a plain-language message, never the native one.
+    expect(await screen.findByText('The camera is still getting ready. Try again in a moment.')).toBeTruthy();
+    expect(screen.queryByText(/Camera is not ready/)).toBeNull();
   });
 });
 
@@ -237,5 +240,66 @@ describe('camera session state', () => {
     await waitFor(() =>
       expect(mockCamera.configure).toHaveBeenLastCalledWith({ aspectRatio: '16:9', resolution: 'max', raw: false }),
     );
+  });
+});
+
+describe('spotlight and vibe match', () => {
+  it('taps choose what stands out and travel with the capture', async () => {
+    await renderReadyCamera();
+    await fireEvent.press(screen.getByTestId('mode-spotlight'));
+    expect(screen.getByTestId('spotlight-panel')).toBeTruthy();
+    const host = screen.getByTestId('camera-preview');
+    await act(async () => {
+      host.props.onFocusTap({ nativeEvent: { x: 0.3, y: 0.4 } });
+    });
+    await act(async () => {
+      host.props.onFocusTap({ nativeEvent: { x: 0.7, y: 0.6 } });
+    });
+    // A second tap on a marker removes it.
+    await act(async () => {
+      host.props.onFocusTap({ nativeEvent: { x: 0.71, y: 0.61 } });
+    });
+    expect(screen.getByText('1 chosen · tap again to remove')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Flawless' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Strong' }));
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalled());
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({
+      mode: 'spotlight',
+      points: [0.3, 0.4],
+      blur: 0.9,
+      retouch: 1,
+    });
+    expect(await screen.findByText('Spotlight photo saved')).toBeTruthy();
+  });
+
+  it('a Vibe Match look shapes the camera and every shot', async () => {
+    const warmBright = [
+      0.08, 0.15, 0.3, 0.45, 0.62, 0.75, 0.85, 0.93, 0.98, -0.05, -0.04, -0.06, 0.05, 0.08, 0.06, 0.05, 0.06, 0.8, 0.01,
+      0.6,
+    ];
+    useAppStore.setState(st => ({
+      settings: { ...st.settings, vibeLook: { referencePath: '/looks/ref.jpg', look: warmBright, strength: 0.8 } },
+    }));
+    await renderReadyCamera();
+    // Warm reference -> warmer white balance (Kelvin on this camera); brighter -> positive exposure.
+    await waitFor(() =>
+      expect(mockCamera.setManual).toHaveBeenCalledWith(expect.objectContaining({ whiteBalance: 'kelvin' })),
+    );
+    const wb = mockCamera.setManual.mock.calls.at(-1)?.[0] as { kelvin: number };
+    expect(wb.kelvin).toBeGreaterThan(5500);
+    await waitFor(() => expect(mockCamera.setExposureCompensation).toHaveBeenCalled());
+    expect(mockCamera.setExposureCompensation.mock.calls.at(-1)?.[0]).toBeGreaterThan(0);
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalled());
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({ look: warmBright, lookStrength: 0.8 });
+    expect(await screen.findByText('Vibe Match · Clarity photo saved')).toBeTruthy();
+    expect(screen.getByLabelText('Vibe Match on. Change style')).toBeTruthy();
+  });
+
+  it('the Vibe Match chip explains the feature when no look is set', async () => {
+    await renderReadyCamera();
+    await fireEvent.press(screen.getByTestId('vibe-chip'));
+    expect(await screen.findByRole('button', { name: 'Choose a style photo' })).toBeTruthy();
   });
 });

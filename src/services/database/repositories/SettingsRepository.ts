@@ -1,3 +1,4 @@
+import { isVibeLook, type VibeLook } from '../../looks/types';
 import type { SqlExecutor } from '../SqlExecutor';
 
 export type ThemePreference = 'dark' | 'light' | 'system';
@@ -18,6 +19,8 @@ export interface AppSettings {
   cameraResolution: 'max' | '12mp' | '8mp' | '5mp' | '2mp';
   /** Save selfies mirrored, as the preview shows them. */
   mirrorFrontCamera: boolean;
+  /** Vibe Match look in use (premium), or null. */
+  vibeLook: VibeLook | null;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -32,6 +35,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraAspectRatio: '4:3',
   cameraResolution: 'max',
   mirrorFrontCamera: true,
+  vibeLook: null,
 };
 
 type Validators = { [K in keyof AppSettings]: (v: unknown) => v is AppSettings[K] };
@@ -54,6 +58,7 @@ const VALIDATORS: Validators = {
   cameraAspectRatio: oneOf('4:3', '16:9', '1:1'),
   cameraResolution: oneOf('max', '12mp', '8mp', '5mp', '2mp'),
   mirrorFrontCamera: isBool,
+  vibeLook: (v): v is VibeLook | null => v === null || isVibeLook(v),
 };
 
 export function isValidSetting<K extends keyof AppSettings>(key: K, value: unknown): value is AppSettings[K] {

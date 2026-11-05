@@ -10,6 +10,7 @@ import com.facebook.react.module.annotations.ReactModule
 import com.photoplus.device.DeviceInfo
 import com.photoplus.device.MemoryPressureMonitor
 import com.photoplus.specs.NativePhotoPlusEngineSpec
+import com.photoplus.studio.PortraitParams
 import com.photoplus.storage.AppPaths
 import com.photoplus.util.emitSafely
 import com.photoplus.util.toWritableMap
@@ -30,6 +31,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
     DeviceInfo.isLowRamDevice(reactContext),
   )
   private val engineAvailable = NativeEngine.ensureLoaded()
+  private val portraitProcessor by lazy { com.photoplus.studio.PortraitProcessor() }
   private val jobs = JobManager(createExecutor(budget.workers), NativeCancelTokens)
   private val ioExecutor = ThreadPoolExecutor(1, 1, 30, TimeUnit.SECONDS, LinkedBlockingQueue(), namedThreads("pp-io")).apply {
     allowCoreThreadTimeOut(true)
@@ -193,6 +195,122 @@ class EngineModule(reactContext: ReactApplicationContext) :
         decoded.bitmap.recycle()
       }
     }
+  }
+
+  /**
+   * Spotlight on a saved photo: optional enhance, then the chosen subject
+   * stands out (taps are in the photo as displayed), with natural skin
+   * retouching. Masks come from on-device models; see PortraitProcessor.
+   */
+  override fun portrait(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val io = resolveIo(map, promise) ?: return
+    val params = PortraitParams.fromMap(map)
+    val points = PortraitParams.points(map["points"])
+    val enhanceFirst = map["enhance"] as? Boolean ?: true
+    val look = lookOf(map["look"])
+    val lookStrength = ((map["lookStrength"] as? Number)?.toFloat() ?: 0.8f).coerceIn(0f, 1f)
+    val maxDim = minOf((map["maxDimension"] as? Number)?.toInt() ?: budget.maxDecodeDimension, budget.maxDecodeDimension, 4096)
+    jobs.submit(jobId, jobListener(promise)) { token ->
+      val started = SystemClock.elapsedRealtime()
+      val decoded = ImageCodec.decode(io.first, maxDim)
+      var enhanced: Bitmap? = null
+      try {
+        var work = decoded.bitmap
+        if (enhanceFirst) {
+          enhanced = createBitmap(work.width, work.height, Bitmap.Config.ARGB_8888).apply {
+            isPremultiplied = false
+            setHasAlpha(false)
+          }
+          NativeEngine.nativeEnhance(arrayOf(work), 1, floatArrayOf(1f, 1f, 0.35f, 0.25f), true, enhanced, token, FloatArray(7))
+          work = enhanced
+        } else if (!work.isMutable) {
+          work = work.copy(Bitmap.Config.ARGB_8888, true)
+          enhanced = work
+        }
+        // Decoding applied EXIF orientation, so the bitmap is already upright.
+        val r = portraitProcessor.apply(work, 0, points, params, token)
+        look?.let { NativeEngine.nativeStyleApply(work, it, lookStrength, token) }
+        ImageCodec.encode(work, io.second, OutputFormat.JPEG, 95)
+        mapOf(
+          "outputPath" to io.second.absolutePath,
+          "width" to work.width,
+          "height" to work.height,
+          "sizeBytes" to io.second.length().toDouble(),
+          "portrait" to mapOf("people" to r.people, "spots" to r.spots, "skin" to r.skinCoverage.toDouble(), "subject" to r.subjectCoverage.toDouble()),
+          "timings" to mapOf("totalMs" to (SystemClock.elapsedRealtime() - started).toDouble()),
+        )
+      } finally {
+        enhanced?.recycle()
+        decoded.bitmap.recycle()
+      }
+    }
+  }
+
+  /** Applies a look ("Vibe Match") to a saved photo. */
+  override fun applyLook(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val io = resolveIo(map, promise) ?: return
+    val look = lookOf(map["look"])
+    if (look == null) {
+      promise.reject(EngineException.INVALID_ARGUMENT, "Choose a look first")
+      return
+    }
+    val strength = ((map["strength"] as? Number)?.toFloat() ?: 0.8f).coerceIn(0f, 1f)
+    jobs.submit(jobId, jobListener(promise)) { token ->
+      val decoded = ImageCodec.decode(io.first, minOf(budget.maxDecodeDimension, 6144))
+      val work = if (decoded.bitmap.isMutable) decoded.bitmap else decoded.bitmap.copy(Bitmap.Config.ARGB_8888, true)
+      try {
+        NativeEngine.nativeStyleApply(work, look, strength, token)
+        ImageCodec.encode(work, io.second, OutputFormat.JPEG, 95)
+        mapOf("outputPath" to io.second.absolutePath, "width" to work.width, "height" to work.height, "sizeBytes" to io.second.length().toDouble())
+      } finally {
+        if (work !== decoded.bitmap) work.recycle()
+        decoded.bitmap.recycle()
+      }
+    }
+  }
+
+  /** Measures a reference photo's look, plus camera hints (brightness, warmth). */
+  override fun analyzeLook(path: String, promise: Promise) {
+    if (!requireEngine(promise)) return
+    ioExecutor.execute {
+      try {
+        val decoded = ImageCodec.decode(paths.resolve(path), 1024)
+        try {
+          val look = NativeEngine.nativeStyleAnalyze(decoded.bitmap)
+          promise.resolve(mapOf("look" to look.map { it.toDouble() }).toWritableMap())
+        } finally {
+          decoded.bitmap.recycle()
+        }
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+      } catch (e: Exception) {
+        promise.reject(EngineException.INTERNAL, e.message, e)
+      }
+    }
+  }
+
+  private fun resolveIo(map: Map<String, Any?>, promise: Promise): Pair<File, File>? = try {
+    paths.resolve(map["inputPath"] as? String ?: "") to paths.resolve(map["outputPath"] as? String ?: "")
+  } catch (e: EngineException) {
+    promise.reject(e.code, e.message, e)
+    null
+  }
+
+  private fun lookOf(raw: Any?): FloatArray? =
+    (raw as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
+      ?.takeIf { it.size == NativeEngine.STYLE_FLOATS && it.all { v -> v.isFinite() } }
+      ?.toFloatArray()
+
+  private fun jobListener(promise: Promise) = object : JobListener<Map<String, Any?>> {
+    override fun onStateChanged(jobId: String, state: JobState) {
+      reactApplicationContext.emitSafely(EVENT_JOB_STATE, mapOf("jobId" to jobId, "state" to state.name.lowercase()))
+    }
+    override fun onSuccess(jobId: String, result: Map<String, Any?>) = promise.resolve(result.toWritableMap())
+    override fun onFailure(jobId: String, error: EngineException) = promise.reject(error.code, error.message, error)
   }
 
   /** Measures noise, blur and exposure of a photo (drives the "Enhance suggested" hint). */

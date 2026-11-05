@@ -28,6 +28,7 @@ export const RESOLUTION_IDS = ['max', '12mp', '8mp', '5mp', '2mp'] as const sati
 export const CAPTURE_MODES = [
   'standard',
   'enhance',
+  'spotlight',
   'night',
   'superres',
   'raw',

@@ -52,24 +52,37 @@ export function formatMegapixels(width: number, height: number): string {
 type Metadata = Record<string, unknown>;
 const pathOf = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
+export type EditKind = 'enhance' | 'superres' | 'spotlight' | 'look';
+
 /**
- * Metadata for an enhanced copy kept as a new library photo. Deliberately
+ * Metadata for an edited copy kept as a new library photo. Deliberately
  * fresh: inheriting the source's companions (its RAW file or its owned
  * "_original") would make deleting the copy delete the source's files.
  */
 export function enhancedCopyMetadata(
   source: { id: string; path: string; metadata: Metadata },
-  upscale: 1 | 2,
+  kind: EditKind | 1 | 2,
   report: unknown,
 ): Metadata {
+  const mode = kind === 1 ? 'enhance' : kind === 2 ? 'superres' : kind;
   return {
-    captureMode: upscale === 2 ? 'superres' : 'enhance',
+    captureMode: mode,
     lens: source.metadata.lens ?? null,
     sourceImageId: source.id,
     originalPath: source.path,
     originalOwned: false,
     report,
   };
+}
+
+/** Sibling path for an edited copy (spotlight / look variants). */
+export function editedPathFor(path: string, kind: EditKind, attempt = 0): string {
+  if (kind === 'enhance') return enhancedPathFor(path, 1, attempt);
+  if (kind === 'superres') return enhancedPathFor(path, 2, attempt);
+  const dot = path.lastIndexOf('.');
+  const slash = path.lastIndexOf('/');
+  const stem = dot > slash ? path.slice(0, dot) : path;
+  return `${stem}_${kind}${attempt > 0 ? `_${attempt}` : ''}.jpg`;
 }
 
 /** Every file to remove with a photo: itself, its DNG, and an original only it owns. */

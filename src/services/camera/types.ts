@@ -9,7 +9,7 @@ export type LensFacing = 'back' | 'front';
 export type FlashMode = 'off' | 'on' | 'auto';
 export type AspectRatio = '4:3' | '16:9' | '1:1';
 export type ResolutionId = 'max' | '12mp' | '8mp' | '5mp' | '2mp';
-export type CaptureModeId = 'standard' | 'raw' | 'enhance' | 'night' | 'superres';
+export type CaptureModeId = 'standard' | 'raw' | 'enhance' | 'night' | 'superres' | 'spotlight';
 export type WhiteBalanceId = 'auto' | 'incandescent' | 'fluorescent' | 'daylight' | 'cloudy' | 'shade' | 'kelvin';
 export type DeviceClass = 'entry' | 'standard' | 'performance';
 
@@ -75,6 +75,14 @@ export interface SessionConfig {
   raw?: boolean;
 }
 
+/** Spotlight settings, 0..1. */
+export interface SpotlightSettings {
+  blur: number;
+  retouch: number;
+  brighten: number;
+  pop: number;
+}
+
 export interface CaptureOptions {
   mode: CaptureModeId;
   flash: FlashMode;
@@ -84,6 +92,22 @@ export interface CaptureOptions {
   detail?: number;
   vibrance?: number;
   autoTone?: boolean;
+  /** Spotlight: what should stand out, as taps on the preview (x0, y0, x1, y1, … in 0..1). */
+  points?: number[];
+  blur?: number;
+  retouch?: number;
+  brighten?: number;
+  pop?: number;
+  /** Vibe Match look numbers and how strongly to apply them. */
+  look?: number[];
+  lookStrength?: number;
+}
+
+export interface SpotlightReport {
+  people: number;
+  spots: number;
+  skin: number;
+  subject: number;
 }
 
 export interface EnhanceReport {
@@ -109,7 +133,9 @@ export interface CaptureResult {
   originalPath?: string;
   originalWidth?: number;
   originalHeight?: number;
-  report?: EnhanceReport;
+  report?: EnhanceReport | null;
+  portrait?: SpotlightReport | null;
+  look?: boolean;
   timings?: { captureMs?: number; processMs?: number; totalMs: number };
 }
 
@@ -126,6 +152,8 @@ export const CameraEvents = {
   shutter: 'PhotoPlusCaptureShutter',
   progress: 'PhotoPlusCaptureProgress',
 } as const;
+
+export type CaptureStage = 'capturing' | 'processing' | 'styling' | 'saving';
 
 export type CameraStateName = 'pendingOpen' | 'opening' | 'open' | 'closing' | 'closed' | 'recovering';
 
@@ -144,7 +172,7 @@ export interface CameraEventPayloads {
   };
   [CameraEvents.peaking]: { sharpness: number };
   [CameraEvents.shutter]: { captureId: string };
-  [CameraEvents.progress]: { captureId: string; stage: 'capturing' | 'processing' | 'saving'; progress: number };
+  [CameraEvents.progress]: { captureId: string; stage: CaptureStage; progress: number };
 }
 
 export type CameraEventName = keyof CameraEventPayloads;

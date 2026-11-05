@@ -16,6 +16,10 @@ class AppPaths(context: Context) {
   val projects = File(files, "projects")
   val captures = File(files, "captures")
   val exports = File(files, "exports")
+  /** Photos brought in from the gallery. */
+  val imports = File(files, "imports")
+  /** Reference photos for looks ("Vibe Match"). */
+  val looks = File(files, "looks")
   val packs = File(files, "packs")
   val models = File(files, "models")
   val databases: File = context.getDatabasePath("x").parentFile ?: File(files.parentFile, "databases")
@@ -27,6 +31,8 @@ class AppPaths(context: Context) {
     "projects" to projects,
     "captures" to captures,
     "exports" to exports,
+    "imports" to imports,
+    "looks" to looks,
     "packs" to packs,
     "models" to models,
     "processingCache" to processingCache,

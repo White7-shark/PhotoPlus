@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, type AppSettings } from '../services/database/reposit
 import type { MemoryPressure } from '../services/lifecycle/LifecycleCoordinator';
 import { createLogger } from '../services/logging/logger';
 import type { EngineInfo } from '../services/processing/types';
+import { FREE_STATE, type EntitlementState } from '../services/entitlements/EntitlementService';
 import { errorMessage } from '../native';
 
 const log = createLogger('store');
@@ -32,6 +33,9 @@ export interface AppStore {
 
   // ---- settings
   settings: AppSettings;
+
+  // ---- plan (Play Billing arrives later; everyone is on the free plan now)
+  entitlements: EntitlementState;
 
   // ---- projects
   projects: Project[];
@@ -63,6 +67,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   engine: null,
 
   settings: DEFAULT_SETTINGS,
+
+  entitlements: FREE_STATE,
 
   projects: [],
   projectsStatus: 'idle',

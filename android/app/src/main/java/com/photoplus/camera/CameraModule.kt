@@ -71,7 +71,7 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
         return@post
       }
       CameraController.setFlash(request.flash)
-      processor.capture(capture, request, CameraController.activeLensFacing == "front", object : CaptureProcessor.Listener {
+      processor.capture(capture, request, CameraController.activeLensFacing == "front", CameraController.deviceTurnDegrees(), object : CaptureProcessor.Listener {
         override fun onShutter(captureId: String) = emit(EVENT_SHUTTER, mapOf("captureId" to captureId))
         override fun onProgress(captureId: String, stage: String, progress: Double) =
           emit(EVENT_PROGRESS, mapOf("captureId" to captureId, "stage" to stage, "progress" to progress))

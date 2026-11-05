@@ -35,7 +35,7 @@ object CapturePolicy {
     }
     return when (mode) {
       CaptureMode.STANDARD, CaptureMode.RAW -> ModePlan(1, 0, 1)
-      CaptureMode.ENHANCE -> ModePlan(1, pick(2048, 3072, 4096), 1)
+      CaptureMode.ENHANCE, CaptureMode.PORTRAIT -> ModePlan(1, pick(2048, 3072, 4096), 1)
       CaptureMode.NIGHT -> ModePlan(if (tier == DeviceTier.ENTRY) 4 else 6, pick(1600, 2400, 3200), 1)
       CaptureMode.SUPER_RES -> ModePlan(if (tier == DeviceTier.ENTRY) 6 else 8, pick(960, 1280, 1600), 2)
     }

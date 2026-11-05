@@ -20,6 +20,9 @@ const f = (id: string, title: string, pillar: Pillar, plan: Plan): FeatureDefini
 export const FEATURES = {
   // Free plan
   cameraCapture: f('camera.capture', 'Camera capture & basic settings', 'camera', 'free'),
+  clarity: f('camera.clarity', 'Clarity: sharper, cleaner single photos', 'camera', 'free'),
+  spotlight: f('camera.spotlight', 'Spotlight portraits & Glow skin retouch', 'camera', 'free'),
+  shareTo: f('library.share', 'Share to other apps', 'editing', 'free'),
   cropRotate: f('editing.cropRotate', 'Crop and rotate', 'editing', 'free'),
   basicAdjustments: f('editing.basicAdjustments', 'Exposure, brightness & contrast', 'editing', 'free'),
   basicFilters: f('editing.basicFilters', 'Basic filters', 'editing', 'free'),
@@ -33,6 +36,8 @@ export const FEATURES = {
 
   // Premium plan
   advancedCamera: f('camera.advanced', 'Advanced camera & manual controls', 'camera', 'premium'),
+  multiShot: f('camera.multiShot', 'Moonlight & Ultra Detail multi-shot modes', 'camera', 'premium'),
+  vibeMatch: f('camera.vibeMatch', 'Vibe Match: shoot in the style of any photo', 'camera', 'premium'),
   advancedEditing: f('editing.advanced', 'Advanced editing tools', 'editing', 'premium'),
   backgroundReplace: f('replication.background', 'Advanced background removal & replacement', 'replication', 'premium'),
   poseGuidance: f('assistant.pose', 'Pose guidance & matching', 'assistant', 'premium'),

@@ -9,6 +9,7 @@
 #include <utility>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -18,6 +19,7 @@
 #include "photoplus/image.hpp"
 #include "photoplus/memory.hpp"
 #include "photoplus/pipeline.hpp"
+#include "photoplus/portrait.hpp"
 #include "photoplus/pp_engine.h"
 #include "photoplus/profiler.hpp"
 
@@ -328,6 +330,109 @@ pp_status pp_focus_peaking(const uint8_t* luma, int32_t width, int32_t height, i
       const double rms = centreCount ? std::sqrt(centreEnergy / static_cast<double>(centreCount)) : 0.0;
       *sharpness = static_cast<float>(std::clamp(rms / 300.0, 0.0, 1.0));
     }
+    return succeed();
+  });
+}
+
+void pp_portrait_default_params(pp_portrait_params* out) {
+  if (out == nullptr) return;
+  const photoplus::portrait::Params d;
+  out->blur = d.blur;
+  out->retouch = d.retouch;
+  out->brighten = d.brighten;
+  out->pop = d.pop;
+}
+
+pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* faces, const pp_image* protect,
+                      const pp_portrait_params* params, const pp_cancel_token* token, pp_portrait_report* report) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || subject == nullptr || params == nullptr) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "image, subject and params are required");
+    }
+    photoplus::portrait::Params p;
+    p.blur = params->blur;
+    p.retouch = params->retouch;
+    p.brighten = params->brighten;
+    p.pop = params->pop;
+    if (!std::isfinite(p.blur) || !std::isfinite(p.retouch) || !std::isfinite(p.brighten) || !std::isfinite(p.pop)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Non-finite portrait parameter");
+    }
+    photoplus::portrait::Report r;
+    photoplus::Error e = photoplus::portrait::apply(image->buffer, subject->buffer, faces ? &faces->buffer : nullptr,
+                                                    protect ? &protect->buffer : nullptr, p,
+                                                    token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (report != nullptr) {
+      report->subject_coverage = r.subjectCoverage;
+      report->skin_coverage = r.skinCoverage;
+      report->spots_removed = r.spotsRemoved;
+      report->blur_radius = r.blurRadius;
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_subject_mask(const pp_image* image, const float* points, size_t count, const pp_cancel_token* token,
+                          pp_image** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    if (image == nullptr || (count > 0 && points == nullptr) || count > 64) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Invalid image or points");
+    }
+    std::vector<std::array<float, 2>> pts;
+    for (size_t i = 0; i < count; ++i) {
+      const float x = points[2 * i], y = points[2 * i + 1];
+      if (!std::isfinite(x) || !std::isfinite(y)) return fail(PP_ERROR_INVALID_ARGUMENT, "Non-finite point");
+      pts.push_back({std::clamp(x, 0.0f, 1.0f), std::clamp(y, 0.0f, 1.0f)});
+    }
+    auto mask = photoplus::portrait::subjectFromPoints(image->buffer, pts, token ? &token->token : nullptr);
+    if (!mask) return fail(mask.error());
+    *out = new pp_image{std::move(mask).value()};
+    return succeed();
+  });
+}
+
+pp_status pp_style_analyze(const pp_image* image, pp_style* out) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image and out are required");
+    auto s = photoplus::portrait::analyzeStyle(image->buffer, nullptr);
+    if (!s) return fail(s.error());
+    for (int i = 0; i < PP_STYLE_QUANTILES; ++i) out->luma[i] = s->luma[static_cast<size_t>(i)];
+    for (int i = 0; i < 3; ++i) {
+      out->zone_cb[i] = s->zoneCb[static_cast<size_t>(i)];
+      out->zone_cr[i] = s->zoneCr[static_cast<size_t>(i)];
+    }
+    out->chroma_std[0] = s->chromaStd[0];
+    out->chroma_std[1] = s->chromaStd[1];
+    out->vignette = s->vignette;
+    out->grain = s->grain;
+    out->mean_luma = s->meanLuma;
+    return succeed();
+  });
+}
+
+pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || target == nullptr || !std::isfinite(strength)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "image and target are required");
+    }
+    photoplus::portrait::Style s;
+    for (int i = 0; i < PP_STYLE_QUANTILES; ++i) {
+      const float v = target->luma[i];
+      if (!std::isfinite(v) || v < 0.0f || v > 1.0f) return fail(PP_ERROR_INVALID_ARGUMENT, "Invalid look");
+      s.luma[static_cast<size_t>(i)] = v;
+    }
+    for (int i = 0; i < 3; ++i) {
+      s.zoneCb[static_cast<size_t>(i)] = std::clamp(target->zone_cb[i], -0.5f, 0.5f);
+      s.zoneCr[static_cast<size_t>(i)] = std::clamp(target->zone_cr[i], -0.5f, 0.5f);
+    }
+    s.chromaStd = {std::clamp(target->chroma_std[0], 0.0f, 0.5f), std::clamp(target->chroma_std[1], 0.0f, 0.5f)};
+    s.vignette = std::isfinite(target->vignette) ? std::clamp(target->vignette, 0.05f, 2.0f) : 1.0f;
+    s.grain = std::isfinite(target->grain) ? std::clamp(target->grain, 0.0f, 0.2f) : 0.0f;
+    s.meanLuma = target->mean_luma;
+    photoplus::Error e = photoplus::portrait::applyStyle(image->buffer, s, strength, token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
     return succeed();
   });
 }

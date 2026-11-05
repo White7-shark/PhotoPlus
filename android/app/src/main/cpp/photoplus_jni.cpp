@@ -42,13 +42,15 @@ void throwStatus(JNIEnv* env, pp_status status) {
 // Locks a Bitmap's pixels for the lifetime of the object.
 class BitmapLock {
  public:
-  BitmapLock(JNIEnv* env, jobject bitmap) : env_(env), bitmap_(bitmap) {
+  // Masks may be ALPHA_8 bitmaps (allowMask), wrapped as single-channel images.
+  BitmapLock(JNIEnv* env, jobject bitmap, bool allowMask = false) : env_(env), bitmap_(bitmap) {
     if (AndroidBitmap_getInfo(env, bitmap, &info_) != ANDROID_BITMAP_RESULT_SUCCESS) {
       error_ = "Unable to read bitmap info";
       return;
     }
-    if (info_.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
-      error_ = "Bitmap must be ARGB_8888";
+    const bool mask = allowMask && info_.format == ANDROID_BITMAP_FORMAT_A_8;
+    if (info_.format != ANDROID_BITMAP_FORMAT_RGBA_8888 && !mask) {
+      error_ = allowMask ? "Mask must be ALPHA_8 or ARGB_8888" : "Bitmap must be ARGB_8888";
       return;
     }
     if (AndroidBitmap_lockPixels(env, bitmap, &pixels_) != ANDROID_BITMAP_RESULT_SUCCESS) {
@@ -66,6 +68,13 @@ class BitmapLock {
   const std::string& error() const { return error_; }
   void* pixels() const { return pixels_; }
   const AndroidBitmapInfo& info() const { return info_; }
+  int32_t ppFormat() const { return info_.format == ANDROID_BITMAP_FORMAT_A_8 ? PP_FORMAT_GRAY8 : PP_FORMAT_RGBA8; }
+
+  // Wraps the locked pixels (no copy). Caller destroys the wrapper.
+  pp_status wrap(pp_image** out) const {
+    return pp_image_wrap(pixels_, static_cast<int32_t>(info_.width), static_cast<int32_t>(info_.height),
+                         static_cast<int32_t>(info_.stride), ppFormat(), out);
+  }
 
  private:
   JNIEnv* env_;
@@ -356,6 +365,148 @@ JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeFocusPeaki
                                         static_cast<int32_t>(lock.info().height), &sharpness);
   if (st != PP_OK) throwStatus(env, st);
   return sharpness;
+}
+
+// ---- Portrait ("Spotlight") and look ("Vibe Match") -----------------------
+
+namespace {
+// Owns a pp_image wrapper of a locked bitmap (nullptr bitmap = no image).
+struct WrappedBitmap {
+  std::unique_ptr<BitmapLock> lock;
+  pp_image* image = nullptr;
+  ~WrappedBitmap() { pp_image_destroy(image); }
+  // Returns false (with a Java exception pending) on failure.
+  bool open(JNIEnv* env, jobject bitmap, bool mask) {
+    if (bitmap == nullptr) return true;
+    lock = std::make_unique<BitmapLock>(env, bitmap, mask);
+    if (!lock->ok()) {
+      throwEngineException(env, "UNSUPPORTED_FORMAT", lock->error());
+      return false;
+    }
+    const pp_status st = lock->wrap(&image);
+    if (st != PP_OK) {
+      throwStatus(env, st);
+      return false;
+    }
+    return true;
+  }
+};
+}  // namespace
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePortrait(
+    JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject faces, jobject protect, jfloatArray params,
+    jlong token, jfloatArray reportOut) {
+  if (env->GetArrayLength(params) < 4 || env->GetArrayLength(reportOut) < 4 || subject == nullptr) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad portrait arguments");
+    return;
+  }
+  jfloat p[4];
+  env->GetFloatArrayRegion(params, 0, 4, p);
+  WrappedBitmap img, subj, fac, prot;
+  if (!img.open(env, bitmap, false) || !subj.open(env, subject, true) || !fac.open(env, faces, true) ||
+      !prot.open(env, protect, true)) {
+    return;
+  }
+  const pp_portrait_params pp{p[0], p[1], p[2], p[3]};
+  pp_portrait_report report{};
+  const pp_status st = pp_portrait(img.image, subj.image, fac.image, prot.image, &pp,
+                                   reinterpret_cast<const pp_cancel_token*>(token), &report);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat values[4] = {report.subject_coverage, report.skin_coverage, static_cast<jfloat>(report.spots_removed),
+                            report.blur_radius};
+  env->SetFloatArrayRegion(reportOut, 0, 4, values);
+}
+
+// Tap-seeded cut-out. Returns the mask bytes; dims are written to sizeOut.
+JNIEXPORT jbyteArray JNICALL Java_com_photoplus_engine_NativeEngine_nativeSubjectMask(JNIEnv* env, jobject,
+                                                                                     jobject bitmap,
+                                                                                     jfloatArray points,
+                                                                                     jintArray sizeOut) {
+  if (env->GetArrayLength(sizeOut) < 2) {
+    throwEngineException(env, "INVALID_ARGUMENT", "sizeOut needs 2 slots");
+    return nullptr;
+  }
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return nullptr;
+  const jsize n = points ? env->GetArrayLength(points) : 0;
+  std::vector<float> pts(static_cast<size_t>(n));
+  if (n > 0) env->GetFloatArrayRegion(points, 0, n, pts.data());
+  pp_image* mask = nullptr;
+  const pp_status st = pp_subject_mask(img.image, pts.data(), static_cast<size_t>(n / 2), nullptr, &mask);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return nullptr;
+  }
+  pp_image_info info{};
+  pp_image_get_info(mask, &info);
+  jbyteArray out = env->NewByteArray(info.width * info.height);
+  if (out != nullptr) {
+    const auto* px = static_cast<const jbyte*>(pp_image_pixels(mask));
+    for (int32_t y = 0; y < info.height; ++y) {
+      env->SetByteArrayRegion(out, y * info.width, info.width, px + static_cast<size_t>(y) * info.stride);
+    }
+    const jint dims[2] = {info.width, info.height};
+    env->SetIntArrayRegion(sizeOut, 0, 2, dims);
+  }
+  pp_image_destroy(mask);
+  return out;
+}
+
+namespace {
+constexpr jsize kStyleFloats = PP_STYLE_QUANTILES + 3 + 3 + 2 + 3;
+}
+
+JNIEXPORT jfloatArray JNICALL Java_com_photoplus_engine_NativeEngine_nativeStyleAnalyze(JNIEnv* env, jobject,
+                                                                                       jobject bitmap) {
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return nullptr;
+  pp_style s{};
+  const pp_status st = pp_style_analyze(img.image, &s);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return nullptr;
+  }
+  jfloat v[kStyleFloats];
+  jsize k = 0;
+  for (float q : s.luma) v[k++] = q;
+  for (float c : s.zone_cb) v[k++] = c;
+  for (float c : s.zone_cr) v[k++] = c;
+  v[k++] = s.chroma_std[0];
+  v[k++] = s.chroma_std[1];
+  v[k++] = s.vignette;
+  v[k++] = s.grain;
+  v[k++] = s.mean_luma;
+  jfloatArray out = env->NewFloatArray(kStyleFloats);
+  if (out != nullptr) env->SetFloatArrayRegion(out, 0, kStyleFloats, v);
+  return out;
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStyleApply(JNIEnv* env, jobject, jobject bitmap,
+                                                                             jfloatArray style, jfloat strength,
+                                                                             jlong token) {
+  if (env->GetArrayLength(style) != kStyleFloats) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad look");
+    return;
+  }
+  jfloat v[kStyleFloats];
+  env->GetFloatArrayRegion(style, 0, kStyleFloats, v);
+  pp_style s{};
+  jsize k = 0;
+  for (float& q : s.luma) q = v[k++];
+  for (float& c : s.zone_cb) c = v[k++];
+  for (float& c : s.zone_cr) c = v[k++];
+  s.chroma_std[0] = v[k++];
+  s.chroma_std[1] = v[k++];
+  s.vignette = v[k++];
+  s.grain = v[k++];
+  s.mean_luma = v[k++];
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  const pp_status st = pp_style_apply(img.image, &s, strength, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
 }
 
 }  // extern "C"

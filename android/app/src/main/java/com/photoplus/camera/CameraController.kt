@@ -385,6 +385,12 @@ object CameraController {
     camera?.cameraControl?.cancelFocusAndMetering()
   }
 
+  /** How far the phone is turned clockwise from the (portrait-locked) display, in degrees. */
+  fun deviceTurnDegrees(): Int {
+    val display = previewView?.display?.rotation ?: Surface.ROTATION_0
+    return (OrientationMath.uiDegrees(display) - OrientationMath.uiDegrees(targetRotation) + 360) % 360
+  }
+
   fun currentZoomRatio(): Float = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
 
   fun setZoomRatio(ratio: Float, onResult: (Float) -> Unit) {

@@ -88,6 +88,36 @@ export interface EnhanceResult {
   timings: { totalMs: number };
 }
 
+export interface SpotlightRequest {
+  inputPath: string;
+  outputPath: string;
+  /** What should stand out, as taps on the photo as displayed (x0, y0, … in 0..1). */
+  points?: number[];
+  blur?: number;
+  retouch?: number;
+  brighten?: number;
+  pop?: number;
+  /** Clarity first (default true). */
+  enhance?: boolean;
+  look?: number[];
+  lookStrength?: number;
+}
+
+export interface SpotlightResult {
+  outputPath: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  portrait: { people: number; spots: number; skin: number; subject: number };
+}
+
+export interface LookResult {
+  outputPath: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+}
+
 export interface QualityReport {
   noise: number;
   /** Estimated blur in pixels at the analysis size (1600 px longest edge). */

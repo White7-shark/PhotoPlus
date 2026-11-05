@@ -1,6 +1,17 @@
 import type { CameraSpec } from '../src/native';
 import { CameraError, CameraService } from '../src/services/camera/CameraService';
 import {
+  DEFAULT_MODE,
+  describeLook,
+  flattenPoints,
+  isLook,
+  lookCameraSettings,
+  MAX_SPOTLIGHT_POINTS,
+  modeLabel,
+  MODES,
+  spotlightSettings,
+  summariseLook,
+  toggleSpotlightPoint,
   activeZoomPreset,
   availableModes,
   availablePresets,
@@ -22,8 +33,15 @@ import {
 } from '../src/services/camera/model';
 import { parseCameraCapabilities } from '../src/services/camera/parse';
 import { CameraEvents, type CameraCapabilities } from '../src/services/camera/types';
+import { checkFeature, FREE_STATE } from '../src/services/entitlements/EntitlementService';
+import { FEATURES } from '../src/services/entitlements/features';
+import { friendlyMessage } from '../src/services/errors';
+import { isVibeLook } from '../src/services/looks/types';
+import { isValidSetting } from '../src/services/database/repositories/SettingsRepository';
+import { improvementBadges, TOOLS } from '../src/screens/PhotoPreviewScreen';
 import { rawCameraCaps } from './helpers/fixtures';
 import {
+  editedPathFor,
   enhancedCopyMetadata,
   enhancedPathFor,
   enhanceSuggestion,
@@ -79,7 +97,14 @@ describe('camera capability parsing', () => {
 
 describe('camera modes and presets', () => {
   it('offers only modes the camera can run', () => {
-    expect(availableModes(caps()).map(m => m.id)).toEqual(['night', 'enhance', 'photo', 'superres', 'pro']);
+    expect(availableModes(caps()).map(m => m.id)).toEqual([
+      'night',
+      'spotlight',
+      'enhance',
+      'photo',
+      'superres',
+      'pro',
+    ]);
     const basic = caps({
       captureModes: ['standard', 'enhance'],
       raw: false,
@@ -180,8 +205,9 @@ describe('exposure and manual dials', () => {
     expect(portraitAspect('4:3')).toBe(0.75);
     expect(portraitAspect('16:9')).toBeCloseTo(0.5625);
     expect(portraitAspect('1:1')).toBe(1);
-    expect(progressLabel('capturing', 6)).toBe('Hold still · capturing 6 frames');
-    expect(progressLabel('processing', 1)).toBe('Enhancing');
+    expect(progressLabel('capturing', 6)).toBe('Hold still…');
+    expect(progressLabel('processing', 1)).toBe('Perfecting your photo…');
+    expect(progressLabel('styling', 1)).toBe('Adding the spotlight…');
   });
 });
 
@@ -336,5 +362,134 @@ describe('CameraService', () => {
     emit(CameraEvents.zoom, { ratio: 3, linear: 0.2, min: 1, max: 10 });
     expect(seen).toEqual([2]);
     expect(listeners[CameraEvents.zoom]).toHaveLength(0);
+  });
+});
+
+describe('plans and names', () => {
+  it('Clarity and Spotlight are free; multi-shot modes and Vibe Match are Premium', () => {
+    const enforced = (key: keyof typeof FEATURES) => checkFeature(key, FREE_STATE, true).allowed;
+    expect(enforced('clarity')).toBe(true);
+    expect(enforced('spotlight')).toBe(true);
+    expect(enforced('shareTo')).toBe(true);
+    expect(enforced('multiShot')).toBe(false);
+    expect(enforced('vibeMatch')).toBe(false);
+    expect(checkFeature('multiShot', { ...FREE_STATE, plan: 'premium' }, true).allowed).toBe(true);
+    // Moonlight and Ultra Detail are the multi-shot modes.
+    expect(MODES.filter(m => m.feature === 'multiShot').map(m => m.label)).toEqual(['Moonlight', 'Ultra Detail']);
+    expect(MODES.find(m => m.id === 'enhance')?.feature).toBe('clarity');
+    expect(MODES.find(m => m.id === 'spotlight')?.feature).toBe('spotlight');
+    expect(DEFAULT_MODE).toBe('enhance');
+  });
+
+  it('never shows technical names', () => {
+    const shown = [
+      ...MODES.flatMap(m => [m.label, m.description]),
+      ...TOOLS.flatMap(t => [t.label, t.description]),
+      ...['standard', 'raw', 'enhance', 'spotlight', 'night', 'superres'].map(modeLabel),
+    ].join(' ');
+    for (const word of [
+      /engine/i,
+      /frame/i,
+      /fus/i,
+      /burst/i,
+      /super-?res/i,
+      /noise/i,
+      /algorithm/i,
+      /segment/i,
+      /model/i,
+      /neural/i,
+    ]) {
+      expect(shown).not.toMatch(word);
+    }
+    expect(modeLabel('superres')).toBe('Ultra Detail');
+    expect(modeLabel('night')).toBe('Moonlight');
+    expect(friendlyMessage('BUDGET_EXCEEDED')).not.toMatch(/budget|memory budget|engine/i);
+    expect(friendlyMessage('SOMETHING_NEW')).toBe('Something went wrong. Please try again.');
+  });
+});
+
+describe('spotlight choices', () => {
+  it('taps add, re-taps remove, and the list is capped', () => {
+    let pts = toggleSpotlightPoint([], { x: 0.2, y: 0.2 });
+    pts = toggleSpotlightPoint(pts, { x: 0.8, y: 0.8 });
+    expect(pts).toHaveLength(2);
+    pts = toggleSpotlightPoint(pts, { x: 0.21, y: 0.19 });
+    expect(pts).toEqual([{ x: 0.8, y: 0.8 }]);
+    for (let i = 0; i < 6; i++) pts = toggleSpotlightPoint(pts, { x: 0.1 * i, y: 0.5 });
+    expect(pts).toHaveLength(MAX_SPOTLIGHT_POINTS);
+    expect(flattenPoints([{ x: 0.1, y: 0.2 }])).toEqual([0.1, 0.2]);
+  });
+
+  it('levels map to gentle, smooth and flawless retouching', () => {
+    expect(spotlightSettings('medium', 'smooth')).toEqual({ blur: 0.6, retouch: 0.75, brighten: 0.4, pop: 0.5 });
+    expect(spotlightSettings('light', 'off').retouch).toBe(0);
+    expect(spotlightSettings('strong', 'flawless')).toMatchObject({ blur: 0.9, retouch: 1 });
+  });
+});
+
+describe('vibe match looks', () => {
+  const neutral = [
+    0.02, 0.06, 0.15, 0.3, 0.45, 0.6, 0.75, 0.88, 0.97, 0, 0, 0, 0.02, 0.02, 0.02, 0.06, 0.06, 0.9, 0.004, 0.45,
+  ];
+  const warm = neutral.map((v, i) => (i >= 12 && i <= 14 ? v + 0.06 : i >= 9 && i <= 11 ? v - 0.03 : v));
+  const cool = neutral.map((v, i) => (i >= 12 && i <= 14 ? v - 0.06 : i >= 9 && i <= 11 ? v + 0.04 : v));
+  const bright = neutral.map((v, i) => (i < 9 ? Math.min(1, v + 0.15) : v));
+
+  it('validates looks and saved settings', () => {
+    expect(isLook(neutral)).toBe(true);
+    expect(isLook([1, 2])).toBe(false);
+    expect(isLook([...neutral.slice(0, 19), NaN])).toBe(false);
+    expect(isVibeLook({ referencePath: '/l.jpg', look: neutral, strength: 0.8 })).toBe(true);
+    expect(isVibeLook({ referencePath: '', look: neutral, strength: 0.8 })).toBe(false);
+    expect(isValidSetting('vibeLook', null)).toBe(true);
+    expect(isValidSetting('vibeLook', { referencePath: '/l.jpg', look: neutral, strength: 2 })).toBe(false);
+  });
+
+  it('describes a look in plain words', () => {
+    expect(describeLook(summariseLook(warm))).toMatch(/warm/);
+    expect(describeLook(summariseLook(cool))).toMatch(/cool/);
+    expect(describeLook(summariseLook(bright))).toMatch(/^Bright/);
+    expect(describeLook(summariseLook(neutral))).toBe('Balanced, neutral');
+  });
+
+  it('turns a look into camera settings', () => {
+    const c = caps();
+    expect(lookCameraSettings(neutral, c)).toMatchObject({ whiteBalance: 'auto', evIndex: 0 });
+    const w = lookCameraSettings(warm, c);
+    expect(w.whiteBalance).toBe('kelvin');
+    expect(w.kelvin).toBeGreaterThan(6000);
+    expect(lookCameraSettings(cool, c).kelvin).toBeLessThan(5000);
+    expect(lookCameraSettings(bright, c).evIndex).toBeGreaterThan(0);
+    // Without Kelvin control, presets stand in.
+    const noKelvin = caps({
+      manual: {
+        ...rawCameraCaps().manual,
+        kelvin: false,
+        whiteBalanceModes: ['auto', 'incandescent', 'cloudy', 'shade'],
+      },
+    });
+    expect(lookCameraSettings(warm, noKelvin).whiteBalance).toBe('shade'); // strongly warm
+    const mild = neutral.map((v, i) => (i === 13 ? v + 0.04 : v));
+    expect(lookCameraSettings(mild, noKelvin).whiteBalance).toBe('cloudy'); // gently warm
+    expect(lookCameraSettings(cool, noKelvin).whiteBalance).toBe('incandescent');
+    expect(lookCameraSettings(warm, null)).toMatchObject({ evIndex: 0, whiteBalance: 'auto' });
+  });
+});
+
+describe('photo results in plain words', () => {
+  it('summarises captures and edits', () => {
+    const night = improvementBadges(
+      'night',
+      { noiseBefore: 0.02, noiseAfter: 0.008, framesInput: 6, framesUsed: 6 },
+      null,
+      false,
+    );
+    expect(night.map(b => b.label)).toEqual(['Grain −60%', '6 shots blended']);
+    const spot = improvementBadges('spotlight', null, { people: 1, spots: 4, skin: 0.05, subject: 0.4 }, true);
+    expect(spot.map(b => b.label)).toEqual(['Background softened', 'Glow · 4 blemishes cleared', 'Vibe Match style']);
+    expect(improvementBadges('standard', null, null, false)).toEqual([]);
+    expect(editedPathFor('/c/PP_1.jpg', 'spotlight')).toBe('/c/PP_1_spotlight.jpg');
+    expect(editedPathFor('/c/PP_1.jpg', 'look', 2)).toBe('/c/PP_1_look_2.jpg');
+    expect(editedPathFor('/c/PP_1.jpg', 'superres')).toBe('/c/PP_1_superres.jpg');
   });
 });

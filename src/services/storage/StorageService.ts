@@ -4,6 +4,8 @@ export interface AppStoragePaths {
   projects: string;
   captures: string;
   exports: string;
+  imports: string;
+  looks: string;
   packs: string;
   models: string;
   processingCache: string;
@@ -44,6 +46,16 @@ export class StorageService {
 
   exists(path: string): Promise<boolean> {
     return this.native.fileExists(path);
+  }
+
+  /** System photo picker; the chosen photo is copied into app storage. Null if cancelled. */
+  pickImage(area: 'imports' | 'looks' = 'imports'): Promise<string | null> {
+    return this.native.pickImage(area);
+  }
+
+  /** Opens the share sheet so photos can be posted to other apps. */
+  share(paths: string[], title = 'Share photo'): Promise<boolean> {
+    return this.native.shareImages(paths, title);
   }
 }
 

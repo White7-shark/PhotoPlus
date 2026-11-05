@@ -79,4 +79,29 @@ object NativeEngine {
     rgbaColor: Int,
     overlay: Bitmap,
   ): Float
+
+  /**
+   * Portrait ("Spotlight") in place on [bitmap] (ARGB_8888). Masks are
+   * ALPHA_8 (or ARGB_8888) bitmaps of any size: [subject] required, [faces]
+   * and [protect] optional. [params] = blur, retouch, brighten, pop (0..1).
+   * [reportOut] (4) = subject coverage, skin coverage, spots, blur radius.
+   */
+  external fun nativePortrait(
+    bitmap: Bitmap,
+    subject: Bitmap,
+    faces: Bitmap?,
+    protect: Bitmap?,
+    params: FloatArray,
+    token: Long,
+    reportOut: FloatArray,
+  )
+
+  /** Tap-seeded cut-out; [points] = x0,y0,x1,y1… (0..1). Returns mask bytes, size in [sizeOut]. */
+  external fun nativeSubjectMask(bitmap: Bitmap, points: FloatArray, sizeOut: IntArray): ByteArray
+
+  /** A photo's look as [STYLE_FLOATS] numbers (see pp_style). */
+  external fun nativeStyleAnalyze(bitmap: Bitmap): FloatArray
+  external fun nativeStyleApply(bitmap: Bitmap, style: FloatArray, strength: Float, token: Long)
+
+  const val STYLE_FLOATS = 20
 }

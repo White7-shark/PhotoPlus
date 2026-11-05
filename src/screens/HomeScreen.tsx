@@ -1,5 +1,5 @@
-import React from 'react';
-import { Image, Pressable, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Image, Pressable, View } from 'react-native';
 
 import {
   AppText,
@@ -16,9 +16,13 @@ import {
   SectionHeader,
   Skeleton,
 } from '../components';
+import { DEVELOPER_TOOLS } from '../app/developer';
 import { useResponsive } from '../hooks/useResponsive';
 import type { TabScreenProps } from '../navigation/types';
+import { errorCode } from '../native';
 import { tierLabel } from '../services/capabilities';
+import { friendlyMessage } from '../services/errors';
+import { importPhoto } from '../services/library/importPhoto';
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
 import { greetingFor, PILLARS } from './pillars';
@@ -32,7 +36,27 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
   const warnings = useAppStore(s => s.warnings);
   const dismissWarning = useAppStore(s => s.dismissWarning);
   const loadProjects = useAppStore(s => s.loadProjects);
+  const repos = useAppStore(s => s.repos);
+  const [importing, setImporting] = useState(false);
   const greeting = greetingFor(new Date());
+
+  const editPhoto = async () => {
+    if (!repos) {
+      return;
+    }
+    setImporting(true);
+    try {
+      const id = await importPhoto(repos);
+      if (id) {
+        void loadProjects();
+        navigation.navigate('PhotoPreview', { imageId: id });
+      }
+    } catch (e) {
+      Alert.alert('Couldn’t open that photo', friendlyMessage(errorCode(e)));
+    } finally {
+      setImporting(false);
+    }
+  };
   const gap = 12;
   const cardWidth = (r.contentWidth - gap * (r.columns - 1)) / r.columns;
 
@@ -42,12 +66,9 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
         <View style={{ flex: 1 }}>
           <Logo size={34} />
         </View>
-        <IconButton
-          icon="cpu"
-          label="Device and engine diagnostics"
-          onPress={() => navigation.navigate('DeviceInfo')}
-          size={44}
-        />
+        {DEVELOPER_TOOLS ? (
+          <IconButton icon="cpu" label="Developer tools" onPress={() => navigation.navigate('DeviceInfo')} size={44} />
+        ) : null}
       </View>
 
       {warnings.map((w, i) => (
@@ -86,11 +107,19 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
             Start a photoshoot
           </AppText>
           <AppText variant="body" tone="secondary" style={{ marginTop: 6, marginBottom: 18, maxWidth: 420 }}>
-            Open the camera with composition guides. Every shot is saved privately on this device.
+            Shoot with Clarity, Spotlight and more — or bring in a photo from your gallery. Everything stays private on
+            this device.
           </AppText>
           <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
             <Button label="Open camera" icon="camera" size="lg" onPress={() => navigation.navigate('Camera')} />
-            <Button label="Engine lab" icon="wand" variant="glass" onPress={() => navigation.navigate('Diagnostics')} />
+            <Button
+              label="Edit a photo"
+              icon="image"
+              variant="glass"
+              loading={importing}
+              onPress={() => void editPhoto()}
+              accessibilityHint="Choose a photo from your gallery to make it shine"
+            />
           </View>
         </View>
       </GlassSurface>
@@ -100,7 +129,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
         {PILLARS.map(p => (
           <PressableCard
             key={p.id}
-            label={`${p.title}. ${p.tagline}. ${p.premium ? 'Premium. ' : ''}Arrives in ${p.phase}.`}
+            label={`${p.title}. ${p.tagline}. ${p.premium ? 'Premium. ' : ''}${p.availability}.`}
             onPress={() => (p.id === 'camera' ? navigation.navigate('Camera') : navigation.navigate('Packs'))}
             style={{ width: cardWidth, minHeight: 170 }}
             radius={theme.radii.lg}
@@ -189,39 +218,41 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
         </View>
       )}
 
-      <Pressable
-        onPress={() => navigation.navigate('DeviceInfo')}
-        accessibilityRole="button"
-        accessibilityLabel={`Device readiness: ${tierLabel[tier]}. View details`}
-        style={{ marginTop: 28 }}
-      >
-        <GlassSurface
-          radius={theme.radii.lg}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}
+      {DEVELOPER_TOOLS ? (
+        <Pressable
+          onPress={() => navigation.navigate('DeviceInfo')}
+          accessibilityRole="button"
+          accessibilityLabel={`Device readiness: ${tierLabel[tier]}. View details`}
+          style={{ marginTop: 28 }}
         >
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundImage: theme.gradients.lagoon,
-            }}
+          <GlassSurface
+            radius={theme.radii.lg}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}
           >
-            <Icon name="shield" size={22} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <AppText variant="bodyStrong">Device readiness</AppText>
-            <AppText variant="caption" tone="secondary">
-              {tier === 'unsupported'
-                ? 'Below the recommended specs — heavy features will be limited.'
-                : `${tierLabel[tier]} tier · all core features available offline`}
-            </AppText>
-          </View>
-          <Icon name="chevronRight" size={18} color={theme.colors.textTertiary} />
-        </GlassSurface>
-      </Pressable>
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundImage: theme.gradients.lagoon,
+              }}
+            >
+              <Icon name="shield" size={22} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText variant="bodyStrong">Device readiness</AppText>
+              <AppText variant="caption" tone="secondary">
+                {tier === 'unsupported'
+                  ? 'Below the recommended specs — heavy features will be limited.'
+                  : `${tierLabel[tier]} tier · all core features available offline`}
+              </AppText>
+            </View>
+            <Icon name="chevronRight" size={18} color={theme.colors.textTertiary} />
+          </GlassSurface>
+        </Pressable>
+      ) : null}
     </Screen>
   );
 }

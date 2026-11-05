@@ -19,6 +19,9 @@ import com.photoplus.engine.JobManager
 import com.photoplus.engine.NativeCancelTokens
 import com.photoplus.engine.NativeEngine
 import com.photoplus.engine.OutputFormat
+import com.photoplus.studio.MaskGeometry
+import com.photoplus.studio.PortraitProcessor
+import com.photoplus.studio.PortraitReport
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -60,21 +63,23 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
   }.apply { allowCoreThreadTimeOut(true) }
   private val jobs = JobManager(processExecutor, NativeCancelTokens)
   private val processing = AtomicBoolean(false)
+  private val portraitProcessor by lazy { PortraitProcessor() }
   private val cancelledBursts = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
   val busy: Boolean get() = processing.get()
 
   /** Main thread. */
-  fun capture(capture: ImageCapture, request: CaptureOptions, frontCamera: Boolean, listener: Listener) {
+  fun capture(capture: ImageCapture, request: CaptureOptions, frontCamera: Boolean, deviceDegrees: Int, listener: Listener) {
     capture.flashMode = when (request.effectiveFlash) {
       FlashSetting.ON -> ImageCapture.FLASH_MODE_ON
       FlashSetting.AUTO -> ImageCapture.FLASH_MODE_AUTO
       FlashSetting.OFF -> ImageCapture.FLASH_MODE_OFF
     }
     val mirror = frontCamera && request.mirrorFront
+    val upright = request.previewPoints.map { (x, y) -> MaskGeometry.previewToUpright(x, y, deviceDegrees, frontCamera) }
     when {
       request.mode == CaptureMode.RAW -> captureRaw(capture, request, mirror, listener)
-      request.mode.processed -> captureProcessed(capture, request, mirror, listener)
+      request.needsProcessing -> captureProcessed(capture, request, mirror, upright, listener)
       else -> captureStandard(capture, request, mirror, listener)
     }
   }
@@ -166,7 +171,14 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
   // ------------------------------------------------------------- processed
 
   /** Shared by the frames of one burst; touched only on the capture executor. */
-  private class Burst(val request: CaptureOptions, val plan: ModePlan, val mirror: Boolean, val started: Long) {
+  private class Burst(
+    val request: CaptureOptions,
+    val plan: ModePlan,
+    val mirror: Boolean,
+    val started: Long,
+    /** Spotlight taps in the upright photo. */
+    val points: List<Pair<Float, Float>>,
+  ) {
     val frames = ArrayList<Bitmap>(plan.frames)
     var received = 0
     var failed = false
@@ -180,7 +192,13 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
     }
   }
 
-  private fun captureProcessed(capture: ImageCapture, request: CaptureOptions, mirror: Boolean, listener: Listener) {
+  private fun captureProcessed(
+    capture: ImageCapture,
+    request: CaptureOptions,
+    mirror: Boolean,
+    points: List<Pair<Float, Float>>,
+    listener: Listener,
+  ) {
     if (!NativeEngine.ensureLoaded()) {
       listener.onFailure(request.captureId, "ENGINE_UNAVAILABLE", "The processing engine is unavailable on this device")
       return
@@ -191,7 +209,7 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
       return
     }
     val plan = CapturePolicy.plan(request.mode, tier)
-    val burst = Burst(request, plan, mirror, SystemClock.elapsedRealtime())
+    val burst = Burst(request, plan, mirror, SystemClock.elapsedRealtime(), points)
     cancelledBursts.remove(request.captureId)
     listener.onProgress(request.captureId, "capturing", 0.0)
     // Queue every frame at once; CameraX pipelines them back to back, which
@@ -280,6 +298,7 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
       ImageDecoder.decodeBitmap(ImageDecoder.createSource(buffer.duplicate())) { decoder, _, _ ->
         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
         decoder.isUnpremultipliedRequired = true
+        decoder.isMutableRequired = true // looks and Spotlight may work in place
         decoder.setTargetSize(geometry.targetWidth, geometry.targetHeight)
         geometry.crop?.let { decoder.crop = Rect(it.left, it.top, it.right, it.bottom) }
       }
@@ -347,31 +366,53 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
     val request = burst.request
     val first = frames.first()
     val upscale = request.mode.upscale
-    val output = createBitmap(first.width * upscale, first.height * upscale, Bitmap.Config.ARGB_8888).apply {
-      isPremultiplied = false // the engine writes straight alpha
-      setHasAlpha(false)
-    }
+    val enhance = request.mode.processed
+    val geometry = burst.geometry!!
+    val target = newFile("jpg")
+    val original = File(target.parentFile, target.nameWithoutExtension + "_original.jpg")
     val report = FloatArray(7)
+    // Enhanced modes write into a fresh bitmap; a look on its own grades the
+    // decoded frame in place (after its untouched copy is saved).
+    var output: Bitmap? = null
     try {
-      NativeEngine.nativeEnhance(
-        frames.toTypedArray(), upscale,
-        floatArrayOf(request.denoise, request.sharpen, request.detail, request.vibrance),
-        request.autoTone, output, token, report,
-      )
+      val work: Bitmap
+      if (enhance) {
+        output = createBitmap(first.width * upscale, first.height * upscale, Bitmap.Config.ARGB_8888).apply {
+          isPremultiplied = false // the engine writes straight alpha
+          setHasAlpha(false)
+        }
+        NativeEngine.nativeEnhance(
+          frames.toTypedArray(), upscale,
+          floatArrayOf(request.denoise, request.sharpen, request.detail, request.vibrance),
+          request.autoTone, output, token, report,
+        )
+        work = output
+      } else {
+        work = first
+      }
+      val reference = frames[report[2].toInt().coerceIn(0, frames.lastIndex)]
+      val (ow, oh) = CaptureGeometry.displaySize(reference.width, reference.height, geometry.remainingRotation)
+      if (!enhance) {
+        ImageCodec.encode(reference, original, OutputFormat.JPEG, ORIGINAL_QUALITY)
+        writeExif(original, burst.exif, geometry.remainingRotation, burst.mirror)
+      }
+      var portrait: PortraitReport? = null
+      if (request.mode == CaptureMode.PORTRAIT) {
+        listener.onProgress(request.captureId, "styling", 0.6)
+        portrait = portraitProcessor.apply(work, geometry.remainingRotation, burst.points, request.portrait, token)
+      }
+      request.look?.let { NativeEngine.nativeStyleApply(work, it, request.lookStrength, token) }
       val processMs = SystemClock.elapsedRealtime() - processStarted
       listener.onProgress(request.captureId, "saving", 0.9)
-      val geometry = burst.geometry!!
-      val target = newFile("jpg")
-      ImageCodec.encode(output, target, OutputFormat.JPEG, OUTPUT_QUALITY)
+      ImageCodec.encode(work, target, OutputFormat.JPEG, OUTPUT_QUALITY)
       writeExif(target, burst.exif, geometry.remainingRotation, burst.mirror)
-      // Keep the reference frame so the user can compare before and after.
-      val reference = frames[report[2].toInt().coerceIn(0, frames.lastIndex)]
-      val original = File(target.parentFile, target.nameWithoutExtension + "_original.jpg")
-      ImageCodec.encode(reference, original, OutputFormat.JPEG, ORIGINAL_QUALITY)
-      writeExif(original, burst.exif, geometry.remainingRotation, burst.mirror)
+      if (enhance) {
+        // Keep the reference frame so the user can compare before and after.
+        ImageCodec.encode(reference, original, OutputFormat.JPEG, ORIGINAL_QUALITY)
+        writeExif(original, burst.exif, geometry.remainingRotation, burst.mirror)
+      }
 
-      val (w, h) = CaptureGeometry.displaySize(output.width, output.height, geometry.remainingRotation)
-      val (ow, oh) = CaptureGeometry.displaySize(reference.width, reference.height, geometry.remainingRotation)
+      val (w, h) = CaptureGeometry.displaySize(work.width, work.height, geometry.remainingRotation)
       return mapOf(
         "path" to target.absolutePath,
         "width" to w,
@@ -382,7 +423,8 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
         "originalPath" to original.absolutePath,
         "originalWidth" to ow,
         "originalHeight" to oh,
-        "report" to mapOf(
+        "look" to (request.look != null),
+        "report" to if (enhance) mapOf(
           "framesInput" to report[0].toInt(),
           "framesUsed" to report[1].toInt(),
           "referenceIndex" to report[2].toInt(),
@@ -391,15 +433,22 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
           "blurBefore" to report[5].toDouble(),
           "deblurSigma" to report[6].toDouble(),
           "upscale" to upscale,
-        ),
+        ) else null,
+        "portrait" to portrait?.let {
+          mapOf("people" to it.people, "spots" to it.spots, "skin" to it.skinCoverage.toDouble(), "subject" to it.subjectCoverage.toDouble())
+        },
         "timings" to mapOf(
           "captureMs" to (processStarted - burst.started).toDouble(),
           "processMs" to processMs.toDouble(),
           "totalMs" to (SystemClock.elapsedRealtime() - burst.started).toDouble(),
         ),
       )
+    } catch (e: Exception) {
+      target.delete()
+      original.delete()
+      throw e
     } finally {
-      output.recycle()
+      output?.recycle()
     }
   }
 

@@ -1,3 +1,4 @@
+import { DEVELOPER_TOOLS } from '../app/developer';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 
@@ -19,7 +20,7 @@ import { formatBytes, getStorageService, type StorageUsage } from '../services/s
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
 
-const APP_VERSION = '0.1.0 · Phase 1';
+const APP_VERSION = '0.2.0';
 
 export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
   const theme = useTheme();
@@ -222,20 +223,29 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
           title={clearing ? 'Clearing…' : 'Clear temporary cache'}
           value={usage ? formatBytes(usage.cacheBytes) : undefined}
           onPress={clearing ? undefined : clearCache}
-          accessibilityHint="Removes temporary processing files. Your photos are not affected."
+          accessibilityHint="Removes temporary files. Your photos are not affected."
           last
         />
       </GlassSurface>
 
       <SectionHeader title="About" />
       <GlassSurface>
-        <ListRow icon="cpu" title="Device & capabilities" onPress={() => navigation.navigate('DeviceInfo')} />
-        <ListRow
-          icon="wand"
-          title="Engine lab"
-          subtitle="Run a processing self-test"
-          onPress={() => navigation.navigate('Diagnostics')}
-        />
+        {DEVELOPER_TOOLS ? (
+          <>
+            <ListRow
+              icon="cpu"
+              title="Device report"
+              subtitle="Developer tools"
+              onPress={() => navigation.navigate('DeviceInfo')}
+            />
+            <ListRow
+              icon="wand"
+              title="Self-test"
+              subtitle="Developer tools"
+              onPress={() => navigation.navigate('Diagnostics')}
+            />
+          </>
+        ) : null}
         <ListRow icon="info" title="Version" value={APP_VERSION} last />
       </GlassSurface>
     </Screen>

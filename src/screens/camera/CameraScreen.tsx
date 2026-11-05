@@ -15,7 +15,9 @@ import {
 } from '../../components';
 import { CameraPreview } from '../../components/CameraPreview';
 import type { TabScreenProps } from '../../navigation/types';
-import { errorCode, errorMessage } from '../../native';
+import { PremiumSheet } from '../../components/PremiumSheet';
+import { useFeatureCheck } from '../../hooks/useFeature';
+import { errorCode } from '../../native';
 import {
   getCameraService,
   type AspectRatio,
@@ -29,6 +31,14 @@ import {
 import {
   availableModes,
   captureModeFor,
+  DEFAULT_MODE,
+  flattenPoints,
+  lookCameraSettings,
+  modeLabel,
+  spotlightSettings,
+  toggleSpotlightPoint,
+  type BlurLevel,
+  type GlowLevel,
   exposureIndices,
   formatEv,
   formatFocusDistance,
@@ -42,7 +52,10 @@ import {
   type CapturePreset,
   type UiMode,
 } from '../../services/camera/model';
-import { CameraEvents } from '../../services/camera/types';
+import { CameraEvents, type CaptureStage } from '../../services/camera/types';
+import type { FeatureKey } from '../../services/entitlements/features';
+import { friendlyMessage } from '../../services/errors';
+import type { VibeLook } from '../../services/looks/LookService';
 import { createLogger } from '../../services/logging/logger';
 import { getPermissionService, type PermissionStatus } from '../../services/permissions/PermissionService';
 import { useAppStore } from '../../state/store';
@@ -51,7 +64,9 @@ import { Chip, LastShot, ModeSwitcher, ShutterButton, uprightStyle, ZoomPills } 
 import { Countdown, FocusRing, GridOverlay, ShutterFlash, StatusPill } from './Overlays';
 import { ProPanel } from './ProPanel';
 import { StopDial } from './StopDial';
+import { SpotlightMarkers, SpotlightPanel } from './SpotlightControls';
 import { useCameraSession } from './useCameraSession';
+import { VibeSheet } from './VibeSheet';
 
 const log = createLogger('camera');
 const FLASH_CYCLE: FlashMode[] = ['off', 'auto', 'on'];
@@ -63,7 +78,7 @@ type Tuning = Pick<CaptureOptions, 'denoise' | 'sharpen' | 'detail' | 'vibrance'
 
 interface Processing {
   captureId: string;
-  stage: 'capturing' | 'processing' | 'saving';
+  stage: CaptureStage;
   frames: number;
 }
 
@@ -95,7 +110,13 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const [lens, setLens] = useState<LensFacing>('back');
   const [flash, setFlash] = useState<FlashMode>('off');
   const [timer, setTimer] = useState<(typeof TIMER_CYCLE)[number]>(0);
-  const [mode, setMode] = useState<UiMode>('photo');
+  const [mode, setMode] = useState<UiMode>(DEFAULT_MODE);
+  const [spotPoints, setSpotPoints] = useState<{ x: number; y: number }[]>([]);
+  const [blurLevel, setBlurLevel] = useState<BlurLevel>('medium');
+  const [glowLevel, setGlowLevel] = useState<GlowLevel>('smooth');
+  const [vibeOpen, setVibeOpen] = useState(false);
+  const [premiumFor, setPremiumFor] = useState<FeatureKey | null>(null);
+  const can = useFeatureCheck();
   const [raw, setRaw] = useState(false);
   const [peaking, setPeaking] = useState(false);
   const [manual, setManual] = useState<ManualSettings>({});
@@ -171,15 +192,44 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     camera.setFocusPeaking(peakingActive);
   }, [camera, peakingActive]);
 
-  // Manual controls apply only in Pro mode; leaving Pro returns to full auto.
-  const proReady = mode === 'pro' && state === 'ready';
+  // Vibe Match (premium): the camera leans toward the reference's light and
+  // colour; every shot is then finished in its style.
+  const vibe: VibeLook | null = settings.vibeLook && can('vibeMatch').allowed ? settings.vibeLook : null;
+  const vibeCamera = useMemo(() => (vibe ? lookCameraSettings(vibe.look, caps) : null), [vibe, caps]);
+
+  // Manual controls: the user's in Pro mode; otherwise Vibe Match's white
+  // balance; otherwise full auto.
+  const sessionReady = state === 'ready';
+  const manualToApply: ManualSettings | null =
+    mode === 'pro'
+      ? manual
+      : vibeCamera && vibeCamera.whiteBalance !== 'auto'
+        ? { whiteBalance: vibeCamera.whiteBalance, kelvin: vibeCamera.kelvin }
+        : null;
+  const manualKey = JSON.stringify(manualToApply);
   useEffect(() => {
-    if (!proReady) {
+    if (!sessionReady) {
+      return;
+    }
+    const m = JSON.parse(manualKey) as ManualSettings | null;
+    if (!m) {
       camera.resetManual();
       return;
     }
-    camera.setManual(manual).catch(e => log.warn('manual controls rejected', e));
-  }, [camera, proReady, manual]);
+    camera.setManual(m).catch(e => log.warn('manual controls rejected', e));
+  }, [camera, sessionReady, manualKey]);
+
+  // Vibe Match brightness, as exposure compensation (re-applied after rebinds).
+  const vibeEv = vibeCamera?.evIndex ?? null;
+  useEffect(() => {
+    if (!sessionReady || vibeEv === null || mode === 'pro') {
+      return;
+    }
+    camera
+      .setExposureCompensation(vibeEv)
+      .then(setEvIndex)
+      .catch(() => undefined);
+  }, [camera, sessionReady, vibeEv, mode]);
 
   const { refreshCapabilities, markFocus } = session;
   const onReady = useCallback(async () => {
@@ -224,6 +274,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         metadata: {
           captureMode: shot.mode,
           lens,
+          look: !!shot.look,
+          portrait: shot.portrait ?? null,
           originalPath: shot.originalPath ?? null,
           originalOwned: !!shot.originalPath,
           rawPath: shot.rawPath ?? null,
@@ -239,9 +291,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
 
   const takePhoto = useCallback(async () => {
     const captureMode = captureModeFor(effectiveMode, rawActive);
-    const processed = captureMode === 'enhance' || captureMode === 'night' || captureMode === 'superres';
+    const look = vibe && captureMode !== 'raw' ? vibe : null;
+    const processed =
+      captureMode === 'enhance' ||
+      captureMode === 'night' ||
+      captureMode === 'superres' ||
+      captureMode === 'spotlight' ||
+      !!look;
     if (processed && processing) {
-      setToast({ text: 'Still processing the last photo', tone: 'danger' });
+      setToast({ text: friendlyMessage('BUSY'), tone: 'danger' });
       return;
     }
     const captureId = camera.newCaptureId();
@@ -252,19 +310,31 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     }
     try {
       const shot = await camera.capture(
-        { mode: captureMode, flash, mirrorFront: settings.mirrorFrontCamera, ...(processed ? tuning : {}) },
+        {
+          mode: captureMode,
+          flash,
+          mirrorFront: settings.mirrorFrontCamera,
+          ...(processed ? tuning : {}),
+          ...(captureMode === 'spotlight'
+            ? { points: flattenPoints(spotPoints), ...spotlightSettings(blurLevel, glowLevel) }
+            : {}),
+          ...(look ? { look: look.look, lookStrength: look.strength } : {}),
+        },
         captureId,
       );
       const imageId = await saveRecord(shot);
       setLastShot({ path: shot.path, imageId });
       setToast({
-        text: shot.rawPath ? 'Saved RAW + JPEG' : processed ? 'Enhanced photo saved' : 'Saved to Captures',
+        text: shot.rawPath ? 'Saved with RAW' : `${look ? 'Vibe Match · ' : ''}${modeLabel(shot.mode)} photo saved`,
         tone: 'success',
       });
     } catch (e) {
       if (errorCode(e) !== 'CANCELLED') {
         log.error('capture failed', e);
-        setToast({ text: `Capture failed: ${errorMessage(e)}`, tone: 'danger' });
+        setToast({
+          text: friendlyMessage(errorCode(e), 'That photo didn’t come through. Please try again.'),
+          tone: 'danger',
+        });
       }
     } finally {
       if (processed) {
@@ -273,7 +343,34 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         setCapturing(false);
       }
     }
-  }, [effectiveMode, rawActive, processing, camera, caps, flash, settings.mirrorFrontCamera, tuning, saveRecord]);
+  }, [
+    effectiveMode,
+    rawActive,
+    vibe,
+    processing,
+    camera,
+    caps,
+    flash,
+    settings.mirrorFrontCamera,
+    tuning,
+    spotPoints,
+    blurLevel,
+    glowLevel,
+    saveRecord,
+  ]);
+
+  // Premium modes ask before switching (enforcement is off until billing ships).
+  const chooseMode = useCallback(
+    (m: UiMode, feature: FeatureKey) => {
+      if (!can(feature).allowed) {
+        setPremiumFor(feature);
+        return;
+      }
+      setMode(m);
+      setTuning({});
+    },
+    [can],
+  );
 
   const stopCountdown = useCallback(() => {
     if (countdownTimer.current) {
@@ -393,7 +490,6 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const md = session.metadata;
 
   const recovering = session.recoveringAttempt !== null && state !== 'error';
-  const plan = caps?.capturePlans[captureModeFor(effectiveMode, rawActive)];
 
   return (
     <View style={styles.root}>
@@ -412,9 +508,16 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           onFocusTap={(x, y) => {
             markFocus(x, y);
             setMenu(m => (m === 'ev' ? m : null));
+            // In Spotlight, taps also choose what stands out.
+            if (effectiveMode === 'spotlight') {
+              setSpotPoints(p => toggleSpotlightPoint(p, { x, y }));
+            }
           }}
         />
         {settings.cameraGrid ? <GridOverlay /> : null}
+        {effectiveMode === 'spotlight' ? (
+          <SpotlightMarkers points={spotPoints} frame={{ width: frameWidth, height: frameHeight }} />
+        ) : null}
         {session.focus ? (
           <FocusRing
             key={session.focus.key}
@@ -468,6 +571,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             accessibilityLabel={timer ? `Timer ${timer} seconds` : 'Timer off'}
             onPress={() => setTimer(TIMER_CYCLE[(TIMER_CYCLE.indexOf(timer) + 1) % TIMER_CYCLE.length])}
             rotation={rotation}
+          />
+          <Chip
+            icon="wand"
+            active={!!vibe}
+            tint={vibe ? theme.colors.premium : undefined}
+            accessibilityLabel={vibe ? 'Vibe Match on. Change style' : 'Vibe Match. Shoot in the style of any photo'}
+            onPress={() => (can('vibeMatch').allowed ? setVibeOpen(true) : setPremiumFor('vibeMatch'))}
+            rotation={rotation}
+            testID="vibe-chip"
           />
           <Chip
             icon="grid"
@@ -601,6 +713,17 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           </View>
         ) : null}
 
+        {effectiveMode === 'spotlight' ? (
+          <SpotlightPanel
+            blur={blurLevel}
+            glow={glowLevel}
+            points={spotPoints.length}
+            onBlur={setBlurLevel}
+            onGlow={setGlowLevel}
+            onClear={() => setSpotPoints([])}
+          />
+        ) : null}
+
         {effectiveMode === 'pro' && caps ? (
           <ProPanel
             caps={caps}
@@ -630,10 +753,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         <ModeSwitcher
           modes={modes}
           value={effectiveMode}
-          onChange={m => {
-            setMode(m);
-            setTuning({});
-          }}
+          onChange={m => chooseMode(m, modes.find(d => d.id === m)?.feature ?? 'cameraCapture')}
         />
 
         <View style={styles.dock}>
@@ -662,14 +782,25 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             />
           </View>
         </View>
-        <AppText variant="caption" align="center" style={styles.caption}>
+        <AppText variant="caption" align="center" style={styles.caption} numberOfLines={1}>
           {state === 'starting'
             ? 'Starting camera…'
-            : `${modes.find(m => m.id === effectiveMode)?.description ?? ''}${
-                plan && plan.frames > 1 ? ` · ${plan.frames} frames` : ''
-              }`}
+            : `${vibe ? 'Vibe Match on · ' : ''}${modes.find(m => m.id === effectiveMode)?.description ?? ''}`}
         </AppText>
       </View>
+
+      <VibeSheet
+        visible={vibeOpen}
+        look={settings.vibeLook}
+        onChange={look => {
+          updateSetting('vibeLook', look).catch(() => undefined);
+          if (!look) {
+            setVibeOpen(false);
+          }
+        }}
+        onClose={() => setVibeOpen(false)}
+      />
+      <PremiumSheet feature={premiumFor} onClose={() => setPremiumFor(null)} />
     </View>
   );
 }

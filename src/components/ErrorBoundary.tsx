@@ -43,7 +43,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
         <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
           <ErrorState
             title={`${this.props.area ?? 'This screen'} ran into a problem`}
-            message="Your photos and projects are safe. You can try again, and the issue has been noted in diagnostics."
+            message="Your photos and projects are safe. You can try again — we’ve noted the problem."
             onRetry={this.reset}
           />
         </View>

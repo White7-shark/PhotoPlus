@@ -195,6 +195,50 @@ pp_status pp_focus_peaking(const uint8_t* luma, int32_t width, int32_t height, i
                            int32_t pixel_stride, float threshold, uint32_t argb, uint32_t* out, int32_t out_width,
                            int32_t out_height, float* sharpness);
 
+/* ---- Portrait ("Spotlight") and look transfer ("Vibe Match") ----------- */
+
+typedef struct pp_portrait_params {
+  float blur;     /* background blur 0..1 (0 = none) */
+  float retouch;  /* skin smoothing and spot removal 0..1 */
+  float brighten; /* gentle lift of the subject's light and skin 0..1 */
+  float pop;      /* subject clarity and separation 0..1 */
+} pp_portrait_params;
+
+typedef struct pp_portrait_report {
+  float subject_coverage; /* fraction of the frame that is subject */
+  float skin_coverage;    /* fraction of the frame retouched as skin */
+  int32_t spots_removed;
+  float blur_radius; /* pixels */
+} pp_portrait_report;
+
+void pp_portrait_default_params(pp_portrait_params* out);
+
+/* Processes `image` (RGBA8/BGRA8) in place. Masks are GRAY8 of any size:
+ * `subject` (required), `faces` (optional: enables skin retouching calibrated
+ * to those faces), `protect` (optional: eyes, brows, lips, never smoothed).
+ * `report` may be NULL. */
+pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* faces, const pp_image* protect,
+                      const pp_portrait_params* params, const pp_cancel_token* token, pp_portrait_report* report);
+
+/* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
+ * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */
+pp_status pp_subject_mask(const pp_image* image, const float* points, size_t count, const pp_cancel_token* token,
+                          pp_image** out);
+
+#define PP_STYLE_QUANTILES 9
+typedef struct pp_style {
+  float luma[PP_STYLE_QUANTILES]; /* at 1, 5, 15, 30, 50, 70, 85, 95, 99 % */
+  float zone_cb[3];               /* shadows, midtones, highlights */
+  float zone_cr[3];
+  float chroma_std[2];
+  float vignette; /* corner / centre light */
+  float grain;
+  float mean_luma;
+} pp_style;
+
+pp_status pp_style_analyze(const pp_image* image, pp_style* out);
+pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
