@@ -55,6 +55,46 @@ object MaskGeometry {
     }
   }
 
+  /** A pixel rectangle. */
+  data class Crop(val x: Int, val y: Int, val width: Int, val height: Int)
+
+  /**
+   * Where the head(s) of the people in a subject [mask] (row-major, 0..255,
+   * [w] x [h]) should be: the top 30% of the people, padded, inside the
+   * image. Null when the mask holds nobody.
+   */
+  fun headCrop(mask: ByteArray, w: Int, h: Int): Crop? {
+    require(mask.size >= w * h) { "mask too small" }
+    val minRow = maxOf(1, w / 100) // ignore stray pixels
+    var top = -1
+    var bottom = -1
+    for (y in 0 until h) {
+      var n = 0
+      for (x in 0 until w) if ((mask[y * w + x].toInt() and 0xFF) > 127) n++
+      if (n >= minRow) {
+        if (top < 0) top = y
+        bottom = y
+      }
+    }
+    if (top < 0) return null
+    val headBottom = minOf(h - 1, top + maxOf(8, ((bottom - top + 1) * 0.3f).toInt()))
+    var left = w
+    var right = -1
+    for (y in top..headBottom) for (x in 0 until w) {
+      if ((mask[y * w + x].toInt() and 0xFF) > 127) {
+        if (x < left) left = x
+        if (x > right) right = x
+      }
+    }
+    if (right < left) return null
+    val pad = maxOf(4, (maxOf(right - left + 1, headBottom - top + 1) * 0.25f).toInt())
+    val x0 = maxOf(0, left - pad)
+    val y0 = maxOf(0, top - pad)
+    val x1 = minOf(w, right + 1 + pad)
+    val y1 = minOf(h, headBottom + 1 + pad)
+    return Crop(x0, y0, x1 - x0, y1 - y0)
+  }
+
   /** Index of the subject mask (if any) containing the point, preferring the most confident. */
   fun pickSubject(confidences: List<Float>, threshold: Float = 0.5f): Int? {
     var best: Int? = null

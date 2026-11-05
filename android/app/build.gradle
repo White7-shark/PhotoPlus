@@ -104,6 +104,11 @@ android {
         }
     }
 
+    androidResources {
+        // The depth model is memory-mapped straight from the APK.
+        noCompress.add("tflite")
+    }
+
     testOptions {
         unitTests.returnDefaultValues = false
         unitTests.all { useJUnitPlatform() }
@@ -153,6 +158,8 @@ dependencies {
     implementation("com.google.mlkit:face-detection:16.1.7")
     implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
+    // On-device inference for Spotlight's depth estimate (16 KB page aligned).
+    implementation("com.google.ai.edge.litert:litert:2.3.2")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -164,5 +171,70 @@ dependencies {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+// Spotlight depth model: Depth Anything V2 Small (Apache-2.0), LiteRT build
+// with 8-bit weights. Fetched once at a pinned revision, verified against its
+// published SHA-256 and cached outside the build directory; it is packaged
+// as a generated asset so the 28 MB binary never lives in the repository.
+// Offline builds can pass -Pphotoplus.depthModel=false: Spotlight then uses
+// the engine's built-in ground-plane depth estimate.
+import java.security.MessageDigest
+
+abstract class FetchDepthModel extends DefaultTask {
+    @Input abstract Property<String> getUrl()
+    @Input abstract Property<String> getSha256()
+    @Input abstract Property<String> getAssetName()
+    @Internal abstract RegularFileProperty getCacheFile()
+    @OutputDirectory abstract DirectoryProperty getOutputDir()
+
+    static String digest(File f) {
+        def md = MessageDigest.getInstance("SHA-256")
+        f.withInputStream { i ->
+            byte[] buf = new byte[1 << 16]
+            int n
+            while ((n = i.read(buf)) > 0) md.update(buf, 0, n)
+        }
+        return md.digest().encodeHex().toString()
+    }
+
+    @TaskAction
+    void fetch() {
+        def cache = cacheFile.get().asFile
+        if (!cache.exists() || digest(cache) != sha256.get()) {
+            cache.parentFile.mkdirs()
+            def part = new File(cache.path + ".part")
+            logger.lifecycle("Downloading the Spotlight depth model…")
+            URI.create(url.get()).toURL().withInputStream { i -> part.withOutputStream { o -> o << i } }
+            def actual = digest(part)
+            if (actual != sha256.get()) {
+                part.delete()
+                throw new GradleException("Depth model checksum mismatch (got $actual)")
+            }
+            cache.delete()
+            if (!part.renameTo(cache)) throw new GradleException("Could not store the depth model in ${cache.parent}")
+        }
+        def out = outputDir.get().file(assetName.get()).asFile
+        out.parentFile.mkdirs()
+        java.nio.file.Files.copy(cache.toPath(), out.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+}
+
+def depthModelSha = "f74509422e4a9270a354b249a9193abdd4903354be63701262238a7f4b869611"
+def fetchDepthModel = tasks.register("fetchDepthModel", FetchDepthModel) {
+    url = "https://huggingface.co/litert-community/depth-anything-v2-small/resolve/" +
+          "178427e448dbf4da93b1e7b1b2abc103ad329bd6/tflite/depth_anything_v2_small_wi8_afp32.tflite"
+    sha256 = depthModelSha
+    assetName = "spotlight_depth.tflite" // DepthEstimator.ASSET
+    cacheFile = new File(gradle.gradleUserHomeDir, "caches/photoplus/depth-${depthModelSha.take(16)}.tflite")
+    outputDir = layout.buildDirectory.dir("generated/depthModel")
+}
+
+if (providers.gradleProperty("photoplus.depthModel").getOrElse("true").toBoolean()) {
+    androidComponents {
+        onVariants(selector().all()) { variant ->
+            variant.sources.assets?.addGeneratedSourceDirectory(fetchDepthModel, { it.outputDir })
+        }
     }
 }

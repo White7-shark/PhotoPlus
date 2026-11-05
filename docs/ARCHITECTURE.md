@@ -80,7 +80,8 @@ CameraScreen (JS) ── configure / setManual / capturePhoto ──► CameraMo
 ```
 capture / saved photo ─▶ decode (bounded size) ─▶ [Clarity] ─▶ PortraitProcessor ─▶ pp_portrait ─▶ [pp_style_apply] ─▶ JPEG + EXIF
                                                                  │ ML Kit subject segmentation (taps choose subjects)
-                                                                 │ ML Kit face contours (faces + protected features)
+                                                                 │ ML Kit face contours (faces + protected features; small faces: enlarged head crop)
+                                                                 │ LiteRT depth estimate (blur grows with distance; else engine ground plane)
                                                                  └ fallbacks: person segmentation ▸ pp_subject_mask (taps)
 ```
 

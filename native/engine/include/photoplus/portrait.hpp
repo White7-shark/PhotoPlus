@@ -32,16 +32,20 @@ struct Report {
   float subjectCoverage = 0.0f;  // fraction of the frame that is subject
   float skinCoverage = 0.0f;     // fraction of the frame retouched as skin
   int32_t spotsRemoved = 0;      // blemishes healed
-  float blurRadius = 0.0f;       // background blur radius in pixels
+  float blurRadius = 0.0f;       // largest blur radius in pixels
+  float focusDepth = 0.0f;       // the subject's depth (0 far … 1 near)
+  bool depthEstimated = false;   // true when no depth map was given
 };
 
 // Masks are single-channel GRAY8 images of any size (they are upsampled and
 // aligned to the photo's edges). `subject` is required; `faces` marks face
 // areas (enables skin retouching, calibrated to those faces' own colour);
-// `protect` marks eyes, brows and lips, which are never smoothed.
+// `protect` marks eyes, brows and lips, which are never smoothed; `depth` is
+// relative depth (0 far … 255 near), e.g. from a monocular depth model —
+// without it, depth is estimated from the subject's position (ground plane).
 // The image (RGBA8/BGRA8) is processed in place.
 Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* faces, const ImageBuffer* protect,
-            const Params& params, const CancellationToken* token, Report* report);
+            const ImageBuffer* depth, const Params& params, const CancellationToken* token, Report* report);
 
 // Subject cut-out seeded by points (normalised 0..1 image coordinates; empty
 // = the frame centre). Returns a GRAY8 mask whose longest edge is ~320 px.

@@ -117,7 +117,7 @@ The design preview also exposed a usability problem: the default focus-peaking t
 
 # Phase 2 additions: Spotlight, Glow, Vibe Match, Share
 
-Design preview: [`design/spotlight-overview.png`](design/spotlight-overview.png). Every photo in it is real engine output on Kodak test photos, and every number is that run's own report.
+Design preview: [`design/spotlight-overview.png`](design/spotlight-overview.png), and how Spotlight uses depth: [`design/spotlight-depth.png`](design/spotlight-depth.png). Every photo in them is real engine output on Kodak test photos, and every number is that run's own report.
 
 ## What changed for people
 
@@ -126,7 +126,7 @@ Design preview: [`design/spotlight-overview.png`](design/spotlight-overview.png)
 | **Clarity** (single-photo enhance) | Free, **default mode** | Sharper, cleaner, brighter in one tap. |
 | **Moonlight** (multi-shot low light) | Premium | Blends a few quick shots for bright, clean night photos. |
 | **Ultra Detail** (multi-shot 2× detail) | Premium | Twice the detail from a few quick shots. |
-| **Spotlight** | Free | The subject stands out while the background melts into a lens-like blur. Tap the preview, or a saved photo, to choose what shines; untapped, it picks the people (or the main subjects). Blur: Light / Medium / Strong. |
+| **Spotlight** | Free | The subject stands out while the background melts into a lens-like blur that grows with distance, as with a real lens: the ground they stand on stays sharp, and what is further back softens more. Tap the preview, or a saved photo, to choose what shines; untapped, it picks the people (or the main subjects). Blur: Light / Medium / Strong. |
 | **Glow** (part of Spotlight) | Free | Skin retouch: smooths, clears spots and blemishes, evens and brightens tone, and keeps each person's own skin colour. Natural / Smooth / Flawless. |
 | **Vibe Match** | Premium | Pick any photo whose style you love. The camera adjusts exposure and white balance toward it, and every shot (and any saved photo) is finished in that style. Subtle / Balanced / Full. |
 | **Share** | Free | System share sheet from the photo preview. |
@@ -138,13 +138,19 @@ Design preview: [`design/spotlight-overview.png`](design/spotlight-overview.png)
 
 **Engine (C++, `native/engine/src/portrait`)**
 - **Matte.** A coarse subject mask is aligned to the photo's own edges with a fast guided filter. Its coefficients live on a ~1024 px grid, and alpha is evaluated per pixel, so no full-size mask is ever stored.
-- **Lens blur.** Disc ("bokeh") blur in linear light with highlight bloom, on a reduced grid. Subject pixels are excluded from the background average (normalised convolution), so there is no halo of subject colour. Grain matching the photo is re-added, slightly lighter, so blurred areas don't look plastic.
+- **Depth-aware lens blur (3D, not a flat cut-out).** Like iPhone and Pixel portrait modes, each area's blur radius grows with its depth distance from the subject's focus plane:
+  - The focus plane spans the subject's own depth, feet included, so the ground they stand on and anything beside them stays sharp. Ground further back softens progressively, the far background melts, and things in front of the subject blur too (a little less).
+  - The image is split into depth bands. Each band gets its own disc ("bokeh") blur in linear light with highlight bloom, and the bands are composited back to front. A blurred background never bleeds over nearer things, and the in-focus slab is inserted from the full-resolution photo.
+  - Stronger blur also means a thinner in-focus slab, like opening up the aperture.
+  - Depth is smoothed along the photo's own edges, so bands never switch blotchily.
+  - Subject pixels are excluded from the background average (normalised convolution), so there is no halo of subject colour. Grain matching the photo is re-added, slightly lighter, so blurred areas don't look plastic.
+  - Without a depth map the engine estimates one: a ground plane for a standing subject (the ground recedes upwards from the feet), or a far background for a close-up.
 - **Glow.** It runs where the face is about 180 px across, then applies through frequency separation in one streaming pass:
-  - The skin model is calibrated to each face's **own** colour (robust median and spread).
-  - Spots are found against surrounding *skin only*, then healed by inpainting from clean skin.
-  - Edge-preserving smoothing keeps 10–55% of real texture, depending on the Glow level.
-  - Blotches are evened toward the person's own median tone.
-  - The lift scales colour with brightness, so hue and saturation hold.
+  - The skin model is calibrated to each face's **own** colour (robust median and spread) and **own brightness**: every threshold is relative to the person's skin luma, so deep and light skin are treated alike.
+  - Spots are found by their *relative* contrast against surrounding *skin only*, then healed by inpainting from clean skin. Only blemish-sized marks are healed; larger dark areas (nostrils, creases, jaw shadow) are features and are left alone.
+  - Edge-preserving smoothing keeps 10–55% of real texture, depending on the Glow level. Strong local contrast (lash line, nostril, lip edge) is kept.
+  - Blotches are evened toward the person's own tone, at each spot's own brightness, so a darker feature never picks up a tint.
+  - The lift is relative (exposure-like) and scales colour with brightness, so hue and saturation hold. Ratios are bounded, so near-black pixels can never turn a false colour.
   - Eyes, brows, lips and nostrils are protected, and strength fades for small faces (group and full-length shots).
 - **Tap cut-out (fallback).** Colour models seeded by the taps are refined along edges, and only regions connected to a tap are kept. A reliability check swaps a patchy result for a soft, deliberate focus fall-off.
 - **Look transfer.** A monotone, slope-bounded tone curve (luma quantiles), colour by tonal zone (split toning), saturation, vignette and grain. The camera-side mapping (`lookCameraSettings`) turns the look into exposure compensation and white balance (Kelvin where available, otherwise the nearest preset).
@@ -152,15 +158,17 @@ Design preview: [`design/spotlight-overview.png`](design/spotlight-overview.png)
 
 **Android (`studio/PortraitProcessor.kt`)**
 - **Subject.** ML Kit subject segmentation (people and objects; Play services module, downloaded once) chooses the tapped subjects. Fallbacks, in order: the bundled ML Kit person segmentation, then the engine's tap cut-out.
-- **Faces.** ML Kit face contours (bundled) give face areas plus protected features. Face detection and subject segmentation run concurrently, and every wait is bounded.
+- **Faces.** ML Kit face contours (bundled) give face areas plus protected features. Face detection and subject segmentation run concurrently, and every wait is bounded. When no face is found in the whole photo (full-length shots), detection runs again on an enlarged crop of the top of the person.
+- **Depth (`DepthEstimator.kt`).** Depth Anything V2 Small (Apache-2.0) runs on-device with LiteRT 2.3.2 at 686×518 (portrait photos are turned landscape first), concurrently with the other models. Its output is stretched between the 1st and 99th percentiles into a 0–255 mask (`DepthMath`, unit-tested). The model loads on first use, is shared by the camera and editor, and is released under memory pressure. If it is missing or fails, the engine's own ground-plane estimate is used, so Spotlight always works.
+- **Model delivery.** The 28 MB model is not in the repository. The Android build fetches it at a pinned revision, verifies its SHA-256, caches it in the Gradle home, and packages it uncompressed as an asset (`fetchDepthModel` in `app/build.gradle`). Offline builds can pass `-Pphotoplus.depthModel=false`.
 - **Geometry.** Taps map from the portrait-locked (mirrored, for selfies) preview to the upright photo, then to the decoded bitmap, in any phone orientation (`MaskGeometry`, unit-tested).
 
 ## Testing
 
 | Suite | Result |
 |---|---|
-| Engine (ASan+UBSan, TSan) | **56 passed**. New, social-media-oriented checks: background clearly blurred (−86% texture) with the subject crisp; no colour halo; spots −86% with texture kept (not plastic); **hue within 0.1° and saturation within 1% for deep, medium and light skin tones**; side-light shading 95% kept; eyes, brows and lips stay sharp; no retouching without faces; neutral settings change nothing; deterministic and leak-free; cancellation is reported as cancellation; tap chooses the right subject (IoU 0.98–0.99); look transfer cuts the distance to the reference by 81%; ~28 MB working set on a large face |
-| Kotlin JVM | **72 passed**. New: tap mapping in all orientations and for selfies, mask rotation, Spotlight and look option parsing |
+| Engine (ASan+UBSan, TSan) | **62 passed**. Depth round: blur grows with distance like a lens (texture kept at the feet 0.99, mid-ground 0.34, far ground 0.16, wall 0.07, in front 0.63); stronger blur gives shallower focus; the ground plane is estimated without depth; close-ups blur the whole background; deep and very deep skin: near-black nostrils get no colour cast (shift 0.004) and are not healed away, blemishes cleared (−91% to −95% contrast, 11 of 11), shading kept. Earlier: New, social-media-oriented checks: background clearly blurred (−86% texture) with the subject crisp; no colour halo; spots −86% with texture kept (not plastic); **hue within 0.1° and saturation within 1% for deep, medium and light skin tones**; side-light shading 95% kept; eyes, brows and lips stay sharp; no retouching without faces; neutral settings change nothing; deterministic and leak-free; cancellation is reported as cancellation; tap chooses the right subject (IoU 0.98–0.99); look transfer cuts the distance to the reference by 81%; ~28 MB working set on a large face |
+| Kotlin JVM | **77 passed**. New: depth model input normalisation, robust depth stretch, head crop for small faces. Earlier: tap mapping in all orientations and for selfies, mask rotation, Spotlight and look option parsing |
 | Jest | **165 passed**. New: plans (Clarity and Spotlight free, multi-shot and Vibe Match Premium, with enforcement on), no-jargon check, Spotlight tap and settings flow to capture, Vibe Match camera settings and capture, exposure reset when Vibe Match is turned off, photo-preview tools, Share, Spotlight on before/after photos, edits never overwrite originals, old style photos removed, "Edit a photo" import |
 | Static | tsc, ESLint (no-deprecated), Prettier, Kotlin 0 warnings, Android Lint "No issues found" |
 
@@ -170,6 +178,8 @@ Synthetic tests were not enough on their own, so the tools were run on Kodak por
 - **A full-length shot with a small face looked ashy.** Retouch strength wasn't tied to face size, and the lift didn't scale colour. Fixed, and a saturation test was added for every skin tone.
 - **The colour-only tap cut-out confused dark clothing with a dark sculpture, and skin with a pink backdrop.** It now detects this and falls back to a harmonious soft-focus look. On phones, ML Kit's segmentation is the primary mask. With a person mask (MediaPipe's selfie segmenter standing in for ML Kit on this machine), Spotlight gives clean hair edges with no halo.
 - **The spot count was inflated** by stray pixels; only blemish-sized clusters are counted now.
+- **Spotlight looked flat (2D), and the ground the woman in kodim18 stood on was blurred** along with the background. A plain cut-out cannot tell ground at the feet from ground far behind. Spotlight is now depth-aware (above): the barrel and grass at her feet stay sharp, the rusty sculpture is sharp where her hand touches it and softens with distance, and the arch and trees melt.
+- **Glow on deep skin (a dark-skinned man's close-up) turned nostrils blue, flattened shading, looked pale and "healed" 41 spots.** Cause: clarity could push a near-black pixel below zero, and the brightening step then divided by ~0.001, flipping and multiplying its colour; absolute thresholds and smoothing strength were also biased against deep skin. Fixed (relative thresholds, bounded ratios, blemish-size limit). It now heals 8 real marks with no colour cast. On kodim18 (dark-skinned woman with facial spots) Glow clears the forehead and cheek marks: 5 blemishes, see `design/spotlight-glow.png`.
 
 ## Code review
 
@@ -189,4 +199,4 @@ Ten findings, all fixed with regression tests:
 
 - Check subject segmentation's first-use download and the fallback path on devices without Google Play services.
 - Tune Glow levels on a range of real selfies, in varied lighting and across skin tones.
-- Measure Spotlight time on entry-tier phones.
+- Measure Spotlight time on entry-tier phones, including the depth estimate (~0.2 s on 4 desktop cores; GPU or NPU acceleration can be added later).

@@ -255,7 +255,7 @@ Run portrait(const Scene& s, const pp_portrait_params& p, bool withFaces = true)
   pp_image* faces = withFaces ? s.mask(s.face, 2) : nullptr;
   pp_image* prot = withFaces ? s.mask(s.protect, 2) : nullptr;
   pp_portrait_report r{};
-  const pp_status st = pp_portrait(img, subj, faces, prot, &p, nullptr, &r);
+  const pp_status st = pp_portrait(img, subj, faces, prot, nullptr, &p, nullptr, &r);
   EXPECT_EQ(st, PP_OK);
   pp_image_destroy(subj);
   pp_image_destroy(faces);
@@ -361,7 +361,7 @@ TEST(portrait_large_photo_retouches_on_a_small_budget) {
   const uint64_t base = liveBytes();
   const pp_portrait_params p = defaults();
   pp_portrait_report r{};
-  EXPECT_EQ(pp_portrait(img, subj, faces, prot, &p, nullptr, &r), PP_OK);
+  EXPECT_EQ(pp_portrait(img, subj, faces, prot, nullptr, &p, nullptr, &r), PP_OK);
   pp_memory_stats st{};
   pp_memory_get_stats(&st);
   const Ycc b = yccOf(img);
@@ -486,6 +486,94 @@ TEST(portrait_eyes_brows_lips_stay_sharp) {
   pp_image_destroy(r.out);
 }
 
+// Deep and very deep skin, at a phone-like face size, with near-black
+// nostrils that the feature mask does not cover (as with a real face model).
+struct DeepFace {
+  Scene s;
+  std::vector<uint8_t> nostrils;
+  explicit DeepFace(Rgbf tone) : s(tone, 5, 2) {
+    nostrils.assign(s.px.size(), 0);
+    for (int y = 0; y < s.h; ++y)
+      for (int x = 0; x < s.w; ++x) {
+        const float fx = static_cast<float>(x) / 2.0f, fy = static_cast<float>(y) / 2.0f;
+        for (const float nx : {s.fcx - 9.0f, s.fcx + 9.0f})
+          if (inEllipse(fx, fy, nx, s.fcy + 24.0f, 5.0f, 3.0f)) {
+            s.px[static_cast<size_t>(y) * s.w + x] = {0.035f, 0.02f, 0.008f};
+            nostrils[static_cast<size_t>(y) * s.w + x] = 1;
+          }
+      }
+  }
+};
+
+pp_portrait_params glowFull() {
+  pp_portrait_params p = defaults();
+  p.retouch = 1.0f;
+  p.pop = 0.3f;  // clarity pushes the darkest pixels hardest
+  return p;
+}
+
+TEST(portrait_deep_skin_dark_features_get_no_false_colour) {
+  for (const Rgbf tone : {kDeep, Rgbf{0.22f, 0.13f, 0.085f}}) {
+    DeepFace f(tone);
+    pp_image* before = f.s.image();
+    const Ycc a = yccOf(before);
+    Run r = portrait(f.s, glowFull());
+    const Ycc b = yccOf(r.out);
+    double worst = 0.0, ya = 0.0, yb = 0.0;
+    size_t n = 0;
+    for (size_t i = 0; i < f.nostrils.size(); ++i)
+      if (f.nostrils[i]) {
+        worst = std::max({worst, static_cast<double>(std::fabs(b.cb[i] - a.cb[i])), static_cast<double>(std::fabs(b.cr[i] - a.cr[i]))});
+        ya += a.y[i];
+        yb += b.y[i];
+        ++n;
+      }
+    std::printf("    tone %.2f: nostril colour shift %.4f, luma %.3f -> %.3f\n", tone.r, worst, ya / n, yb / n);
+    EXPECT_TRUE(worst < 0.015);          // no blue or green cast in near-black features
+    EXPECT_TRUE(yb / n - ya / n < 0.04);  // and they are not "healed" into skin
+    pp_image_destroy(before);
+    pp_image_destroy(r.out);
+  }
+}
+
+TEST(portrait_deep_skin_blemishes_healed_shape_kept) {
+  for (const Rgbf tone : {kDeep, Rgbf{0.22f, 0.13f, 0.085f}}) {
+    DeepFace f(tone);
+    pp_image* before = f.s.image();
+    const Ycc a = yccOf(before);
+    Run r = portrait(f.s, defaults());
+    const Ycc b = yccOf(r.out);
+    const double cBefore = spotContrast(f.s, a), cAfter = spotContrast(f.s, b);
+    // Lit/shadowed cheek ratio, relative to this tone (the shape of the face).
+    auto cheeks = [&](const Ycc& c) {
+      double l = 0, rr = 0;
+      int nl = 0, nr = 0;
+      for (int y = 350; y < 400; ++y)
+        for (int x = 260; x < 460; ++x) {
+          const size_t i = static_cast<size_t>(y) * f.s.w + x;
+          if (!f.s.face[i] || f.s.protect[i] || f.s.spotCentre[i]) continue;
+          if (x < 300) {
+            l += c.y[i];
+            ++nl;
+          } else if (x > 420) {
+            rr += c.y[i];
+            ++nr;
+          }
+        }
+      return (rr / nr) / (l / nl);
+    };
+    const double ra = cheeks(a), rb = cheeks(b);
+    std::printf("    tone %.2f: spot contrast %.4f -> %.4f (%d healed), lit/shadow %.3f -> %.3f\n", tone.r, cBefore, cAfter,
+                r.report.spots_removed, ra, rb);
+    EXPECT_TRUE(cAfter < 0.3 * cBefore);       // blemishes on deep skin are found and cleared
+    EXPECT_TRUE(r.report.spots_removed >= 8);  // ...each of them
+    EXPECT_TRUE(r.report.spots_removed <= 16);  // nostrils are not counted as blemishes
+    EXPECT_TRUE(rb > 1.0 + 0.8 * (ra - 1.0));   // shading not flattened
+    pp_image_destroy(before);
+    pp_image_destroy(r.out);
+  }
+}
+
 TEST(portrait_neutral_settings_change_nothing) {
   Scene s(kLight);
   pp_image* before = s.image();
@@ -529,16 +617,16 @@ TEST(portrait_rejects_bad_input_and_honours_cancel) {
   pp_image* img = s.image();
   pp_image* subj = s.mask(s.subject, 2);
   const pp_portrait_params p = defaults();
-  EXPECT_EQ(pp_portrait(img, nullptr, nullptr, nullptr, &p, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_portrait(img, nullptr, nullptr, nullptr, nullptr, &p, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_portrait_params bad = p;
   bad.blur = NAN;
-  EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, &bad, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, nullptr, &bad, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_cancel_token* t = pp_cancel_token_create();
   pp_cancel_token_cancel(t);
-  EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, &p, t, nullptr), PP_ERROR_CANCELLED);
+  EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, nullptr, &p, t, nullptr), PP_ERROR_CANCELLED);
   // ...also with skin retouching in play (never misreported as low memory).
   pp_image* faces = s.mask(s.face, 2);
-  EXPECT_EQ(pp_portrait(img, subj, faces, nullptr, &p, t, nullptr), PP_ERROR_CANCELLED);
+  EXPECT_EQ(pp_portrait(img, subj, faces, nullptr, nullptr, &p, t, nullptr), PP_ERROR_CANCELLED);
   pp_image_destroy(faces);
   pp_cancel_token_destroy(t);
   float pts[2] = {0.5f, 0.5f};
@@ -735,4 +823,191 @@ TEST(look_of_itself_or_zero_strength_changes_nothing) {
   pp_image_destroy(img2);
   pp_image_destroy(orig);
   pp_image_destroy(ref);
+}
+
+// ---------------------------------------------------------------------------
+// Depth: a person standing on textured ground in front of a wall. Like a real
+// lens, the ground at their feet stays sharp, the ground further back blurs
+// progressively, the wall blurs most, and ground nearer than them blurs too.
+namespace {
+
+struct Scene3D {
+  int w = 360, h = 480, horizon = 180, feet = 400;
+  std::vector<uint8_t> rgba, person, depth;
+  float groundDepth(int y) const { return 0.2f + 0.8f * static_cast<float>(y - horizon) / static_cast<float>(h - horizon); }
+
+  explicit Scene3D(bool closeUp = false) {
+    const auto n = static_cast<size_t>(w) * h;
+    rgba.assign(n * 4, 255);
+    person.assign(n, 0);
+    depth.assign(n, 0);
+    for (int y = 0; y < h; ++y)
+      for (int x = 0; x < w; ++x) {
+        const size_t i = static_cast<size_t>(y) * w + x;
+        float r, g, b, dv;
+        if (y < horizon) {  // wall
+          const float t = 0.45f + 0.25f * (((x / 6) + (y / 6)) % 2) + 0.05f * (hash01(x, y, 11) - 0.5f);
+          r = t * 0.8f, g = t * 0.75f, b = t * 0.9f, dv = 0.1f;
+        } else {  // ground with texture that stays the same size in pixels
+          // Fine and coarse pattern, so both light and heavy blur are measurable.
+          const float t = 0.3f + 0.15f * (((x / 4) + (y / 4)) % 2) + 0.2f * (((x / 12) + (y / 12)) % 2) +
+                          0.05f * (hash01(x, y, 12) - 0.5f);
+          r = t * 0.6f, g = t * 0.9f, b = t * 0.5f, dv = groundDepth(y);
+        }
+        const bool body = closeUp ? (inEllipse(x, y, 180, 330, 120, 200) || y > 400)
+                                  : (inEllipse(x, y, 180, 150, 28, 34) || (std::abs(x - 180) < 40 && y > 180 && y <= feet));
+        if (body) {
+          const float t = 0.55f + 0.2f * ((x / 2 + y / 2) % 2);
+          r = t * 0.85f, g = t * 0.2f, b = t * 0.25f;
+          dv = closeUp ? 0.9f : groundDepth(feet);
+          person[i] = 255;
+        }
+        rgba[i * 4] = static_cast<uint8_t>(r * 255);
+        rgba[i * 4 + 1] = static_cast<uint8_t>(g * 255);
+        rgba[i * 4 + 2] = static_cast<uint8_t>(b * 255);
+        depth[i] = static_cast<uint8_t>(std::lround(std::clamp(dv, 0.0f, 1.0f) * 255));
+      }
+  }
+
+  pp_image* image() const {
+    pp_image* img = nullptr;
+    pp_image_create(w, h, PP_FORMAT_RGBA8, &img);
+    std::memcpy(pp_image_pixels(img), rgba.data(), rgba.size());
+    return img;
+  }
+  pp_image* gray(const std::vector<uint8_t>& v, int f) const {
+    pp_image* img = nullptr;
+    pp_image_create(w / f, h / f, PP_FORMAT_GRAY8, &img);
+    pp_image_info info{};
+    pp_image_get_info(img, &info);
+    auto* p = static_cast<uint8_t*>(pp_image_pixels(img));
+    for (int y = 0; y < h / f; ++y)
+      for (int x = 0; x < w / f; ++x) p[static_cast<size_t>(y) * info.stride + x] = v[static_cast<size_t>(y * f) * w + x * f];
+    return img;
+  }
+};
+
+// Texture kept in a horizontal band of rows, away from the person.
+double bandTexture(const Ycc& a, const Ycc& b, const Scene3D& s, int y0, int y1) {
+  std::vector<uint8_t> region(static_cast<size_t>(s.w) * s.h, 0);
+  for (int y = y0; y < y1; ++y)
+    for (int x = 8; x < s.w - 8; ++x)
+      if (std::abs(x - 180) > 70) region[static_cast<size_t>(y) * s.w + x] = 1;
+  // Band-pass at two scales: fine detail and the coarser pattern.
+  auto measure = [&](const Ycc& c) {
+    const auto b1 = boxBlur(c.y, s.w, s.h, 1), b4 = boxBlur(c.y, s.w, s.h, 4), b12 = boxBlur(c.y, s.w, s.h, 12);
+    double sum = 0;
+    for (size_t i = 0; i < region.size(); ++i)
+      if (region[i]) sum += std::fabs(b1[i] - b4[i]) + std::fabs(b4[i] - b12[i]);
+    return sum;
+  };
+  return measure(b) / measure(a);
+}
+
+pp_portrait_params blurOnly() {
+  pp_portrait_params p = defaults();
+  p.retouch = 0.0f;
+  p.brighten = 0.0f;
+  p.pop = 0.0f;
+  return p;
+}
+
+}  // namespace
+
+TEST(depth_blur_grows_with_distance_like_a_lens) {
+  Scene3D s;
+  pp_image* before = s.image();
+  pp_image* img = s.image();
+  pp_image* subj = s.gray(s.person, 2);
+  pp_image* dep = s.gray(s.depth, 4);  // depth models output low resolution
+  const pp_portrait_params p = blurOnly();
+  pp_portrait_report r{};
+  EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, dep, &p, nullptr, &r), PP_OK);
+  const Ycc a = yccOf(before), b = yccOf(img);
+  const double atFeet = bandTexture(a, b, s, 385, 405);
+  const double midGround = bandTexture(a, b, s, 290, 320);
+  const double farGround = bandTexture(a, b, s, 185, 215);
+  const double wall = bandTexture(a, b, s, 40, 150);
+  const double nearGround = bandTexture(a, b, s, 450, 475);
+  std::printf("    texture kept: wall %.2f, far ground %.2f, mid %.2f, at the feet %.2f, in front %.2f (focus %.2f)\n", wall,
+              farGround, midGround, atFeet, nearGround, r.focus_depth);
+  EXPECT_TRUE(atFeet > 0.75);                 // where they stand stays sharp
+  EXPECT_TRUE(midGround < atFeet - 0.15);     // softer further back...
+  EXPECT_TRUE(farGround < midGround);         // ...and softer still
+  EXPECT_TRUE(wall < 0.3);                    // the far background melts
+  EXPECT_TRUE(nearGround < atFeet - 0.1);     // nearer than them blurs too
+  EXPECT_TRUE(r.depth_estimated == 0);
+  EXPECT_NEAR(r.focus_depth, s.groundDepth(s.feet), 0.05);
+  // The person stays crisp.
+  std::vector<uint8_t> body(s.person.size());
+  for (size_t i = 0; i < body.size(); ++i) body[i] = s.person[i] ? 1 : 0;
+  const auto core = erode(body, s.w, s.h, 5);
+  EXPECT_TRUE(detail(b.y, core, s.w, s.h) > 0.9 * detail(a.y, core, s.w, s.h));
+  pp_image_destroy(dep);
+  pp_image_destroy(subj);
+  pp_image_destroy(img);
+  pp_image_destroy(before);
+}
+
+TEST(depth_stronger_blur_means_shallower_focus) {
+  Scene3D s;
+  pp_image* before = s.image();
+  const Ycc a = yccOf(before);
+  double mid[2];
+  for (int i = 0; i < 2; ++i) {
+    pp_image* img = s.image();
+    pp_image* subj = s.gray(s.person, 2);
+    pp_image* dep = s.gray(s.depth, 4);
+    pp_portrait_params p = blurOnly();
+    p.blur = i == 0 ? 0.35f : 0.9f;
+    EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, dep, &p, nullptr, nullptr), PP_OK);
+    mid[i] = bandTexture(a, yccOf(img), s, 300, 330);
+    pp_image_destroy(dep);
+    pp_image_destroy(subj);
+    pp_image_destroy(img);
+  }
+  std::printf("    mid-ground texture kept: light %.2f, strong %.2f\n", mid[0], mid[1]);
+  EXPECT_TRUE(mid[1] < mid[0] - 0.1);
+  pp_image_destroy(before);
+}
+
+TEST(without_depth_the_ground_plane_is_estimated) {
+  Scene3D s;
+  pp_image* before = s.image();
+  pp_image* img = s.image();
+  pp_image* subj = s.gray(s.person, 2);
+  const pp_portrait_params p = blurOnly();
+  pp_portrait_report r{};
+  EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, nullptr, &p, nullptr, &r), PP_OK);
+  const Ycc a = yccOf(before), b = yccOf(img);
+  const double atFeet = bandTexture(a, b, s, 385, 405), farGround = bandTexture(a, b, s, 185, 215);
+  const double wall = bandTexture(a, b, s, 40, 150);
+  std::printf("    estimated depth: at the feet %.2f, far ground %.2f, wall %.2f\n", atFeet, farGround, wall);
+  EXPECT_TRUE(r.depth_estimated == 1);
+  EXPECT_TRUE(atFeet > 0.7);
+  EXPECT_TRUE(farGround < atFeet - 0.25);
+  EXPECT_TRUE(wall < 0.35);
+  pp_image_destroy(subj);
+  pp_image_destroy(img);
+  pp_image_destroy(before);
+}
+
+TEST(close_up_without_depth_blurs_the_whole_background) {
+  Scene3D s(/*closeUp=*/true);
+  pp_image* before = s.image();
+  pp_image* img = s.image();
+  pp_image* subj = s.gray(s.person, 2);
+  const pp_portrait_params p = blurOnly();
+  EXPECT_EQ(pp_portrait(img, subj, nullptr, nullptr, nullptr, &p, nullptr, nullptr), PP_OK);
+  const Ycc a = yccOf(before), b = yccOf(img);
+  // Beside the shoulders (bottom of the frame) is background too: no sharp patch.
+  std::vector<uint8_t> side(static_cast<size_t>(s.w) * s.h, 0);
+  for (int y = 300; y < 400; ++y)
+    for (int x = 4; x < 40; ++x) side[static_cast<size_t>(y) * s.w + x] = s.person[static_cast<size_t>(y) * s.w + x] ? 0 : 1;
+  const double kept = texture(b.y, side, s.w, s.h) / texture(a.y, side, s.w, s.h);
+  std::printf("    beside the shoulders: texture kept %.2f\n", kept);
+  EXPECT_TRUE(kept < 0.5);
+  pp_image_destroy(subj);
+  pp_image_destroy(img);
+  pp_image_destroy(before);
 }

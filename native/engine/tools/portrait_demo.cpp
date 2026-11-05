@@ -6,7 +6,7 @@
 //   portrait_demo IN.ppm OUT.ppm [MASK.pgm] [--tap x,y]... [--face cx,cy,rx,ry]...
 //                 [--protect cx,cy,rx,ry]... [--blur v] [--retouch v] [--brighten v] [--pop v]
 //                 [--look REF.ppm] [--strength v]
-//                 [--subject-mask M.pgm] [--faces-mask F.pgm] [--protect-mask P.pgm]
+//                 [--subject-mask M.pgm] [--faces-mask F.pgm] [--protect-mask P.pgm] [--depth-mask D.pgm]
 // Mask files replace taps/ellipses (e.g. masks from an on-device model).
 // Coordinates are normalised to 0..1. Prints a one-line JSON report.
 
@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
   std::vector<std::vector<float>> faces, protect;
   pp_portrait_params params{};
   pp_portrait_default_params(&params);
-  std::string look, subjectFile, facesFile, protectFile;
+  std::string look, subjectFile, facesFile, protectFile, depthFile;
   float strength = 0.8f;
   for (; i + 1 < argc; i += 2) {
     const std::string k = argv[i];
@@ -149,6 +149,7 @@ int main(int argc, char** argv) {
     else if (k == "--subject-mask") subjectFile = argv[i + 1];
     else if (k == "--faces-mask") facesFile = argv[i + 1];
     else if (k == "--protect-mask") protectFile = argv[i + 1];
+    else if (k == "--depth-mask") depthFile = argv[i + 1];
   }
   pp_image_info info{};
   pp_image_get_info(img, &info);
@@ -169,19 +170,21 @@ int main(int argc, char** argv) {
   }
   pp_image* faceMask = facesFile.empty() ? ellipses(info.width / 2, info.height / 2, faces) : readPgm(facesFile);
   pp_image* protectMask = protectFile.empty() ? ellipses(info.width / 2, info.height / 2, protect) : readPgm(protectFile);
+  pp_image* depthMask = depthFile.empty() ? nullptr : readPgm(depthFile);
   pp_portrait_report r{};
-  if (pp_portrait(img, subject, faceMask, protectMask, &params, nullptr, &r) != PP_OK) {
+  if (pp_portrait(img, subject, faceMask, protectMask, depthMask, &params, nullptr, &r) != PP_OK) {
     std::fprintf(stderr, "portrait failed: %s\n", pp_last_error_message());
     return 1;
   }
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   if (!maskOut.empty()) writePgm(maskOut, subject);
   writePpm(argv[2], img);
-  std::printf("{\"ms\":%.1f,\"subject\":%.3f,\"skin\":%.4f,\"spots\":%d,\"blurRadius\":%.1f}\n", ms, r.subject_coverage,
-              r.skin_coverage, r.spots_removed, r.blur_radius);
+  std::printf("{\"ms\":%.1f,\"subject\":%.3f,\"skin\":%.4f,\"spots\":%d,\"blurRadius\":%.1f,\"focus\":%.2f,\"estimated\":%d}\n", ms,
+              r.subject_coverage, r.skin_coverage, r.spots_removed, r.blur_radius, r.focus_depth, r.depth_estimated);
   pp_image_destroy(subject);
   pp_image_destroy(faceMask);
   pp_image_destroy(protectMask);
+  pp_image_destroy(depthMask);
   pp_image_destroy(img);
   return 0;
 }

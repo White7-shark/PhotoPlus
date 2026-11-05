@@ -40,6 +40,8 @@
 | ML Kit face detection (bundled) | **16.1.7** | 16.1.7 |
 | ML Kit selfie segmentation (bundled) | **16.0.0-beta6** | 16.0.0-beta6 (Google ships it only as beta) |
 | ML Kit subject segmentation (Play services) | **16.0.0-beta1** | 16.0.0-beta1 (Google ships it only as beta) |
+| LiteRT (on-device inference, 16 KB page aligned) | **2.3.2** | 2.3.2 |
+| Depth Anything V2 Small, LiteRT 8-bit weights (Apache-2.0; fetched and SHA-256-verified at build time, revision `178427e`) | **2024 release** | — |
 | JUnit (Jupiter, via BOM) | **6.1.3** | 6.1.3 (migrated from JUnit 4, which is maintenance-only) |
 | org.json (tests) | **20260814** | 20260814 |
 

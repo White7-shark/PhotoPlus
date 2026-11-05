@@ -17,6 +17,7 @@
 // lift that preserves hue. Tests check this across skin tones.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 #include <utility>
@@ -87,35 +88,46 @@ struct SkinResult {
   Plane base, retouched;  // luma before / after retouching (grid)
   Plane dcb, dcr;         // chroma change (grid)
   float keep = 1.0f;      // share of fine texture kept on skin
+  float skinLuma = 0.5f;  // the person's median skin luma
   int32_t spots = 0;
   double skinSum = 0.0;   // in full-res pixels
 
   bool active() const { return !skin.empty(); }
 };
 
-// Blemish-sized clusters only (stray pixels are not reported as spots).
-int32_t countSpots(const Plane& spot, int32_t minArea) {
+// Keeps blemish-sized clusters only: stray pixels are not reported, and
+// anything larger than a blemish (a nostril, a crease, the shadow under the
+// jaw) is a feature of the face, so it is cleared from the map, not healed.
+// Returns the number of blemishes.
+int32_t keepBlemishes(Plane& spot, int32_t minArea, int32_t maxArea) {
   const int32_t w = spot.width(), h = spot.height();
   std::vector<uint8_t> seen(spot.size(), 0);
-  std::vector<int32_t> stack;
+  std::vector<int32_t> stack, members;
   int32_t count = 0;
   for (int32_t i = 0; i < w * h; ++i) {
     if (seen[static_cast<size_t>(i)] || spot.data()[i] < 0.5f) continue;
-    int32_t area = 0;
+    // Connected through the soft fringe; sized by its solid core.
+    int32_t core = 0;
+    members.clear();
     stack.push_back(i);
     while (!stack.empty()) {
       const int32_t j = stack.back();
       stack.pop_back();
-      if (seen[static_cast<size_t>(j)] || spot.data()[j] < 0.5f) continue;
+      if (seen[static_cast<size_t>(j)] || spot.data()[j] < 0.1f) continue;
       seen[static_cast<size_t>(j)] = 1;
-      ++area;
+      members.push_back(j);
+      if (spot.data()[j] >= 0.5f) ++core;
       const int32_t x = j % w, y = j / w;
       if (x > 0) stack.push_back(j - 1);
       if (x < w - 1) stack.push_back(j + 1);
       if (y > 0) stack.push_back(j - w);
       if (y < h - 1) stack.push_back(j + w);
     }
-    if (area >= minArea) ++count;
+    if (core > maxArea) {
+      for (const int32_t j : members) spot.data()[j] = 0.0f;
+    } else if (core >= minArea) {
+      ++count;
+    }
   }
   return count;
 }
@@ -204,7 +216,7 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   r.x1 = std::clamp(static_cast<int32_t>(static_cast<float>(bx1 + 1) / fx + 0.8f * fw), 0, W);
   r.y0 = std::clamp(static_cast<int32_t>(static_cast<float>(by0) / fy - 0.3f * fh), 0, H);
   r.y1 = std::clamp(static_cast<int32_t>(static_cast<float>(by1 + 1) / fy + 1.6f * fh), 0, H);
-  if (r.w() < 16 || r.h() < 16 || faceScaleFull < 12.0f) return res;
+  if (r.w() < 16 || r.h() < 16 || faceScaleFull < 20.0f) return res;
 
   // Work where the face is ~180 px across: big faces cost no more memory.
   const int32_t scale = std::max<int32_t>(1, static_cast<int32_t>(std::lround(faceScaleFull / 180.0f)));
@@ -216,7 +228,7 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   const int32_t cw = Yc.width(), ch = Yc.height();
   auto F = Plane::allocate(cw, ch), Pr = Plane::allocate(cw, ch), S = Plane::allocate(cw, ch);
   if (!F || !Pr || !S) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory to retouch"));
-  std::vector<float> sampCb, sampCr;
+  std::vector<float> sampCb, sampCr, sampY;
   for (int32_t y = 0; y < ch; ++y)
     for (int32_t x = 0; x < cw; ++x) {
       // Centre of this grid cell in full-res pixel coordinates.
@@ -234,12 +246,17 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
       if (fv > 0.6f && pv < 0.3f && yy > 0.06f && yy < 0.98f) {
         sampCb.push_back(Cb.row(y)[x]);
         sampCr.push_back(Cr.row(y)[x]);
+        sampY.push_back(yy);
       }
     }
   if (sampCb.size() < 100) return res;
 
   // This person's own skin colour (robust statistics over the face).
   const float mcb = median(sampCb), mcr = median(sampCr);
+  // The person's own skin brightness: every retouch threshold is relative to
+  // it, so deep and light skin are treated alike (absolute thresholds would
+  // flatten the shading of deep skin and miss its blemishes).
+  const float mY = std::max(0.08f, median(sampY));
   for (auto& v : sampCb) v = std::fabs(v - mcb);
   for (auto& v : sampCr) v = std::fabs(v - mcr);
   const float scb = std::max(0.012f, 1.4826f * median(sampCb));
@@ -272,8 +289,8 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   // Small faces (group or full-length shots) already show no fine texture:
   // smoothing them would only erase the natural shading that shapes a face,
   // and their "spots" would really be nostrils or eye corners.
-  const float strength = std::clamp(p.retouch, 0.0f, 1.0f) * smoothstep(40.0f, 140.0f, faceScaleFull);
-  const bool healSpots = faceScaleFull >= 100.0f;
+  const float strength = std::clamp(p.retouch, 0.0f, 1.0f) * smoothstep(20.0f, 90.0f, faceScaleFull);
+  const bool healSpots = faceScaleFull >= 28.0f;
 
   // 1. Spots: small dark or red blemishes against the surrounding SKIN only
   //    (averages weighted by the skin map, so hair, background or the face
@@ -298,11 +315,17 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   auto spot = Plane::allocate(cw, ch);
   if (!spot) return failure(spot.error());
   for (size_t i = 0; i < spot->size(); ++i) {
-    const float dark = smoothstep(0.015f, 0.05f, G->data()[i] - Yc.data()[i]);
-    const float red = smoothstep(0.012f, 0.035f, Cr.data()[i] - CrS->data()[i]);
+    const float g = std::max(G->data()[i], 0.25f * mY);
+    const float dark = smoothstep(0.035f, 0.1f, (G->data()[i] - Yc.data()[i]) / g);
+    const float red = smoothstep(0.025f, 0.07f, (Cr.data()[i] - CrS->data()[i]) / std::max(g, 0.12f));
     spot->data()[i] = healSpots ? std::max(dark, red) * smoothstep(0.45f, 0.75f, S->data()[i]) : 0.0f;
   }
-  res.spots = strength > 0.0f && healSpots ? countSpots(*spot, std::max(6, rs * rs)) : 0;
+  {
+    const float rMax = 0.03f * faceScale;
+    const int32_t maxArea = std::max(12, static_cast<int32_t>(3.14159f * rMax * rMax));
+    const int32_t n = keepBlemishes(*spot, std::max(6, rs * rs), maxArea);
+    res.spots = strength > 0.0f && healSpots ? n : 0;
+  }
   auto spotD = blurLarge(*spot, 0.6f * static_cast<float>(rs), token);
   if (!spotD) return failure(spotD.error());
   for (auto* v = spotD->data(); v != spotD->data() + spotD->size(); ++v) *v = std::min(1.0f, *v * 3.0f);
@@ -341,7 +364,7 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   auto base = clonePlane(*Yh);
   if (!base) return failure(base.error());
   if (strength > 0.0f) {
-    if (Error e = enhance::denoiseGuided(*base, rs, 0.03f * 0.03f, 0.0f, token); e.status != PP_OK) return failure(e);
+    if (Error e = enhance::denoiseGuided(*base, rs, std::max(0.07f * mY, 0.01f) * std::max(0.07f * mY, 0.01f), 0.0f, token); e.status != PP_OK) return failure(e);
   }
   const float keep = 1.0f - 0.9f * strength;
 
@@ -350,8 +373,10 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   if (!CbS) return failure(CbS.error());
   auto CrS2 = blurLarge(*Crh, 2.0f * static_cast<float>(rs), token);
   if (!CrS2) return failure(CrS2.error());
+  auto YS = blurLarge(*Yh, 2.0f * static_cast<float>(rs), token);
+  if (!YS) return failure(YS.error());
   const float even = 0.65f * strength;
-  const float lift = 0.055f * std::clamp(p.brighten, 0.0f, 1.0f);
+  const float lift = 0.07f * std::clamp(p.brighten, 0.0f, 1.0f);
 
   // Fully-retouched values; the composite blends them in by the skin weight.
   auto ret = Plane::allocate(cw, ch), dcb = Plane::allocate(cw, ch), dcr = Plane::allocate(cw, ch);
@@ -359,15 +384,19 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   double skinSum = 0.0;
   for (size_t i = 0; i < ret->size(); ++i) {
     float yv = base->data()[i] + keep * (Yh->data()[i] - base->data()[i]);
-    const float tcb = CbS->data()[i] + 0.3f * (mcb - CbS->data()[i]);
-    const float tcr = CrS2->data()[i] + 0.3f * (mcr - CrS2->data()[i]);
+    // Target colour at this cell's own brightness: chroma scales with luma,
+    // so a darker feature keeps proportionally less colour (never a tint).
+    const float rel = std::clamp((Yh->data()[i] + 0.02f) / (YS->data()[i] + 0.02f), 0.0f, 1.5f);
+    const float tcb = rel * (CbS->data()[i] + 0.3f * (mcb - CbS->data()[i]));
+    const float tcr = rel * (CrS2->data()[i] + 0.3f * (mcr - CrS2->data()[i]));
     float cb = Cbh->data()[i] + even * (tcb - Cbh->data()[i]);
     float cr = Crh->data()[i] + even * (tcr - Crh->data()[i]);
     // Exposure-style lift: chroma scales with luma, so hue and saturation
     // hold (a lift without it reads as pale or ashy, on any skin tone).
-    const float before = std::max(yv, 1e-3f);
-    yv += lift * (1.0f - yv) * smoothstep(0.03f, 0.3f, yv);
-    const float k = yv / before;
+    yv = std::max(yv, 0.0f);
+    const float before = yv;
+    yv = std::min(1.0f, yv * (1.0f + lift * (1.0f - yv) * smoothstep(0.03f, 0.3f, yv)));
+    const float k = std::clamp((yv + 0.02f) / (before + 0.02f), 0.0f, 1.25f);
     ret->data()[i] = yv;
     dcb->data()[i] = cb * k - Cb.data()[i];
     dcr->data()[i] = cr * k - Cr.data()[i];
@@ -376,6 +405,7 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   res.rect = r;
   res.scale = scale;
   res.keep = keep;
+  res.skinLuma = mY;
   res.skinSum = skinSum * static_cast<double>(scale) * scale;
   res.skin = std::move(S).value();
   res.base = std::move(Yc);
@@ -385,24 +415,101 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   return res;
 }
 
-// Subject-free lens blur of the background on a reduced grid (linear light).
+// Depth-aware lens blur on a reduced grid, in linear light.
+//
+// Like a real lens (and flagship phones' portrait modes), each area's blur
+// grows with its depth distance from the subject's focus plane: the ground
+// at the subject's feet and anything beside them stays sharp, the ground
+// further back softens progressively, the far background melts, and things
+// nearer than the subject blur too. The image is split into depth bands;
+// each band is blurred by its own amount and they are composited back to
+// front, so a blurred background never bleeds over nearer things.
 struct Bokeh {
-  Plane r, g, b;
+  Plane farR, farG, farB;                // background behind the focus plane (hole-filled)
+  Plane nearR, nearG, nearB, nearA;      // in front of the focus plane (premultiplied)
+  Plane focus;                           // weight of the sharp, in-focus band
   int32_t factor = 1;
   float radius = 0.0f;
 };
 
-Result<Bokeh> lensBlur(const ImageBuffer& image, const Matte& matte, float radius, float pop,
-                       const CancellationToken* token) {
-  ScopedTimer timer("portrait.lensBlur");
+namespace {
+
+struct Tap {
+  int32_t dx, dy;
+  float w;
+};
+
+std::vector<Tap> discTaps(float radius) {
+  std::vector<Tap> taps;
+  const auto R = static_cast<int32_t>(std::ceil(radius + 0.5f));
+  for (int32_t dy = -R; dy <= R; ++dy)
+    for (int32_t dx = -R; dx <= R; ++dx) {
+      const float wgt = std::clamp(radius + 0.5f - std::sqrt(static_cast<float>(dx * dx + dy * dy)), 0.0f, 1.0f);
+      if (wgt > 0.0f) taps.push_back({dx, dy, wgt});
+    }
+  return taps;
+}
+
+// Disc blur of premultiplied colour + weight planes (same kernel for all).
+Error discBlur(const std::array<const Plane*, 4>& src, std::array<Plane, 4>& dst, float radius,
+               const CancellationToken* token) {
+  const int32_t w = src[0]->width(), h = src[0]->height();
+  for (auto& p : dst) {
+    auto a = Plane::allocate(w, h);
+    if (!a) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur");
+    p = std::move(a).value();
+  }
+  const auto taps = discTaps(std::max(radius, 0.5f));
+  float ks = 0.0f;
+  for (const Tap& t : taps) ks += t.w;
+  const float inv = 1.0f / ks;
+  const bool done = parallelFor(h, token, [&](int32_t begin, int32_t end) {
+    for (int32_t y = begin; y < end && !isCancelled(token); ++y)
+      for (int32_t x = 0; x < w; ++x) {
+        float acc[4] = {0, 0, 0, 0};
+        for (const Tap& t : taps) {
+          const int32_t xx = std::clamp(x + t.dx, 0, w - 1), yy = std::clamp(y + t.dy, 0, h - 1);
+          for (int c = 0; c < 4; ++c) acc[c] += t.w * src[static_cast<size_t>(c)]->row(yy)[xx];
+        }
+        for (int c = 0; c < 4; ++c) dst[static_cast<size_t>(c)].row(y)[x] = acc[c] * inv;
+      }
+  });
+  return done ? ok() : cancelledError();
+}
+
+float weightedMedian(std::vector<std::pair<float, float>>& v) {
+  if (v.empty()) return 0.5f;
+  std::sort(v.begin(), v.end());
+  double total = 0.0;
+  for (const auto& e : v) total += e.second;
+  double acc = 0.0;
+  for (const auto& e : v) {
+    acc += e.second;
+    if (acc >= total * 0.5) return e.first;
+  }
+  return v.back().first;
+}
+
+}  // namespace
+
+// Exposed for tests through Report: the focus plane and how depth was known.
+struct DepthInfo {
+  float focus = 0.0f;
+  bool estimated = false;
+};
+
+Result<Bokeh> depthBokeh(const ImageBuffer& image, const Matte& matte, const Plane* depth, float radius,
+                         DepthInfo* info, const CancellationToken* token) {
+  ScopedTimer timer("portrait.depthBokeh");
   Bokeh out;
   out.radius = radius;
   out.factor = std::max<int32_t>(1, static_cast<int32_t>(std::lround(radius / 7.0f)));
   const int32_t d = out.factor;
   const int32_t W = image.width(), H = image.height();
   const int32_t w = (W + d - 1) / d, h = (H + d - 1) / d;
-  auto Lr = Plane::allocate(w, h), Lg = Plane::allocate(w, h), Lb = Plane::allocate(w, h), Wb = Plane::allocate(w, h);
-  if (!Lr || !Lg || !Lb || !Wb) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur"));
+  auto alloc = [&]() { return Plane::allocate(w, h); };
+  auto Lr = alloc(), Lg = alloc(), Lb = alloc(), A = alloc(), D = alloc(), Yg = alloc();
+  if (!Lr || !Lg || !Lb || !A || !D || !Yg) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur"));
 
   float lut[256];
   for (int i = 0; i < 256; ++i) lut[i] = toLinear(static_cast<float>(i) / 255.0f);
@@ -427,8 +534,8 @@ Result<Bokeh> lensBlur(const ImageBuffer& image, const Matte& matte, float radiu
         r *= inv;
         g *= inv;
         b *= inv;
-        // One matte evaluation per cell (at its centre, from the cell's luma).
-        const float a = matte.at(std::min(W - 1, x * d + d / 2), std::min(H - 1, y * d + d / 2), luma * inv / 255.0f);
+        Yg->row(y)[x] = luma * inv / 255.0f;
+        A->row(y)[x] = matte.at(std::min(W - 1, x * d + d / 2), std::min(H - 1, y * d + d / 2), Yg->row(y)[x]);
         // Highlights bloom into "bokeh" discs, as they do through a real lens.
         const float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
         const float s = smoothstep(0.7f, 1.0f, lum);
@@ -436,78 +543,207 @@ Result<Bokeh> lensBlur(const ImageBuffer& image, const Matte& matte, float radiu
         Lr->row(y)[x] = r * k;
         Lg->row(y)[x] = g * k;
         Lb->row(y)[x] = b * k;
-        const float bgw = std::clamp(1.0f - 1.6f * a, 0.0f, 1.0f);
-        Wb->row(y)[x] = bgw * bgw;
       }
   });
   if (!done) return failure(cancelledError());
 
-  // Anti-aliased disc kernel.
-  const float rl = radius / static_cast<float>(d);
-  const int32_t R = static_cast<int32_t>(std::ceil(rl + 0.5f));
-  struct Tap {
-    int32_t dx, dy;
-    float w;
-  };
-  std::vector<Tap> taps;
-  for (int32_t dy = -R; dy <= R; ++dy)
-    for (int32_t dx = -R; dx <= R; ++dx) {
-      const float wgt = std::clamp(rl + 0.5f - std::sqrt(static_cast<float>(dx * dx + dy * dy)), 0.0f, 1.0f);
-      if (wgt > 0.0f) taps.push_back({dx, dy, wgt});
-    }
-  auto Br = Plane::allocate(w, h), Bg = Plane::allocate(w, h), Bb = Plane::allocate(w, h);
-  if (!Br || !Bg || !Bb) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur"));
-  done = parallelFor(h, token, [&](int32_t begin, int32_t end) {
-    for (int32_t y = begin; y < end && !isCancelled(token); ++y)
+  // Disparity per cell (near = 1). From the depth map when there is one,
+  // otherwise a ground-plane estimate anchored at the subject's feet.
+  float focus = 0.6f;
+  // The in-focus range spans the subject's own depth: a standing person's feet
+  // touch the ground, so the ground where they stand stays sharp too.
+  float focusNear = focus, focusFar = focus;
+  if (depth != nullptr) {
+    const float sx = static_cast<float>(depth->width()) / static_cast<float>(w);
+    const float sy = static_cast<float>(depth->height()) / static_cast<float>(h);
+    auto raw = alloc();
+    if (!raw) return failure(raw.error());
+    for (int32_t y = 0; y < h; ++y)
       for (int32_t x = 0; x < w; ++x) {
-        float nr = 0, ng = 0, nb = 0, den = 0, pr = 0, pg = 0, pb = 0, ks = 0;
-        for (const Tap& t : taps) {
-          const int32_t xx = std::clamp(x + t.dx, 0, w - 1), yy = std::clamp(y + t.dy, 0, h - 1);
-          const float bw = t.w * Wb->row(yy)[xx];
-          const float vr = Lr->row(yy)[xx], vg = Lg->row(yy)[xx], vb = Lb->row(yy)[xx];
-          nr += bw * vr;
-          ng += bw * vg;
-          nb += bw * vb;
-          den += bw;
-          pr += t.w * vr;
-          pg += t.w * vg;
-          pb += t.w * vb;
-          ks += t.w;
-        }
-        float r, g, b;
-        if (den > 0.02f * ks) {
-          r = nr / den;
-          g = ng / den;
-          b = nb / den;
-        } else {  // deep inside the subject: hidden by the matte anyway
-          r = pr / ks;
-          g = pg / ks;
-          b = pb / ks;
-        }
-        // Soft-clip the bloomed highlights, then separate the background a
-        // touch (slightly calmer colour and light) so the subject leads.
-        auto knee = [](float v) { return v <= 0.9f ? v : 0.9f + 0.1f * (1.0f - std::exp(-(v - 0.9f) / 0.1f)); };
-        r = knee(r);
-        g = knee(g);
-        b = knee(b);
-        const float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
-        const float desat = 0.12f * pop, dim = 1.0f - 0.06f * pop;
-        Br->row(y)[x] = (r + desat * (lum - r)) * dim;
-        Bg->row(y)[x] = (g + desat * (lum - g)) * dim;
-        Bb->row(y)[x] = (b + desat * (lum - b)) * dim;
+        raw->row(y)[x] = depth->sample((static_cast<float>(x) + 0.5f) * sx - 0.5f, (static_cast<float>(y) + 0.5f) * sy - 0.5f);
       }
-  });
-  if (!done) return failure(cancelledError());
-  out.r = std::move(Br).value();
-  out.g = std::move(Bg).value();
-  out.b = std::move(Bb).value();
+    // Depth estimates are slightly noisy: smooth them along the photo's own
+    // edges so blur changes gradually across a surface yet stays crisp at
+    // object outlines.
+    auto ga = alloc(), gb = alloc();
+    if (!ga || !gb) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur"));
+    if (Error e = guidedCoefficients(*Yg, *raw, 2, 4e-3f, *ga, *gb, token); e.status != PP_OK) return failure(e);
+    std::vector<std::pair<float, float>> subjectDepths;
+    for (size_t c = 0; c < D->size(); ++c) {
+      D->data()[c] = std::clamp(ga->data()[c] * Yg->data()[c] + gb->data()[c], 0.0f, 1.0f);
+      const float a = A->data()[c];
+      if (a > 0.8f) subjectDepths.emplace_back(D->data()[c], a);
+    }
+    if (subjectDepths.empty()) {
+      focus = focusNear = focusFar = D->row(h / 2)[w / 2];
+    } else {
+      // Robust subject depth range (a stray hand or hair doesn't stretch it).
+      focus = weightedMedian(subjectDepths);
+      std::vector<float> v;
+      v.reserve(subjectDepths.size());
+      for (const auto& e : subjectDepths) v.push_back(e.first);
+      std::sort(v.begin(), v.end());
+      // A subject is shallow front to back, so the far edge hugs its depth;
+      // the near edge reaches its closest part (feet, an outstretched hand).
+      focusFar = std::max(v[v.size() / 4], focus - 0.03f);
+      focusNear = std::max(v[std::min(v.size() - 1, v.size() * 95 / 100)], focus);
+    }
+  } else {
+    int32_t top = -1, bottom = -1;
+    for (int32_t y = 0; y < h; ++y) {
+      int32_t cells = 0;
+      for (int32_t x = 0; x < w; ++x) cells += A->row(y)[x] > 0.5f ? 1 : 0;
+      if (cells >= std::max(1, w / 100)) {
+        if (top < 0) top = y;
+        bottom = y;
+      }
+    }
+    const bool standing = bottom >= 0 && bottom < h - 2;
+    for (int32_t y = 0; y < h; ++y) {
+      float v;
+      if (standing) {
+        // Ground in front of the feet comes closer; behind, it recedes.
+        v = y >= bottom ? focus + 0.6f * static_cast<float>(y - bottom) / static_cast<float>(h - bottom)
+                        : focus - 0.9f * std::min(1.0f, static_cast<float>(bottom - y) / (0.55f * static_cast<float>(h)));
+      } else {
+        // Head-and-shoulders: everything around the subject is well behind it,
+        // a touch less so toward the bottom of the frame.
+        v = focus - 0.5f - 0.35f * (1.0f - static_cast<float>(y) / static_cast<float>(h));
+      }
+      for (int32_t x = 0; x < w; ++x) D->row(y)[x] = v;
+    }
+  }
+  if (info != nullptr) {
+    info->focus = focus;
+    info->estimated = depth == nullptr;
+  }
+
+  // Blur radius (grid pixels) from the depth distance to the focus plane.
+  const float Rg = radius / static_cast<float>(d);
+  // Like opening up a lens: stronger blur also means a thinner slice of the
+  // scene in focus, so things just behind the subject separate more.
+  const float strength = std::clamp(radius / (0.04f * static_cast<float>(std::min(W, H))), 0.0f, 1.0f);
+  const float kDead = 0.05f - 0.03f * strength;  // a thin slab around the subject stays sharp
+  const float kSpan = 0.45f - 0.25f * strength;  // depth distance at which blur is full
+  constexpr float kNear = 0.75f;   // nearer things blur a little less
+  constexpr int kFar = 4, kNearBands = 2;
+  auto Rc = alloc();
+  auto farSide = alloc();
+  if (!Rc || !farSide) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur"));
+  for (int32_t y = 0; y < h; ++y)
+    for (int32_t x = 0; x < w; ++x) {
+      const float a = A->row(y)[x];
+      const float dv = D->row(y)[x];
+      const float off = dv < focusFar ? dv - focusFar : dv > focusNear ? dv - focusNear : 0.0f;
+      const float delta = off * (1.0f - a);  // the subject itself is in focus
+      const float t = std::clamp((std::fabs(delta) - kDead) / kSpan, 0.0f, 1.0f);
+      const bool far = delta < 0.0f;
+      Rc->row(y)[x] = Rg * t * (far ? 1.0f : kNear);
+      farSide->row(y)[x] = far ? 1.0f : 0.0f;
+    }
+
+  // Tent weights between band radii (bands overlap, so transitions are smooth).
+  auto bandWeight = [&](float r, float levelStep, int k) {
+    const float level = static_cast<float>(k) * levelStep;
+    return std::max(0.0f, 1.0f - std::fabs(r - level) / levelStep);
+  };
+  const float farStep = Rg / kFar, nearStep = kNear * Rg / kNearBands;
+
+  auto focusW = alloc();
+  if (!focusW) return failure(focusW.error());
+  for (int32_t y = 0; y < h; ++y)
+    for (int32_t x = 0; x < w; ++x) {
+      const float r = Rc->row(y)[x];
+      const bool far = farSide->row(y)[x] > 0.5f;
+      focusW->row(y)[x] = std::max(A->row(y)[x], bandWeight(r, far ? farStep : nearStep, 0));
+    }
+
+  // Composite one side's bands back to front: C = blur(P_k) + (1 − blur(A_k))·C.
+  auto compose = [&](bool far, int bands, float step, std::array<Plane, 4>& acc) -> Error {
+    for (auto& p : acc) {
+      auto a = alloc();
+      if (!a) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur");
+      std::fill(a->data(), a->data() + a->size(), 0.0f);
+      p = std::move(a).value();
+    }
+    // Farthest band first: on the far side that is the widest blur; on the
+    // near side, the band closest to the focus plane.
+    for (int i = 0; i < bands; ++i) {
+      const int k = far ? bands - i : 1 + i;
+      auto pr = alloc(), pg = alloc(), pb = alloc(), pa = alloc();
+      if (!pr || !pg || !pb || !pa) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur");
+      bool any = false;
+      for (size_t c = 0; c < pr->size(); ++c) {
+        const bool side = (farSide->data()[c] > 0.5f) == far;
+        const float wk = side ? bandWeight(Rc->data()[c], step, k) * (1.0f - A->data()[c]) : 0.0f;
+        any = any || wk > 0.0f;
+        pr->data()[c] = wk * Lr->data()[c];
+        pg->data()[c] = wk * Lg->data()[c];
+        pb->data()[c] = wk * Lb->data()[c];
+        pa->data()[c] = wk;
+      }
+      if (!any) continue;
+      std::array<Plane, 4> blurred;
+      if (Error e = discBlur({&*pr, &*pg, &*pb, &*pa}, blurred, static_cast<float>(k) * step, token); e.status != PP_OK) return e;
+      for (size_t c = 0; c < acc[0].size(); ++c) {
+        const float keep = 1.0f - std::min(1.0f, blurred[3].data()[c]);
+        for (int ch = 0; ch < 4; ++ch) acc[static_cast<size_t>(ch)].data()[c] = blurred[static_cast<size_t>(ch)].data()[c] + keep * acc[static_cast<size_t>(ch)].data()[c];
+      }
+    }
+    return ok();
+  };
+
+  std::array<Plane, 4> farAcc, nearAcc;
+  if (Error e = compose(true, kFar, farStep, farAcc); e.status != PP_OK) return failure(e);
+  if (Error e = compose(false, kNearBands, nearStep, nearAcc); e.status != PP_OK) return failure(e);
+
+  // Behind the subject (and the sharp slab) the far layer has holes: fill
+  // them with a wide, subject-free blur so edges never pick up subject colour.
+  std::array<Plane, 4> fill;
+  {
+    auto fr = alloc(), fg = alloc(), fb = alloc(), fa = alloc();
+    if (!fr || !fg || !fb || !fa) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur"));
+    for (size_t c = 0; c < fr->size(); ++c) {
+      const float bw = std::clamp(1.0f - 1.6f * A->data()[c], 0.0f, 1.0f);
+      const float wgt = bw * bw;
+      fr->data()[c] = wgt * Lr->data()[c];
+      fg->data()[c] = wgt * Lg->data()[c];
+      fb->data()[c] = wgt * Lb->data()[c];
+      fa->data()[c] = wgt;
+    }
+    if (Error e = discBlur({&*fr, &*fg, &*fb, &*fa}, fill, std::max(Rg * 0.5f, 1.0f), token); e.status != PP_OK) return failure(e);
+  }
+  auto knee = [](float v) { return v <= 0.9f ? v : 0.9f + 0.1f * (1.0f - std::exp(-(v - 0.9f) / 0.1f)); };
+  auto fR = alloc(), fG = alloc(), fB = alloc();
+  if (!fR || !fG || !fB) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the blur"));
+  for (size_t c = 0; c < fR->size(); ++c) {
+    const float ca = farAcc[3].data()[c];
+    const float fa = fill[3].data()[c];
+    const float gap = std::max(0.0f, 0.05f - ca);
+    auto mix = [&](float acc, float fl) {
+      const float fillColour = fa > 1e-4f ? fl / fa : acc / std::max(ca, 1e-4f);
+      return knee((acc + gap * fillColour) / std::max(ca, 0.05f));
+    };
+    fR->data()[c] = mix(farAcc[0].data()[c], fill[0].data()[c]);
+    fG->data()[c] = mix(farAcc[1].data()[c], fill[1].data()[c]);
+    fB->data()[c] = mix(farAcc[2].data()[c], fill[2].data()[c]);
+    for (int ch = 0; ch < 3; ++ch) nearAcc[static_cast<size_t>(ch)].data()[c] = knee(nearAcc[static_cast<size_t>(ch)].data()[c]);
+  }
+  out.farR = std::move(fR).value();
+  out.farG = std::move(fG).value();
+  out.farB = std::move(fB).value();
+  out.nearR = std::move(nearAcc[0]);
+  out.nearG = std::move(nearAcc[1]);
+  out.nearB = std::move(nearAcc[2]);
+  out.nearA = std::move(nearAcc[3]);
+  out.focus = std::move(focusW).value();
   return out;
 }
 
 }  // namespace
 
 Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* faces, const ImageBuffer* protect,
-            const Params& params, const CancellationToken* token, Report* report) {
+            const ImageBuffer* depth, const Params& params, const CancellationToken* token, Report* report) {
   ScopedTimer timer("portrait.apply");
   if (!isColour(image)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Portrait needs an RGBA image");
   if (image.width() < 16 || image.height() < 16) return makeError(PP_ERROR_INVALID_ARGUMENT, "Image too small");
@@ -586,11 +822,18 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
     clarityBase = std::move(blurred).value();
   }
 
-  // 4. Background lens blur.
+  // 4. Depth-aware lens blur.
   const float blurRadius = p.blur * 0.04f * shortSide;
   std::optional<Bokeh> bokeh;
+  DepthInfo depthInfo;
   if (blurRadius >= 1.5f) {
-    auto b = lensBlur(image, matte, blurRadius, p.pop, token);
+    std::optional<Plane> depthPlane;
+    if (depth != nullptr && !depth->empty()) {
+      auto dp = maskPlane(*depth);
+      if (!dp) return dp.error();
+      depthPlane = std::move(dp).value();
+    }
+    auto b = depthBokeh(image, matte, depthPlane ? &*depthPlane : nullptr, blurRadius, &depthInfo, token);
     if (!b) return b.error();
     bokeh = std::move(b).value();
   }
@@ -621,9 +864,16 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
           sv = skin.skin.sample(gx, gy);
           if (sv > 0.0f) {
             const float base = skin.scale == 1 ? y0 : skin.base.sample(gx, gy);
-            yv = y0 + sv * ((skin.retouched.sample(gx, gy) - base) + (skin.keep - 1.0f) * (y0 - base));
-            cb += sv * skin.dcb.sample(gx, gy);
-            cr += sv * skin.dcr.sample(gx, gy);
+            // Fine texture finer than the grid is softened, but strong local
+            // contrast (lash line, nostril, lip edge) is a feature: keep it.
+            const float fine = y0 - base;
+            const float soften = 1.0f - smoothstep(0.12f * skin.skinLuma, 0.3f * skin.skinLuma, std::fabs(fine));
+            yv = y0 + sv * ((skin.retouched.sample(gx, gy) - base) + (skin.keep - 1.0f) * fine * soften);
+            // Grid colour changes follow this pixel's own brightness, so a
+            // dark feature inside a skin cell is never tinted.
+            const float cscale = std::clamp((y0 + 0.02f) / (base + 0.02f), 0.0f, 1.5f);
+            cb += sv * cscale * skin.dcb.sample(gx, gy);
+            cr += sv * cscale * skin.dcr.sample(gx, gy);
           }
         }
         if (a > 0.0f) {
@@ -636,21 +886,36 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
             cb *= k;
             cr *= k;
           }
-          const float before = std::max(yv, 1e-3f);
-          yv += p.brighten * 0.035f * a * (1.0f - yv) * smoothstep(0.02f, 0.25f, yv);
-          const float k = yv / before;  // keep saturation as light is added
+          // Exposure-style lift (relative, so deep and light tones brighten
+          // alike); chroma follows luma to keep saturation. Clarity can push
+          // a near-black pixel below zero, so luma is clamped first and the
+          // ratio is bounded: a ratio of near-zero values would turn the
+          // darkest features (nostrils, lashes) a false colour.
+          yv = std::max(yv, 0.0f);
+          const float before = yv;
+          yv = std::min(1.0f, yv * (1.0f + p.brighten * 0.045f * a * (1.0f - yv) * smoothstep(0.02f, 0.25f, yv)));
+          const float k = std::clamp((yv + 0.02f) / (before + 0.02f), 0.0f, 1.25f);
           cb *= k;
           cr *= k;
         }
         float r, g, b;
         yccToRgb(yv, cb, cr, r, g, b);
         if (bokeh) {
+          // Back to front: far layer, then the sharp in-focus slab (subject and
+          // whatever shares its depth), then anything nearer than the subject.
           const float d = static_cast<float>(bokeh->factor);
           const float bx = (static_cast<float>(x) + 0.5f) / d - 0.5f, by = (static_cast<float>(y) + 0.5f) / d - 0.5f;
-          const float n = grainAmt * (1.0f - a) * hashNoise(x, y, 0x5EEDu);
-          r = toGamma(a * toLinear(r) + (1.0f - a) * bokeh->r.sample(bx, by)) + n;
-          g = toGamma(a * toLinear(g) + (1.0f - a) * bokeh->g.sample(bx, by)) + n;
-          b = toGamma(a * toLinear(b) + (1.0f - a) * bokeh->b.sample(bx, by)) + n;
+          const float sharp = std::max(a, bokeh->focus.sample(bx, by));
+          const float na = std::min(1.0f, bokeh->nearA.sample(bx, by)) * (1.0f - a);
+          const float soft = 1.0f - sharp * (1.0f - na);
+          const float n = grainAmt * soft * hashNoise(x, y, 0x5EEDu);
+          auto layer = [&](float c, const Plane& farP, const Plane& nearP) {
+            const float base = sharp * toLinear(c) + (1.0f - sharp) * farP.sample(bx, by);
+            return toGamma((1.0f - a) * nearP.sample(bx, by) + (1.0f - na) * base) + n;
+          };
+          r = layer(r, bokeh->farR, bokeh->nearR);
+          g = layer(g, bokeh->farG, bokeh->nearG);
+          b = layer(b, bokeh->farB, bokeh->nearB);
         }
         px[o.r] = toByte(r);
         px[o.g] = toByte(g);
@@ -669,6 +934,8 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
     report->skinCoverage = static_cast<float>(skin.skinSum / n);
     report->spotsRemoved = skin.spots;
     report->blurRadius = bokeh ? blurRadius : 0.0f;
+    report->focusDepth = depthInfo.focus;
+    report->depthEstimated = depthInfo.estimated;
   }
   return ok();
 }

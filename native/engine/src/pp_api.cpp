@@ -344,7 +344,8 @@ void pp_portrait_default_params(pp_portrait_params* out) {
 }
 
 pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* faces, const pp_image* protect,
-                      const pp_portrait_params* params, const pp_cancel_token* token, pp_portrait_report* report) {
+                      const pp_image* depth, const pp_portrait_params* params, const pp_cancel_token* token,
+                      pp_portrait_report* report) {
   return guarded([&]() -> pp_status {
     if (image == nullptr || subject == nullptr || params == nullptr) {
       return fail(PP_ERROR_INVALID_ARGUMENT, "image, subject and params are required");
@@ -359,7 +360,8 @@ pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* 
     }
     photoplus::portrait::Report r;
     photoplus::Error e = photoplus::portrait::apply(image->buffer, subject->buffer, faces ? &faces->buffer : nullptr,
-                                                    protect ? &protect->buffer : nullptr, p,
+                                                    protect ? &protect->buffer : nullptr,
+                                                    depth ? &depth->buffer : nullptr, p,
                                                     token ? &token->token : nullptr, &r);
     if (e.status != PP_OK) return fail(e);
     if (report != nullptr) {
@@ -367,6 +369,8 @@ pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* 
       report->skin_coverage = r.skinCoverage;
       report->spots_removed = r.spotsRemoved;
       report->blur_radius = r.blurRadius;
+      report->focus_depth = r.focusDepth;
+      report->depth_estimated = r.depthEstimated ? 1 : 0;
     }
     return succeed();
   });

@@ -31,8 +31,12 @@ mkdirSync(out, { recursive: true });
 const uri = file => `data:image/png;base64,${readFileSync(join(assets, file)).toString('base64')}`;
 const K18 = uri('kodim18.png');
 const SPOT18 = uri('spot18.png');
-const K04 = uri('kodim04.png');
-const GLOW04 = uri('glow04.png');
+const FACE18 = uri('face18.png');
+const GLOWFACE18 = uri('glowface18.png');
+const GLOW = JSON.parse(readFileSync(join(assets, 'glow18.json'), 'utf8'));
+const DEPTH18 = uri('depth18.png');
+const FEET18 = uri('feet18.png');
+const SPOTFEET18 = uri('spotfeet18.png');
 const REF = uri('look_ref.png');
 const VIBE18 = uri('vibe18.png');
 const EMBLEM = `data:image/png;base64,${readFileSync(join(root, 'src/assets/brand/logo-emblem@3x.png')).toString('base64')}`;
@@ -103,7 +107,9 @@ const topBar = ({ flash = 'off', timer = 0, ev = null, vibe = false }) => `
   </div>`;
 
 const zoom = (active = 1) => `
-  <div style="display:flex;justify-content:center"><div class="row" style="gap:8px;padding:4px 6px;border-radius:26px;background:rgba(10,9,17,.45)">${[0.6, 1, 2, 5]
+  <div style="display:flex;justify-content:center"><div class="row" style="gap:8px;padding:4px 6px;border-radius:26px;background:rgba(10,9,17,.45)">${[
+    0.6, 1, 2, 5,
+  ]
     .map(z =>
       z === active
         ? `<div style="width:44px;height:44px;border-radius:22px;border:1px solid ${GOLD};background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${GOLD}">${z}×</div>`
@@ -136,16 +142,14 @@ const dock = (mode, { thumb = K18, busy = false } = {}) => `
     ${shutter(mode, false)}
     <div class="chip" style="width:40px">${icon('flip')}</div>
   </div>`;
-const bottom = inner => `<div style="position:absolute;left:0;right:0;bottom:46px;display:flex;flex-direction:column;gap:10px">${inner}</div>`;
+const bottom = inner =>
+  `<div style="position:absolute;left:0;right:0;bottom:46px;display:flex;flex-direction:column;gap:10px">${inner}</div>`;
 const captionLine = text =>
   `<div class="caption" style="color:rgba(255,255,255,.7);text-align:center;padding:0 24px">${text}</div>`;
 
-const focusRing = (x, y, locked = true) =>
-  `<div style="position:absolute;left:${x - 38}px;top:${y - 38}px;width:76px;height:76px;border-radius:38px;border:1.5px solid ${locked ? GOLD : '#fff'};display:flex;align-items:center;justify-content:center"><div style="width:4px;height:4px;border-radius:2px;background:${locked ? GOLD : '#fff'}"></div></div>`;
-
 // ---- screens ----
 // Every number shown comes from the engine run that made the assets (e.g.
-// the 25 blemishes are portrait_demo's report for kodim04 at Flawless).
+// the blemish count is portrait_demo's report for kodim18 at Flawless).
 const pill = (label, on) =>
   `<div style="height:30px;padding:0 12px;border-radius:15px;border:1px solid ${on ? GOLD : 'rgba(255,255,255,.22)'};background:${on ? 'rgba(245,198,107,.16)' : 'transparent'};display:flex;align-items:center;font-size:12px;font-weight:700;color:${on ? GOLD : '#fff'}">${label}</div>`;
 const spotPanel = `
@@ -174,7 +178,11 @@ const compareBox = (before, after, w, h, split = 0.5) => `
     <div class="overline" style="position:absolute;right:10px;top:10px;padding:3px 8px;border-radius:10px;background:rgba(10,9,17,.6);color:${GOLD}">After</div>
   </div>`;
 const badge = (label, ic, tone) => {
-  const c = { ok: ['rgba(61,220,151,.14)', '#3DDC97', 'rgba(61,220,151,.4)'], acc: ['rgba(255,122,69,.14)', '#FF7A45', 'rgba(255,122,69,.4)'], gold: ['rgba(245,198,107,.16)', GOLD, 'rgba(245,198,107,.45)'] }[tone];
+  const c = {
+    ok: ['rgba(61,220,151,.14)', '#3DDC97', 'rgba(61,220,151,.4)'],
+    acc: ['rgba(255,122,69,.14)', '#FF7A45', 'rgba(255,122,69,.4)'],
+    gold: ['rgba(245,198,107,.16)', GOLD, 'rgba(245,198,107,.45)'],
+  }[tone];
   return `<span class="badge" style="background:${c[0]};color:${c[1]};border-color:${c[2]}">${icon(ic, 12, c[1], 2.2)}${label}</span>`;
 };
 const improved = items =>
@@ -185,9 +193,10 @@ const spotResult = `${status}${aurora}<div style="position:absolute;inset:0;padd
   ${compareBox(K18, SPOT18, 358, 537, 0.42)}
   ${improved([badge('Background softened', 'target', 'acc')])}${actions}</div>`;
 
-const glowResult = `${status}${aurora}<div style="position:absolute;inset:0;padding:58px 16px 0">${header('Spotlight · Glow Flawless', 'Your photo')}
-  ${compareBox(K04, GLOW04, 340, 480, 0.5)}
-  ${improved([badge('Glow · 25 blemishes cleared', 'sparkles', 'ok'), badge('Background softened', 'target', 'acc')])}${actions}</div>`;
+// Her face is ~55 px across in the Kodak photo: shown enlarged (same crop of both).
+const glowResult = `${status}${aurora}<div style="position:absolute;inset:0;padding:58px 16px 0">${header('Spotlight · Glow Flawless', 'Zoomed in')}
+  ${compareBox(FACE18, GLOWFACE18, 358, 500, 0.5)}
+  ${improved([badge(`Glow · ${GLOW.spots} blemishes cleared`, 'sparkles', 'ok'), badge('Background softened', 'target', 'acc')])}${actions}</div>`;
 
 const vibeResult = `${status}${aurora}<div style="position:absolute;inset:0;padding:58px 16px 0">${header('Vibe Match', 'Your photo')}
   <div class="glass" style="border-radius:20px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:12px"><img src="${REF}" style="width:58px;height:58px;border-radius:12px;object-fit:cover"><div style="flex:1"><div class="row" style="gap:6px;font-weight:700">${icon('wand', 16, GOLD)}Style from your photo</div><div class="caption" style="color:rgba(247,245,251,.7)">Your camera now shoots in this style.</div></div>${icon('crown', 16, GOLD, 2.2)}</div>
@@ -225,5 +234,20 @@ const overview = `<div style="padding:48px 56px 56px;background:radial-gradient(
 await p.setViewportSize({ width: W, height: 1050 });
 await p.setContent(page(overview, W, 1050));
 await p.screenshot({ path: join(out, 'spotlight-overview.png'), fullPage: true });
+
+// How Spotlight sees depth: photo, depth (near = bright), result, and the
+// ground at her feet before / after (stays sharp; ground further back softens).
+const panel = (src, label, w = 300, h = 450) =>
+  `<div style="display:flex;flex-direction:column;gap:10px"><img src="${src}" style="width:${w}px;height:${h}px;object-fit:cover;border-radius:18px"><div class="overline" style="color:rgba(247,245,251,.74)">${label}</div></div>`;
+const depthPage = `<div style="padding:40px 48px;background:radial-gradient(ellipse at 20% 0%, #24172f 0%, #0b0a10 55%)">
+  <div style="font-size:24px;font-weight:800;margin-bottom:6px">Spotlight blurs by distance, like a real lens</div>
+  <div class="caption" style="color:rgba(247,245,251,.74);margin-bottom:24px">The ground she stands on stays sharp; everything behind her softens the further back it is.</div>
+  <div style="display:flex;gap:24px;align-items:flex-start">
+    ${panel(K18, 'Your photo')}${panel(DEPTH18, 'Distance · near is bright')}${panel(SPOT18, 'Spotlight')}
+    <div style="display:flex;flex-direction:column;gap:14px">${panel(FEET18, 'At her feet · before', 362, 210)}${panel(SPOTFEET18, 'At her feet · Spotlight', 362, 210)}</div>
+  </div></div>`;
+await p.setViewportSize({ width: 1430, height: 640 });
+await p.setContent(page(depthPage, 1430, 640));
+await p.screenshot({ path: join(out, 'spotlight-depth.png'), fullPage: true });
 await browser.close();
 console.log('Spotlight preview rendered to docs/design');

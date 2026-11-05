@@ -80,17 +80,23 @@ object NativeEngine {
     overlay: Bitmap,
   ): Float
 
+  /** Size of [nativePortrait]'s report. */
+  const val PORTRAIT_REPORT_SIZE = 6
+
   /**
    * Portrait ("Spotlight") in place on [bitmap] (ARGB_8888). Masks are
-   * ALPHA_8 (or ARGB_8888) bitmaps of any size: [subject] required, [faces]
-   * and [protect] optional. [params] = blur, retouch, brighten, pop (0..1).
-   * [reportOut] (4) = subject coverage, skin coverage, spots, blur radius.
+   * ALPHA_8 (or ARGB_8888) bitmaps of any size: [subject] required, [faces],
+   * [protect] and [depth] (0 far … 255 near) optional; without [depth] the
+   * engine estimates a ground plane. [params] = blur, retouch, brighten, pop
+   * (0..1). [reportOut] ([PORTRAIT_REPORT_SIZE]) = subject coverage, skin
+   * coverage, spots, blur radius, focus depth, depth estimated (0/1).
    */
   external fun nativePortrait(
     bitmap: Bitmap,
     subject: Bitmap,
     faces: Bitmap?,
     protect: Bitmap?,
+    depth: Bitmap?,
     params: FloatArray,
     token: Long,
     reportOut: FloatArray,

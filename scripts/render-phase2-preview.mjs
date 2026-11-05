@@ -103,7 +103,9 @@ const topBar = ({ flash = 'off', timer = 0, ev = null }) => `
   </div>`;
 
 const zoom = (active = 1) => `
-  <div style="display:flex;justify-content:center"><div class="row" style="gap:8px;padding:4px 6px;border-radius:26px;background:rgba(10,9,17,.45)">${[0.6, 1, 2, 5]
+  <div style="display:flex;justify-content:center"><div class="row" style="gap:8px;padding:4px 6px;border-radius:26px;background:rgba(10,9,17,.45)">${[
+    0.6, 1, 2, 5,
+  ]
     .map(z =>
       z === active
         ? `<div style="width:44px;height:44px;border-radius:22px;border:1px solid ${GOLD};background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:${GOLD}">${z}×</div>`
@@ -135,7 +137,8 @@ const dock = (mode, { thumb = SCENE, busy = false } = {}) => `
     ${shutter(mode, false)}
     <div class="chip" style="width:40px">${icon('flip')}</div>
   </div>`;
-const bottom = inner => `<div style="position:absolute;left:0;right:0;bottom:46px;display:flex;flex-direction:column;gap:10px">${inner}</div>`;
+const bottom = inner =>
+  `<div style="position:absolute;left:0;right:0;bottom:46px;display:flex;flex-direction:column;gap:10px">${inner}</div>`;
 const captionLine = text =>
   `<div class="caption" style="color:rgba(255,255,255,.7);text-align:center;padding:0 24px">${text}</div>`;
 

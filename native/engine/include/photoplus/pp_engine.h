@@ -208,17 +208,23 @@ typedef struct pp_portrait_report {
   float subject_coverage; /* fraction of the frame that is subject */
   float skin_coverage;    /* fraction of the frame retouched as skin */
   int32_t spots_removed;
-  float blur_radius; /* pixels */
+  float blur_radius; /* largest blur radius, pixels */
+  float focus_depth; /* the subject's depth, 0 (far) .. 1 (near) */
+  int32_t depth_estimated; /* 1 when no depth map was given */
 } pp_portrait_report;
 
 void pp_portrait_default_params(pp_portrait_params* out);
 
 /* Processes `image` (RGBA8/BGRA8) in place. Masks are GRAY8 of any size:
  * `subject` (required), `faces` (optional: enables skin retouching calibrated
- * to those faces), `protect` (optional: eyes, brows, lips, never smoothed).
+ * to those faces), `protect` (optional: eyes, brows, lips, never smoothed),
+ * `depth` (optional: relative depth, 0 far .. 255 near; blur then follows
+ * each area's distance from the subject's focus plane, as with a real lens;
+ * without it depth is estimated from the subject's position).
  * `report` may be NULL. */
 pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* faces, const pp_image* protect,
-                      const pp_portrait_params* params, const pp_cancel_token* token, pp_portrait_report* report);
+                      const pp_image* depth, const pp_portrait_params* params, const pp_cancel_token* token,
+                      pp_portrait_report* report);
 
 /* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
  * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */

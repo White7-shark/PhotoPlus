@@ -394,30 +394,35 @@ struct WrappedBitmap {
 }  // namespace
 
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePortrait(
-    JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject faces, jobject protect, jfloatArray params,
-    jlong token, jfloatArray reportOut) {
-  if (env->GetArrayLength(params) < 4 || env->GetArrayLength(reportOut) < 4 || subject == nullptr) {
+    JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject faces, jobject protect, jobject depth,
+    jfloatArray params, jlong token, jfloatArray reportOut) {
+  constexpr jsize kReport = 6;
+  if (env->GetArrayLength(params) < 4 || env->GetArrayLength(reportOut) < kReport || subject == nullptr) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad portrait arguments");
     return;
   }
   jfloat p[4];
   env->GetFloatArrayRegion(params, 0, 4, p);
-  WrappedBitmap img, subj, fac, prot;
+  WrappedBitmap img, subj, fac, prot, dep;
   if (!img.open(env, bitmap, false) || !subj.open(env, subject, true) || !fac.open(env, faces, true) ||
-      !prot.open(env, protect, true)) {
+      !prot.open(env, protect, true) || !dep.open(env, depth, true)) {
     return;
   }
   const pp_portrait_params pp{p[0], p[1], p[2], p[3]};
   pp_portrait_report report{};
-  const pp_status st = pp_portrait(img.image, subj.image, fac.image, prot.image, &pp,
+  const pp_status st = pp_portrait(img.image, subj.image, fac.image, prot.image, dep.image, &pp,
                                    reinterpret_cast<const pp_cancel_token*>(token), &report);
   if (st != PP_OK) {
     throwStatus(env, st);
     return;
   }
-  const jfloat values[4] = {report.subject_coverage, report.skin_coverage, static_cast<jfloat>(report.spots_removed),
-                            report.blur_radius};
-  env->SetFloatArrayRegion(reportOut, 0, 4, values);
+  const jfloat values[kReport] = {report.subject_coverage,
+                                  report.skin_coverage,
+                                  static_cast<jfloat>(report.spots_removed),
+                                  report.blur_radius,
+                                  report.focus_depth,
+                                  static_cast<jfloat>(report.depth_estimated)};
+  env->SetFloatArrayRegion(reportOut, 0, kReport, values);
 }
 
 // Tap-seeded cut-out. Returns the mask bytes; dims are written to sizeOut.
