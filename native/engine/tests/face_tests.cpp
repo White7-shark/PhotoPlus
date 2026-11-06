@@ -546,6 +546,10 @@ TEST(face_slim_narrows_the_jaw_gently_forehead_stays) {
   EXPECT_TRUE(jaw0 - jaw1 >= static_cast<int>(0.02f * faceW));
   EXPECT_TRUE(jaw0 - jaw1 <= static_cast<int>(0.08f * faceW));  // gentle
   EXPECT_TRUE(std::abs(brow0 - brow1) <= 2);
+  // Moved skin keeps its pores (resampling must not soften it).
+  const double t0 = fineTexture(ref, f, 1), t1 = fineTexture(out, f, 1);
+  std::printf("    face texture kept %.0f%%\n", 100.0 * t1 / t0);
+  EXPECT_TRUE(t1 > 0.9 * t0);
   pp_image_destroy(out);
   pp_image_destroy(ref);
 }

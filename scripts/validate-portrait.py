@@ -248,6 +248,26 @@ def main() -> int:
                     "ms": rep["ms"],
                     "lightGain": rep.get("lightGain"),
                 }
+            # Resolution: the same edit at half size must change the photo the
+            # same way (what is previewed small is what is saved large).
+            if min(photo.size) >= 500:
+                half = d / "half"
+                half.mkdir(exist_ok=True)
+                hs = (photo.size[0] // 2, photo.size[1] // 2)
+                photo.resize(hs, Image.LANCZOS).save(half / "in.ppm")
+                hm = {}
+                for k, f in masks.items():
+                    Image.open(f).resize((max(1, Image.open(f).width // 2), max(1, Image.open(f).height // 2))).save(half / f.name)
+                    hm[k] = half / f.name
+                run(a.demo, half / "in.ppm", half / "advanced.ppm", hm, lm_file, CONFIGS["advanced"])
+                full_d = (np.asarray(Image.open(d / "advanced.ppm").resize(hs, Image.LANCZOS), np.float32)
+                          - np.asarray(photo.resize(hs, Image.LANCZOS), np.float32))
+                half_d = (np.asarray(Image.open(half / "advanced.ppm"), np.float32)
+                          - np.asarray(Image.open(half / "in.ppm"), np.float32))
+                face = np.asarray(Image.open(masks["faces"]).resize(hs)) > 127
+                change = float(np.abs(half_d[face]).mean())
+                row["resolution"] = {"change": round(change, 2),
+                                     "fullVsHalf": round(float(np.abs(full_d[face] - half_d[face]).mean()), 2)}
             results.append(row)
             print(json.dumps(row))
     finally:

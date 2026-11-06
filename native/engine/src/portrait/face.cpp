@@ -516,19 +516,43 @@ Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p
         uint8_t* px = row + x * 4;
         float R = px[o.r] / 255.0f, Gc = px[o.g] / 255.0f, B = px[o.b] / 255.0f;
         if (src && x >= warpRect.x0 && x < warpRect.x1 && y >= warpRect.y0 && y < warpRect.y1) {
-          // out(q) = in(q - d(q)), bilinear, clamped to the copied box.
-          const float sx = static_cast<float>(x - warpRect.x0) - dispX->sample(fx, fy);
-          const float sy = static_cast<float>(y - warpRect.y0) - dispY->sample(fx, fy);
-          const float cx = std::clamp(sx, 0.0f, static_cast<float>(warpRect.w() - 1));
-          const float cy = std::clamp(sy, 0.0f, static_cast<float>(warpRect.h() - 1));
-          const auto x0 = static_cast<int32_t>(cx), y0 = static_cast<int32_t>(cy);
-          const int32_t x1 = std::min(warpRect.w() - 1, x0 + 1), y1 = std::min(warpRect.h() - 1, y0 + 1);
-          const float tx = cx - static_cast<float>(x0), ty = cy - static_cast<float>(y0);
-          auto at = [&](int32_t xx, int32_t yy, int c) { return static_cast<float>(src->row(yy)[xx * 4 + c]) / 255.0f; };
-          auto bil = [&](int c) {
-            return (at(x0, y0, c) * (1 - tx) + at(x1, y0, c) * tx) * (1 - ty) + (at(x0, y1, c) * (1 - tx) + at(x1, y1, c) * tx) * ty;
-          };
-          R = bil(o.r), Gc = bil(o.g), B = bil(o.b);
+          // out(q) = in(q - d(q)). Catmull-Rom (bicubic) sampling keeps skin
+          // texture crisp where pixels move by a fraction of a pixel (bilinear
+          // would visibly soften pores); pixels that do not move are copied.
+          const float ddx = dispX->sample(fx, fy), ddy = dispY->sample(fx, fy);
+          if (std::fabs(ddx) + std::fabs(ddy) > 0.01f) {
+            const float sx = static_cast<float>(x - warpRect.x0) - ddx;
+            const float sy = static_cast<float>(y - warpRect.y0) - ddy;
+            const auto ix = static_cast<int32_t>(std::floor(sx)), iy = static_cast<int32_t>(std::floor(sy));
+            const float tx = sx - static_cast<float>(ix), ty = sy - static_cast<float>(iy);
+            auto cr = [](float t, float w[4]) {
+              const float t2 = t * t, t3 = t2 * t;
+              w[0] = 0.5f * (-t3 + 2 * t2 - t);
+              w[1] = 0.5f * (3 * t3 - 5 * t2 + 2);
+              w[2] = 0.5f * (-3 * t3 + 4 * t2 + t);
+              w[3] = 0.5f * (t3 - t2);
+            };
+            float wx[4], wy[4];
+            cr(tx, wx);
+            cr(ty, wy);
+            float acc[3] = {0, 0, 0};
+            for (int j = 0; j < 4; ++j) {
+              const uint8_t* srow = src->row(std::clamp(iy - 1 + j, 0, warpRect.h() - 1));
+              for (int i = 0; i < 4; ++i) {
+                const uint8_t* q = srow + std::clamp(ix - 1 + i, 0, warpRect.w() - 1) * 4;
+                const float w = wx[i] * wy[j];
+                acc[0] += w * q[o.r];
+                acc[1] += w * q[o.g];
+                acc[2] += w * q[o.b];
+              }
+            }
+            R = std::clamp(acc[0] / 255.0f, 0.0f, 1.0f);
+            Gc = std::clamp(acc[1] / 255.0f, 0.0f, 1.0f);
+            B = std::clamp(acc[2] / 255.0f, 0.0f, 1.0f);
+          } else {
+            const uint8_t* q = src->row(y - warpRect.y0) + (x - warpRect.x0) * 4;
+            R = q[o.r] / 255.0f, Gc = q[o.g] / 255.0f, B = q[o.b] / 255.0f;
+          }
         }
         float yv, cbv, crv;
         rgbToYcc(R, Gc, B, yv, cbv, crv);

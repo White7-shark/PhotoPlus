@@ -98,6 +98,10 @@ The licence texts ship in `android/app/src/main/assets/fonts/LICENSES.txt`. Prop
 | OpenCV | 5.0.0 (latest; **not shipped**) | Apache-2.0 | Evaluated for the app: the official Android SDK (4.12 AAR) is 118 MB. Used only on the development machine as the test oracle (`scripts/verify-engine-against-opencv.py`, `opencv-python-headless` 5.0.0.93). See PHASE4_REPORT "OpenCV decision" |
 | ai-edge-litert (Python) | 2.3.0 | Apache-2.0 | Development only: host measurements in MODEL_EVALUATION.md |
 
+## Portrait validation (Phase 5, development only)
+
+No app dependencies were added in Phase 5. On the desktop, `scripts/validate-portrait.py` uses MediaPipe 1.2.2 (face landmarker and selfie segmenter) as a stand-in for ML Kit, plus pyarrow to read the FairFace validation set (CC BY 4.0: Kärkkäinen & Joo, "FairFace", WACV 2021). The dataset is used only locally and is not committed.
+
 ## Ads (Phase 3 update)
 
 | Library | Version | Latest stable | Notes |

@@ -1,4 +1,4 @@
-# Photo Plus — Architecture (Phases 1–4)
+# Photo Plus — Architecture (Phases 1–5)
 
 ```
 ┌──────────────────────────── React Native (TypeScript) ────────────────────────────┐
@@ -166,3 +166,27 @@ C++     validate everything → estimate peak vs budget → [reduce for preview]
 | Errors | `pp_status` + message → `EngineException(code)` → `ProcessingError.code`. Nothing throws across the C ABI |
 | Consistency | Saves and exports use only the CPU path. The GPU is used for previews only after matching the CPU within 2 levels on that device. The operations are cross-checked against OpenCV 5.0 on the host |
 | Models | Every model is declared in `ModelRegistry` with its licence and measured memory. It loads only when the phone can spare that memory, is released under pressure, and the feature falls back if the model is unavailable |
+
+## Portrait intelligence (Phase 5)
+
+Full report: [`PHASE5_REPORT.md`](PHASE5_REPORT.md).
+
+```
+ML Kit face detection (contours + landmarks, offline)
+   └─ PortraitProcessor.withContours: every face gets contours (per-face crop re-detection)
+   └─ FaceLandmarks: 131-point layout (PP_FACE_*), resampled; approximated when contours are missing
+ML Kit subject / selfie segmentation ─ DepthEstimator (optional)
+   │
+   ├─ pp_portrait   subject matte (luma, or colour + decontamination when edge > 0)
+   │                skin: smooth / blemish / even (or the Glow preset), lift, clarity
+   │                background: depth-aware blur, light, colour
+   └─ pp_face_adjust (landmarks)  eyes · teeth · lips · under-eye · shine · slim · face light · studio light
+```
+
+| Where | What |
+|---|---|
+| `EditDocument.portrait` / `document.ts` `portrait` | The Premium fine controls; `null` means presets only. Older saved edits load with `null` |
+| `EditRenderer.heavy` | Glow/Spotlight presets plus the fine controls, in the cached slow stage (the cache key includes them) |
+| `CaptureOptions.beauty*` | Camera Glow outside Spotlight. It turns on the processed capture path (never for RAW), and is recorded in the recipe so Transform re-applies it |
+| `PortraitPanel.tsx` | Basic (presets) and Advanced (Premium) modes, Reset to Glow, Restore original; `SpotlightAdvanced` holds the background controls |
+| Fairness rule | Every face threshold is relative to the person's own measurements. Exposure lifts are judged on the light around the head and the presence of frontal highlights, never on skin brightness |

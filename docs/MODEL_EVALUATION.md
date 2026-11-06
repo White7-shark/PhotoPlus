@@ -21,7 +21,7 @@ Every model the app runs goes through one interface (`com.photoplus.ml`), and is
 |---|---|---|---|---|---|---|---|
 | **Depth Anything V2 Small**, LiteRT, int8 weights, float activations (`litert-community/depth-anything-v2-small`, rev `178427e`, SHA-256 checked at build) | Spotlight: background blur that grows with distance | **Apache-2.0** | 27.7 MB | load 111 ms, run **244 ms** median (first 234 ms), input 686×518 NCHW | run 992 ms | **+234 MB** (weights unpacked to float by XNNPACK) | to be measured |
 | ML Kit selfie segmentation (bundled with ML Kit 16.0.0-beta6) | Spotlight: person mask when no subject was tapped | Google ML Kit terms (free for commercial use) | 0.25 MB | run 5 ms, input 256×256 | — | +16 MB | to be measured |
-| ML Kit face detection 16.1.7 (bundled) | Glow, props fitting, camera props | Google ML Kit terms | bundled | not measured separately | — | — | to be measured |
+| ML Kit face detection 16.1.7 (bundled) | Glow, props fitting, camera props, **Phase 5 face landmarks** (contours for every face via per-face crops) | Google ML Kit terms | bundled | not measured separately | — | — | to be measured |
 
 The depth model's `memoryBytes` was raised from an estimate of 160 MB to the measured **240 MB**, and is now enforced through `canLoad`. On low-memory phones the depth model is therefore skipped. Spotlight then uses the engine's ground-plane depth estimate, which needs no model and was already the fallback.
 
@@ -41,6 +41,13 @@ The depth model's `memoryBytes` was raised from an estimate of 160 MB to the mea
 | Segment Anything / MobileSAM | tap-to-select | Apache-2.0 | ⏸ Commercially fine. The image encoder is heavy for mid-range phones. Tap cut-out uses ML Kit subject segmentation plus the engine's own cut-out today |
 
 ✅ shipped · ⏸ allowed, not yet needed or not yet measured on a device · ❌ rejected
+
+## Face landmarks (Phase 5)
+
+| Candidate | Points | Licence | Decision |
+|---|---|---|---|
+| **ML Kit face detection (contours)** | 133 contour points (+ 10 landmarks) per face | Google ML Kit terms | ✅ **Used.** Already shipped and offline. Contours are measured only for the most prominent face, so each other face is detected again in an enlarged crop where it is the main face. Converted to the engine's 131-point layout |
+| MediaPipe Face Landmarker | 478-point mesh | Apache-2.0 | ⏸ Richer (irises), but adds ~35 MB of native code and a second vision runtime (see DEPENDENCIES). Used only on the desktop, to validate (`scripts/validate-portrait.py`) |
 
 ## Selection rules (applied to every future model)
 
