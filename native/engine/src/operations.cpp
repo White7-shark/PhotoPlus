@@ -1,4 +1,5 @@
 #include "photoplus/operations.hpp"
+#include "photoplus/parallel.hpp"
 
 #include <algorithm>
 #include <array>
@@ -42,15 +43,16 @@ Error applyLut(ImageBuffer& image, const std::array<uint8_t, 256>& lut,
                const CancellationToken* token) {
   const int32_t bpp = bytesPerPixel(image.format());
   const int32_t channels = colorChannels(image.format());
-  for (int32_t y = 0; y < image.height(); ++y) {
-    if (isCancelled(token)) return cancelled();
-    uint8_t* row = image.row(y);
-    for (int32_t x = 0; x < image.width(); ++x) {
-      uint8_t* p = row + x * bpp;
-      for (int32_t c = 0; c < channels; ++c) p[c] = lut[p[c]];
+  const bool done = parallelFor(image.height(), token, [&](int32_t y0, int32_t y1) {
+    for (int32_t y = y0; y < y1; ++y) {
+      uint8_t* row = image.row(y);
+      for (int32_t x = 0; x < image.width(); ++x) {
+        uint8_t* p = row + x * bpp;
+        for (int32_t c = 0; c < channels; ++c) p[c] = lut[p[c]];
+      }
     }
-  }
-  return kOkStatus();
+  });
+  return done ? kOkStatus() : cancelled();
 }
 
 }  // namespace
@@ -62,6 +64,10 @@ Error tone(ImageBuffer& image, const ToneParams& params, const CancellationToken
       !std::isfinite(params.contrast)) {
     return makeError(PP_ERROR_INVALID_ARGUMENT, "Tone parameters must be finite");
   }
+  return applyLut(image, toneLut(params), token);
+}
+
+std::array<uint8_t, 256> toneLut(const ToneParams& params) {
   const float ev = std::clamp(params.exposureEv, -5.0f, 5.0f);
   const float brightness = std::clamp(params.brightness, -1.0f, 1.0f);
   const float contrast = std::clamp(params.contrast, -1.0f, 1.0f);
@@ -77,7 +83,7 @@ Error tone(ImageBuffer& image, const ToneParams& params, const CancellationToken
     v = (v - 0.5f) * contrastFactor + 0.5f;
     lut[i] = clampByte(v * 255.0f);
   }
-  return applyLut(image, lut, token);
+  return lut;
 }
 
 Error grayscale(ImageBuffer& image, const CancellationToken* token) {
@@ -86,17 +92,18 @@ Error grayscale(ImageBuffer& image, const CancellationToken* token) {
   if (image.format() == PixelFormat::Gray8) return kOkStatus();
   const int32_t bpp = bytesPerPixel(image.format());
   const auto idx = rgbIndex(image.format());
-  for (int32_t y = 0; y < image.height(); ++y) {
-    if (isCancelled(token)) return cancelled();
-    uint8_t* row = image.row(y);
-    for (int32_t x = 0; x < image.width(); ++x) {
-      uint8_t* p = row + x * bpp;
-      const auto luma =
-          static_cast<uint8_t>((p[idx[0]] * 54 + p[idx[1]] * 183 + p[idx[2]] * 19) >> 8);
-      p[idx[0]] = p[idx[1]] = p[idx[2]] = luma;
+  const bool done = parallelFor(image.height(), token, [&](int32_t y0, int32_t y1) {
+    for (int32_t y = y0; y < y1; ++y) {
+      uint8_t* row = image.row(y);
+      for (int32_t x = 0; x < image.width(); ++x) {
+        uint8_t* p = row + x * bpp;
+        const auto luma =
+            static_cast<uint8_t>((p[idx[0]] * 54 + p[idx[1]] * 183 + p[idx[2]] * 19) >> 8);
+        p[idx[0]] = p[idx[1]] = p[idx[2]] = luma;
+      }
     }
-  }
-  return kOkStatus();
+  });
+  return done ? kOkStatus() : cancelled();
 }
 
 Error saturation(ImageBuffer& image, float delta, const CancellationToken* token) {
@@ -107,19 +114,20 @@ Error saturation(ImageBuffer& image, float delta, const CancellationToken* token
   const float s = 1.0f + std::clamp(delta, -1.0f, 1.0f);
   const int32_t bpp = bytesPerPixel(image.format());
   const auto idx = rgbIndex(image.format());
-  for (int32_t y = 0; y < image.height(); ++y) {
-    if (isCancelled(token)) return cancelled();
-    uint8_t* row = image.row(y);
-    for (int32_t x = 0; x < image.width(); ++x) {
-      uint8_t* p = row + x * bpp;
-      const float r = p[idx[0]], g = p[idx[1]], b = p[idx[2]];
-      const float l = 0.2126f * r + 0.7152f * g + 0.0722f * b;
-      p[idx[0]] = clampByte(l + (r - l) * s);
-      p[idx[1]] = clampByte(l + (g - l) * s);
-      p[idx[2]] = clampByte(l + (b - l) * s);
+  const bool done = parallelFor(image.height(), token, [&](int32_t y0, int32_t y1) {
+    for (int32_t y = y0; y < y1; ++y) {
+      uint8_t* row = image.row(y);
+      for (int32_t x = 0; x < image.width(); ++x) {
+        uint8_t* p = row + x * bpp;
+        const float r = p[idx[0]], g = p[idx[1]], b = p[idx[2]];
+        const float l = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+        p[idx[0]] = clampByte(l + (r - l) * s);
+        p[idx[1]] = clampByte(l + (g - l) * s);
+        p[idx[2]] = clampByte(l + (b - l) * s);
+      }
     }
-  }
-  return kOkStatus();
+  });
+  return done ? kOkStatus() : cancelled();
 }
 
 Error flip(ImageBuffer& image, bool horizontal, bool vertical, const CancellationToken* token) {

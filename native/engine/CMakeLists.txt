@@ -15,6 +15,7 @@ option(PP_ENGINE_BUILD_TOOLS "Build developer tools (enhance_bench)" OFF)
 
 add_library(photoplus_engine STATIC
   src/memory.cpp
+  src/thread_pool.cpp
   src/image.cpp
   src/operations.cpp
   src/pipeline.cpp
@@ -35,8 +36,47 @@ add_library(photoplus_engine STATIC
   src/edit/adjust.cpp
   src/edit/composite.cpp
   src/edit/frame.cpp
+  src/ops/resample.cpp
+  src/ops/filters.cpp
+  src/ops/blend.cpp
+  src/codec/codec.cpp
+  src/codec/stb_impl.cpp
+  src/ml/tensor.cpp
 )
 target_include_directories(photoplus_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(photoplus_engine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
+# Third-party code: compiled without the engine's warning set.
+set_source_files_properties(src/codec/stb_impl.cpp PROPERTIES COMPILE_OPTIONS "-w")
+
+# GPU acceleration (OpenGL ES 3.1 compute). Android always has EGL/GLES; on
+# the host it is used when EGL and GLES headers are installed (Mesa runs the
+# same shaders in software, so GPU results are tested on every build).
+option(PP_ENGINE_GPU "Build the OpenGL ES 3.1 compute backend" ON)
+set(PP_GPU_FOUND OFF)
+if(PP_ENGINE_GPU)
+  if(ANDROID)
+    set(PP_GPU_FOUND ON)
+    set(PP_GPU_LIBS EGL GLESv3)
+  else()
+    find_path(PP_EGL_INCLUDE EGL/egl.h)
+    find_path(PP_GLES3_INCLUDE GLES3/gl31.h)
+    find_library(PP_EGL_LIB EGL)
+    find_library(PP_GLES_LIB GLESv2)
+    if(PP_EGL_INCLUDE AND PP_GLES3_INCLUDE AND PP_EGL_LIB AND PP_GLES_LIB)
+      set(PP_GPU_FOUND ON)
+      set(PP_GPU_LIBS ${PP_EGL_LIB} ${PP_GLES_LIB})
+    endif()
+  endif()
+endif()
+if(PP_GPU_FOUND)
+  target_sources(photoplus_engine PRIVATE src/gpu/gpu_gles.cpp)
+  target_link_libraries(photoplus_engine PUBLIC ${PP_GPU_LIBS})
+  target_compile_definitions(photoplus_engine PUBLIC PP_ENGINE_HAS_GPU=1)
+  message(STATUS "Photo Plus engine: GPU backend ON")
+else()
+  target_sources(photoplus_engine PRIVATE src/gpu/gpu_none.cpp)
+  message(STATUS "Photo Plus engine: GPU backend OFF")
+endif()
 target_compile_options(photoplus_engine PRIVATE
   -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion -Werror=return-type)
 
@@ -48,7 +88,7 @@ endif()
 if(PP_ENGINE_BUILD_TESTS)
   enable_testing()
   find_package(Threads REQUIRED)
-  add_executable(photoplus_engine_tests tests/test_main.cpp tests/engine_tests.cpp tests/enhance_tests.cpp tests/portrait_tests.cpp tests/lens_tests.cpp tests/edit_tests.cpp)
+  add_executable(photoplus_engine_tests tests/test_main.cpp tests/engine_tests.cpp tests/enhance_tests.cpp tests/portrait_tests.cpp tests/lens_tests.cpp tests/edit_tests.cpp tests/core_tests.cpp tests/gpu_tests.cpp)
   target_link_libraries(photoplus_engine_tests PRIVATE photoplus_engine Threads::Threads)
   add_test(NAME photoplus_engine_tests COMMAND photoplus_engine_tests)
 endif()

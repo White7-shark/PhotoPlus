@@ -28,7 +28,7 @@ extern "C" {
 #endif
 
 #define PP_ENGINE_VERSION_MAJOR 0
-#define PP_ENGINE_VERSION_MINOR 1
+#define PP_ENGINE_VERSION_MINOR 2
 #define PP_ENGINE_VERSION_PATCH 0
 
 typedef enum pp_status {
@@ -38,7 +38,8 @@ typedef enum pp_status {
   PP_ERROR_BUDGET_EXCEEDED = 3,
   PP_ERROR_CANCELLED = 4,
   PP_ERROR_UNSUPPORTED_FORMAT = 5,
-  PP_ERROR_INTERNAL = 6
+  PP_ERROR_INTERNAL = 6,
+  PP_ERROR_IO = 7 /* a file could not be read or written */
 } pp_status;
 
 /* All formats with alpha use *straight* (non-premultiplied) alpha. Hosts must
@@ -63,9 +64,11 @@ typedef enum pp_op_type {
   PP_OP_FLIP = 4,
   /* p[0..3] = x, y, width, height in pixels of the current image */
   PP_OP_CROP = 5,
-  /* p[0] = target width, p[1] = target height (bilinear) */
+  /* p[0] = target width, p[1] = target height, p[2] = filter (pp_resize_filter;
+   * 0 = auto: area when shrinking, Lanczos-3 when enlarging) */
   PP_OP_RESIZE = 6,
-  /* p[0] = amount (0..2), unsharp mask with 3x3 box blur */
+  /* p[0] = amount (0..3), p[1] = radius in pixels (0 = 1 px), p[2] = threshold
+   * (0..0.2). Unsharp mask on luminance (no colour fringes). */
   PP_OP_SHARPEN = 7,
   /* p[0] = saturation multiplier delta (-1..1) */
   PP_OP_SATURATION = 8,
@@ -79,8 +82,39 @@ typedef enum pp_op_type {
   /* p[0] = kind (1 radial, 2 tilt), p[1..2] = centre x, y (0..1), p[3] = size
    * (fraction of the shorter side), p[4] = tilt angle (deg), p[5] = strength
    * (0..1), p[6] = feather (0..1) */
-  PP_OP_FOCUS = 12
+  PP_OP_FOCUS = 12,
+  /* p[0] = Gaussian sigma in pixels (0..500) */
+  PP_OP_BLUR = 13,
+  /* p[0] = strength (0..1), scaled to the noise the photo has */
+  PP_OP_DENOISE = 14,
+  /* p[0] = vertical, p[1] = horizontal keystone (-1..1; > 0 widens the top /
+   * the right side, straightening lines that converge there) */
+  PP_OP_PERSPECTIVE = 15
 } pp_op_type;
+
+typedef enum pp_resize_filter {
+  PP_RESIZE_AUTO = 0,
+  PP_RESIZE_BILINEAR = 1,
+  PP_RESIZE_AREA = 2,
+  PP_RESIZE_LANCZOS = 3
+} pp_resize_filter;
+
+/* Where pp_process_ex may run (see pp_gpu_*). Final renders should use CPU
+ * when results must be identical on every device. */
+typedef enum pp_backend {
+  PP_BACKEND_AUTO = 0, /* GPU when available and verified, else CPU */
+  PP_BACKEND_CPU = 1,
+  PP_BACKEND_GPU = 2 /* fails with PP_ERROR_UNSUPPORTED_FORMAT if no verified GPU */
+} pp_backend;
+
+typedef struct pp_render_options {
+  /* > 0: a preview. The input is reduced so its longer edge fits, and settings
+   * measured in pixels (crop, resize, blur and sharpen radii) are scaled too,
+   * so the preview matches the full-resolution render. 0 = full resolution. */
+  int32_t max_edge;
+  int32_t backend; /* pp_backend */
+  int32_t reserved[6];
+} pp_render_options;
 
 /* Looks for PP_OP_FILTER. */
 typedef enum pp_filter_id {
@@ -123,6 +157,8 @@ typedef struct pp_memory_stats {
   uint64_t live_allocations;
   uint64_t total_allocations;
   uint64_t failed_allocations;
+  uint64_t cached_bytes;       /* idle buffers kept for reuse (count against the budget) */
+  uint64_t reused_allocations; /* allocations served from kept buffers */
 } pp_memory_stats;
 
 /* ---- Library info ------------------------------------------------------- */
@@ -149,6 +185,9 @@ pp_cancel_token* pp_cancel_token_create(void);
 void pp_cancel_token_cancel(pp_cancel_token* token);
 int32_t pp_cancel_token_is_cancelled(const pp_cancel_token* token);
 void pp_cancel_token_destroy(pp_cancel_token* token);
+/* How far the job using this token has got, 0..1 (never decreases; poll it
+ * from any thread to show progress). A token is meant for one job. */
+float pp_cancel_token_progress(const pp_cancel_token* token);
 
 /* ---- Processing --------------------------------------------------------- */
 /* Runs `ops` in order on `input` and returns a newly allocated image in *out.
@@ -156,12 +195,27 @@ void pp_cancel_token_destroy(pp_cancel_token* token);
 pp_status pp_process(const pp_image* input, const pp_op* ops, size_t op_count,
                      const pp_cancel_token* token, pp_image** out);
 
+/* pp_process with options (preview size, backend). `options` may be NULL.
+ * Progress is reported through `token`. */
+pp_status pp_process_ex(const pp_image* input, const pp_op* ops, size_t op_count, const pp_render_options* options,
+                        const pp_cancel_token* token, pp_image** out);
+/* Upper bound of the engine memory pp_process_ex will hold at its peak for an
+ * input of this size (the input included), without running it. Also checks
+ * the operations, so invalid lists fail here first. */
+pp_status pp_process_estimate(int32_t width, int32_t height, int32_t format, const pp_op* ops, size_t op_count,
+                              const pp_render_options* options, uint64_t* peak_bytes);
+
 /* ---- Memory ------------------------------------------------------------- */
 void pp_memory_get_stats(pp_memory_stats* out);
 /* 0 disables the budget. Allocations that would exceed it fail with
  * PP_ERROR_BUDGET_EXCEEDED rather than risking a process kill. */
 void pp_memory_set_budget(uint64_t bytes);
 void pp_memory_reset_peak(void);
+/* Frees the buffers kept for reuse (call on memory pressure). */
+void pp_memory_trim(void);
+/* Most memory kept for reuse between operations (default 96 MB, and never
+ * more than a quarter of the budget); 0 disables reuse. */
+void pp_memory_set_reuse_limit(uint64_t bytes);
 
 /* ---- Profiling ---------------------------------------------------------- */
 /* Writes a JSON report into buffer (always NUL terminated when capacity > 0).
@@ -360,6 +414,149 @@ typedef struct pp_style {
 
 pp_status pp_style_analyze(const pp_image* image, pp_style* out);
 pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token);
+
+/* ---- Codec (Phase 4) ---------------------------------------------------- */
+/* JPEG and PNG (read and write), BMP and GIF (read). Decoded images are RGBA8
+ * with straight alpha, upright (JPEG EXIF orientation applied). Dimensions are
+ * checked before decoding, and decoding counts toward the memory budget. */
+typedef enum pp_codec {
+  PP_CODEC_UNKNOWN = 0,
+  PP_CODEC_JPEG = 1,
+  PP_CODEC_PNG = 2,
+  PP_CODEC_BMP = 3,
+  PP_CODEC_GIF = 4
+} pp_codec;
+
+typedef struct pp_decode_options {
+  int32_t max_edge;          /* > 0: shrink so the longer edge fits (area filter) */
+  int32_t apply_orientation; /* 1 (default when options is NULL): upright pixels */
+  int32_t reserved[6];
+} pp_decode_options;
+
+typedef struct pp_decode_info {
+  int32_t width, height;               /* returned image */
+  int32_t source_width, source_height; /* as stored */
+  int32_t orientation;                 /* EXIF 1..8 */
+  int32_t codec;                       /* pp_codec */
+  int32_t has_alpha;
+  int32_t reserved;
+} pp_decode_info;
+
+pp_status pp_decode_memory(const void* data, size_t size, const pp_decode_options* options,
+                           const pp_cancel_token* token, pp_image** out, pp_decode_info* info);
+pp_status pp_decode_file(const char* path, const pp_decode_options* options, const pp_cancel_token* token,
+                         pp_image** out, pp_decode_info* info);
+/* *data is allocated by the engine; release it with pp_free(). quality 1..100 (JPEG). */
+pp_status pp_encode_memory(const pp_image* image, int32_t codec, int32_t quality, void** data, size_t* size);
+/* Written atomically (temporary file, then rename). */
+pp_status pp_encode_file(const pp_image* image, const char* path, int32_t codec, int32_t quality);
+void pp_free(void* data);
+
+/* ---- Geometry, colour, compositing, masks (Phase 4) ----------------------- */
+/* Straightens the quadrilateral `quad` (x,y of top-left, top-right,
+ * bottom-right, bottom-left in source pixels; convex) into width x height. */
+pp_status pp_warp_perspective(const pp_image* image, const float quad[8], int32_t width, int32_t height,
+                              const pp_cancel_token* token, pp_image** out);
+/* Suggested PP_OP_PERSPECTIVE vertical amount (-1..1) that makes the photo's
+ * near-vertical lines parallel; 0 when there are too few lines to judge. */
+pp_status pp_detect_keystone(const pp_image* image, const pp_cancel_token* token, float* vertical);
+/* 3D LUT: size^3 RGB float triples (red fastest, as in .cube files), values
+ * 0..1; size 2..65; tetrahedral interpolation; strength 0..1. In place. */
+pp_status pp_apply_lut3d(pp_image* image, const float* table, int32_t size, float strength,
+                         const pp_cancel_token* token);
+/* out = M (r,g,b,1), M row-major 3x4; linear_light != 0 applies it in linear light. In place. */
+pp_status pp_color_matrix(pp_image* image, const float matrix[12], int32_t linear_light, const pp_cancel_token* token);
+
+typedef enum pp_blend_mode {
+  PP_BLEND_NORMAL = 0,
+  PP_BLEND_MULTIPLY = 1,
+  PP_BLEND_SCREEN = 2,
+  PP_BLEND_OVERLAY = 3,
+  PP_BLEND_SOFT_LIGHT = 4,
+  PP_BLEND_HARD_LIGHT = 5,
+  PP_BLEND_DARKEN = 6,
+  PP_BLEND_LIGHTEN = 7,
+  PP_BLEND_DIFFERENCE = 8,
+  PP_BLEND_ADD = 9,
+  PP_BLEND_COLOR = 10,
+  PP_BLEND_LUMINOSITY = 11
+} pp_blend_mode;
+
+/* Draws `layer` onto `image` at (x, y), clipped (W3C compositing, straight
+ * alpha). `mask` (GRAY8, layer-sized, may be NULL) scales the layer's alpha:
+ * with a subject matte this is background replacement. */
+pp_status pp_blend(pp_image* image, const pp_image* layer, const pp_image* mask, int32_t x, int32_t y,
+                   int32_t mode, float opacity, const pp_cancel_token* token);
+
+typedef enum pp_mask_op {
+  PP_MASK_INVERT = 1,
+  PP_MASK_FEATHER = 2,  /* amount = sigma in pixels */
+  PP_MASK_GROW = 3,     /* amount = pixels; negative shrinks */
+  PP_MASK_THRESHOLD = 4 /* amount = level 0..1 */
+} pp_mask_op;
+
+/* In place on a GRAY8 mask. */
+pp_status pp_mask_adjust(pp_image* mask, int32_t op, float amount, const pp_cancel_token* token);
+/* Snaps a coarse mask (any size, e.g. a model's output) to the edges of
+ * `guide` and returns it at the guide's size (fast guided filter). */
+pp_status pp_mask_refine(const pp_image* mask, const pp_image* guide, int32_t radius, float eps,
+                         const pp_cancel_token* token, pp_image** out);
+
+/* ---- Machine-learning helpers (Phase 4) ------------------------------------ */
+/* Every on-device model shares these: preparing its input and turning its
+ * output into a mask are native, parallel and identical everywhere. */
+typedef enum pp_tensor_layout { PP_TENSOR_NHWC = 0, PP_TENSOR_NCHW = 1 } pp_tensor_layout;
+typedef enum pp_tensor_fit {
+  PP_FIT_STRETCH = 0,
+  PP_FIT_LETTERBOX = 1, /* whole photo, padded with the mean colour (0 after normalisation) */
+  PP_FIT_CROP_CENTER = 2
+} pp_tensor_fit;
+
+typedef struct pp_tensor_spec {
+  int32_t width, height; /* model input size */
+  int32_t layout;        /* pp_tensor_layout */
+  int32_t fit;           /* pp_tensor_fit */
+  float mean[3];         /* value = (pixel/255 - mean) / std, RGB order */
+  float std[3];
+  int32_t reserved[4];
+} pp_tensor_spec;
+
+/* Where the photo landed in the tensor: tensor_xy = photo_xy * scale + offset. */
+typedef struct pp_tensor_placement {
+  float scale_x, scale_y, offset_x, offset_y;
+} pp_tensor_placement;
+
+/* Fills `out` (width*height*3 floats) from the image. `placement` may be NULL. */
+pp_status pp_image_to_tensor(const pp_image* image, const pp_tensor_spec* spec, float* out, size_t out_count,
+                             const pp_cancel_token* token, pp_tensor_placement* placement);
+
+typedef enum pp_activation { PP_ACTIVATION_NONE = 0, PP_ACTIVATION_SIGMOID = 1, PP_ACTIVATION_SOFTMAX = 2 } pp_activation;
+
+/* A model's score map (width x height x channels, NHWC or NCHW) -> GRAY8 mask
+ * of `channel` at out_width x out_height. `placement` (from
+ * pp_image_to_tensor, may be NULL) crops out padding; photo_width/height are
+ * the original photo's. Fails on NaN/Inf output (a broken model run). */
+pp_status pp_tensor_to_mask(const float* data, int32_t width, int32_t height, int32_t channels, int32_t layout,
+                            int32_t channel, int32_t activation, int32_t out_width, int32_t out_height,
+                            const pp_tensor_placement* placement, int32_t photo_width, int32_t photo_height,
+                            const pp_cancel_token* token, pp_image** out);
+
+/* ---- GPU (Phase 4) -------------------------------------------------------- */
+typedef struct pp_gpu_status {
+  int32_t compiled;       /* built with GPU support */
+  int32_t available;      /* initialised and verified against the CPU */
+  int32_t max_difference; /* largest CPU/GPU difference in the self-test (0..255), -1 if not run */
+  int32_t reserved;
+  char renderer[96];
+  char reason[160];
+} pp_gpu_status;
+
+/* Initialises and verifies the GPU (once; later calls report the result).
+ * Safe to call from any thread; the GPU work runs on its own thread. */
+pp_status pp_gpu_init(pp_gpu_status* out);
+void pp_gpu_get_status(pp_gpu_status* out);
+/* Frees the GPU context (memory pressure). pp_gpu_init can start it again. */
+void pp_gpu_shutdown(void);
 
 #ifdef __cplusplus
 } /* extern "C" */

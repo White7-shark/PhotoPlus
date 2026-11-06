@@ -27,11 +27,27 @@ class MemoryTracker {
   void resetPeak() noexcept;
 
   pp_memory_stats stats() const noexcept;
+  // Frees every buffer kept for reuse (memory pressure, or after a job).
+  void trim() noexcept;
+  // Most memory kept for reuse; 0 disables reuse.
+  void setReuseLimit(std::uint64_t bytes) noexcept;
 
   static constexpr std::size_t kAlignment = 64;  // cache line; friendly to NEON loads
+  // Buffers smaller than this are not worth keeping.
+  static constexpr std::size_t kReuseMinBytes = 64 * 1024;
 
  private:
   MemoryTracker() = default;
+
+  // Buffers released by finished work are kept for the next allocation of
+  // the same size (pipelines allocate the same plane sizes over and over).
+  // They count against the budget and are freed first when it is tight.
+  void* takeCached(std::size_t rounded) noexcept;
+  bool cache(void* ptr, std::size_t rounded) noexcept;
+  bool evictFor(std::uint64_t needed) noexcept;
+  std::atomic<std::uint64_t> cached_{0};
+  std::atomic<std::uint64_t> reuseLimit_{96ull * 1024 * 1024};
+  std::atomic<std::uint64_t> reused_{0};
 
   std::atomic<std::uint64_t> current_{0};
   std::atomic<std::uint64_t> peak_{0};

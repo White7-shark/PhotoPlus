@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
+
 #include "photoplus/cancellation.hpp"
 #include "photoplus/image.hpp"
 #include "photoplus/status.hpp"
@@ -20,6 +23,8 @@ struct ToneParams {
 };
 
 Error tone(ImageBuffer& image, const ToneParams& params, const CancellationToken* token);
+// The 256-entry table tone() applies to every colour channel (shared with the GPU path).
+std::array<uint8_t, 256> toneLut(const ToneParams& params);
 Error grayscale(ImageBuffer& image, const CancellationToken* token);
 Error saturation(ImageBuffer& image, float delta, const CancellationToken* token);
 Error flip(ImageBuffer& image, bool horizontal, bool vertical, const CancellationToken* token);

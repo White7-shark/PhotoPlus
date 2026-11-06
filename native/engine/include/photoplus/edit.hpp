@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include <cstdint>
 
 #include "photoplus/cancellation.hpp"
@@ -17,6 +19,8 @@ Result<ImageBuffer> straighten(const ImageBuffer& src, float degrees, const Canc
 
 // White balance nudge: temperature (-1 cool … 1 warm), tint (-1 green … 1 magenta).
 Error warmth(ImageBuffer& image, float temperature, float tint, const CancellationToken* token);
+// Per-channel (R, G, B) tables warmth() applies (shared with the GPU path).
+std::array<std::array<uint8_t, 256>, 3> warmthLuts(float temperature, float tint);
 
 // Look presets ("filters"). Ids match pp_filter_id; strength 0..1.
 constexpr int32_t kFilterCount = 12;

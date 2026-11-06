@@ -72,10 +72,7 @@ Result<ImageBuffer> straighten(const ImageBuffer& src, float degrees, const Canc
 
 // ---- Warmth -----------------------------------------------------------------
 
-Error warmth(ImageBuffer& image, float temperature, float tint, const CancellationToken* token) {
-  ScopedTimer timer("edit.warmth");
-  if (!isColour(image)) return makeError(PP_ERROR_UNSUPPORTED_FORMAT, "Warmth needs a colour photo");
-  if (!std::isfinite(temperature) || !std::isfinite(tint)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Warmth must be finite");
+std::array<std::array<uint8_t, 256>, 3> warmthLuts(float temperature, float tint) {
   const float t = std::clamp(temperature, -1.0f, 1.0f), g = std::clamp(tint, -1.0f, 1.0f);
   // Gains on the light (blacks stay black), normalised so brightness holds.
   float gr = 1.0f + 0.16f * t + 0.04f * g, gg = 1.0f - 0.08f * g, gb = 1.0f - 0.16f * t + 0.04f * g;
@@ -90,6 +87,14 @@ Error warmth(ImageBuffer& image, float temperature, float tint, const Cancellati
     lut[1][static_cast<size_t>(i)] = byteOf(v * gg);
     lut[2][static_cast<size_t>(i)] = byteOf(v * gb);
   }
+  return lut;
+}
+
+Error warmth(ImageBuffer& image, float temperature, float tint, const CancellationToken* token) {
+  ScopedTimer timer("edit.warmth");
+  if (!isColour(image)) return makeError(PP_ERROR_UNSUPPORTED_FORMAT, "Warmth needs a colour photo");
+  if (!std::isfinite(temperature) || !std::isfinite(tint)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Warmth must be finite");
+  const auto lut = warmthLuts(temperature, tint);
   const Rgb o = offsets(image);
   const bool done = parallelFor(image.height(), token, [&](int32_t begin, int32_t end) {
     for (int32_t y = begin; y < end; ++y) {

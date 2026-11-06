@@ -21,6 +21,12 @@
 #include "photoplus/lens.hpp"
 #include "photoplus/memory.hpp"
 #include "photoplus/pipeline.hpp"
+#include "photoplus/tensor.hpp"
+#include <cstdio>
+#include <cstdlib>
+#include "photoplus/gpu.hpp"
+#include "photoplus/filters.hpp"
+#include "photoplus/codec.hpp"
 #include "photoplus/portrait.hpp"
 #include "photoplus/pp_engine.h"
 #include "photoplus/profiler.hpp"
@@ -83,6 +89,7 @@ const char* pp_status_name(pp_status status) {
     case PP_ERROR_CANCELLED: return "CANCELLED";
     case PP_ERROR_UNSUPPORTED_FORMAT: return "UNSUPPORTED_FORMAT";
     case PP_ERROR_INTERNAL: return "INTERNAL";
+    case PP_ERROR_IO: return "IO_ERROR";
   }
   return "UNKNOWN";
 }
@@ -161,6 +168,10 @@ int32_t pp_cancel_token_is_cancelled(const pp_cancel_token* token) {
 
 void pp_cancel_token_destroy(pp_cancel_token* token) { delete token; }
 
+float pp_cancel_token_progress(const pp_cancel_token* token) {
+  return token == nullptr ? 0.0f : token->token.progress();
+}
+
 pp_status pp_process(const pp_image* input, const pp_op* ops, size_t op_count,
                      const pp_cancel_token* token, pp_image** out) {
   return guarded([&]() -> pp_status {
@@ -175,6 +186,42 @@ pp_status pp_process(const pp_image* input, const pp_op* ops, size_t op_count,
   });
 }
 
+pp_status pp_process_ex(const pp_image* input, const pp_op* ops, size_t op_count, const pp_render_options* options,
+                        const pp_cancel_token* token, pp_image** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    if (input == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "input is null");
+    photoplus::RenderOptions o;
+    if (options != nullptr) {
+      o.maxEdge = options->max_edge;
+      o.backend = options->backend;
+    }
+    auto result = photoplus::runPipeline(input->buffer, ops, op_count, o, token ? &token->token : nullptr);
+    if (!result) return fail(result.error());
+    *out = new pp_image{std::move(result).value()};
+    return succeed();
+  });
+}
+
+pp_status pp_process_estimate(int32_t width, int32_t height, int32_t format, const pp_op* ops, size_t op_count,
+                              const pp_render_options* options, uint64_t* peak_bytes) {
+  return guarded([&]() -> pp_status {
+    if (peak_bytes == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "peak_bytes is null");
+    *peak_bytes = 0;
+    if (!photoplus::isValidFormat(format)) return fail(PP_ERROR_UNSUPPORTED_FORMAT, "Unknown pixel format");
+    photoplus::RenderOptions o;
+    if (options != nullptr) {
+      o.maxEdge = options->max_edge;
+      o.backend = options->backend;
+    }
+    auto r = photoplus::estimatePipeline(width, height, static_cast<photoplus::PixelFormat>(format), ops, op_count, o);
+    if (!r) return fail(r.error());
+    *peak_bytes = *r;
+    return succeed();
+  });
+}
+
 void pp_memory_get_stats(pp_memory_stats* out) {
   if (out != nullptr) *out = photoplus::MemoryTracker::instance().stats();
 }
@@ -182,6 +229,10 @@ void pp_memory_get_stats(pp_memory_stats* out) {
 void pp_memory_set_budget(uint64_t bytes) { photoplus::MemoryTracker::instance().setBudget(bytes); }
 
 void pp_memory_reset_peak(void) { photoplus::MemoryTracker::instance().resetPeak(); }
+
+void pp_memory_trim(void) { photoplus::MemoryTracker::instance().trim(); }
+
+void pp_memory_set_reuse_limit(uint64_t bytes) { photoplus::MemoryTracker::instance().setReuseLimit(bytes); }
 
 size_t pp_profiler_report_json(char* buffer, size_t capacity) {
   std::string json;
@@ -581,5 +632,252 @@ pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength
     return succeed();
   });
 }
+
+
+// ---- Codec ----------------------------------------------------------------------
+
+namespace {
+
+photoplus::codec::DecodeOptions decodeOptions(const pp_decode_options* o) {
+  photoplus::codec::DecodeOptions d;
+  if (o != nullptr) {
+    d.maxEdge = o->max_edge;
+    d.applyOrientation = o->apply_orientation != 0;
+  }
+  return d;
+}
+
+void fillDecodeInfo(const photoplus::codec::DecodeInfo& i, pp_decode_info* out) {
+  if (out == nullptr) return;
+  *out = pp_decode_info{};
+  out->width = i.width;
+  out->height = i.height;
+  out->source_width = i.sourceWidth;
+  out->source_height = i.sourceHeight;
+  out->orientation = i.orientation;
+  out->codec = static_cast<int32_t>(i.format);
+  out->has_alpha = i.hasAlpha ? 1 : 0;
+}
+
+}  // namespace
+
+pp_status pp_decode_memory(const void* data, size_t size, const pp_decode_options* options,
+                           const pp_cancel_token* token, pp_image** out, pp_decode_info* info) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    photoplus::codec::DecodeInfo i;
+    auto r = photoplus::codec::decode(static_cast<const uint8_t*>(data), size, decodeOptions(options),
+                                      token ? &token->token : nullptr, &i);
+    if (!r) return fail(r.error());
+    fillDecodeInfo(i, info);
+    *out = new pp_image{std::move(r).value()};
+    return succeed();
+  });
+}
+
+pp_status pp_decode_file(const char* path, const pp_decode_options* options, const pp_cancel_token* token,
+                         pp_image** out, pp_decode_info* info) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    photoplus::codec::DecodeInfo i;
+    auto r = photoplus::codec::decodeFile(path, decodeOptions(options), token ? &token->token : nullptr, &i);
+    if (!r) return fail(r.error());
+    fillDecodeInfo(i, info);
+    *out = new pp_image{std::move(r).value()};
+    return succeed();
+  });
+}
+
+pp_status pp_encode_memory(const pp_image* image, int32_t codec, int32_t quality, void** data, size_t* size) {
+  return guarded([&]() -> pp_status {
+    if (data == nullptr || size == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "data or size is null");
+    *data = nullptr;
+    *size = 0;
+    if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is null");
+    auto r = photoplus::codec::encode(image->buffer, static_cast<photoplus::codec::Format>(codec), quality);
+    if (!r) return fail(r.error());
+    void* mem = std::malloc(r->size());
+    if (mem == nullptr) return fail(PP_ERROR_OUT_OF_MEMORY, "Out of memory");
+    std::memcpy(mem, r->data(), r->size());
+    *data = mem;
+    *size = r->size();
+    return succeed();
+  });
+}
+
+pp_status pp_encode_file(const pp_image* image, const char* path, int32_t codec, int32_t quality) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is null");
+    if (auto e = photoplus::codec::encodeFile(image->buffer, path, static_cast<photoplus::codec::Format>(codec), quality);
+        e.status != PP_OK) {
+      return fail(e);
+    }
+    return succeed();
+  });
+}
+
+void pp_free(void* data) { std::free(data); }
+
+// ---- Geometry, colour, compositing, masks --------------------------------------------
+
+pp_status pp_warp_perspective(const pp_image* image, const float quad[8], int32_t width, int32_t height,
+                              const pp_cancel_token* token, pp_image** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is null");
+    auto r = photoplus::ops::warpPerspective(image->buffer, quad, width, height, token ? &token->token : nullptr);
+    if (!r) return fail(r.error());
+    *out = new pp_image{std::move(r).value()};
+    return succeed();
+  });
+}
+
+pp_status pp_detect_keystone(const pp_image* image, const pp_cancel_token* token, float* vertical) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || vertical == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    *vertical = photoplus::ops::detectVerticalKeystone(image->buffer, token ? &token->token : nullptr);
+    if (token != nullptr && token->token.isCancelled()) return fail(PP_ERROR_CANCELLED, "Processing was cancelled");
+    return succeed();
+  });
+}
+
+pp_status pp_apply_lut3d(pp_image* image, const float* table, int32_t size, float strength,
+                         const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is null");
+    if (auto e = photoplus::ops::applyLut3d(image->buffer, table, size, strength, token ? &token->token : nullptr);
+        e.status != PP_OK) {
+      return fail(e);
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_color_matrix(pp_image* image, const float matrix[12], int32_t linear_light, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is null");
+    if (auto e = photoplus::ops::colorMatrix(image->buffer, matrix, linear_light != 0, token ? &token->token : nullptr);
+        e.status != PP_OK) {
+      return fail(e);
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_blend(pp_image* image, const pp_image* layer, const pp_image* mask, int32_t x, int32_t y,
+                   int32_t mode, float opacity, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || layer == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image or layer is null");
+    if (mode < 0 || mode >= photoplus::ops::kBlendModeCount) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown blend mode");
+    if (auto e = photoplus::ops::blend(image->buffer, layer->buffer, mask ? &mask->buffer : nullptr, x, y,
+                                       static_cast<photoplus::ops::BlendMode>(mode), opacity,
+                                       token ? &token->token : nullptr);
+        e.status != PP_OK) {
+      return fail(e);
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_mask_adjust(pp_image* mask, int32_t op, float amount, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (mask == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "mask is null");
+    if (op < PP_MASK_INVERT || op > PP_MASK_THRESHOLD) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown mask operation");
+    if (auto e = photoplus::ops::maskAdjust(mask->buffer, static_cast<photoplus::ops::MaskOp>(op), amount,
+                                            token ? &token->token : nullptr);
+        e.status != PP_OK) {
+      return fail(e);
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_mask_refine(const pp_image* mask, const pp_image* guide, int32_t radius, float eps,
+                         const pp_cancel_token* token, pp_image** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    if (mask == nullptr || guide == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "mask or guide is null");
+    auto r = photoplus::ops::maskRefine(mask->buffer, guide->buffer, radius, eps, token ? &token->token : nullptr);
+    if (!r) return fail(r.error());
+    *out = new pp_image{std::move(r).value()};
+    return succeed();
+  });
+}
+
+// ---- Machine learning --------------------------------------------------------------
+
+pp_status pp_image_to_tensor(const pp_image* image, const pp_tensor_spec* spec, float* out, size_t out_count,
+                             const pp_cancel_token* token, pp_tensor_placement* placement) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || spec == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image or spec is null");
+    if (spec->layout != PP_TENSOR_NHWC && spec->layout != PP_TENSOR_NCHW) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown layout");
+    if (spec->fit < PP_FIT_STRETCH || spec->fit > PP_FIT_CROP_CENTER) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown fit");
+    photoplus::ml::TensorSpec s;
+    s.width = spec->width;
+    s.height = spec->height;
+    s.layout = static_cast<photoplus::ml::Layout>(spec->layout);
+    s.fit = static_cast<photoplus::ml::Fit>(spec->fit);
+    for (int c = 0; c < 3; ++c) s.mean[c] = spec->mean[c], s.std[c] = spec->std[c];
+    photoplus::ml::Placement p;
+    if (auto e = photoplus::ml::toTensor(image->buffer, s, out, out_count, token ? &token->token : nullptr, &p); e.status != PP_OK) {
+      return fail(e);
+    }
+    if (placement != nullptr) *placement = {p.scaleX, p.scaleY, p.offsetX, p.offsetY};
+    return succeed();
+  });
+}
+
+pp_status pp_tensor_to_mask(const float* data, int32_t width, int32_t height, int32_t channels, int32_t layout,
+                            int32_t channel, int32_t activation, int32_t out_width, int32_t out_height,
+                            const pp_tensor_placement* placement, int32_t photo_width, int32_t photo_height,
+                            const pp_cancel_token* token, pp_image** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    if (layout != PP_TENSOR_NHWC && layout != PP_TENSOR_NCHW) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown layout");
+    if (activation < PP_ACTIVATION_NONE || activation > PP_ACTIVATION_SOFTMAX) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown activation");
+    photoplus::ml::Placement p;
+    if (placement != nullptr) p = {placement->scale_x, placement->scale_y, placement->offset_x, placement->offset_y};
+    auto r = photoplus::ml::toMask(data, width, height, channels, static_cast<photoplus::ml::Layout>(layout), channel,
+                                   static_cast<photoplus::ml::Activation>(activation), out_width, out_height,
+                                   placement ? &p : nullptr, photo_width, photo_height, token ? &token->token : nullptr);
+    if (!r) return fail(r.error());
+    *out = new pp_image{std::move(r).value()};
+    return succeed();
+  });
+}
+
+// ---- GPU -------------------------------------------------------------------------
+
+namespace {
+
+void fillGpu(const photoplus::gpu::Status& s, pp_gpu_status* out) {
+  if (out == nullptr) return;
+  *out = pp_gpu_status{};
+  out->compiled = s.compiled ? 1 : 0;
+  out->available = s.available ? 1 : 0;
+  out->max_difference = s.maxDifference;
+  std::snprintf(out->renderer, sizeof(out->renderer), "%s", s.renderer.c_str());
+  std::snprintf(out->reason, sizeof(out->reason), "%s", s.reason.c_str());
+}
+
+}  // namespace
+
+pp_status pp_gpu_init(pp_gpu_status* out) {
+  return guarded([&]() -> pp_status {
+    const auto s = photoplus::gpu::init();
+    fillGpu(s, out);
+    if (!s.available) return fail(PP_ERROR_UNSUPPORTED_FORMAT, s.reason.empty() ? "GPU unavailable" : s.reason);
+    return succeed();
+  });
+}
+
+void pp_gpu_get_status(pp_gpu_status* out) { fillGpu(photoplus::gpu::status(), out); }
+
+void pp_gpu_shutdown(void) { photoplus::gpu::shutdown(); }
 
 }  // extern "C"
