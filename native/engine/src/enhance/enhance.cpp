@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <optional>
 #include <cmath>
 #include <string>
 #include <utility>
@@ -8,6 +9,29 @@
 #include "photoplus/profiler.hpp"
 
 namespace photoplus::enhance {
+
+float fineTexture(const Plane& p) {
+  double sum = 0.0;
+  size_t n = 0;
+  for (int32_t y = 1; y < p.height() - 1; y += 2) {
+    const float* r = p.row(y);
+    const float* u = p.row(y - 1);
+    const float* d = p.row(y + 1);
+    for (int32_t x = 1; x < p.width() - 1; x += 2, ++n) {
+      sum += std::fabs(4.0f * r[x] - r[x - 1] - r[x + 1] - u[x] - d[x]);
+    }
+  }
+  return n ? static_cast<float>(sum / static_cast<double>(n)) : 0.0f;
+}
+
+float applyDetailBudget(const Plane& before, Plane& after, float budget) {
+  const float t0 = fineTexture(before), t1 = fineTexture(after);
+  if (t0 <= 0.0f || t1 <= budget * t0) return 1.0f;
+  const float t = (budget - 1.0f) * t0 / (t1 - t0);
+  for (size_t i = 0; i < after.size(); ++i) after.data()[i] = before.data()[i] + t * (after.data()[i] - before.data()[i]);
+  return t;
+}
+
 
 namespace {
 
@@ -72,7 +96,7 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
   //    sharper ("lucky imaging": hand-shake blurs some frames more than
   //    others). Sharpness is judged at half resolution so noise doesn't win.
   size_t refIdx = 0;
-  if (data.size() > 1) {
+  if (data.size() > 1 && !params.fixedReference) {
     std::vector<float> sharp(data.size(), 0.0f);
     for (size_t i = 0; i < data.size(); ++i) {
       auto half = downsample2(data[i].y, token);
@@ -88,6 +112,7 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
 
   auto quality = analyze(data[0].y, token);
   if (!quality) return failure(quality.error());
+  if (params.noiseSigma > 0.0f) quality->noiseSigma = params.noiseSigma;
   rep.noiseBefore = quality->noiseSigma;
   rep.blurBefore = quality->blurSigma;
 
@@ -219,6 +244,18 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
     if (Error e = denoiseGuided(out.cr, 4 * scale, ceps, 0.0f, token); e.status != PP_OK) return failure(e);
   }
 
+  // Detail budget: photos from phones have usually been sharpened by the
+  // phone already, and deblurring them again turns skin and hair crunchy
+  // (measured on a real selfie: fine texture x2.5). Genuine restoration of
+  // a soft capture raises fine texture by up to ~1.6x (tests/enhance_tests),
+  // so anything beyond kDetailBudget is blended back.
+  constexpr float kDetailBudget = 1.7f;
+  std::optional<Plane> preDeblur;
+  float texBefore = 0.0f;
+  if (willDeblur) {
+    texBefore = fineTexture(out.y);
+    if (auto copy = clonePlane(out.y)) preDeblur = std::move(copy).value();  // skipped if memory is short
+  }
   if (willDeblur) {
     const float resample = scale == 2 ? 0.6f : 0.0f;
     const float s = static_cast<float>(scale);
@@ -253,6 +290,10 @@ Result<ImageBuffer> run(const std::vector<const ImageBuffer*>& frames, const Par
     }
   }
 
+  if (preDeblur && texBefore > 0.0f) {
+    applyDetailBudget(*preDeblur, out.y, kDetailBudget);
+    preDeblur.reset();
+  }
   // Measured on the restored luma (before tone, which rescales levels) so it
   // is comparable with noiseBefore and reflects denoising and deconvolution.
   rep.noiseAfter = estimateNoise(out.y);

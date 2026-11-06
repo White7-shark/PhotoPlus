@@ -9,6 +9,7 @@
 //   ops_probe blend   base layer out.png mode opacity     (pp_blend_mode)
 //   ops_probe keystone in                                  (prints the suggested vertical amount)
 //   ops_probe perspective in out.png vertical horizontal  (PP_OP_PERSPECTIVE, -1..1)
+//   ops_probe enhance in out.png                           (Clarity: single-frame pp_enhance, defaults)
 //
 // With PP_PROBE_PROFILE=1 in the environment, the engine's own timings and
 // peak memory are printed to stderr (decoding and PNG writing excluded).
@@ -68,7 +69,7 @@ float num(const char* s) { return static_cast<float>(std::strtod(s, nullptr)); }
 
 int main(int argc, char** argv) {
   if (argc < 3) {
-    std::fprintf(stderr, "usage: ops_probe decode|resize|blur|warp|blend|keystone|perspective ...\n");
+    std::fprintf(stderr, "usage: ops_probe decode|resize|blur|warp|blend|keystone|perspective|enhance ...\n");
     return 2;
   }
   const std::string cmd = argv[1];
@@ -124,6 +125,21 @@ int main(int argc, char** argv) {
     op.p[0] = num(argv[4]);
     op.p[1] = num(argv[5]);
     return process(in, argv[3], op);
+  }
+  if (cmd == "enhance" && argc == 4) {
+    pp_image* in = load(argv[2]);
+    if (in == nullptr) return 1;
+    pp_enhance_params ep{};
+    pp_enhance_default_params(&ep);
+    pp_image* out = nullptr;
+    pp_enhance_report rep{};
+    const pp_status s = pp_enhance(&in, 1, &ep, nullptr, &out, &rep);
+    pp_image_destroy(in);
+    if (s != PP_OK) return fail("enhance", s);
+    std::printf("{\"noiseBefore\":%.4f,\"noiseAfter\":%.4f,\"blurBefore\":%.2f,\"deblurSigma\":%.2f}\n",
+                static_cast<double>(rep.noise_before), static_cast<double>(rep.noise_after),
+                static_cast<double>(rep.blur_before), static_cast<double>(rep.deblur_sigma));
+    return save(out, argv[3]);
   }
   if (cmd == "keystone" && argc == 3) {
     pp_image* in = load(argv[2]);

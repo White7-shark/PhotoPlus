@@ -261,6 +261,10 @@ void pp_enhance_default_params(pp_enhance_params* out) {
   out->detail = d.detail;
   out->auto_tone = d.autoTone ? 1 : 0;
   out->vibrance = d.vibrance;
+  out->fixed_reference = 0;
+  out->measured_blur = 0.0f;
+  out->noise_sigma = 0.0f;
+  std::fill(std::begin(out->reserved), std::end(out->reserved), 0.0f);
 }
 
 namespace {
@@ -279,6 +283,12 @@ pp_status enhanceImpl(const pp_image* const* frames, size_t count, const pp_enha
     p.detail = params->detail;
     p.autoTone = params->auto_tone != 0;
     p.vibrance = params->vibrance;
+    if (!std::isfinite(params->measured_blur) || !std::isfinite(params->noise_sigma)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Enhancement parameters must be finite");
+    }
+    p.fixedReference = params->fixed_reference != 0;
+    p.measuredBlur = std::clamp(params->measured_blur, 0.0f, 8.0f);
+    p.noiseSigma = std::clamp(params->noise_sigma, 0.0f, 0.5f);
   }
   std::vector<const photoplus::ImageBuffer*> buffers;
   buffers.reserve(count);

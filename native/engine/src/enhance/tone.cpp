@@ -61,8 +61,22 @@ Error tone(YccImage& img, const ToneParams& params, const CancellationToken* tok
       // to each pixel's brightness: blacks stay black (an even shift would
       // tint dark clothing and hair).
       const float inv = 1.0f / std::max(static_cast<float>(sy / static_cast<double>(n)), 0.1f);
+      // Skin keeps most of its warmth: people read a neutralised skin tone
+      // as grey or ashy (most visibly on deep skin), so a cooling correction
+      // reaches skin-coloured pixels at only a third of its strength while
+      // greys, walls and sky get all of it. Warming corrections are not held back.
+      const bool cooling = shiftB > 0.0f || shiftR < 0.0f;
       for (size_t i = 0; i < img.cb.size(); ++i) {
-        const float k = std::min(img.y.data()[i] * inv, 1.6f);
+        float k = std::min(img.y.data()[i] * inv, 1.6f);
+        if (cooling) {
+          const float cb = img.cb.data()[i], cr = img.cr.data()[i];
+          const float chroma = std::hypot(cb, cr);
+          // Skin hues sit between yellow-orange and red (cb < 0 < cr) for every skin tone.
+          const float hue = std::atan2(cr, cb) * 57.29578f;  // degrees
+          const float skin = (1.0f - std::min(1.0f, std::fabs(hue - 128.0f) / 32.0f)) *
+                             std::clamp((chroma - 0.012f) / 0.03f, 0.0f, 1.0f);
+          k *= 1.0f - 0.67f * std::max(0.0f, skin);
+        }
         img.cb.data()[i] += shiftB * k;
         img.cr.data()[i] += shiftR * k;
       }

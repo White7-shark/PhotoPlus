@@ -232,6 +232,11 @@ typedef struct pp_enhance_params {
   float detail;      /* 0..1 local contrast ("clarity") */
   int32_t auto_tone; /* 1 = automatic white balance and levels */
   float vibrance;    /* 0..1 */
+  /* Video (zero = automatic, as for photos): */
+  int32_t fixed_reference; /* 1: frame 0 is always the reference (centre of a video window) */
+  float measured_blur;     /* > 0: blur (px) measured once for the clip, instead of per frame */
+  float noise_sigma;       /* > 0: noise level measured once for the clip */
+  float reserved[4];
 } pp_enhance_params;
 
 typedef struct pp_quality_report {

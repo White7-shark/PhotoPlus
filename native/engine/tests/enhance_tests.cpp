@@ -341,3 +341,106 @@ TEST(enhance_into_writes_caller_buffer_without_extra_allocation) {
   pp_image_destroy(wrong);
   pp_image_destroy(dst);
 }
+
+// ---- Real-phone findings (Phase 6) ------------------------------------------------------
+
+namespace {
+double meanLaplacian(const Plane& p) {
+  double s = 0;
+  size_t n = 0;
+  for (int y = 1; y < p.height() - 1; ++y)
+    for (int x = 1; x < p.width() - 1; ++x, ++n)
+      s += std::fabs(4 * p.row(y)[x] - p.row(y)[x - 1] - p.row(y)[x + 1] - p.row(y - 1)[x] - p.row(y + 1)[x]);
+  return s / static_cast<double>(n);
+}
+}  // namespace
+
+TEST(enhance_does_not_oversharpen_a_photo_the_phone_already_sharpened) {
+  // A phone JPEG: optics soften the scene, then the phone's own processing
+  // sharpens it again (unsharp mask). Deblurring that on top must not turn
+  // fine texture crunchy: the detail budget caps the gain.
+  const Plane scene = scene::makeScene(480, 360, 11);
+  // Optics and the phone's noise reduction leave edges soft and fine
+  // texture flat; then the phone's sharpening steepens the edges again.
+  Plane soft = scene::degrade(scene, 0.0f, 0.0f, 2.0f, 1, 0.0015f, 3);
+  auto blurred = Plane::allocate(soft.width(), soft.height());
+  ASSERT_OK(photoplus::gaussianBlur(soft, *blurred, 2.5f, nullptr).status);
+  for (size_t i = 0; i < soft.size(); ++i) soft.data()[i] += 0.8f * (soft.data()[i] - blurred->data()[i]);
+  pp_image* in = toImage(soft);
+  pp_enhance_params p = restorationOnly(1);
+  pp_image* out = nullptr;
+  ASSERT_OK(pp_enhance(&in, 1, &p, nullptr, &out, nullptr));
+  const double before = meanLaplacian(lumaOf(in)), after = meanLaplacian(lumaOf(out));
+  std::printf("    fine texture x%.2f\n", after / before);
+  EXPECT_TRUE(after / before < 1.8);
+  pp_image_destroy(in);
+  pp_image_destroy(out);
+}
+
+TEST(white_balance_neutralises_the_light_but_keeps_skin_warm) {
+  // Warm light on a grey wall with a person: the wall becomes neutral, the
+  // skin keeps most of its warmth (a fully neutralised skin reads ashy).
+  const int w = 320, h = 240;
+  pp_image* img = nullptr;
+  ASSERT_OK(pp_image_create(w, h, PP_FORMAT_RGBA8, &img));
+  auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+  auto inSkin = [](int x, int y) { return (x - 160) * (x - 160) / 3600.0 + (y - 120) * (y - 120) / 6400.0 < 1.0; };
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x) {
+      uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+      const int t = static_cast<int>((x * 7 + y * 13) % 9) - 4;
+      if (inSkin(x, y)) {
+        q[0] = static_cast<uint8_t>(118 + t), q[1] = static_cast<uint8_t>(76 + t), q[2] = static_cast<uint8_t>(54 + t);  // deep skin
+      } else {
+        q[0] = static_cast<uint8_t>(160 + t), q[1] = static_cast<uint8_t>(154 + t), q[2] = static_cast<uint8_t>(140 + t);  // grey wall in warm light
+      }
+      q[3] = 255;
+    }
+  pp_enhance_params p{};
+  pp_enhance_default_params(&p);
+  p.denoise = p.sharpen = p.detail = p.vibrance = 0.0f;  // white balance (and levels) only
+  pp_image* out = nullptr;
+  ASSERT_OK(pp_enhance(&img, 1, &p, nullptr, &out, nullptr));
+  auto warmth = [&](pp_image* im, bool skin) {  // (R - B) / luma, averaged
+    const auto* d = static_cast<const uint8_t*>(pp_image_pixels(im));
+    pp_image_info info{};
+    pp_image_get_info(im, &info);
+    double s = 0;
+    int n = 0;
+    for (int y = 0; y < h; ++y)
+      for (int x = 0; x < w; ++x) {
+        if (inSkin(x, y) != skin) continue;
+        const uint8_t* q = d + static_cast<size_t>(y) * info.stride + x * 4;
+        s += (q[0] - q[2]) / (0.299 * q[0] + 0.587 * q[1] + 0.114 * q[2] + 1.0);
+        ++n;
+      }
+    return s / n;
+  };
+  const double wall0 = warmth(img, false), wall1 = warmth(out, false), skin0 = warmth(img, true), skin1 = warmth(out, true);
+  std::printf("    wall warmth %.3f -> %.3f, skin warmth %.3f -> %.3f\n", wall0, wall1, skin0, skin1);
+  EXPECT_TRUE(wall1 < wall0 * 0.8);  // the light's cast is corrected
+  EXPECT_TRUE(skin1 > skin0 * 0.93);  // the skin keeps its own warmth (0.89 without protection)
+  pp_image_destroy(img);
+  pp_image_destroy(out);
+}
+
+TEST(detail_budget_caps_texture_gain_and_leaves_moderate_restoration_alone) {
+  const Plane scene = scene::makeScene(200, 150, 5);
+  auto soft = Plane::allocate(200, 150);
+  ASSERT_OK(photoplus::gaussianBlur(scene, *soft, 1.0f, nullptr).status);
+  // Over-restored: three times the fine detail of the soft image.
+  auto harsh = clonePlane(*soft);
+  for (size_t i = 0; i < harsh->size(); ++i) harsh->data()[i] += 2.0f * (soft->data()[i] - scene.data()[i]) * -1.0f;
+  const float before = photoplus::enhance::fineTexture(*soft);
+  const float kept = photoplus::enhance::applyDetailBudget(*soft, *harsh, 1.7f);
+  const float after = photoplus::enhance::fineTexture(*harsh);
+  std::printf("    capped to x%.2f (kept %.0f%% of the change)\n", after / before, 100.0 * kept);
+  EXPECT_TRUE(kept < 1.0f);
+  EXPECT_NEAR(after / before, 1.7, 0.05);
+  // Moderate restoration is not touched.
+  auto gentle = clonePlane(*soft);
+  for (size_t i = 0; i < gentle->size(); ++i) gentle->data()[i] += 0.2f * (scene.data()[i] - soft->data()[i]);
+  auto copy = clonePlane(*gentle);
+  EXPECT_EQ(photoplus::enhance::applyDetailBudget(*soft, *gentle, 1.7f), 1.0f);
+  for (size_t i = 0; i < gentle->size(); ++i) EXPECT_TRUE(gentle->data()[i] == copy->data()[i]);
+}

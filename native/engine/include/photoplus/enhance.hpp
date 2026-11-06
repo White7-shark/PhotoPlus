@@ -97,6 +97,13 @@ struct ToneParams {
 };
 Error tone(YccImage& image, const ToneParams& params, const CancellationToken* token);
 
+// Mean absolute Laplacian on a sparse grid: fine texture (and noise).
+float fineTexture(const Plane& p);
+// Keeps restoration natural: if `after` holds more than `budget` times the
+// fine texture of `before`, it is blended back toward `before` until it
+// holds exactly that. Returns the share of the change kept (1 = untouched).
+float applyDetailBudget(const Plane& before, Plane& after, float budget);
+
 struct Params {
   int32_t upscale = 1;     // 1 or 2
   float denoise = 1.0f;    // 0..1 multiplier on the automatic strength (0 = off)
@@ -115,6 +122,11 @@ struct Params {
   // it backs off, leaving noise to the deconvolution's regulariser): for
   // photos that will be viewed enlarged, where leftover grain shows.
   bool fullDenoise = false;
+  // Video (Glide): frame 0 stays the reference even if another frame is
+  // sharper, and a noise level measured once for the whole clip replaces the
+  // per-frame estimate, so every output frame is treated alike (no flicker).
+  bool fixedReference = false;
+  float noiseSigma = 0.0f;
 };
 
 struct Report {
