@@ -119,6 +119,11 @@ export class CameraService {
     this.native.setFocusPeaking(enabled, color, threshold);
   }
 
+  /** Props in the camera: live faces arrive as `faces` events while enabled. */
+  setFaceTracking(enabled: boolean): void {
+    this.native.setFaceTracking(enabled);
+  }
+
   async setManual(settings: ManualSettings): Promise<ManualSettings> {
     return this.native.setManual(settings);
   }

@@ -8,3 +8,4 @@ export * from './Logo';
 export * from './Primitives';
 export * from './Screen';
 export * from './States';
+export * from './PreviewTile';

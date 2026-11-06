@@ -61,6 +61,10 @@ export function fitToFace(prop: PropDef, face: FaceGeometry, aspect: number): Pr
   if (prop.anchor === 'eyes') {
     anchor = { x: (eL.x + eR.x) / 2, y: (eL.y + eR.y) / 2 };
     width = prop.fit * eyeDist;
+  } else if (prop.anchor === 'free') {
+    // Made props with no set place start in the middle of the face.
+    anchor = { x: (top.x + chin.x) / 2, y: (top.y + chin.y) / 2 };
+    width = prop.fit * faceW;
   } else {
     anchor = prop.anchor === 'head' ? top : chin;
     width = prop.fit * faceW;
@@ -82,7 +86,14 @@ export function fitToFace(prop: PropDef, face: FaceGeometry, aspect: number): Pr
 
 /** Without a face: centred, a third of the photo wide. */
 export function defaultPlacement(prop: PropDef): PropPlacement {
-  return { id: prop.id, cx: 0.5, cy: prop.anchor === 'neck' ? 0.6 : 0.4, width: 0.35, rotation: 0, flip: false };
+  return {
+    id: prop.id,
+    cx: 0.5,
+    cy: prop.anchor === 'neck' ? 0.6 : prop.anchor === 'free' ? 0.5 : 0.4,
+    width: 0.35,
+    rotation: 0,
+    flip: false,
+  };
 }
 
 /** The face a new prop should go on: the largest one. */

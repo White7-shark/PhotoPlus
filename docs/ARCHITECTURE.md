@@ -119,3 +119,22 @@ EditRenderer (Kotlin): decode base ─▶ [Transform] ─▶ geometry (rotate ·
   - Edits and re-exports start from the clean copy, so the mark is never doubled.
   - Deleting a photo deletes its clean copy too.
 - **Props and frames** are engine operations at full resolution. Prop art is generated SVG (`scripts/make-props.mjs`) bundled as PNG. Frames are signed-distance shapes, so their edges are smooth at any size.
+
+### Props in the camera
+
+```
+ImageAnalysis (640×480) ─▶ FaceTracker (ML Kit contours, ≈15 fps) ─▶ PhotoPlusCameraFaces event (preview fractions)
+                                   │ viewport crop → upright → preview; mirrored for the front camera
+JS: CameraProps.tsx ─ fitToFace + the person's adjustment (along the face) ─▶ live overlay (drag / pinch)
+capture ─▶ CaptureOptions.props ─▶ CameraProps.kt: preview → upright photo (rotation, mirroring)
+            ─▶ refit to the face found in the photo (FaceFinder + PropFit, same rules as placement.ts)
+            ─▶ pp_place_prop into the pixels ─▶ watermark (free plan) ─▶ JPEG + EXIF
+```
+
+- One analysis stream serves either face tracking (props on) or focus peaking.
+- Props people make: `createCustomProp` cuts the tapped object out (subject segmentation, then the engine's tap cut-out) and saves a transparent PNG under the app's `props` folder. `PropArt` loads bundled and made props for both the editor and the camera.
+- Frame previews: `frameThumbnails` renders every frame around the person's photo at thumbnail size, cached per photo.
+
+### Watermark-free unlock (rewarded ads)
+
+`AdsModule` handles consent (User Messaging Platform) and Google Mobile Ads rewarded ads. `AdRewards` counts rewards per photo from the SDK's reward callback only. `EngineModule.exportImage` asks `AdRewards.isUnlocked(photo)` and `ExportPolicy.resolveForExport` before choosing the mark, so an unlocked free photo exports clean and nothing else does.

@@ -106,6 +106,8 @@ object CameraController {
   @Volatile private var kelvinWaitingForTransform = false
   private var flash = FlashSetting.OFF
   private var peakingEnabled = false
+  /** Live face tracking for props worn in the camera. */
+  private var facesEnabled = false
   @Volatile var targetRotation = Surface.ROTATION_0
     private set
   private var capabilityInputs: CameraCapabilities.Inputs? = null
@@ -231,7 +233,16 @@ object CameraController {
         val capture = captureBuilder.build()
 
         val groupBuilder = UseCaseGroup.Builder().addUseCase(preview).addUseCase(capture)
-        val peaking = if (peakingEnabled) buildAnalysis(aspect, view.display?.rotation ?: Surface.ROTATION_0).also { groupBuilder.addUseCase(it) } else null
+        // One analysis stream: face tracking while props are on (they need the
+        // frame rate), otherwise focus peaking when it is enabled.
+        FaceTracker.mirrored = lensFacing == "front"
+        FaceTracker.reset()
+        val analyzer: ImageAnalysis.Analyzer? = when {
+          facesEnabled -> FaceTracker
+          peakingEnabled -> FocusPeakingAnalyzer
+          else -> null
+        }
+        val peaking = analyzer?.let { buildAnalysis(aspect, view.display?.rotation ?: Surface.ROTATION_0, it).also { a -> groupBuilder.addUseCase(a) } }
         // What-you-see-is-what-you-get: crop every output to the chosen ratio
         // (this is also how 1:1 is produced from a 4:3 stream).
         groupBuilder.setViewPort(buildViewPort(view))
@@ -264,7 +275,7 @@ object CameraController {
     return ViewPort.Builder(rational, rotation).setScaleType(ViewPort.FILL_CENTER).build()
   }
 
-  private fun buildAnalysis(aspect: AspectRatioStrategy, displayRotation: Int): ImageAnalysis {
+  private fun buildAnalysis(aspect: AspectRatioStrategy, displayRotation: Int, analyzer: ImageAnalysis.Analyzer): ImageAnalysis {
     val selector = ResolutionSelector.Builder()
       .setAspectRatioStrategy(aspect)
       .setResolutionStrategy(ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
@@ -274,7 +285,7 @@ object CameraController {
       .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
       .setTargetRotation(displayRotation)
       .build()
-      .also { it.setAnalyzer(analysisExecutor, FocusPeakingAnalyzer) }
+      .also { it.setAnalyzer(analysisExecutor, analyzer) }
   }
 
   // --------------------------------------------------- state and recovery
@@ -426,6 +437,14 @@ object CameraController {
     if (peakingEnabled == enabled) return
     peakingEnabled = enabled
     if (!enabled) FocusPeakingAnalyzer.clearOverlay()
+    owner?.let { bindUseCases(it) }
+  }
+
+  /** Props in the camera: faces are reported as PhotoPlusCameraFaces events while enabled. */
+  fun setFaceTracking(enabled: Boolean) {
+    if (facesEnabled == enabled) return
+    facesEnabled = enabled
+    FaceTracker.sink = if (enabled) FaceTracker.Sink { faces -> events?.emit("PhotoPlusCameraFaces", mapOf("faces" to faces)) } else null
     owner?.let { bindUseCases(it) }
   }
 

@@ -67,6 +67,8 @@ import { ProPanel } from './ProPanel';
 import { StopDial } from './StopDial';
 import { SpotlightMarkers, SpotlightPanel } from './SpotlightControls';
 import { useCameraSession } from './useCameraSession';
+import { LivePropOverlay, PropTray, livePlacement, propRequest, useLiveProp } from './CameraProps';
+import { allProps, findProp, type PropCategory, type PropDef } from '../../services/edit/catalog';
 import { VibeSheet } from './VibeSheet';
 
 const log = createLogger('camera');
@@ -134,6 +136,13 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const [flashKey, setFlashKey] = useState(0);
   const [previewKey, setPreviewKey] = useState(0);
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Props worn in the camera (they follow the face, like a lens).
+  const [propsOpen, setPropsOpen] = useState(false);
+  const [propCategory, setPropCategory] = useState<PropCategory>('hats');
+  const [wornId, setWornId] = useState<string | null>(null);
+  const customProps = settings.customProps;
+  const propList = useMemo(() => allProps(customProps), [customProps]);
+  const worn = wornId ? (findProp(wornId, customProps) ?? null) : null;
 
   const aspect = settings.cameraAspectRatio;
   const resolution = settings.cameraResolution;
@@ -169,6 +178,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
 
   // The camera only runs while visible and foregrounded.
   const active = focused && foreground && permission === 'granted';
+  const liveProp = useLiveProp(camera, worn, active && state === 'ready');
   const [wasActive, setWasActive] = useState(active);
   if (active !== wasActive) {
     setWasActive(active);
@@ -306,6 +316,12 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     [repos, lens, loadProjects],
   );
 
+  // The preview frame (sized to the chosen ratio), also where props are placed.
+  const previewFrame = useMemo(
+    () => ({ width: window.width, height: Math.min(window.height, window.width / portraitAspect(aspect)) }),
+    [window.width, window.height, aspect],
+  );
+
   const takePhoto = useCallback(async () => {
     const captureMode = captureModeFor(effectiveMode, rawActive);
     const look = vibe && captureMode !== 'raw' ? vibe : null;
@@ -338,6 +354,20 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           ...(look ? { look: look.look, lookStrength: look.strength } : {}),
           // Free-plan photos carry the user's chosen watermark (signature style by default).
           watermark: settings.watermark,
+          // The prop worn in the preview goes into the photo itself.
+          ...(worn
+            ? {
+                props: [
+                  propRequest(
+                    worn,
+                    livePlacement(worn, liveProp.face, previewFrame, liveProp.adjust, liveProp.free),
+                    previewFrame,
+                    liveProp.face,
+                    liveProp.adjust,
+                  ),
+                ],
+              }
+            : {}),
         },
         captureId,
       );
@@ -372,6 +402,11 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     flash,
     settings.mirrorFrontCamera,
     settings.watermark,
+    worn,
+    liveProp.face,
+    liveProp.adjust,
+    liveProp.free,
+    previewFrame,
     tuning,
     spotPoints,
     blurLevel,
@@ -538,6 +573,17 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         {effectiveMode === 'spotlight' ? (
           <SpotlightMarkers points={spotPoints} frame={{ width: frameWidth, height: frameHeight }} />
         ) : null}
+        {worn && ready ? (
+          <LivePropOverlay
+            def={worn}
+            frame={{ width: frameWidth, height: frameHeight }}
+            face={liveProp.face}
+            adjust={liveProp.adjust}
+            free={liveProp.free}
+            onAdjust={liveProp.setAdjust}
+            onFree={liveProp.setFree}
+          />
+        ) : null}
         {session.focus ? (
           <FocusRing
             key={session.focus.key}
@@ -591,6 +637,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             accessibilityLabel={timer ? `Timer ${timer} seconds` : 'Timer off'}
             onPress={() => setTimer(TIMER_CYCLE[(TIMER_CYCLE.indexOf(timer) + 1) % TIMER_CYCLE.length])}
             rotation={rotation}
+          />
+          <Chip
+            icon="hat"
+            active={propsOpen || worn !== null}
+            tint={worn ? theme.colors.premium : undefined}
+            accessibilityLabel={worn ? `Wearing ${worn.name}. Change props` : 'Props. Try on hats, glasses and more'}
+            onPress={() => setPropsOpen(o => !o)}
+            rotation={rotation}
+            testID="props-chip"
           />
           <Chip
             icon="wand"
@@ -733,7 +788,27 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           </View>
         ) : null}
 
-        {effectiveMode === 'spotlight' ? (
+        {propsOpen ? (
+          <PropTray
+            props={propList}
+            category={propCategory}
+            onCategory={setPropCategory}
+            selected={wornId}
+            locked={!can('premiumProps').allowed}
+            onSelect={(def: PropDef | null) => {
+              if (def?.premium && !can(def.category === 'mine' ? 'customProps' : 'premiumProps').allowed) {
+                setPremiumFor(def.category === 'mine' ? 'customProps' : 'premiumProps');
+                return;
+              }
+              setWornId(def?.id ?? null);
+            }}
+            onCreate={() =>
+              can('customProps').allowed ? navigation.navigate('CreateProp') : setPremiumFor('customProps')
+            }
+          />
+        ) : null}
+
+        {effectiveMode === 'spotlight' && !propsOpen ? (
           <SpotlightPanel
             blur={blurLevel}
             glow={glowLevel}
@@ -777,16 +852,28 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         />
 
         <View style={styles.dock}>
-          <LastShot
-            path={lastShot?.path ?? null}
-            progress={processing ? 0 : null}
-            rotation={rotation}
-            onPress={() => {
-              if (lastShot?.imageId) {
-                navigation.navigate('PhotoPreview', { imageId: lastShot.imageId });
-              }
-            }}
-          />
+          <View style={{ alignItems: 'center', gap: 6, width: 64 }}>
+            <LastShot
+              path={lastShot?.path ?? null}
+              progress={processing ? 0 : null}
+              rotation={rotation}
+              onPress={() => {
+                if (lastShot?.imageId) {
+                  navigation.navigate('PhotoPreview', { imageId: lastShot.imageId });
+                }
+              }}
+            />
+            {lastShot?.imageId ? (
+              <Chip
+                icon="sliders"
+                label="Edit"
+                accessibilityLabel="Edit this photo"
+                onPress={() => lastShot.imageId && navigation.navigate('Editor', { imageId: lastShot.imageId })}
+                rotation={rotation}
+                testID="edit-last-shot"
+              />
+            ) : null}
+          </View>
           <ShutterButton
             mode={effectiveMode}
             disabled={!ready || (capturing && countdown === null)}

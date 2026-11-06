@@ -81,9 +81,15 @@ data class EditDocument(
 
     /** Bundled props (android/app/src/main/assets/props/<id>.png). */
     val PROPS = setOf(
-      "fedora", "beanie", "cap", "sunhat", "beret", "crown", "laurel",
-      "aviators", "round", "cateye", "tortoise", "bowtie", "chain", "necktie", "pearls",
+      "fedora", "beanie", "cap", "sunhat", "beret", "crown", "laurel", "tophat", "bucket", "cowboy", "flowers",
+      "aviators", "round", "cateye", "tortoise", "hearts", "shield", "rimless",
+      "bowtie", "chain", "necktie", "pearls", "scarf", "choker", "medal",
     )
+
+    /** Props the user made (CustomProps), stored as files: "custom-" + a random id. */
+    val CUSTOM_PROP = Regex("^custom-[a-z0-9]{8,32}$")
+
+    fun isKnownProp(id: String) = id in PROPS || CUSTOM_PROP.matches(id)
 
     const val MAX_PROPS = 12
 
@@ -117,7 +123,7 @@ data class EditDocument(
       val props = rawProps.map { raw ->
         val p = raw as? Map<*, *> ?: invalid("A prop must be an object")
         val id = p["id"] as? String ?: invalid("prop id is required")
-        if (id !in PROPS) invalid("Unknown prop '$id'")
+        if (!isKnownProp(id)) invalid("Unknown prop '$id'")
         PropPlacement(id, num("cx", -0.5f, 1.5f, p), num("cy", -0.5f, 1.5f, p), num("width", 0.01f, 3f, p), num("rotation", -180f, 180f, p), p["flip"] == true)
       }
       val frame = (map["frame"] as? Map<*, *>)?.let { f ->

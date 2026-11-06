@@ -5,6 +5,7 @@ import React, { useMemo } from 'react';
 
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { CameraScreen } from '../screens/camera/CameraScreen';
+import { CreatePropScreen } from '../screens/CreatePropScreen';
 import { EditorScreen } from '../screens/editor/EditorScreen';
 import { PhotoPreviewScreen } from '../screens/PhotoPreviewScreen';
 import { DeviceInfoScreen } from '../screens/DeviceInfoScreen';
@@ -43,6 +44,7 @@ const DeviceInfo = guarded(DeviceInfoScreen, 'Device');
 const Diagnostics = guarded(DiagnosticsScreen, 'Engine Lab');
 const PhotoPreview = guarded(PhotoPreviewScreen, 'Photo');
 const Editor = guarded(EditorScreen, 'Edit');
+const CreateProp = guarded(CreatePropScreen, 'Make a prop');
 
 const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 
@@ -95,6 +97,7 @@ export function RootNavigator() {
         <Stack.Screen name="Diagnostics" component={Diagnostics} options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="PhotoPreview" component={PhotoPreview} options={{ animation: 'fade' }} />
         <Stack.Screen name="Editor" component={Editor} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="CreateProp" component={CreateProp} options={{ animation: 'slide_from_bottom' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

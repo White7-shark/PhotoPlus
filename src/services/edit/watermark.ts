@@ -35,7 +35,8 @@ export const DEFAULT_WATERMARK: WatermarkSpec = {
   style: 'signature',
   font: 'modern',
   layout: 'inline',
-  size: 0.5,
+  // Matches the brand reference (cap height ≈ 3.2% of the photo's short side).
+  size: 0.78,
   opacity: 0.85,
   position: 'br',
   enabled: true,

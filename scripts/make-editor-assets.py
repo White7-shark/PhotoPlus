@@ -56,65 +56,121 @@ FREE_HEIGHT = (0.035, 0.08)
 FREE_OPACITY = (0.6, 1.0)
 
 
-def signature_mark(photo: Image.Image, size=0.5, opacity=0.85):
+# Proportions in units of the wordmark's cap height C (see WatermarkRenderer.kt).
+C_PER_H, CAMERA_W, CAMERA_ASPECT, TEXT_LEFT = 0.46, 2.28, 300 / 320, 2.4
+SCRIPT_BASELINE, WORDMARK_BASELINE, SCRIPT_WIDTH, PAD = 0.77, 2.2, 1.05, 0.32
+DEFAULT_SIZE, DEFAULT_OPACITY = 0.78, 0.85
+
+
+def _quad(p0, p1, p2, n=48):
+    return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0], (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]) for t in np.linspace(0, 1, n)]
+
+
+def _tinted(img: Image.Image, rgb) -> Image.Image:
+    t = Image.new("RGBA", img.size, tuple(rgb) + (0,))
+    t.putalpha(img.split()[3])
+    return t
+
+
+def _hgradient(w, h, x0, x1, stops):
+    xs = np.clip((np.arange(w) - x0) / max(1e-6, x1 - x0), 0, 1)
+    pos = [p for p, _ in stops]
+    cols = np.stack([np.interp(xs, pos, [c[i] for _, c in stops]) for i in range(3)], -1)
+    return np.broadcast_to(cols[None, :, :], (h, w, 3)).astype(np.uint8)
+
+
+def _vgradient(w, h, y0, y1, c0, c1):
+    ys = np.clip((np.arange(h) - y0) / max(1e-6, y1 - y0), 0, 1)[:, None]
+    cols = np.array(c0) * (1 - ys) + np.array(c1) * ys
+    return np.broadcast_to(cols[:, None, :], (h, w, 3)).astype(np.uint8)
+
+
+def signature_mark(photo: Image.Image, size=DEFAULT_SIZE, opacity=DEFAULT_OPACITY):
     W, H = photo.size
     short = min(W, H)
     h = max(12.0, (FREE_HEIGHT[0] + (FREE_HEIGHT[1] - FREE_HEIGHT[0]) * size) * short)
-    pad = 0.18 * h
-    script = ImageFont.truetype(str(assets / "fonts/GreatVibes-Regular.ttf"), int(0.42 * h))
-    bold = ImageFont.truetype(str(assets / "fonts/Poppins-SemiBold.ttf"), int(0.5 * h))
-    w1 = script.getlength("Created with")
-    w2 = bold.getlength("PhotoPlus")
-    block = max(w1, w2)
-    sw, sh = math.ceil(h * 1.12 + block + 2 * pad), math.ceil(h + 2 * pad)
-    # Bottom-right with a margin of 3.5% of the shorter side (WatermarkPlacement).
+    c = C_PER_H * h
+    S = 4  # draw at 4x and downsample, like anti-aliased Canvas text
+    cs = c * S
+    wfont_path = str(assets / "fonts/Poppins-ExtraBoldItalic.ttf")
+    probe = ImageFont.truetype(wfont_path, 1000)
+    hb = probe.getbbox("H")
+    wsize = 1000 * cs / (hb[3] - hb[1])
+    wf = ImageFont.truetype(wfont_path, round(wsize))
+    word_w = wf.getlength("PhotoPlus")
+    sfont = str(assets / "fonts/PetitFormalScript-Regular.ttf")
+    sprobe = ImageFont.truetype(sfont, 1000)
+    line = "Created with"
+    sf = ImageFont.truetype(sfont, round(1000 * SCRIPT_WIDTH * word_w / sprobe.getlength(line)))
+    cam_w, text_left = CAMERA_W * cs, TEXT_LEFT * cs
+    cam_h = cam_w * CAMERA_ASPECT
+    content_w = text_left + SCRIPT_WIDTH * word_w + 0.1 * cs
+    content_h = WORDMARK_BASELINE * cs + 0.95 * cs
+    pad = PAD * cs
+    sw, sh = math.ceil((content_w + 2 * pad) / S), math.ceil((content_h + 2 * pad) / S)
+    SW, SH = sw * S, sh * S
     margin = round(0.035 * short)
     x, y = W - sw - margin, H - sh - margin
     region = np.asarray(photo.convert("L").crop((x, y, x + sw, y + sh)), dtype=np.float64) / 255
-    luma = float(region.mean())
-    dark = luma > 0.62
-    ink = (31, 31, 36, 255) if dark else (255, 255, 255, 255)
+    dark = float(region.mean()) > 0.62
+    ink = (31, 31, 36) if dark else (255, 255, 255)
     shadow = (255, 255, 255, 128) if dark else (0, 0, 0, 140)
-    shape = Image.new("L", (sw, sh), 0)
-    d = ImageDraw.Draw(shape)
-    tl = pad + h * 1.12
-    top = pad
-    d.text((tl + (block - w1) * 0.65, top + 0.4 * h), "Created with", font=script, fill=255, anchor="ls")
-    d.text((tl + (block - w2), top + 0.86 * h), "PhotoPlus", font=bold, fill=255, anchor="ls")
-    # The gold swoosh: two quadratic curves closing a tapered stroke.
-    sx, ex, sy = tl + (block - w2) + 0.12 * w2, tl + block + 0.02 * w2, top + 0.97 * h
 
-    def quad(p0, p1, p2, n=40):
-        return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0], (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]) for t in np.linspace(0, 1, n)]
-
-    mid = (sx + ex) / 2
-    swoosh = quad((sx, sy), (mid, sy - 0.1 * h), (ex, sy - 0.17 * h)) + quad((ex, sy - 0.17 * h), (mid, sy - 0.02 * h), (sx, sy + 0.035 * h))
-    gold_mask = Image.new("L", (sw, sh), 0)
-    ImageDraw.Draw(gold_mask).polygon(swoosh, fill=255)
-    emblem = Image.open(assets / "brand/emblem.png").convert("RGBA")
-    e = round(h * 0.92)
-    emblem = emblem.resize((e, e), Image.LANCZOS)
-    stamp = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
-    # Soft shadow under everything.
-    sil = Image.new("L", (sw, sh), 0)
-    sil.paste(shape, (0, 0))
-    sil.paste(gold_mask, (0, 0), gold_mask)
-    sil.paste(emblem.split()[3], (round(pad), round(pad + 0.04 * h)))
-    blur = sil.filter(ImageFilter.GaussianBlur(0.1 * h / 2))
+    layer = Image.new("RGBA", (SW, SH), (0, 0, 0, 0))
+    # Camera: tinted outline, then the coloured lens and swoosh.
+    box = (round(pad), round(pad), round(pad + cam_w), round(pad + cam_h))
+    size_ = (box[2] - box[0], box[3] - box[1])
+    lines = Image.open(assets / "brand/mark-camera-lines.png").convert("RGBA").resize(size_, Image.LANCZOS)
+    color = Image.open(assets / "brand/mark-camera-color.png").convert("RGBA").resize(size_, Image.LANCZOS)
+    layer.alpha_composite(_tinted(lines, ink), box[:2])
+    layer.alpha_composite(color, box[:2])
+    tx = pad + text_left
+    # "Created with": slanted (skew -0.1) and slightly heavier than the font.
+    smask = Image.new("L", (SW, SH), 0)
+    ImageDraw.Draw(smask).text((tx, pad + SCRIPT_BASELINE * cs), line, font=sf, fill=255, anchor="ls", stroke_width=max(1, round(0.009 * cs)), stroke_fill=255)
+    base = pad + SCRIPT_BASELINE * cs
+    smask = smask.transform(smask.size, Image.AFFINE, (1, -0.1, 0.1 * base, 0, 1, 0), Image.BICUBIC)
+    sl = Image.new("RGBA", (SW, SH), ink + (0,))
+    sl.putalpha(smask)
+    layer.alpha_composite(sl)
+    # Wordmark: "Ph", aperture "o", "to" in ink; "Plus" in vertical gold.
+    bl = pad + WORDMARK_BASELINE * cs
+    wmask = Image.new("L", (SW, SH), 0)
+    d = ImageDraw.Draw(wmask)
+    d.text((tx, bl), "Ph", font=wf, fill=255, anchor="ls")
+    o_left = tx + wf.getlength("Ph")
+    ob = wf.getbbox("o", anchor="ls")
+    dia = ob[3] - ob[1]
+    cx, cy = o_left + (ob[0] + ob[2]) / 2, bl + (ob[1] + ob[3]) / 2
+    ap = Image.open(assets / "brand/mark-aperture.png").convert("RGBA").resize((round(dia), round(dia)), Image.LANCZOS)
+    wmask.paste(255, (round(cx - dia / 2), round(cy - dia / 2)), ap.split()[3])
+    d.text((tx + wf.getlength("Pho"), bl), "to", font=wf, fill=255, anchor="ls")
+    wl = Image.new("RGBA", (SW, SH), ink + (0,))
+    wl.putalpha(wmask)
+    layer.alpha_composite(wl)
+    pmask = Image.new("L", (SW, SH), 0)
+    ImageDraw.Draw(pmask).text((tx + wf.getlength("Photo"), bl), "Plus", font=wf, fill=255, anchor="ls")
+    top_c, bot_c = ((242, 169, 0), (217, 121, 11)) if dark else ((255, 203, 46), (245, 160, 21))
+    plus = Image.fromarray(np.dstack([_vgradient(SW, SH, bl - wsize * 0.72, bl, top_c, bot_c), np.asarray(pmask)]), "RGBA")
+    layer.alpha_composite(plus)
+    # Gold swoosh under the wordmark.
+    L = (tx + 0.43 * cs, bl + 0.83 * cs)
+    R = (tx + word_w - 0.74 * cs, bl + 0.74 * cs)
+    P = (tx + 0.4 * word_w + 0.4 * cs, bl + 0.31 * cs)
+    ctrl = (2 * P[0] - (L[0] + R[0]) / 2, 2 * P[1] - (L[1] + R[1]) / 2)
+    thick = 0.22 * cs
+    gmask = Image.new("L", (SW, SH), 0)
+    ImageDraw.Draw(gmask).polygon(_quad(L, ctrl, R) + _quad(R, (ctrl[0], ctrl[1] + 2 * thick), L), fill=255)
+    stops = [(0, (247, 183, 51)), (0.45, (255, 201, 60)), (1, (243, 154, 30))]
+    layer.alpha_composite(Image.fromarray(np.dstack([_hgradient(SW, SH, L[0], R[0], stops), np.asarray(gmask)]), "RGBA"))
+    layer = layer.resize((sw, sh), Image.LANCZOS)
+    # Soft shadow from the silhouette (BlurMaskFilter 0.16 C, offset 0.05 C).
+    blur = layer.split()[3].filter(ImageFilter.GaussianBlur(0.16 * c * 0.577 + 0.5))
     shifted = Image.new("L", (sw, sh), 0)
-    shifted.paste(blur, (0, round(0.03 * h)))
-    shadow_layer = Image.new("RGBA", (sw, sh), shadow[:3] + (0,))
-    shadow_layer.putalpha(shifted.point(lambda v: v * shadow[3] // 255))
-    stamp = Image.alpha_composite(stamp, shadow_layer)
-    text_layer = Image.new("RGBA", (sw, sh), ink[:3] + (0,))
-    text_layer.putalpha(shape)
-    stamp = Image.alpha_composite(stamp, text_layer)
-    grad = Image.linear_gradient("L").rotate(90).resize((sw, sh))
-    g = np.asarray(grad, dtype=np.float64)[..., None] / 255
-    gold = (np.array([246, 196, 83]) * (1 - g) + np.array([224, 138, 30]) * g).astype(np.uint8)
-    gold_layer = Image.fromarray(np.dstack([gold, np.asarray(gold_mask)]), "RGBA")
-    stamp = Image.alpha_composite(stamp, gold_layer)
-    stamp.alpha_composite(emblem, (round(pad), round(pad + 0.04 * h)))
+    shifted.paste(blur, (0, round(0.05 * c)))
+    stamp = Image.new("RGBA", (sw, sh), shadow[:3] + (0,))
+    stamp.putalpha(shifted.point(lambda v: v * shadow[3] // 255))
+    stamp.alpha_composite(layer)
     return stamp, x, y, FREE_OPACITY[0] + (FREE_OPACITY[1] - FREE_OPACITY[0]) * opacity, dark
 
 
@@ -128,7 +184,7 @@ def watermarked(src: Path, dst: Path) -> dict:
 
 # ---- frames (mirrors FrameStyles.kt) ------------------------------------------
 frames_src = (root / "android/app/src/main/java/com/photoplus/edit/FrameStyles.kt").read_text()
-SHAPES = {"RECT": 0, "ELLIPSE": 1, "ARCH": 2, "STAR": 3, "HEART": 4, "HEXAGON": 5, "DIAMOND": 6}
+SHAPES = {"RECT": 0, "ELLIPSE": 1, "ARCH": 2, "STAR": 3, "HEART": 4, "HEXAGON": 5, "DIAMOND": 6, "OCTAGON": 7, "SCALLOP": 8, "SPARKLE": 9}
 BACKDROPS = {"SOLID": 0, "GRADIENT": 1, "BLURRED_PHOTO": 2, "PAPER": 3}
 
 
@@ -140,7 +196,7 @@ def frame_styles():
         kv = dict(re.findall(r"(\w+) = ([^,\n]+)", rest))
         num = lambda k, d=0.0: float(kv[k].rstrip("f")) if k in kv else d
         col = lambda k: ("0x" + re.search(r"0x([0-9A-F]{8})", kv[k]).group(1)) if k in kv and "0x" in kv[k] else ("0xFFDDB15E" if k in kv and "GOLD" in kv[k] else "0xFFFFFFFF")
-        s.update(param=num("shapeParam"), backdrop=BACKDROPS[kv.get("backdrop", "FrameStyle.SOLID").split(".")[-1]], colorA=col("colorA"),
+        s.update(param=num("shapeParam"), rot=num("rotation"), backdrop=BACKDROPS[kv.get("backdrop", "FrameStyle.SOLID").split(".")[-1]], colorA=col("colorA"),
                  colorB=col("colorB"), border=num("border"), borderColor=col("borderColor"), metallic=int(kv.get("metallic", "false") == "true"),
                  gap=num("outlineGap"), ow=num("outlineWidth"), oc=col("outlineColor"), shadow=num("shadow"), so=num("shadowOffset", 0.02),
                  sb=num("shadowBlur", 0.04), glow=num("glow"), gc=col("glowColor"), deco=int(num("decoration")))
@@ -154,7 +210,7 @@ def framed(src: Path, dst: Path, s: dict) -> dict:
     ww = min(w, h * window_aspect)
     cw = ww / s["window"][2]
     ch = cw / s["aspect"]
-    return run(demo, src, dst, "--frame", round(cw), round(ch), s["shape"], s["param"], 0, *s["window"], s["backdrop"], s["colorA"], s["colorB"],
+    return run(demo, src, dst, "--frame", round(cw), round(ch), s["shape"], s["param"], s["rot"], *s["window"], s["backdrop"], s["colorA"], s["colorB"],
                s["border"], s["borderColor"], s["metallic"], s["gap"], s["ow"], s["oc"], s["shadow"], s["so"], s["sb"], s["glow"], s["gc"], 1, 0, 0, s["deco"])
 
 
@@ -223,13 +279,15 @@ for name, src in [("wm_street", k01), ("wm_dark", k23), ("wm_portrait", k04), ("
     report[name] = watermarked(src, out / f"{name}.ppm")
 for s in frame_styles():
     report["frame_" + s["id"]] = framed(k04, out / f"frame_{s['id']}.ppm", s)
-for pid in ["aviators", "round", "cateye", "tortoise"]:
+for pid in ["aviators", "round", "cateye", "tortoise", "hearts", "shield", "rimless"]:
     report[f"glasses_{pid}"] = with_props(k15, out / f"glasses_{pid}.ppm", [pid])
 if portrait:
     src = out / "portrait.ppm"
     Image.open(portrait).convert("RGB").save(src)
-    for pid in ["fedora", "beanie", "cap", "sunhat", "beret", "crown", "laurel", "bowtie", "chain", "necktie", "pearls"]:
+    for pid in ["fedora", "beanie", "cap", "sunhat", "beret", "crown", "laurel", "tophat", "bucket", "cowboy", "flowers",
+                "bowtie", "chain", "necktie", "pearls", "scarf", "choker", "medal"]:
         report[f"hat_{pid}"] = with_props(src, out / f"hat_{pid}.ppm", [pid])
+report["camera_hearts"] = with_props(k04, out / "camera_hearts.ppm", ["hearts"])
 report["edited"] = run(demo, k18, out / "edited.ppm", "--op", "10,0.25,0", "--op", "11,10,0.7", "--op", "1,0.2,0,0.1")
 for p in out.glob("*.ppm"):
     Image.open(p).save(p.with_suffix(".png"))

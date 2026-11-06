@@ -67,6 +67,9 @@ data class FrameStyle(
     const val HEART = 4
     const val HEXAGON = 5
     const val DIAMOND = 6
+    const val OCTAGON = 7
+    const val SCALLOP = 8
+    const val SPARKLE = 9
     const val SOLID = 0
     const val GRADIENT = 1
     const val BLURRED_PHOTO = 2
@@ -91,6 +94,18 @@ object FrameStyles {
       border = 0.012f, borderColor = c(0xFFFFFFFF), shadow = 0.4f, shadowOffset = 0.02f, shadowBlur = 0.05f),
     FrameStyle("soft", 0.8f, floatArrayOf(0.1f, 0.14f, 0.8f, 0.64f), FrameStyle.RECT, shapeParam = 0.16f,
       backdrop = FrameStyle.BLURRED_PHOTO, shadow = 0.45f, shadowOffset = 0.025f, shadowBlur = 0.06f),
+    FrameStyle("story", 0.5625f, floatArrayOf(0.08f, 0.16f, 0.84f, 0.6f), FrameStyle.RECT, shapeParam = 0.1f,
+      backdrop = FrameStyle.BLURRED_PHOTO, border = 0.008f, borderColor = c(0xFFFFFFFF), shadow = 0.45f, shadowOffset = 0.02f, shadowBlur = 0.06f),
+    FrameStyle("tilted", 0.8f, floatArrayOf(0.15f, 0.12f, 0.7f, 0.66f), FrameStyle.RECT, rotation = -4f, backdrop = FrameStyle.PAPER,
+      colorA = c(0xFFE9E2D6), border = 0.07f, borderColor = c(0xFFFBFAF6), shadow = 0.4f, shadowOffset = 0.02f, shadowBlur = 0.04f),
+    FrameStyle("noir", 0.8f, floatArrayOf(0.08f, 0.07f, 0.84f, 0.86f), FrameStyle.RECT, backdrop = FrameStyle.SOLID,
+      colorA = c(0xFF0D0D0F), outlineGap = 0.022f, outlineWidth = 0.003f, outlineColor = c(0xFFEDEDED)),
+    FrameStyle("doublemat", 0.8f, floatArrayOf(0.13f, 0.11f, 0.74f, 0.7f), FrameStyle.RECT, backdrop = FrameStyle.PAPER,
+      colorA = c(0xFFF3EEE4), border = 0.004f, borderColor = c(0xFF2A2A2A), outlineGap = 0.04f, outlineWidth = 0.004f,
+      outlineColor = c(GOLD), shadow = 0.2f, shadowOffset = 0.008f, shadowBlur = 0.02f),
+    FrameStyle("capsule", 0.8f, floatArrayOf(0.17f, 0.08f, 0.66f, 0.84f), FrameStyle.RECT, shapeParam = 1f,
+      backdrop = FrameStyle.GRADIENT, colorA = c(0xFFF6E7DA), colorB = c(0xFFE7CDB8), border = 0.012f, borderColor = c(0xFFFFFFFF),
+      shadow = 0.3f, shadowOffset = 0.02f, shadowBlur = 0.05f),
     // Premium.
     FrameStyle("star", 0.8f, floatArrayOf(0.06f, 0.15f, 0.88f, 0.704f), FrameStyle.STAR, shapeParam = 0.48f,
       backdrop = FrameStyle.GRADIENT, colorA = c(0xFF141B3D), colorB = c(0xFF4B2A6B), border = 0.012f,
@@ -107,6 +122,22 @@ object FrameStyles {
       shadow = 0.35f, shadowOffset = 0.02f, shadowBlur = 0.05f),
     FrameStyle("window", 0.8f, floatArrayOf(0.14f, 0.1f, 0.72f, 0.78f), FrameStyle.ARCH, backdrop = FrameStyle.BLURRED_PHOTO,
       border = 0.014f, borderColor = c(0xFFD9B26A), metallic = true, shadow = 0.4f, shadowOffset = 0.02f, shadowBlur = 0.05f),
+    FrameStyle("scallop", 0.8f, floatArrayOf(0.1f, 0.16f, 0.8f, 0.64f), FrameStyle.SCALLOP, shapeParam = 0.05f,
+      backdrop = FrameStyle.GRADIENT, colorA = c(0xFFFDE4D8), colorB = c(0xFFF6B9B0), border = 0.014f, borderColor = c(0xFFFFFFFF),
+      shadow = 0.3f, shadowOffset = 0.02f, shadowBlur = 0.05f),
+    FrameStyle("octagon", 0.8f, floatArrayOf(0.1f, 0.15f, 0.8f, 0.64f), FrameStyle.OCTAGON, backdrop = FrameStyle.SOLID,
+      colorA = c(0xFF14302A), border = 0.012f, borderColor = c(GOLD), metallic = true, shadow = 0.4f, shadowOffset = 0.02f, shadowBlur = 0.05f),
+    FrameStyle("sparkle", 0.8f, floatArrayOf(0.05f, 0.12f, 0.9f, 0.72f), FrameStyle.SPARKLE, shapeParam = 0.8f,
+      backdrop = FrameStyle.GRADIENT, colorA = c(0xFF0F1530), colorB = c(0xFF3A2459), border = 0.01f, borderColor = c(GOLD),
+      metallic = true, glow = 0.5f, glowColor = c(0xFFF6D27A)),
+    FrameStyle("neon", 0.8f, floatArrayOf(0.1f, 0.16f, 0.8f, 0.64f), FrameStyle.ELLIPSE, backdrop = FrameStyle.SOLID,
+      colorA = c(0xFF0B0A12), border = 0.01f, borderColor = c(0xFFFF4FA3), glow = 0.85f, glowColor = c(0xFFFF4FA3)),
+    FrameStyle("cameo", 0.8f, floatArrayOf(0.17f, 0.1f, 0.66f, 0.8f), FrameStyle.ELLIPSE, backdrop = FrameStyle.PAPER,
+      colorA = c(0xFFF1E8DA), border = 0.014f, borderColor = c(GOLD), metallic = true, outlineGap = 0.03f, outlineWidth = 0.004f,
+      outlineColor = c(0xFFB89A6A), shadow = 0.3f, shadowOffset = 0.02f, shadowBlur = 0.05f),
+    FrameStyle("sunset", 0.8f, floatArrayOf(0.15f, 0.1f, 0.7f, 0.78f), FrameStyle.ARCH, backdrop = FrameStyle.GRADIENT,
+      colorA = c(0xFFFFB37A), colorB = c(0xFF7B4B94), border = 0.012f, borderColor = c(0xFFFFFFFF),
+      shadow = 0.35f, shadowOffset = 0.02f, shadowBlur = 0.05f),
   )
 
   fun byId(id: String): FrameStyle? = ALL.firstOrNull { it.id == id }

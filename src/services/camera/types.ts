@@ -104,6 +104,33 @@ export interface CaptureOptions {
   lookStrength?: number;
   /** The watermark free-plan photos carry (WatermarkSpec). */
   watermark?: WatermarkSpec;
+  /** Props worn in the preview, composited into the photo. */
+  props?: CameraPropRequest[];
+}
+
+/**
+ * A prop as placed on the preview (preview fractions, rotation clockwise),
+ * with how it sits on a face so the photo can fit it to the face again.
+ */
+export interface CameraPropRequest {
+  id: string;
+  cx: number;
+  cy: number;
+  width: number;
+  rotation: number;
+  flip: boolean;
+  anchor: 'head' | 'eyes' | 'neck' | 'free';
+  ax: number;
+  ay: number;
+  fit: number;
+  drop: number;
+  aspect: number;
+  /** Following a face: the person's shift (face widths, along the face), size and turn on top of the fit. */
+  tracked: boolean;
+  du?: number;
+  dv?: number;
+  scale?: number;
+  turn?: number;
 }
 
 export interface SpotlightReport {
@@ -156,6 +183,7 @@ export const CameraEvents = {
   focus: 'PhotoPlusCameraFocus',
   metadata: 'PhotoPlusCameraMetadata',
   peaking: 'PhotoPlusCameraPeaking',
+  faces: 'PhotoPlusCameraFaces',
   shutter: 'PhotoPlusCaptureShutter',
   progress: 'PhotoPlusCaptureProgress',
 } as const;
@@ -178,6 +206,8 @@ export interface CameraEventPayloads {
     focusLocked: boolean;
   };
   [CameraEvents.peaking]: { sharpness: number };
+  /** Faces in the preview (preview fractions), while props are on. */
+  [CameraEvents.faces]: { faces: import('../edit/placement').FaceGeometry[] };
   [CameraEvents.shutter]: { captureId: string };
   [CameraEvents.progress]: { captureId: string; stage: CaptureStage; progress: number };
 }

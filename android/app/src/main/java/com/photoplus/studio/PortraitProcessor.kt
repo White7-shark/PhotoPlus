@@ -151,6 +151,24 @@ class PortraitProcessor {
     }
   }
 
+  /**
+   * A cut-out of what the taps chose in an upright photo (for custom props):
+   * subject segmentation first (people and objects), then the engine's tap
+   * cut-out. Returns mask bytes (0..255) at the photo's size, or null.
+   */
+  fun cutout(bitmap: Bitmap, points: List<Pair<Float, Float>>): ByteArray? {
+    val w = bitmap.width
+    val h = bitmap.height
+    val image = InputImage.fromBitmap(bitmap, 0)
+    val subjects = runCatching { Tasks.await(subjectSegmenter.process(image), ML_TIMEOUT_S, TimeUnit.SECONDS) }
+      .onFailure { Log.i(TAG, "subject segmentation unavailable, using the tap cut-out", it) }.getOrNull()
+    subjectMask(image, w, h, points, emptyList(), subjects)?.let { return it.first }
+    val size = IntArray(2)
+    val bytes = NativeEngine.nativeSubjectMask(bitmap, points.flatMap { listOf(it.first, it.second) }.toFloatArray(), size)
+    if (size[0] <= 0 || size[1] <= 0) return null
+    return MaskGeometry.resizeBilinear(bytes, size[0], size[1], w, h)
+  }
+
   private fun buildMasks(bitmap: Bitmap, rotation: Int, points: List<Pair<Float, Float>>, wantDepth: Boolean): Masks {
     val rot = MaskGeometry.normalise(rotation)
     // Small upright copy for the models (one scaled copy; the photo itself is untouched).

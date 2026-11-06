@@ -225,6 +225,41 @@ export class ImageProcessingService {
     }
   }
 
+  /** Every frame design around a photo, small (paths by frame id); {} if unavailable. */
+  async frameThumbnails(inputPath: string, size = 240): Promise<Record<string, string>> {
+    try {
+      const r = (await this.engine.frameThumbnails({ inputPath, size })) as unknown as {
+        thumbnails?: Record<string, string>;
+      };
+      return r.thumbnails ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  /** Premium: cuts the tapped object out of a photo and saves it as a prop. */
+  async createCustomProp(
+    inputPath: string,
+    points: readonly { x: number; y: number }[],
+  ): Promise<{ id: string; path: string; width: number; height: number }> {
+    try {
+      return (await this.engine.createCustomProp(createId('prop'), {
+        inputPath,
+        points: points.flatMap(p => [p.x, p.y]),
+      })) as unknown as { id: string; path: string; width: number; height: number };
+    } catch (error) {
+      throw new ProcessingError(errorMessage(error), errorCode(error) ?? 'INTERNAL');
+    }
+  }
+
+  async deleteCustomProp(id: string): Promise<boolean> {
+    try {
+      return await this.engine.deleteCustomProp(id);
+    } catch {
+      return false;
+    }
+  }
+
   /** The plan held natively (decides watermarks on everything that leaves the app). */
   async plan(): Promise<'free' | 'premium'> {
     try {

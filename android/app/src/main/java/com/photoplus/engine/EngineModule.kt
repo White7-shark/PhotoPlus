@@ -22,6 +22,8 @@ import com.photoplus.device.MemoryPressureMonitor
 import com.photoplus.specs.NativePhotoPlusEngineSpec
 import com.photoplus.studio.PortraitParams
 import com.photoplus.storage.AppPaths
+import com.photoplus.edit.FrameStyles
+import com.photoplus.edit.CustomProps
 import com.photoplus.util.emitSafely
 import com.photoplus.util.toWritableMap
 import java.io.File
@@ -36,6 +38,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
   NativePhotoPlusEngineSpec(reactContext), MemoryPressureMonitor.Listener {
 
   private val paths = AppPaths(reactContext)
+  private val adRewards = com.photoplus.ads.AdRewards.preferences(reactContext)
   private val budget = MemoryBudgetPolicy.forTotalRam(
     DeviceInfo.totalRamBytes(reactContext),
     DeviceInfo.isLowRamDevice(reactContext),
@@ -377,7 +380,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
     return com.photoplus.edit.PhotoWatermark.applyToFile(file, watermarkOf(map), Entitlements.plan)
   }
 
-  private val editRenderer by lazy { EditRenderer(reactApplicationContext.assets) { portraitProcessor } }
+  private val editRenderer by lazy { EditRenderer(reactApplicationContext.assets, paths.customProps) { portraitProcessor } }
   private val previewLock = Any()
   private var previewSource: Pair<String, Bitmap>? = null
 
@@ -486,12 +489,14 @@ class EngineModule(reactContext: ReactApplicationContext) :
       return
     }
     val plan = Entitlements.plan
+    // Free photos unlocked with rewarded ads (counted natively) export clean.
+    val adUnlocked = plan == Plan.FREE && adRewards.isUnlocked(input)
     val doc: EditDocument
     val mark: ResolvedWatermark?
     val format: OutputFormat
     try {
       doc = docOf(map)
-      mark = ExportPolicy.resolve(watermarkOf(map), plan)
+      mark = ExportPolicy.resolveForExport(watermarkOf(map), plan, adUnlocked)
       format = OutputFormat.parse(map["format"] as? String)
     } catch (e: EngineException) {
       promise.reject(e.code, e.message, e)
@@ -504,7 +509,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
       try {
         val r = editRenderer.render(source, doc, EditRenderer.Options(watermark = mark, maxEdge = minOf(budget.maxDecodeDimension, 8192)), token)
         try {
-          ExportPolicy.verify(mark, plan, r.watermarkVisible, r.bitmap.width, r.bitmap.height)
+          ExportPolicy.verify(mark, plan, r.watermarkVisible, r.bitmap.width, r.bitmap.height, adUnlocked)
           paths.exports.mkdirs()
           pruneExports()
           val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.US).format(java.util.Date())
@@ -521,6 +526,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
               "applied" to (mark != null),
               "enforced" to (mark?.enforced ?: false),
               "plan" to plan.name.lowercase(),
+              "unlockedByAds" to adUnlocked,
             ),
           )
         } finally {
@@ -572,7 +578,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
         val doc = EditDocument(quarterTurns = full.quarterTurns, flipH = full.flipH, straighten = full.straighten, crop = full.crop)
         val source = ImageCodec.decode(paths.resolve(map["inputPath"] as? String ?: ""), 1600).bitmap
         try {
-          val r = EditRenderer(reactApplicationContext.assets) { portraitProcessor }.render(source, doc, EditRenderer.Options(), 0L)
+          val r = EditRenderer(reactApplicationContext.assets, paths.customProps) { portraitProcessor }.render(source, doc, EditRenderer.Options(), 0L)
           try {
             promise.resolve(mapOf("faces" to FaceFinder.find(r.bitmap)).toWritableMap())
           } finally {
@@ -587,6 +593,88 @@ class EngineModule(reactContext: ReactApplicationContext) :
         promise.reject(EngineException.INTERNAL, e.message, e)
       }
     }
+  }
+
+  /**
+   * Every frame design around this photo, small, so people see exactly what
+   * each one looks like before choosing. Cached per photo.
+   */
+  override fun frameThumbnails(request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    ioExecutor.execute {
+      try {
+        val input = paths.resolve(map["inputPath"] as? String ?: "")
+        val edge = ((map["size"] as? Number)?.toInt() ?: 240).coerceIn(96, 512)
+        val dir = File(paths.processingCache, "frames/${(input.absolutePath + input.lastModified() + edge).hashCode().toUInt().toString(16)}")
+        val out = LinkedHashMap<String, Any?>()
+        val missing = FrameStyles.ALL.filter { !File(dir, "${it.id}.jpg").isFile }
+        if (missing.isNotEmpty()) {
+          dir.mkdirs()
+          val photo = ImageCodec.decode(input, edge * 2).bitmap
+          try {
+            for (style in missing) {
+              val (cw, ch) = style.canvasSize(photo.width, photo.height, edge)
+              val canvas = createBitmap(cw, ch, Bitmap.Config.ARGB_8888).apply {
+                isPremultiplied = false
+                setHasAlpha(false)
+              }
+              try {
+                NativeEngine.nativeFrame(photo, canvas, style.floats(1f, 0f, 0f), style.ints(), 0L)
+                ImageCodec.encode(canvas, File(dir, "${style.id}.jpg"), OutputFormat.JPEG, 85)
+              } finally {
+                canvas.recycle()
+              }
+            }
+          } finally {
+            photo.recycle()
+          }
+        }
+        for (style in FrameStyles.ALL) out[style.id] = File(dir, "${style.id}.jpg").absolutePath
+        promise.resolve(mapOf("thumbnails" to out).toWritableMap())
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+      } catch (e: Exception) {
+        promise.reject(EngineException.INTERNAL, e.message, e)
+      }
+    }
+  }
+
+  /**
+   * Premium: cuts the object the taps chose out of a photo and saves it as a
+   * prop (transparent PNG in app storage). Resolves with its id and file.
+   */
+  override fun createCustomProp(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    if (Entitlements.plan != Plan.PREMIUM) {
+      promise.reject("PREMIUM_REQUIRED", "Making your own props is part of Premium")
+      return
+    }
+    val map = request.toHashMap()
+    val points = com.photoplus.studio.PortraitParams.points(map["points"])
+    ioExecutor.execute {
+      try {
+        val photo = ImageCodec.decode(paths.resolve(map["inputPath"] as? String ?: ""), 2048).bitmap
+        try {
+          val mask = portraitProcessor.cutout(photo, points)
+            ?: throw EngineException(EngineException.INVALID_ARGUMENT, "Nothing was found where you tapped")
+          val saved = CustomProps.save(photo, mask, paths.customProps)
+          promise.resolve(
+            mapOf("id" to saved.id, "path" to saved.file.absolutePath, "width" to saved.width, "height" to saved.height).toWritableMap(),
+          )
+        } finally {
+          photo.recycle()
+        }
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+      } catch (e: Exception) {
+        promise.reject(EngineException.INTERNAL, e.message, e)
+      }
+    }
+  }
+
+  override fun deleteCustomProp(id: String, promise: Promise) {
+    ioExecutor.execute { promise.resolve(CustomProps.delete(paths.customProps, id)) }
   }
 
   override fun getPlan(promise: Promise) = promise.resolve(Entitlements.plan.name.lowercase())

@@ -24,6 +24,8 @@ export interface Spec extends TurboModule {
   setTorch(enabled: boolean): Promise<boolean>;
   /** color is 0xAARRGGBB; threshold 0..1 (lower highlights more edges). */
   setFocusPeaking(enabled: boolean, color: number, threshold: number): void;
+  /** Props in the camera: live face positions arrive as PhotoPlusCameraFaces events. */
+  setFaceTracking(enabled: boolean): void;
   /** Applies manual controls; resolves with the values actually applied (clamped). */
   setManual(settings: Object): Promise<Object>;
   resetManual(): void;

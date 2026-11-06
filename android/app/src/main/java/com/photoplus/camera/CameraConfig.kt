@@ -101,6 +101,8 @@ data class CaptureOptions(
   val lookStrength: Float = 0.8f,
   /** The watermark free-plan photos carry (the user's chosen style). */
   val watermark: com.photoplus.edit.WatermarkSpec = com.photoplus.edit.WatermarkSpec(),
+  /** Props worn in the preview, composited into the photo (not RAW). */
+  val props: List<CameraProps.Placed> = emptyList(),
 ) {
   /** RAW stays untouched; every other capture with a look is decoded and graded. */
   val needsProcessing: Boolean get() = mode != CaptureMode.RAW && (mode.processed || look != null)
@@ -130,6 +132,7 @@ data class CaptureOptions(
           @Suppress("UNCHECKED_CAST")
           com.photoplus.edit.WatermarkSpec.fromMap(map["watermark"] as? Map<String, Any?>)
         }.getOrDefault(com.photoplus.edit.WatermarkSpec()),
+        props = CameraProps.parse(map["props"]),
       )
     }
   }

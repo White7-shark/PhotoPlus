@@ -89,6 +89,14 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
+        // Google Mobile Ads (rewarded ads that unlock a watermark-free export).
+        // Google's public test IDs unless real ones are supplied as Gradle
+        // properties; debug builds always use the test ad unit.
+        def admobAppId = project.findProperty("photoplus.admobAppId") ?: "ca-app-pub-3940256099942544~3347511713"
+        def admobRewardedId = project.findProperty("photoplus.admobRewardedId") ?: "ca-app-pub-3940256099942544/5224354917"
+        manifestPlaceholders["admobAppId"] = admobAppId
+        buildConfigField("String", "ADMOB_REWARDED_ID", "\"${admobRewardedId}\"")
+
         externalNativeBuild {
             cmake {
                 // Must match React Native's STL to avoid duplicate runtimes.
@@ -165,6 +173,9 @@ dependencies {
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
     // On-device inference for Spotlight's depth estimate (16 KB page aligned).
     implementation("com.google.ai.edge.litert:litert:2.3.2")
+    // Rewarded ads (free plan: four ads unlock one watermark-free photo) and consent.
+    implementation("com.google.android.gms:play-services-ads:25.5.0")
+    implementation("com.google.android.ump:user-messaging-platform:4.0.0")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")

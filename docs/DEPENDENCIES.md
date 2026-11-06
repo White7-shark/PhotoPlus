@@ -79,11 +79,22 @@ A clean `npm ci` reports **0 deprecated packages** and **0 warnings**. `@parcel/
 |---|---|---|
 | Poppins SemiBold ("Modern") | Google Fonts | SIL OFL 1.1 |
 | DM Serif Display ("Elegant") | Google Fonts | SIL OFL 1.1 |
-| Great Vibes ("Signature", and the watermark's "Created with") | Google Fonts | SIL OFL 1.1 |
+| Great Vibes ("Signature") | Google Fonts | SIL OFL 1.1 |
+| Petit Formal Script (the brand mark's "Created with") | Google Fonts | SIL OFL 1.1 |
+| Poppins ExtraBold Italic (the brand mark's "PhotoPlus") | Google Fonts | SIL OFL 1.1 |
 | Bebas Neue ("Bold") | Google Fonts | SIL OFL 1.1 |
 | Space Mono ("Type") | Google Fonts | SIL OFL 1.1 |
 
-The licence texts ship in `android/app/src/main/assets/fonts/LICENSES.txt`. Prop artwork is original: `scripts/make-props.mjs` draws it as SVG and renders it with the Playwright/Chromium already used for the design previews. It is a build-time tool only, not an app dependency. The editor preview script uses Pillow and MediaPipe (desktop only), as the Spotlight preview does.
+The licence texts ship in `android/app/src/main/assets/fonts/LICENSES.txt`. Prop artwork and the brand mark's camera are original: `scripts/make-props.mjs` and `scripts/make-brand-mark.mjs` draw them as SVG and renders it with the Playwright/Chromium already used for the design previews. It is a build-time tool only, not an app dependency. The editor preview script uses Pillow and MediaPipe (desktop only), as the Spotlight preview does.
+
+## Ads (Phase 3 update)
+
+| Library | Version | Latest stable | Notes |
+|---|---|---|---|
+| com.google.android.gms:play-services-ads | **25.5.0** | 25.5.0 | Rewarded ads for the free plan's watermark-free unlock |
+| com.google.android.ump:user-messaging-platform | **4.0.0** | 4.0.0 | Consent where the law requires it, before any ad request |
+
+Debug builds always use Google's test ad unit. Release IDs come from the Gradle properties `photoplus.admobAppId` / `photoplus.admobRewardedId`; until they are set, the test IDs are used.
 
 ## Patched upstream: `@react-native/gradle-plugin` 0.88.1
 

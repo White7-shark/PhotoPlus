@@ -49,7 +49,15 @@ import kotlin.math.roundToInt
  * output bitmap in place (pp_enhance_into), and orientation is recorded as
  * an EXIF tag rather than by rotating pixels.
  */
-class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTier) {
+class CaptureProcessor(
+  private val capturesDir: File,
+  private val tier: DeviceTier,
+  /** Artwork for props worn in the camera. */
+  private val propArt: com.photoplus.edit.PropArt? = null,
+) {
+  /** How preview positions map onto this capture's upright photo. */
+  private data class PropFrame(val deviceDegrees: Int, val mirrored: Boolean)
+
 
   interface Listener {
     fun onShutter(captureId: String) {}
@@ -79,10 +87,12 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
     }
     val mirror = frontCamera && request.mirrorFront
     val upright = request.previewPoints.map { (x, y) -> MaskGeometry.previewToUpright(x, y, deviceDegrees, frontCamera) }
+    // The saved photo is upright; it matches the mirrored preview only when front photos are mirrored.
+    val propFrame = PropFrame(deviceDegrees, frontCamera && !request.mirrorFront)
     when {
       request.mode == CaptureMode.RAW -> captureRaw(capture, request, mirror, listener)
-      request.needsProcessing -> captureProcessed(capture, request, mirror, upright, listener)
-      else -> captureStandard(capture, request, mirror, listener)
+      request.needsProcessing -> captureProcessed(capture, request, mirror, upright, propFrame, listener)
+      else -> captureStandard(capture, request, mirror, propFrame, listener)
     }
   }
 
@@ -98,12 +108,13 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
 
   // -------------------------------------------------------------- standard
 
-  private fun captureStandard(capture: ImageCapture, request: CaptureOptions, mirror: Boolean, listener: Listener) {
+  private fun captureStandard(capture: ImageCapture, request: CaptureOptions, mirror: Boolean, propFrame: PropFrame, listener: Listener) {
     val file = newFile("jpg")
     val started = SystemClock.elapsedRealtime()
     capture.takePicture(fileOptions(file, mirror), captureExecutor, object : ImageCapture.OnImageSavedCallback {
       override fun onCaptureStarted() = listener.onShutter(request.captureId)
       override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+        applyProps(file, request, propFrame)
         val clean = markForPlan(file, request)
         listener.onSuccess(request.captureId, photoResult(file, request.mode, started) + mapOf("cleanPath" to clean))
       }
@@ -181,6 +192,7 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
     val started: Long,
     /** Spotlight taps in the upright photo. */
     val points: List<Pair<Float, Float>>,
+    val propFrame: PropFrame,
   ) {
     val frames = ArrayList<Bitmap>(plan.frames)
     var received = 0
@@ -200,6 +212,7 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
     request: CaptureOptions,
     mirror: Boolean,
     points: List<Pair<Float, Float>>,
+    propFrame: PropFrame,
     listener: Listener,
   ) {
     if (!NativeEngine.ensureLoaded()) {
@@ -214,7 +227,7 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
     // A look on a plain photo is still decoded: size it like Clarity so it is
     // bounded and can step down on low memory (never a full-sensor decode).
     val plan = CapturePolicy.plan(if (request.mode.processed) request.mode else CaptureMode.ENHANCE, tier)
-    val burst = Burst(request, plan, mirror, SystemClock.elapsedRealtime(), points)
+    val burst = Burst(request, plan, mirror, SystemClock.elapsedRealtime(), points, propFrame)
     cancelledBursts.remove(request.captureId)
     listener.onProgress(request.captureId, "capturing", 0.0)
     // Queue every frame at once; CameraX pipelines them back to back, which
@@ -411,6 +424,7 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
       listener.onProgress(request.captureId, "saving", 0.9)
       ImageCodec.encode(work, target, OutputFormat.JPEG, OUTPUT_QUALITY)
       writeExif(target, burst.exif, geometry.remainingRotation, burst.mirror)
+      applyProps(target, request, burst.propFrame)
       val clean = markForPlan(target, request)
       if (enhance) {
         // Keep the reference frame so the user can compare before and after.
@@ -478,6 +492,17 @@ class CaptureProcessor(private val capturesDir: File, private val tier: DeviceTi
    * here never loses the photo: it is kept as captured (exports still apply
    * the mark).
    */
+  /** Props go into the photo itself, before the watermark; a failure keeps the photo as captured. */
+  private fun applyProps(file: File, request: CaptureOptions, frame: PropFrame) {
+    val art = propArt ?: return
+    if (request.props.isEmpty()) return
+    try {
+      CameraProps.applyToFile(file, request.props, art, frame.deviceDegrees, frame.mirrored)
+    } catch (e: Exception) {
+      android.util.Log.w("PhotoPlusCapture", "props failed; photo kept as captured", e)
+    }
+  }
+
   private fun markForPlan(file: File, request: CaptureOptions): String? = try {
     PhotoWatermark.applyToFile(file, request.watermark, Entitlements.plan)
   } catch (e: Exception) {

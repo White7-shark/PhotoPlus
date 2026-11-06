@@ -5,6 +5,7 @@ import {
   type BrandingPreset,
   type WatermarkSpec,
 } from '../../edit/watermark';
+import { isCustomProps, type CustomProp } from '../../edit/catalog';
 import { isVibeLook, type VibeLook } from '../../looks/types';
 import type { SqlExecutor } from '../SqlExecutor';
 
@@ -32,6 +33,8 @@ export interface AppSettings {
   watermark: WatermarkSpec;
   /** Saved branding looks (Premium). */
   brandingPresets: BrandingPreset[];
+  /** Props people made from their own photos (Premium). */
+  customProps: CustomProp[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -49,6 +52,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   vibeLook: null,
   watermark: DEFAULT_WATERMARK,
   brandingPresets: [],
+  customProps: [],
 };
 
 type Validators = { [K in keyof AppSettings]: (v: unknown) => v is AppSettings[K] };
@@ -74,6 +78,7 @@ const VALIDATORS: Validators = {
   vibeLook: (v): v is VibeLook | null => v === null || isVibeLook(v),
   watermark: isWatermarkSpec,
   brandingPresets: isBrandingPresets,
+  customProps: isCustomProps,
 };
 
 export function isValidSetting<K extends keyof AppSettings>(key: K, value: unknown): value is AppSettings[K] {

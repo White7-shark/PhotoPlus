@@ -37,7 +37,7 @@ data class WatermarkSpec(
   val font: WatermarkFont = WatermarkFont.MODERN,
   val layout: WatermarkLayout = WatermarkLayout.INLINE,
   /** 0..1 slider, mapped into the plan's size range. */
-  val size: Float = 0.5f,
+  val size: Float = DEFAULT_SIZE,
   /** 0..1 slider, mapped into the plan's opacity range. */
   val opacity: Float = 0.85f,
   val position: WatermarkPosition = WatermarkPosition.DEFAULT,
@@ -46,6 +46,9 @@ data class WatermarkSpec(
   val custom: CustomBranding? = null,
 ) {
   companion object {
+    /** The default size reproduces the brand reference (cap height ≈ 3.2% of the short side). */
+    const val DEFAULT_SIZE = 0.78f
+
     fun fromMap(map: Map<String, Any?>?): WatermarkSpec {
       if (map == null) return WatermarkSpec()
       fun <T : Enum<T>> enum(key: String, values: Array<T>, default: T): T {
@@ -68,7 +71,7 @@ data class WatermarkSpec(
         style = enum("style", WatermarkStyle.entries.toTypedArray(), WatermarkStyle.SIGNATURE),
         font = enum("font", WatermarkFont.entries.toTypedArray(), WatermarkFont.MODERN),
         layout = enum("layout", WatermarkLayout.entries.toTypedArray(), WatermarkLayout.INLINE),
-        size = unit("size", 0.5f),
+        size = unit("size", DEFAULT_SIZE),
         opacity = unit("opacity", 0.85f),
         position = enum("position", WatermarkPosition.entries.toTypedArray(), WatermarkPosition.DEFAULT),
         enabled = map["enabled"] as? Boolean ?: true,
@@ -125,6 +128,13 @@ object ExportPolicy {
 
   private fun map(v: Float, range: ClosedFloatingPointRange<Float>) = range.start + (range.endInclusive - range.start) * v.coerceIn(0f, 1f)
 
+  /**
+   * For an export: a free photo unlocked by watching rewarded ads
+   * ([com.photoplus.ads.AdRewards], checked natively) goes out without a mark.
+   */
+  fun resolveForExport(spec: WatermarkSpec?, plan: Plan, adUnlocked: Boolean): ResolvedWatermark? =
+    if (plan == Plan.FREE && adUnlocked) null else resolve(spec, plan)
+
   /** Null only when a Premium user turned the watermark off. */
   fun resolve(spec: WatermarkSpec?, plan: Plan): ResolvedWatermark? {
     val s = spec ?: WatermarkSpec()
@@ -157,8 +167,8 @@ object ExportPolicy {
    * (not off the edge, not invisible). Premium marks are the owner's choice
    * (a faint signature is fine), so they are not checked.
    */
-  fun verify(resolved: ResolvedWatermark?, plan: Plan, visiblePixels: Long, imageWidth: Int, imageHeight: Int) {
-    if (plan == Plan.PREMIUM) return
+  fun verify(resolved: ResolvedWatermark?, plan: Plan, visiblePixels: Long, imageWidth: Int, imageHeight: Int, adUnlocked: Boolean = false) {
+    if (plan == Plan.PREMIUM || adUnlocked) return
     if (resolved == null) throw EngineException(WATERMARK_MISSING, "A free export must carry the Photo Plus watermark")
     val heightPx = (resolved.height * minOf(imageWidth, imageHeight)).roundToInt()
     if (visiblePixels < minimumVisiblePixels(heightPx)) {

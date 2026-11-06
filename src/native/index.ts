@@ -6,12 +6,14 @@
  * module is missing (tests, previews, a future platform). Callers use
  * `requireNative` when the feature cannot work without the module.
  */
+import NativeAds from './specs/NativePhotoPlusAds';
 import NativeCamera from './specs/NativePhotoPlusCamera';
 import NativeDatabase from './specs/NativePhotoPlusDatabase';
 import NativeDevice from './specs/NativePhotoPlusDevice';
 import NativeEngine from './specs/NativePhotoPlusEngine';
 import NativeStorage from './specs/NativePhotoPlusStorage';
 
+export type { Spec as AdsSpec } from './specs/NativePhotoPlusAds';
 export type { Spec as CameraSpec } from './specs/NativePhotoPlusCamera';
 export type { Spec as DatabaseSpec } from './specs/NativePhotoPlusDatabase';
 export type { Spec as DeviceSpec } from './specs/NativePhotoPlusDevice';
@@ -34,6 +36,7 @@ export function requireNative<T>(module: T | null | undefined, name: string): T 
 }
 
 export const nativeModules = {
+  ads: NativeAds,
   camera: NativeCamera,
   database: NativeDatabase,
   device: NativeDevice,

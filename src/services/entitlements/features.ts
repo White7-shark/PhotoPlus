@@ -51,6 +51,8 @@ export const FEATURES = {
   customWatermark: f('editing.customWatermark', 'Custom watermark & branding', 'editing', 'premium'),
   premiumProps: f('editing.premiumProps', 'The full props collection', 'editing', 'premium'),
   premiumFrames: f('editing.premiumFrames', 'Signature frame designs', 'editing', 'premium'),
+  customProps: f('editing.customProps', 'Make your own props from your photos', 'editing', 'premium'),
+  cameraProps: f('camera.props', 'Props in the camera', 'camera', 'free'),
   packAccess: f('marketplace.packAccess', 'Unlock, download & apply photoshoot packs', 'marketplace', 'premium'),
   clothingTransform: f('replication.clothing', 'Clothing transformation (compatible packs)', 'replication', 'premium'),
 } as const;

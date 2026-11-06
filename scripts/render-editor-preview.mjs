@@ -118,11 +118,23 @@ const segmented = (label, options, active) =>
         `<div class="caption" style="flex:1;text-align:center;padding:7px 0;border-radius:11px;font-weight:700;${o === active ? 'background:rgba(255,255,255,.16)' : 'color:rgba(247,245,251,.7)'}">${o}</div>`,
     )
     .join('')}</div></div>`;
-const chips = (items, active) =>
-  `<div class="scroll">${items.map(([label, premium]) => `<div class="chip ${label === active ? 'on' : ''}">${label}${premium ? icon('crown', 11, GOLD, 2.2) : ''}</div>`).join('')}</div>`;
-
 const screen = (img, active, panel, note, extra = '') =>
   `${aurora}${status}<div style="position:relative;padding:52px 16px 32px;display:flex;flex-direction:column;gap:12px">${header}${photo(img, extra)}${saveRow}${tools(active)}<div class="glass" style="padding:14px 16px">${panel}</div>${exportRow(note)}</div>`;
+
+// ---- catalogue (parsed from src/services/edit/catalog.ts) and preview tiles ----
+const catalogSrc = readFileSync(join(root, 'src/services/edit/catalog.ts'), 'utf8');
+const PROP_LIST = [
+  ...catalogSrc.matchAll(/id: '(\w+)',\s*name: '([^']+)',\s*category: '(\w+)',\s*premium: (true|false)/g),
+].map(m => ({ id: m[1], name: m[2], category: m[3], premium: m[4] === 'true' }));
+const FRAME_LIST = [...catalogSrc.matchAll(/\{ id: '(\w+)', name: '([^']+)', premium: (true|false) \}/g)].map(m => ({
+  id: m[1],
+  name: m[2],
+  premium: m[3] === 'true',
+}));
+const propUri = id =>
+  `data:image/png;base64,${readFileSync(join(root, 'android/app/src/main/assets/props', `${id}.png`)).toString('base64')}`;
+const tile = (label, src, { locked = false, selected = false, w = 76, h = 76, dark = false, ph = 'image' } = {}) =>
+  `<div style="flex:none;width:${w}px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:${w}px;height:${h}px;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;border:${selected ? 2 : 1}px solid ${selected ? ACCENT : STROKE};background:${dark ? 'rgba(10,9,17,.55)' : 'rgba(255,255,255,.065)'}">${src ? `<img src="${src}" style="max-width:${w - 10}px;max-height:${h - 10}px">` : icon(ph, 22, 'rgba(247,245,251,.56)')}${locked ? `<div style="position:absolute;right:5px;top:5px;width:20px;height:20px;border-radius:10px;background:rgba(10,9,17,.7);display:flex;align-items:center;justify-content:center">${icon('crown', 11, GOLD, 2.2)}</div>` : ''}</div><div class="caption" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${w + 8}px">${label}</div></div>`;
 
 const FREE_NOTE = 'Photos you share carry the Photo Plus mark. Your original stays untouched.';
 
@@ -134,30 +146,29 @@ const adjust = screen(
   FREE_NOTE,
 );
 
-const FRAME_CHIPS = [
-  ['None'],
-  ['Gallery'],
-  ['Instant'],
-  ['Arch'],
-  ['Halo'],
-  ['Soft square'],
-  ['Star', true],
-  ['Heart', true],
-];
 const frames = screen(
   uri('frame_arch.png'),
   'frames',
-  `<div style="display:flex;flex-direction:column;gap:10px">${chips(FRAME_CHIPS, 'Arch')}${slider('Zoom', '100', 0)}</div>`,
+  `<div style="display:flex;flex-direction:column;gap:10px"><div class="scroll" style="gap:10px">${tile('None', null, { w: 68, h: 86, ph: 'close' })}${FRAME_LIST.slice(
+    0,
+    5,
+  )
+    .map(f => tile(f.name, uri(`frame_${f.id}.png`), { w: 68, h: 86, selected: f.id === 'arch', locked: f.premium }))
+    .join(
+      '',
+    )}</div>${slider('Zoom', '1.0×', 0)}<div class="caption sec">${FRAME_LIST.length} frames, each shown around your own photo.</div></div>`,
   FREE_NOTE,
 );
 
 const props = screen(
   uri('glasses_round.png'),
   'props',
-  `<div style="display:flex;flex-direction:column;gap:10px">${segmented('Category', ['Hats', 'Glasses', 'Outfit'], 'Glasses')}${chips(
-    [['Aviators'], ['Round'], ['Cat-eye', true], ['Tortoise', true]],
-    'Round',
-  )}<div class="caption sec">Drag to move · Fitted to the face</div></div>`,
+  `<div style="display:flex;flex-direction:column;gap:10px">${segmented('Category', ['Hats', 'Glasses', 'Outfit', 'Mine'], 'Glasses')}<div class="scroll" style="gap:10px">${PROP_LIST.filter(
+    d => d.category === 'glasses',
+  )
+    .slice(0, 4)
+    .map(d => tile(d.name, propUri(d.id), { dark: true, selected: d.id === 'round', locked: d.premium }))
+    .join('')}</div><div class="caption sec">Drag to move · Fitted to the face</div></div>`,
   FREE_NOTE,
 );
 
@@ -176,12 +187,48 @@ const watermark = screen(
   FREE_NOTE,
 );
 
+// ---- the camera with a prop on (it follows the face; the photo gets it in its pixels) ----
+const camChip = (ic, on = false, tint = '#fff') =>
+  `<div style="height:36px;min-width:40px;padding:0 10px;border-radius:18px;border:1px solid rgba(255,255,255,.16);background:${on ? 'rgba(255,255,255,.2)' : 'rgba(16,14,25,.55)'};display:flex;align-items:center;justify-content:center">${icon(ic, 18, tint)}</div>`;
+const cameraProps = `<div style="position:absolute;inset:0;background:#000"></div>
+  <div style="position:absolute;top:100px;left:0;width:390px;height:520px;overflow:hidden"><img src="${uri('camera_hearts.png')}" style="width:100%;height:100%;object-fit:cover;object-position:50% 30%"></div>
+  ${status}
+  <div class="row" style="position:absolute;top:52px;left:12px;right:12px;justify-content:space-between">${camChip('close')}<div class="row" style="gap:6px">${camChip('flashOff')}${camChip('timer')}${camChip('hat', true, GOLD)}${camChip('wand')}${camChip('grid', true)}${camChip('exposure')}</div></div>
+  <div style="position:absolute;left:0;right:0;bottom:30px;display:flex;flex-direction:column;gap:10px">
+    <div style="margin:0 12px;padding:12px;border-radius:22px;background:rgba(10,9,17,.66);display:flex;flex-direction:column;gap:10px">
+      ${segmented('Props', ['Hats', 'Glasses', 'Outfit', 'Mine'], 'Glasses')}
+      <div class="scroll" style="gap:10px">${tile('None', null, { w: 64, h: 64, ph: 'close' })}${PROP_LIST.filter(
+        d => d.category === 'glasses',
+      )
+        .slice(3, 8)
+        .map(d =>
+          tile(d.name, propUri(d.id), { w: 64, h: 64, dark: true, selected: d.id === 'hearts', locked: d.premium }),
+        )
+        .join('')}</div>
+      <div class="caption sec" style="text-align:center">It follows your face. Drag it to move it, pinch to resize.</div>
+    </div>
+    <div class="row" style="justify-content:space-between;padding:0 32px">
+      <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:50px;height:50px;border-radius:14px;overflow:hidden;border:1.5px solid rgba(255,255,255,.6)"><img src="${uri('camera_hearts.png')}" style="width:100%;height:100%;object-fit:cover"></div><div class="row caption" style="gap:4px;height:28px;padding:0 10px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:rgba(16,14,25,.55);font-weight:700">${icon('sliders', 14)}Edit</div></div>
+      <div style="width:82px;height:82px;border-radius:41px;border:4px solid #fff;display:flex;align-items:center;justify-content:center"><div style="width:64px;height:64px;border-radius:32px;background-image:linear-gradient(135deg,#FF7A45 0%,#F2477E 48%,#8B5CF6 100%)"></div></div>
+      ${camChip('flip')}
+    </div>
+  </div>`;
+
+// ---- watching ads for a watermark-free photo (free plan) ----
+const unlockCard = `<div class="glass" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><div class="row" style="justify-content:space-between"><div style="font-weight:700;font-size:15px">Remove the watermark</div><div class="row" style="gap:5px">${[0, 1, 2, 3].map(i => `<div style="width:9px;height:9px;border-radius:5px;background:${i < 2 ? GOLD : STROKE}"></div>`).join('')}</div></div><div class="caption sec">2 more to go. Your progress is kept for this photo.</div><div class="btn glass" style="border-radius:24px">${icon('play', 18)}Watch ad 3 of 4</div></div>`;
+const unlock = `${aurora}${status}<div style="position:relative;padding:52px 16px 32px;display:flex;flex-direction:column;gap:12px">${header}${photo(uri('wm_portrait.png'))}<div class="row" style="gap:10px"><div class="btn glass" style="flex:1;border-radius:24px">${icon('share', 18)}Share</div><div class="btn glass" style="flex:1;border-radius:24px">${icon('image', 18)}Save to gallery</div></div>${unlockCard}<div class="caption sec" style="text-align:center">${FREE_NOTE}</div></div>`;
+
+// ---- making a prop (Premium): tap the object to cut it out ----
+const marker = (x, y) =>
+  `<div style="position:absolute;left:${x - 17}px;top:${y - 17}px;width:34px;height:34px;border-radius:17px;border:2px solid ${GOLD};background:rgba(10,9,17,.25);display:flex;align-items:center;justify-content:center"><div style="width:18px;height:18px;border-radius:9px;background:${GOLD};color:#1A1206;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">1</div></div>`;
+const create = `${aurora}${status}<div style="position:relative;padding:52px 16px 32px;display:flex;flex-direction:column;gap:14px"><div class="row" style="gap:10px">${round('chevronLeft')}<div style="flex:1;font-size:20px;font-weight:700">Make a prop</div></div><div class="sec" style="font-size:15px;line-height:21px">Turn anything in a photo into a prop you can wear in the camera and the editor.</div>${photo(uri('kodim04.png'), marker(186, 70))}<div class="caption sec" style="text-align:center">Tap again to add more of it, or cut it out.</div><div class="row" style="gap:10px"><div class="btn glass" style="flex:1;border-radius:24px">${icon('image', 18)}Other photo</div><div class="btn" style="flex:1;background-image:${ACTION}">${icon('sparkles', 18)}Cut it out</div></div><div class="glass" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">${segmented('Where it goes', ['Head', 'Eyes', 'Neck', 'Anywhere'], 'Head')}<div class="caption sec">Saved props appear under Mine, in the camera and the editor.</div></div></div>`;
+
 const page = (inner, w, h) =>
   `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body style="width:${w}px;min-height:${h}px">${inner}</body></html>`;
 
 const browser = await chromium.launch();
 const p = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-const SCREENS = { adjust, frames, props, watermark };
+const SCREENS = { adjust, frames, props, watermark, unlock, create, camera: cameraProps };
 for (const [key, html] of Object.entries(SCREENS)) {
   await p.setContent(page(`<div class="phone">${html}</div>`, 390, 844));
   await p.evaluate('document.fonts.ready');
@@ -191,27 +238,15 @@ for (const [key, html] of Object.entries(SCREENS)) {
 }
 
 // ---- gallery: every frame, and the watermark on light, dark and busy photos ----
-const FRAMES = [
-  ['gallery', 'Gallery'],
-  ['polaroid', 'Instant'],
-  ['arch', 'Arch'],
-  ['circle', 'Halo'],
-  ['soft', 'Soft square'],
-  ['star', 'Star', true],
-  ['heart', 'Heart', true],
-  ['hexagon', 'Hexagon', true],
-  ['film', 'Film', true],
-  ['diamond', 'Diamond', true],
-  ['window', 'Window', true],
-];
+const FRAMES = FRAME_LIST.map(f => [f.id, f.name, f.premium]);
 const W = 1240;
-const tile = ([id, name, premium]) =>
+const frameTile = ([id, name, premium]) =>
   `<div style="width:180px;display:flex;flex-direction:column;gap:8px"><div style="height:225px;border-radius:14px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center"><img src="${uri(`frame_${id}.png`)}" style="max-width:100%;max-height:100%"></div><div class="row caption" style="gap:4px;font-weight:700">${name}${premium ? icon('crown', 12, GOLD, 2.2) : '<span class="sec" style="font-weight:500">· Free</span>'}</div></div>`;
 const wmCrop = (file, label) =>
-  `<div style="flex:1;display:flex;flex-direction:column;gap:8px"><div style="height:200px;border-radius:14px;overflow:hidden;position:relative;background:#000"><img src="${uri(file)}" style="position:absolute;right:0;bottom:0;width:250%"></div><div class="caption sec">${label}</div></div>`;
+  `<div style="flex:1;display:flex;flex-direction:column;gap:8px"><div style="height:200px;border-radius:14px;overflow:hidden;position:relative;background:#000"><img src="${uri(file)}" style="position:absolute;right:0;bottom:0;width:190%"></div><div class="caption sec">${label}</div></div>`;
 const gallery = `<div style="padding:36px;display:flex;flex-direction:column;gap:22px">
   <div><div class="overline" style="color:${ACCENT}">Phase 3 · Photo editor</div><div style="font-size:28px;font-weight:700;margin-top:4px">Frames and the Photo Plus mark</div><div class="caption sec" style="margin-top:6px">Every image is the engine's real output. Frames are drawn at full resolution; the mark is drawn into the photo's pixels and adapts its ink to what is behind it.</div></div>
-  <div style="display:flex;flex-wrap:wrap;gap:16px">${FRAMES.map(tile).join('')}</div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px">${FRAMES.map(frameTile).join('')}</div>
   <div style="font-size:18px;font-weight:700">Signature mark on free photos (bottom right, ink adapts)</div>
   <div class="row" style="gap:16px">${wmCrop('wm_dark.png', 'Busy, dark: white ink with a soft shadow')}${wmCrop('wm_street.png', 'Mid-tone street: white ink')}${wmCrop('wm_bright.png', 'Bright, high-key: deep charcoal ink')}</div>
 </div>`;

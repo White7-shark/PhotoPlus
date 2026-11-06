@@ -17,6 +17,7 @@ export type RootStackParamList = {
   Diagnostics: undefined;
   PhotoPreview: { imageId: string };
   Editor: { imageId: string };
+  CreateProp: undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

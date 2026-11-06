@@ -2,8 +2,8 @@ package com.photoplus.edit
 
 import android.content.res.AssetManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.core.graphics.createBitmap
+import java.io.File
 import com.photoplus.engine.EngineException
 import com.photoplus.engine.EngineOp
 import com.photoplus.engine.NativeEngine
@@ -20,7 +20,12 @@ import com.photoplus.studio.PortraitReport
  * The slow early stages (Transform, Spotlight) are cached for the last
  * document, so moving a slider in the preview only redoes the fast steps.
  */
-class EditRenderer(private val assets: AssetManager, private val portrait: () -> PortraitProcessor) {
+class EditRenderer(
+  private val assets: AssetManager,
+  /** Where custom props live ([EditDocument.CUSTOM_PROP] ids → <id>.png). */
+  private val customProps: File?,
+  private val portrait: () -> PortraitProcessor,
+) {
   data class Options(
     val skipProps: Set<Int> = emptySet(),
     val skipFrame: Boolean = false,
@@ -40,7 +45,7 @@ class EditRenderer(private val assets: AssetManager, private val portrait: () ->
 
   private var stageKey: String? = null
   private var stage: Bitmap? = null
-  private val props = LinkedHashMap<String, Bitmap>(8, 0.75f, true)
+  private val propArt = PropArt(assets, customProps)
 
   @Synchronized
   fun render(source: Bitmap, doc: EditDocument, opts: Options, token: Long): Result {
@@ -137,19 +142,7 @@ class EditRenderer(private val assets: AssetManager, private val portrait: () ->
     }
   }
 
-  private fun prop(id: String): Bitmap {
-    props[id]?.takeIf { !it.isRecycled }?.let { return it }
-    if (id !in EditDocument.PROPS) throw EngineException(EngineException.INVALID_ARGUMENT, "Unknown prop")
-    val options = BitmapFactory.Options().apply {
-      inPremultiplied = false // the engine works in straight alpha
-      inPreferredConfig = Bitmap.Config.ARGB_8888
-    }
-    val bmp = assets.open("props/$id.png").use { BitmapFactory.decodeStream(it, null, options) }
-      ?: throw EngineException(EngineException.IO_ERROR, "Prop artwork is missing")
-    while (props.size >= 6) props.remove(props.keys.first())?.recycle()
-    props[id] = bmp
-    return bmp
-  }
+  private fun prop(id: String): Bitmap = propArt.load(id)
 
   /** Engine-written photos: straight alpha, opaque. */
   private fun mark(b: Bitmap) {
@@ -162,8 +155,7 @@ class EditRenderer(private val assets: AssetManager, private val portrait: () ->
     stage?.recycle()
     stage = null
     stageKey = null
-    props.values.forEach { it.recycle() }
-    props.clear()
+    propArt.clear()
   }
 
   companion object {

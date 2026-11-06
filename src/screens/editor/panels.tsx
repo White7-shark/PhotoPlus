@@ -1,15 +1,14 @@
 import React from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
-import { AppText, Badge, Button, Icon, SegmentedControl, type IconName } from '../../components';
+import { AppText, Badge, Button, Icon, PreviewTile, SegmentedControl, type IconName } from '../../components';
 import { ValueSlider } from '../../components/ValueSlider';
 import { BLUR_LEVELS, GLOW_LEVELS, type BlurLevel, type GlowLevel } from '../../services/camera/model';
 import {
   FRAMES,
   LOOKS,
   PROP_CATEGORIES,
-  PROPS,
-  propAsset,
+  propSource,
   type PropCategory,
   type PropDef,
 } from '../../services/edit/catalog';
@@ -373,10 +372,12 @@ export function TransformEditPanel({
 }
 
 export function PropsPanel({
+  props,
   category,
   onCategory,
   selected,
   onAdd,
+  onCreate,
   onPremium,
   locked,
   placed,
@@ -387,10 +388,14 @@ export function PropsPanel({
   onRemove,
   commit,
 }: {
+  /** Bundled props and the ones the person made. */
+  props: readonly PropDef[];
   category: PropCategory;
   onCategory: (c: PropCategory) => void;
   selected: { def: PropDef; width: number; rotation: number } | null;
   onAdd: (p: PropDef) => void;
+  /** Opens the prop maker (Premium). */
+  onCreate: () => void;
   onPremium: () => void;
   locked: boolean;
   placed: number;
@@ -409,20 +414,36 @@ export function PropsPanel({
         onChange={onCategory}
         options={PROP_CATEGORIES.map(c => ({ value: c.id, label: c.label }))}
       />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        {PROPS.filter(p => p.category === category).map(p => (
-          <Chip
-            key={p.id}
-            label={p.name}
-            premium={p.premium}
-            selected={selected?.def.id === p.id}
-            testID={`prop-${p.id}`}
-            onPress={() => (p.premium && locked ? onPremium() : onAdd(p))}
-          >
-            <Image source={{ uri: propAsset(p.id) }} style={{ width: 64, height: 40 }} resizeMode="contain" />
-          </Chip>
-        ))}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+        {category === 'mine' ? (
+          <PreviewTile
+            label="Make your own"
+            placeholderIcon="plus"
+            locked={locked}
+            onPress={() => (locked ? onPremium() : onCreate())}
+            testID="prop-create"
+          />
+        ) : null}
+        {props
+          .filter(p => p.category === category)
+          .map(p => (
+            <PreviewTile
+              key={p.id}
+              label={p.name}
+              uri={propSource(p)}
+              dark
+              locked={p.premium && locked}
+              selected={selected?.def.id === p.id}
+              testID={`prop-${p.id}`}
+              onPress={() => (p.premium && locked ? onPremium() : onAdd(p))}
+            />
+          ))}
       </ScrollView>
+      {category === 'mine' && !props.some(p => p.category === 'mine') ? (
+        <AppText variant="caption" tone="secondary">
+          Turn anything in your photos into a prop: a hat, a pair of glasses, a pet, a logo.
+        </AppText>
+      ) : null}
       {selected ? (
         <View style={{ gap: 10 }}>
           <ValueSlider
@@ -482,22 +503,37 @@ export function FramesPanel({
   commit,
   onPremium,
   locked,
+  thumbnails,
 }: {
   doc: EditDocument;
   update: Update;
   commit: () => void;
   onPremium: () => void;
   locked: boolean;
+  /** Each frame around this photo, small (frame id → file path). */
+  thumbnails: Record<string, string>;
 }) {
   return (
     <View style={{ gap: 12 }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <Chip label="None" selected={!doc.frame} onPress={() => update({ frame: null })} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+        <PreviewTile
+          label="None"
+          placeholderIcon="close"
+          width={68}
+          height={86}
+          selected={!doc.frame}
+          onPress={() => update({ frame: null })}
+          testID="frame-none"
+        />
         {FRAMES.map(f => (
-          <Chip
+          <PreviewTile
             key={f.id}
             label={f.name}
-            premium={f.premium}
+            uri={thumbnails[f.id] ? `file://${thumbnails[f.id]}` : null}
+            placeholderIcon="grid"
+            width={68}
+            height={86}
+            locked={f.premium && locked}
             selected={doc.frame?.id === f.id}
             testID={`frame-${f.id}`}
             onPress={() =>

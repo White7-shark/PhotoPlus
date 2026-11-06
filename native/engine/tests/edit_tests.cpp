@@ -297,7 +297,7 @@ TEST(edit_prop_matches_the_photos_softness) {
 
 TEST(edit_frames_hold_the_photo_cleanly_in_every_shape) {
   pp_image* photo = solid(600, 750, 230, 60, 60);  // red photo
-  for (int shape = 0; shape <= 6; ++shape) {
+  for (int shape = 0; shape <= 9; ++shape) {
     pp_image* canvas = solid(1000, 1250, 0, 0, 0);
     pp_frame_params f{};
     f.shape = shape;
@@ -349,7 +349,7 @@ TEST(edit_frames_hold_the_photo_cleanly_in_every_shape) {
   f.decoration = 0;
   EXPECT_EQ(pp_frame(photo, canvas, &f, nullptr), PP_OK);
   EXPECT_TRUE(at(canvas, 10, 10).r > at(canvas, 10, 10).g + 40);  // the photo's own colour, blurred
-  f.shape = 9;
+  f.shape = 10;
   EXPECT_EQ(pp_frame(photo, canvas, &f, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image_destroy(canvas);
   pp_image_destroy(photo);

@@ -65,6 +65,7 @@ import { formatBytes, getStorageService } from '../services/storage/StorageServi
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
 import { VibeSheet } from './camera/VibeSheet';
+import { WatermarkUnlock } from './WatermarkUnlock';
 import { SpotlightMarkers, SpotlightPanel } from './camera/SpotlightControls';
 import { CompareView } from './CompareView';
 
@@ -423,42 +424,50 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
     openedAt,
   ]);
 
-  const keepResult = useCallback(async () => {
-    if (!image || !result || !repos) {
-      return;
-    }
-    try {
-      const record = await repos.images.add({
-        projectId: image.projectId,
-        path: result.outputPath,
-        source: 'export',
-        width: result.width,
-        height: result.height,
-        sizeBytes: result.sizeBytes,
-        mimeType: 'image/jpeg',
-        capturedAt: image.capturedAt,
-        metadata: {
-          ...enhancedCopyMetadata(
-            image,
-            result.kind,
-            result.kind === 'spotlight' ? null : result.report,
-            result.cleanPath,
-          ),
-          ...(result.kind === 'spotlight' ? { portrait: result.report } : {}),
-          ...(result.kind === 'transform' && result.portrait ? { portrait: result.portrait } : {}),
-          ...(result.kind === 'look' || (result.kind === 'transform' && transformPlan(image).look)
-            ? { look: true }
-            : {}),
-          // What was done, so Transform can always start over from the untouched photo.
-          recipe: result.step ? editRecipe(image, result.step) : effectiveRecipe(image),
-        },
-      });
-      void loadProjects();
-      navigation.replace('PhotoPreview', { imageId: record.id });
-    } catch (e) {
-      Alert.alert('Couldn’t save', friendlyMessage(errorCode(e)));
-    }
-  }, [image, result, repos, loadProjects, navigation]);
+  /** Saves the result as its own photo; then shows it, or opens it in the editor. */
+  const keepResult = useCallback(
+    async (then: 'show' | 'edit' = 'show') => {
+      if (!image || !result || !repos) {
+        return;
+      }
+      try {
+        const record = await repos.images.add({
+          projectId: image.projectId,
+          path: result.outputPath,
+          source: 'export',
+          width: result.width,
+          height: result.height,
+          sizeBytes: result.sizeBytes,
+          mimeType: 'image/jpeg',
+          capturedAt: image.capturedAt,
+          metadata: {
+            ...enhancedCopyMetadata(
+              image,
+              result.kind,
+              result.kind === 'spotlight' ? null : result.report,
+              result.cleanPath,
+            ),
+            ...(result.kind === 'spotlight' ? { portrait: result.report } : {}),
+            ...(result.kind === 'transform' && result.portrait ? { portrait: result.portrait } : {}),
+            ...(result.kind === 'look' || (result.kind === 'transform' && transformPlan(image).look)
+              ? { look: true }
+              : {}),
+            // What was done, so Transform can always start over from the untouched photo.
+            recipe: result.step ? editRecipe(image, result.step) : effectiveRecipe(image),
+          },
+        });
+        void loadProjects();
+        if (then === 'edit') {
+          navigation.replace('Editor', { imageId: record.id });
+        } else {
+          navigation.replace('PhotoPreview', { imageId: record.id });
+        }
+      } catch (e) {
+        Alert.alert('Couldn’t save', friendlyMessage(errorCode(e)));
+      }
+    },
+    [image, result, repos, loadProjects, navigation],
+  );
 
   const discardResult = useCallback(async () => {
     if (result) {
@@ -648,14 +657,23 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         ) : null}
 
         {result ? (
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Button label="Keep" icon="check" onPress={() => void keepResult()} style={{ flex: 1 }} />
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Button label="Keep" icon="check" onPress={() => void keepResult()} style={{ flex: 1 }} />
+              <Button
+                label="Discard"
+                variant="glass"
+                icon="close"
+                onPress={() => void discardResult()}
+                style={{ flex: 1 }}
+              />
+            </View>
             <Button
-              label="Discard"
+              label="Keep and edit photo"
+              icon="sliders"
               variant="glass"
-              icon="close"
-              onPress={() => void discardResult()}
-              style={{ flex: 1 }}
+              onPress={() => void keepResult('edit')}
+              testID="keep-and-edit"
             />
           </View>
         ) : (
@@ -841,6 +859,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           testID="edit-photo"
         />
         <Button label="Share" variant="glass" icon="share" onPress={() => void share()} />
+        {entitlements.plan !== 'premium' && !result ? <WatermarkUnlock photoPath={cleanOf(image)} /> : null}
         <Button label="Delete photo" variant="danger" icon="trash" onPress={confirmDelete} />
       </View>
       <VibeSheet

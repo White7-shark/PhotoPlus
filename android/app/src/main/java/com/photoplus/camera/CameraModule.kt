@@ -27,7 +27,9 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
     DeviceInfo.isLowRamDevice(reactContext),
   )
   private val tier = CapturePolicy.tierFor(budget.engineBytes)
-  private val processor = CaptureProcessor(AppPaths(reactContext).captures, tier)
+  private val processor = AppPaths(reactContext).let { paths ->
+    CaptureProcessor(paths.captures, tier, com.photoplus.edit.PropArt(reactContext.assets, paths.customProps))
+  }
 
   init {
     // The engine budget is process-wide; set it here too in case the engine
@@ -55,6 +57,10 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
       }
       promise.resolve((caps + mapOf("tier" to tier.name.lowercase(), "capturePlans" to plans)).toWritableMap())
     }
+  }
+
+  override fun setFaceTracking(enabled: Boolean) {
+    main.post { CameraController.setFaceTracking(enabled) }
   }
 
   override fun configure(config: ReadableMap) {

@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import com.facebook.react.uimanager.ViewManager
+import com.photoplus.ads.AdsModule
 import com.photoplus.camera.CameraModule
 import com.photoplus.camera.CameraPreviewManager
 import com.photoplus.device.DeviceModule
@@ -22,11 +23,12 @@ class PhotoPlusPackage : BaseReactPackage() {
     DatabaseModule.NAME -> DatabaseModule(reactContext)
     StorageModule.NAME -> StorageModule(reactContext)
     CameraModule.NAME -> CameraModule(reactContext)
+    AdsModule.NAME -> AdsModule(reactContext)
     else -> null
   }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
-    listOf(DeviceModule.NAME, EngineModule.NAME, DatabaseModule.NAME, StorageModule.NAME, CameraModule.NAME)
+    listOf(DeviceModule.NAME, EngineModule.NAME, DatabaseModule.NAME, StorageModule.NAME, CameraModule.NAME, AdsModule.NAME)
       .associateWith { name ->
         ReactModuleInfo(
           name = name,

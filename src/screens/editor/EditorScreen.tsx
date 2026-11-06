@@ -17,7 +17,7 @@ import { errorCode } from '../../native';
 import { toggleSpotlightPoint } from '../../services/camera/model';
 import type { ImageRecord } from '../../services/database/repositories/ImagesRepository';
 import { createId } from '../../services/database/ids';
-import { PROPS, propAsset, type PropCategory, type PropDef } from '../../services/edit/catalog';
+import { allProps, findProp, propSource, type PropCategory, type PropDef } from '../../services/edit/catalog';
 import { EMPTY_DOCUMENT, geometryOf, hasEdits, isEditDocument, type EditDocument } from '../../services/edit/document';
 import { canRedo, canUndo, historyReducer, startHistory } from '../../services/edit/history';
 import {
@@ -59,6 +59,7 @@ import {
   TransformEditPanel,
   type ToolId,
 } from './panels';
+import { WatermarkUnlock } from '../WatermarkUnlock';
 import { WatermarkPanel } from './WatermarkPanel';
 
 const log = createLogger('editor');
@@ -118,7 +119,24 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
   const counter = useRef(0);
   const spec = settings.watermark;
   const presets = settings.brandingPresets;
+  const customProps = settings.customProps;
+  const propList = useMemo(() => allProps(customProps), [customProps]);
+  const [frameThumbs, setFrameThumbs] = useState<Record<string, string>>({});
   const premiumPlan = entitlements.plan === 'premium';
+
+  // ---- frame previews: every frame around this photo, made once per photo -----
+  useEffect(() => {
+    if (tool !== 'frames' || !base) return;
+    let live = true;
+    void getProcessingService()
+      .frameThumbnails(base)
+      .then(t => {
+        if (live) setFrameThumbs(t);
+      });
+    return () => {
+      live = false;
+    };
+  }, [tool, base]);
 
   // ---- load -------------------------------------------------------------------
   useEffect(() => {
@@ -249,7 +267,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
     setSelectedProp(doc.props.length);
   };
   const selected = selectedProp !== null ? doc.props[selectedProp] : undefined;
-  const selectedDef = selected ? PROPS.find(p => p.id === selected.id) : undefined;
+  const selectedDef = selected ? findProp(selected.id, customProps) : undefined;
   const setSelected = (patch: Partial<PropPlacement>, group?: string) => {
     if (selectedProp === null || !selected) return;
     const next = doc.props.map((p, i) => (i === selectedProp ? { ...p, ...patch } : p));
@@ -279,7 +297,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
       const aspect = preview.width / preview.height;
       const hit = [...doc.props.keys()].reverse().find(i => {
         const q = doc.props[i];
-        const def = PROPS.find(d => d.id === q.id);
+        const def = findProp(q.id, customProps);
         const halfH = (q.width * (def?.aspect ?? 0.5) * aspect) / 2;
         return Math.abs(p.x - q.cx) <= q.width / 2 && Math.abs(p.y - q.cy) <= halfH;
       });
@@ -496,7 +514,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
 
   const shownCrop = live?.crop !== undefined ? live.crop : doc.crop;
   const liveProp = live?.prop ?? (tool === 'props' ? selected : undefined);
-  const liveDef = liveProp ? PROPS.find(p => p.id === liveProp.id) : undefined;
+  const liveDef = liveProp ? findProp(liveProp.id, customProps) : undefined;
   const spotPts: { x: number; y: number }[] = [];
   const raw = doc.spotlight?.points ?? [];
   for (let i = 0; i + 1 < raw.length; i += 2) spotPts.push({ x: raw[i], y: raw[i + 1] });
@@ -659,7 +677,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
               {liveProp && liveDef ? (
                 <Image
                   pointerEvents="none"
-                  source={{ uri: propAsset(liveProp.id) }}
+                  source={{ uri: propSource(liveDef) }}
                   resizeMode="stretch"
                   style={{
                     position: 'absolute',
@@ -793,6 +811,8 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
           ) : null}
           {tool === 'props' ? (
             <PropsPanel
+              props={propList}
+              onCreate={() => navigation.navigate('CreateProp')}
               category={propCategory}
               onCategory={setPropCategory}
               selected={
@@ -820,6 +840,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
           ) : null}
           {tool === 'frames' ? (
             <FramesPanel
+              thumbnails={frameThumbs}
               doc={doc}
               update={update}
               commit={commit}
@@ -868,6 +889,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
             testID="editor-gallery"
           />
         </View>
+        {!premiumPlan && base ? <WatermarkUnlock photoPath={base} /> : null}
         <AppText variant="caption" tone="secondary" align="center">
           {premiumPlan
             ? spec.enabled

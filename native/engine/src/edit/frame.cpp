@@ -82,6 +82,34 @@ std::vector<V2> polygonFor(Shape shape, float hw, float hh, float param) {
     case Shape::Diamond:
       v = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
       break;
+    case Shape::Octagon:
+      for (int i = 0; i < 8; ++i) {
+        const float a = kPi / 8.0f + static_cast<float>(i) * kPi / 4.0f;
+        v.push_back({std::cos(a), std::sin(a)});
+      }
+      break;
+    case Shape::Scallop: {
+      // A circle with soft waves around its edge (12 lobes).
+      const float amp = std::clamp(param > 0.0f ? param : 0.06f, 0.02f, 0.15f);
+      for (int i = 0; i < 240; ++i) {
+        const float a = static_cast<float>(i) / 240.0f * 2.0f * kPi;
+        const float r = 1.0f + amp * std::cos(12.0f * a);
+        v.push_back({r * std::cos(a), r * std::sin(a)});
+      }
+      break;
+    }
+    case Shape::Sparkle: {
+      // A four-pointed sparkle: the curve |x|^q + |y|^q = 1 with q < 1 has
+      // concave sides that meet in sharp points. Smaller q, slimmer points.
+      const float q = std::clamp(param > 0.0f ? param : 0.62f, 0.4f, 0.95f);
+      for (int i = 0; i < 240; ++i) {
+        const float a = static_cast<float>(i) / 240.0f * 2.0f * kPi;
+        const float c = std::fabs(std::cos(a)), s = std::fabs(std::sin(a));
+        const float r = std::pow(std::pow(c, q) + std::pow(s, q), -1.0f / q);
+        v.push_back({r * std::cos(a), r * std::sin(a)});
+      }
+      break;
+    }
     default:
       break;
   }
@@ -139,7 +167,7 @@ Error frame(const ImageBuffer& photo, ImageBuffer& canvas, const FrameParams& fp
     if (!std::isfinite(v)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Frame parameters must be finite");
   }
   const auto shapeId = static_cast<int32_t>(fp.shape);
-  if (shapeId < 0 || shapeId > 6) return makeError(PP_ERROR_INVALID_ARGUMENT, "Unknown frame shape");
+  if (shapeId < 0 || shapeId > 9) return makeError(PP_ERROR_INVALID_ARGUMENT, "Unknown frame shape");
   if (fp.window[2] <= 0.02f || fp.window[3] <= 0.02f) return makeError(PP_ERROR_INVALID_ARGUMENT, "Frame window is too small");
   const int32_t CW = canvas.width(), CH = canvas.height();
   const float wx = fp.window[0] * static_cast<float>(CW), wy = fp.window[1] * static_cast<float>(CH);

@@ -53,11 +53,22 @@ Error placeProp(ImageBuffer& image, const ImageBuffer& prop, const PropParams& p
                 PropReport* report);
 
 // Frames: the photo shown inside a shape on a designed card.
-enum class Shape : int32_t { Rect = 0, Ellipse = 1, Arch = 2, Star = 3, Heart = 4, Hexagon = 5, Diamond = 6 };
+enum class Shape : int32_t {
+  Rect = 0,
+  Ellipse = 1,
+  Arch = 2,
+  Star = 3,
+  Heart = 4,
+  Hexagon = 5,
+  Diamond = 6,
+  Octagon = 7,
+  Scallop = 8,  // wavy circle; shapeParam = wave depth
+  Sparkle = 9,  // four-pointed sparkle; shapeParam = side curvature (0.4 slim .. 0.95 plump)
+};
 enum class Backdrop : int32_t { Solid = 0, Gradient = 1, BlurredPhoto = 2, Paper = 3 };
 struct FrameParams {
   Shape shape = Shape::Rect;
-  float shapeParam = 0.0f;           // corner radius (rect, fraction of the smaller half size) / inner ratio (star)
+  float shapeParam = 0.0f;           // corner radius (rect) / inner ratio (star) / curvature (sparkle) / wave depth (scallop)
   float rotationDeg = 0.0f;          // tilt of the window
   float window[4] = {0.1f, 0.1f, 0.8f, 0.8f};  // x, y, w, h in canvas fractions
   Backdrop backdrop = Backdrop::Solid;

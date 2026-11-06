@@ -164,7 +164,7 @@ class EditTest {
       assertEquals(16, style.floats(1f, 0f, 0f).size)
       assertEquals(9, style.ints().size)
     }
-    assertEquals(11, FrameStyles.ALL.size)
+    assertEquals(22, FrameStyles.ALL.size)
     assertNull(FrameStyles.byId("nope"))
   }
 }

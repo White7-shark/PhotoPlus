@@ -47,6 +47,11 @@
           android:resource="@xml/shared_paths" />
       </provider>
 
+      <!-- Google Mobile Ads app id (test id unless a real one is configured). -->
+      <meta-data
+        android:name="com.google.android.gms.ads.APPLICATION_ID"
+        android:value="${admobAppId}" />
+
       <!-- Download the subject segmentation model ahead of first use. -->
       <meta-data
         android:name="com.google.mlkit.vision.DEPENDENCIES"

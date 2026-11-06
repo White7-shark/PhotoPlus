@@ -235,8 +235,9 @@ pp_status pp_place_prop(pp_image* image, const pp_image* prop, const pp_prop_par
 
 /* Frames: the photo inside a shape on a designed card. Colours are 0xAARRGGBB. */
 typedef struct pp_frame_params {
-  int32_t shape;        /* 0 rect, 1 ellipse, 2 arch, 3 star, 4 heart, 5 hexagon, 6 diamond */
-  float shape_param;    /* rect corner radius (fraction) / star inner ratio */
+  int32_t shape;        /* 0 rect, 1 ellipse, 2 arch, 3 star, 4 heart, 5 hexagon, 6 diamond, 7 octagon,
+                           8 scallop (wavy circle), 9 sparkle (four-pointed star) */
+  float shape_param;    /* rect corner radius (fraction) / star inner ratio / sparkle curvature / scallop wave depth */
   float rotation_deg;
   float window[4];      /* x, y, w, h: where the photo sits, canvas fractions */
   int32_t backdrop;     /* 0 solid, 1 gradient, 2 blurred photo, 3 paper */

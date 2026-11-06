@@ -27,6 +27,11 @@ export interface Spec extends TurboModule {
   exportImage(jobId: string, request: Object): Promise<Object>;
   /** Faces (for fitting props) in the photo after its turn/straighten/crop. */
   detectFaces(request: Object): Promise<Object>;
+  /** Every frame design around a photo, small (paths by frame id). */
+  frameThumbnails(request: Object): Promise<Object>;
+  /** Premium: cuts the tapped object out of a photo and saves it as a prop. */
+  createCustomProp(jobId: string, request: Object): Promise<Object>;
+  deleteCustomProp(id: string): Promise<boolean>;
   /** The plan held natively ("free" | "premium"). */
   getPlan(): Promise<string>;
   /** Debug builds only: switch plan to test Premium. */
