@@ -136,11 +136,18 @@ int32_t keepBlemishes(Plane& spot, int32_t minArea, int32_t maxArea) {
 // coarse grid (no full-resolution alpha plane is ever stored).
 struct Matte {
   Plane a, b;
+  // Colour matte (edge refinement): coefficients for gamma R, G, B.
+  bool color = false;
+  std::array<Plane, 3> ac;
   float inv = 1.0f;  // grid cells per full-res pixel
-  float at(int32_t x, int32_t y, float luma) const {
+  // Raw (unsharpened) alpha at a pixel of gamma colour (r, g, b).
+  float raw(int32_t x, int32_t y, float r, float g, float bl) const {
     const float fx = (static_cast<float>(x) + 0.5f) * inv - 0.5f, fy = (static_cast<float>(y) + 0.5f) * inv - 0.5f;
-    return smoothstep(0.08f, 0.92f, std::clamp(a.sample(fx, fy) * luma + b.sample(fx, fy), 0.0f, 1.0f));
+    const float v = color ? ac[0].sample(fx, fy) * r + ac[1].sample(fx, fy) * g + ac[2].sample(fx, fy) * bl + b.sample(fx, fy)
+                          : a.sample(fx, fy) * (0.299f * r + 0.587f * g + 0.114f * bl) + b.sample(fx, fy);
+    return std::clamp(v, 0.0f, 1.0f);
   }
+  float at(int32_t x, int32_t y, float r, float g, float bl) const { return smoothstep(0.08f, 0.92f, raw(x, y, r, g, bl)); }
 };
 
 // Area-averaged luma/chroma of a rectangle of the photo on a grid of `f`.
@@ -269,7 +276,9 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
       const float like = std::exp(-0.5f * d2 / (2.5f * 2.5f));
       const float wide = std::exp(-0.5f * d2 / (4.0f * 4.0f));
       const int32_t ix = std::min(W - 1, r.x0 + x * scale + scale / 2), iy = std::min(H - 1, r.y0 + y * scale + scale / 2);
-      const float a = matte.at(ix, iy, Yc.row(y)[x]);
+      float cr_, cg_, cb_;
+      yccToRgb(Yc.row(y)[x], Cb.row(y)[x], Cr.row(y)[x], cr_, cg_, cb_);
+      const float a = matte.at(ix, iy, cr_, cg_, cb_);
       float s = like * smoothstep(0.15f, 0.5f, a);
       s = std::max(s, F->row(y)[x] * wide);
       S->row(y)[x] = s * (1.0f - Pr->row(y)[x]);
@@ -289,7 +298,10 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   // Small faces (group or full-length shots) already show no fine texture:
   // smoothing them would only erase the natural shading that shapes a face,
   // and their "spots" would really be nostrils or eye corners.
-  const float strength = std::clamp(p.retouch, 0.0f, 1.0f) * smoothstep(20.0f, 90.0f, faceScaleFull);
+  const float sizeK = smoothstep(20.0f, 90.0f, faceScaleFull);
+  const float sSmooth = std::clamp(p.smoothAmount(), 0.0f, 1.0f) * sizeK;
+  const float sHeal = std::clamp(p.blemishAmount(), 0.0f, 1.0f) * sizeK;
+  const float sEven = std::clamp(p.evenAmount(), 0.0f, 1.0f) * sizeK;
   const bool healSpots = faceScaleFull >= 28.0f;
 
   // 1. Spots: small dark or red blemishes against the surrounding SKIN only
@@ -324,7 +336,7 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
     const float rMax = 0.03f * faceScale;
     const int32_t maxArea = std::max(12, static_cast<int32_t>(3.14159f * rMax * rMax));
     const int32_t n = keepBlemishes(*spot, std::max(6, rs * rs), maxArea);
-    res.spots = strength > 0.0f && healSpots ? n : 0;
+    res.spots = sHeal > 0.0f && healSpots ? n : 0;
   }
   auto spotD = blurLarge(*spot, 0.6f * static_cast<float>(rs), token);
   if (!spotD) return failure(spotD.error());
@@ -343,7 +355,7 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
     if (!nb) return nb.error();
     auto wb = blurLarge(*wgt, healSigma, token);
     if (!wb) return wb.error();
-    const float m = std::min(1.0f, strength * 2.0f);
+    const float m = std::min(1.0f, sHeal * 2.0f);
     for (size_t i = 0; i < ch_.size(); ++i) {
       const float healed = wb->data()[i] > 1e-3f ? nb->data()[i] / wb->data()[i] : ch_.data()[i];
       ch_.data()[i] += (healed - ch_.data()[i]) * spotD->data()[i] * m;
@@ -354,7 +366,7 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   auto Cbh = clonePlane(Cb);
   auto Crh = clonePlane(Cr);
   if (!Yh || !Cbh || !Crh) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory to retouch"));
-  if (strength > 0.0f) {
+  if (sHeal > 0.0f) {
     if (Error e = heal(*Yh); e.status != PP_OK) return failure(e);
     if (Error e = heal(*Cbh); e.status != PP_OK) return failure(e);
     if (Error e = heal(*Crh); e.status != PP_OK) return failure(e);
@@ -363,10 +375,10 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   // 2. Smooth: edge-preserving base + a share of real texture (not plastic).
   auto base = clonePlane(*Yh);
   if (!base) return failure(base.error());
-  if (strength > 0.0f) {
+  if (sSmooth > 0.0f) {
     if (Error e = enhance::denoiseGuided(*base, rs, std::max(0.07f * mY, 0.01f) * std::max(0.07f * mY, 0.01f), 0.0f, token); e.status != PP_OK) return failure(e);
   }
-  const float keep = 1.0f - 0.9f * strength;
+  const float keep = 1.0f - 0.9f * sSmooth;
 
   // 3. Even blotches toward the person's own tone (never a different tone).
   auto CbS = blurLarge(*Cbh, 2.0f * static_cast<float>(rs), token);
@@ -375,7 +387,7 @@ Result<SkinResult> retouchSkin(const ImageBuffer& image, const Matte& matte, con
   if (!CrS2) return failure(CrS2.error());
   auto YS = blurLarge(*Yh, 2.0f * static_cast<float>(rs), token);
   if (!YS) return failure(YS.error());
-  const float even = 0.65f * strength;
+  const float even = 0.65f * sEven;
   const float lift = 0.07f * std::clamp(p.brighten, 0.0f, 1.0f);
 
   // Fully-retouched values; the composite blends them in by the skin weight.
@@ -518,7 +530,7 @@ Result<Bokeh> depthBokeh(const ImageBuffer& image, const Matte& matte, const Pla
   bool done = parallelFor(h, token, [&](int32_t begin, int32_t end) {
     for (int32_t y = begin; y < end; ++y)
       for (int32_t x = 0; x < w; ++x) {
-        float r = 0, g = 0, b = 0, luma = 0;
+        float r = 0, g = 0, b = 0, luma = 0, gr = 0, gg = 0, gb = 0;
         int32_t n = 0;
         for (int32_t yy = y * d; yy < std::min(H, (y + 1) * d); ++yy) {
           const uint8_t* row = image.row(yy);
@@ -528,6 +540,9 @@ Result<Bokeh> depthBokeh(const ImageBuffer& image, const Matte& matte, const Pla
             g += lut[px[o.g]];
             b += lut[px[o.b]];
             luma += 0.299f * px[o.r] + 0.587f * px[o.g] + 0.114f * px[o.b];
+            gr += px[o.r];
+            gg += px[o.g];
+            gb += px[o.b];
           }
         }
         const float inv = 1.0f / static_cast<float>(n);
@@ -535,7 +550,8 @@ Result<Bokeh> depthBokeh(const ImageBuffer& image, const Matte& matte, const Pla
         g *= inv;
         b *= inv;
         Yg->row(y)[x] = luma * inv / 255.0f;
-        A->row(y)[x] = matte.at(std::min(W - 1, x * d + d / 2), std::min(H - 1, y * d + d / 2), Yg->row(y)[x]);
+        const float g255 = inv / 255.0f;
+        A->row(y)[x] = matte.at(std::min(W - 1, x * d + d / 2), std::min(H - 1, y * d + d / 2), gr * g255, gg * g255, gb * g255);
         // Highlights bloom into "bokeh" discs, as they do through a real lens.
         const float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
         const float s = smoothstep(0.7f, 1.0f, lum);
@@ -740,6 +756,73 @@ Result<Bokeh> depthBokeh(const ImageBuffer& image, const Matte& matte, const Pla
   return out;
 }
 
+// The background's own colour near the subject, in linear light: a blur of
+// background pixels only (normalised convolution weighted by 1 - alpha), so
+// the subject's colour never enters it. Used to decontaminate edge pixels.
+struct BackgroundEstimate {
+  std::array<Plane, 3> c;
+  int32_t factor = 1;
+};
+
+Result<BackgroundEstimate> backgroundEstimate(const ImageBuffer& image, const Matte& matte, float shortSide,
+                                              const CancellationToken* token) {
+  BackgroundEstimate out;
+  const int32_t d = std::max<int32_t>(1, static_cast<int32_t>(std::lround(shortSide / 240.0f)));
+  out.factor = d;
+  const int32_t W = image.width(), H = image.height();
+  const int32_t w = (W + d - 1) / d, h = (H + d - 1) / d;
+  std::array<Plane, 3> num;
+  auto wgt = Plane::allocate(w, h);
+  if (!wgt) return failure(wgt.error());
+  for (auto& q : num) {
+    auto pl = Plane::allocate(w, h);
+    if (!pl) return failure(pl.error());
+    q = std::move(pl).value();
+  }
+  float lut[256];
+  for (int i = 0; i < 256; ++i) lut[i] = toLinear(static_cast<float>(i) / 255.0f);
+  const Rgb o = offsets(image);
+  const bool done = parallelFor(h, token, [&](int32_t begin, int32_t end) {
+    for (int32_t y = begin; y < end; ++y)
+      for (int32_t x = 0; x < w; ++x) {
+        float r = 0, g = 0, b = 0, wsum = 0;
+        for (int32_t yy = y * d; yy < std::min(H, (y + 1) * d); ++yy) {
+          const uint8_t* row = image.row(yy);
+          for (int32_t xx = x * d; xx < std::min(W, (x + 1) * d); ++xx) {
+            const uint8_t* px = row + xx * 4;
+            const float a = matte.raw(xx, yy, px[o.r] / 255.0f, px[o.g] / 255.0f, px[o.b] / 255.0f);
+            const float wv = (1.0f - a) * (1.0f - a) * (1.0f - a);
+            r += wv * lut[px[o.r]];
+            g += wv * lut[px[o.g]];
+            b += wv * lut[px[o.b]];
+            wsum += wv;
+          }
+        }
+        num[0].row(y)[x] = r;
+        num[1].row(y)[x] = g;
+        num[2].row(y)[x] = b;
+        wgt->row(y)[x] = wsum;
+      }
+  });
+  if (!done) return failure(cancelledError());
+  // Near the edge: a small window; deep inside the subject: wide, so every
+  // cell finds some background to borrow from.
+  auto wn = blurLarge(*wgt, 3.0f, token), ww = blurLarge(*wgt, 14.0f, token);
+  if (!wn) return failure(wn.error());
+  if (!ww) return failure(ww.error());
+  for (int c = 0; c < 3; ++c) {
+    auto bn = blurLarge(num[c], 3.0f, token), bw = blurLarge(num[c], 14.0f, token);
+    if (!bn) return failure(bn.error());
+    if (!bw) return failure(bw.error());
+    for (size_t i = 0; i < num[c].size(); ++i) {
+      const float sn = wn->data()[i], sw = ww->data()[i];
+      num[c].data()[i] = sn > 0.05f ? bn->data()[i] / sn : sw > 1e-4f ? bw->data()[i] / sw : 0.0f;
+    }
+    out.c[c] = std::move(num[c]);
+  }
+  return out;
+}
+
 }  // namespace
 
 Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* faces, const ImageBuffer* protect,
@@ -755,6 +838,12 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
   p.retouch = std::clamp(p.retouch, 0.0f, 1.0f);
   p.brighten = std::clamp(p.brighten, 0.0f, 1.0f);
   p.pop = std::clamp(p.pop, 0.0f, 1.0f);
+  if (p.smooth >= 0.0f) p.smooth = std::min(p.smooth, 1.0f);
+  if (p.blemish >= 0.0f) p.blemish = std::min(p.blemish, 1.0f);
+  if (p.even >= 0.0f) p.even = std::min(p.even, 1.0f);
+  p.bgLight = std::clamp(p.bgLight, -1.0f, 1.0f);
+  p.bgColor = std::clamp(p.bgColor, -1.0f, 1.0f);
+  p.edge = std::clamp(p.edge, 0.0f, 1.0f);
   const int32_t W = image.width(), H = image.height();
   const float shortSide = static_cast<float>(std::min(W, H));
   const Rect full{0, 0, W, H};
@@ -773,11 +862,15 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
   //    coefficients live on a coarse grid; alpha is evaluated per pixel).
   Matte matte;
   {
-    const auto radius = std::max<int32_t>(4, static_cast<int32_t>(shortSide / 150.0f));
+    // Edge refinement narrows the window (finer strands survive) and solves
+    // with the colour guide, which separates hair from a background of
+    // similar brightness but another hue.
+    const auto radius = std::max<int32_t>(3, static_cast<int32_t>(shortSide / (150.0f + 110.0f * p.edge)));
     // Coefficients are smooth, so a grid of ~1024 px is plenty; the per-pixel
     // a·I + b evaluation restores full-resolution edges.
     const int32_t s = std::max<int32_t>({1, radius / 4, (std::max(W, H) + 1023) / 1024});
-    auto guide = gridYcc(image, full, s, false, token);
+    const bool colourMatte = p.edge > 0.0f;
+    auto guide = gridYcc(image, full, s, colourMatte, token);
     if (!guide) return guide.error();
     auto coarse = maskPlane(subject);
     if (!coarse) return coarse.error();
@@ -787,15 +880,39 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
     auto b = Plane::allocate(guide->y.width(), guide->y.height());
     if (!a || !b) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
     const int32_t rl = std::max<int32_t>(1, static_cast<int32_t>(std::lround(static_cast<float>(radius) / static_cast<float>(s))));
-    if (Error e = guidedCoefficients(guide->y, *pl, rl, 2e-4f, *a, *b, token); e.status != PP_OK) return e;
-    matte.a = std::move(a).value();
+    if (colourMatte) {
+      const int32_t gw = guide->y.width(), gh = guide->y.height();
+      std::array<Plane, 3> rgb;
+      for (auto& c : rgb) {
+        auto q = Plane::allocate(gw, gh);
+        if (!q) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+        c = std::move(q).value();
+      }
+      for (size_t i = 0; i < guide->y.size(); ++i) {
+        yccToRgb(guide->y.data()[i], guide->cb.data()[i], guide->cr.data()[i], rgb[0].data()[i], rgb[1].data()[i], rgb[2].data()[i]);
+      }
+      std::array<Plane, 3> ac;
+      for (auto& c : ac) {
+        auto q = Plane::allocate(gw, gh);
+        if (!q) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+        c = std::move(q).value();
+      }
+      // Free the luma-only buffers before the larger colour solve.
+      a = Plane::allocate(1, 1);
+      if (Error e = guidedCoefficientsColor({&rgb[0], &rgb[1], &rgb[2]}, *pl, rl, 1e-4f, ac, *b, token); e.status != PP_OK) return e;
+      matte.color = true;
+      matte.ac = std::move(ac);
+    } else {
+      if (Error e = guidedCoefficients(guide->y, *pl, rl, 2e-4f, *a, *b, token); e.status != PP_OK) return e;
+      matte.a = std::move(a).value();
+    }
     matte.b = std::move(b).value();
     matte.inv = 1.0f / static_cast<float>(s);
   }
 
   // 2. Skin (on a face-sized grid).
   SkinResult skin;
-  if (faces != nullptr && !faces->empty() && (p.retouch > 0.0f || p.brighten > 0.0f)) {
+  if (faces != nullptr && !faces->empty() && p.skinWork()) {
     auto F = maskPlane(*faces);
     if (!F) return F.error();
     std::optional<Plane> Pr;
@@ -844,6 +961,19 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
   // Matched (slightly lighter) grain keeps blurred areas from looking
   // plastic next to the real subject; capped so results stay clean.
   const float grainAmt = bokeh ? std::min(0.6f * grain, 0.008f) : 0.0f;
+  // Selective background light and colour, and edge decontamination (only
+  // where the background changes: otherwise the edge already matches it).
+  const bool bgAdjust = p.bgLight != 0.0f || p.bgColor != 0.0f;
+  const bool decon = p.edge > 0.0f && (bokeh.has_value() || bgAdjust);
+  std::optional<BackgroundEstimate> bgEst;
+  if (decon) {
+    auto e = backgroundEstimate(image, matte, shortSide, token);
+    if (!e) return e.error();
+    bgEst = std::move(e).value();
+  }
+  const float bgGain = std::exp2(p.bgLight);
+  const float bgSat = p.bgColor < 0.0f ? 1.0f + p.bgColor : 1.0f + 0.6f * p.bgColor;
+  std::vector<double> rowCleaned(static_cast<size_t>(H), 0.0);
   const float invCf = 1.0f / static_cast<float>(cf);
   std::vector<double> rowCoverage(static_cast<size_t>(H), 0.0);
   const bool done = parallelFor(H, token, [&](int32_t begin, int32_t end) {
@@ -854,7 +984,7 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
         uint8_t* px = row + x * 4;
         float y0, cb, cr;
         rgbToYcc(px[o.r] / 255.0f, px[o.g] / 255.0f, px[o.b] / 255.0f, y0, cb, cr);
-        const float a = matte.at(x, y, y0);
+        const float a = matte.at(x, y, px[o.r] / 255.0f, px[o.g] / 255.0f, px[o.b] / 255.0f);
         cov += a;
         float yv = y0, sv = 0.0f;
         if (skin.active() && skin.rect.contains(x, y)) {
@@ -900,6 +1030,23 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
         }
         float r, g, b;
         yccToRgb(yv, cb, cr, r, g, b);
+        if (bgEst && a > 0.01f && a < 0.99f) {
+          // Edge pixels mix subject and old background: I = aF + (1-a)B.
+          // Recover F (in linear light) so the new background shows no fringe.
+          const float ar = std::max(matte.raw(x, y, px[o.r] / 255.0f, px[o.g] / 255.0f, px[o.b] / 255.0f), 0.35f);
+          const float f = static_cast<float>(bgEst->factor);
+          const float ex = (static_cast<float>(x) + 0.5f) / f - 0.5f, ey = (static_cast<float>(y) + 0.5f) / f - 0.5f;
+          const float wv = p.edge * (1.0f - smoothstep(0.85f, 0.99f, a));
+          auto clean = [&](float c, const Plane& B) {
+            const float L = toLinear(c);
+            const float F = std::clamp((L - (1.0f - ar) * B.sample(ex, ey)) / ar, 0.0f, 1.0f);
+            return toGamma(L + wv * (F - L));
+          };
+          r = clean(r, bgEst->c[0]);
+          g = clean(g, bgEst->c[1]);
+          b = clean(b, bgEst->c[2]);
+          rowCleaned[static_cast<size_t>(y)] += 1.0;
+        }
         if (bokeh) {
           // Back to front: far layer, then the sharp in-focus slab (subject and
           // whatever shares its depth), then anything nearer than the subject.
@@ -916,6 +1063,23 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
           r = layer(r, bokeh->farR, bokeh->nearR);
           g = layer(g, bokeh->farG, bokeh->nearG);
           b = layer(b, bokeh->farB, bokeh->nearB);
+        }
+        if (bgAdjust && a < 1.0f) {
+          // Everything that is not the subject: light in stops (highlights
+          // roll off instead of clipping) and colour around its own luminance.
+          float lr = toLinear(r), lg = toLinear(g), lb = toLinear(b);
+          auto tone = [&](float v) { return bgGain > 1.0f ? v * bgGain / (1.0f + v * (bgGain - 1.0f)) : v * bgGain; };
+          lr = tone(lr);
+          lg = tone(lg);
+          lb = tone(lb);
+          const float Y = 0.2126f * lr + 0.7152f * lg + 0.0722f * lb;
+          lr = std::clamp(Y + bgSat * (lr - Y), 0.0f, 1.0f);
+          lg = std::clamp(Y + bgSat * (lg - Y), 0.0f, 1.0f);
+          lb = std::clamp(Y + bgSat * (lb - Y), 0.0f, 1.0f);
+          const float wbg = 1.0f - a;
+          r += wbg * (toGamma(lr) - r);
+          g += wbg * (toGamma(lg) - g);
+          b += wbg * (toGamma(lb) - b);
         }
         px[o.r] = toByte(r);
         px[o.g] = toByte(g);
@@ -936,6 +1100,9 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* f
     report->blurRadius = bokeh ? blurRadius : 0.0f;
     report->focusDepth = depthInfo.focus;
     report->depthEstimated = depthInfo.estimated;
+    double cleaned = 0.0;
+    for (double c : rowCleaned) cleaned += c;
+    report->edgeCleaned = static_cast<float>(cleaned / n);
   }
   return ok();
 }

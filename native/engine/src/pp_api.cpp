@@ -15,6 +15,7 @@
 
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
+#include "photoplus/face.hpp"
 #include "photoplus/plane.hpp"
 #include "photoplus/edit.hpp"
 #include "photoplus/image.hpp"
@@ -526,6 +527,13 @@ void pp_portrait_default_params(pp_portrait_params* out) {
   out->retouch = d.retouch;
   out->brighten = d.brighten;
   out->pop = d.pop;
+  out->smooth = d.smooth;
+  out->blemish = d.blemish;
+  out->even = d.even;
+  out->bg_light = d.bgLight;
+  out->bg_color = d.bgColor;
+  out->edge = d.edge;
+  std::fill(std::begin(out->reserved), std::end(out->reserved), 0.0f);
 }
 
 pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* faces, const pp_image* protect,
@@ -540,8 +548,14 @@ pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* 
     p.retouch = params->retouch;
     p.brighten = params->brighten;
     p.pop = params->pop;
-    if (!std::isfinite(p.blur) || !std::isfinite(p.retouch) || !std::isfinite(p.brighten) || !std::isfinite(p.pop)) {
-      return fail(PP_ERROR_INVALID_ARGUMENT, "Non-finite portrait parameter");
+    p.smooth = params->smooth;
+    p.blemish = params->blemish;
+    p.even = params->even;
+    p.bgLight = params->bg_light;
+    p.bgColor = params->bg_color;
+    p.edge = params->edge;
+    for (float v : {p.blur, p.retouch, p.brighten, p.pop, p.smooth, p.blemish, p.even, p.bgLight, p.bgColor, p.edge}) {
+      if (!std::isfinite(v)) return fail(PP_ERROR_INVALID_ARGUMENT, "Non-finite portrait parameter");
     }
     photoplus::portrait::Report r;
     photoplus::Error e = photoplus::portrait::apply(image->buffer, subject->buffer, faces ? &faces->buffer : nullptr,
@@ -556,6 +570,47 @@ pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* 
       report->blur_radius = r.blurRadius;
       report->focus_depth = r.focusDepth;
       report->depth_estimated = r.depthEstimated ? 1 : 0;
+      report->edge_cleaned = r.edgeCleaned;
+    }
+    return succeed();
+  });
+}
+
+void pp_face_default_params(pp_face_params* out) {
+  if (out == nullptr) return;
+  *out = pp_face_params{};
+}
+
+pp_status pp_face_adjust(pp_image* image, const pp_face* faces, size_t count, const pp_face_params* params,
+                         const pp_cancel_token* token, pp_face_report* report) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || params == nullptr || (count > 0 && faces == nullptr)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "image and params are required");
+    }
+    if (count > 32) return fail(PP_ERROR_INVALID_ARGUMENT, "At most 32 faces");
+    std::vector<photoplus::portrait::FaceLandmarks> lm(count);
+    for (size_t i = 0; i < count; ++i) {
+      std::copy(std::begin(faces[i].points), std::end(faces[i].points), lm[i].points.begin());
+      lm[i].detailed = faces[i].detailed != 0;
+    }
+    photoplus::portrait::FaceParams p;
+    p.eyes = params->eyes;
+    p.teeth = params->teeth;
+    p.lips = params->lips;
+    p.underEye = params->under_eye;
+    p.shine = params->shine;
+    p.slim = params->slim;
+    p.faceLight = params->face_light;
+    p.studio = params->studio_light;
+    p.lightAngle = params->light_angle;
+    photoplus::portrait::FaceReport r;
+    const photoplus::Error e = photoplus::portrait::adjustFaces(image->buffer, lm, p, token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (report != nullptr) {
+      *report = pp_face_report{};
+      report->faces = r.faces;
+      report->adjusted = r.adjusted;
+      report->light_gain = r.lightGain;
     }
     return succeed();
   });

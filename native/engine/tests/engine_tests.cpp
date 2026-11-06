@@ -66,7 +66,7 @@ uint64_t liveBytes() {
 
 }  // namespace
 
-TEST(version_is_reported) { EXPECT_TRUE(std::strcmp(pp_version(), "0.2.0") == 0); }
+TEST(version_is_reported) { EXPECT_TRUE(std::strcmp(pp_version(), "0.3.0") == 0); }
 
 TEST(create_rejects_invalid_dimensions) {
   pp_image* img = nullptr;

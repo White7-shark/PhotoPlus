@@ -41,6 +41,66 @@ Error guidedCoefficients(const Plane& I, const Plane& p, int32_t r, float eps, P
   return boxBlur(*mIP, meanB, r, token);
 }
 
+// Colour guided filter (He et al., section 3.5): with three guide channels a
+// boundary is found wherever colour changes, even where brightness does not
+// (dark hair against a dark background of another hue). Per pixel the 3x3
+// guide covariance (+ eps) is inverted; out = a·I + b.
+Error guidedCoefficientsColor(const std::array<const Plane*, 3>& I, const Plane& p, int32_t r, float eps,
+                              std::array<Plane, 3>& meanA, Plane& meanB, const CancellationToken* token) {
+  const int32_t w = p.width(), h = p.height();
+  const size_t n = p.size();
+  auto alloc = [&]() { return Plane::allocate(w, h); };
+  std::array<Result<Plane>, 3> mI{alloc(), alloc(), alloc()}, mIp{alloc(), alloc(), alloc()};
+  std::array<Result<Plane>, 6> cov{alloc(), alloc(), alloc(), alloc(), alloc(), alloc()};  // rr rg rb gg gb bb
+  auto mP = alloc(), tmp = alloc();
+  for (auto* q : {&mI[0], &mI[1], &mI[2], &mIp[0], &mIp[1], &mIp[2], &mP, &tmp}) {
+    if (!*q) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+  }
+  for (auto& q : cov)
+    if (!q) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+  if (Error e = boxBlur(p, *mP, r, token); e.status != PP_OK) return e;
+  for (int c = 0; c < 3; ++c) {
+    if (Error e = boxBlur(*I[c], *mI[c], r, token); e.status != PP_OK) return e;
+    for (size_t i = 0; i < n; ++i) tmp->data()[i] = I[c]->data()[i] * p.data()[i];
+    if (Error e = boxBlur(*tmp, *mIp[c], r, token); e.status != PP_OK) return e;
+  }
+  const int pairs[6][2] = {{0, 0}, {0, 1}, {0, 2}, {1, 1}, {1, 2}, {2, 2}};
+  for (int k = 0; k < 6; ++k) {
+    const Plane& A = *I[pairs[k][0]];
+    const Plane& B = *I[pairs[k][1]];
+    for (size_t i = 0; i < n; ++i) tmp->data()[i] = A.data()[i] * B.data()[i];
+    if (Error e = boxBlur(*tmp, *cov[k], r, token); e.status != PP_OK) return e;
+  }
+  if (isCancelled(token)) return cancelledError();
+  // a (3 channels) overwrites mIp; b overwrites mP.
+  for (size_t i = 0; i < n; ++i) {
+    const float m0 = mI[0]->data()[i], m1 = mI[1]->data()[i], m2 = mI[2]->data()[i], mp = mP->data()[i];
+    const float s00 = cov[0]->data()[i] - m0 * m0 + eps, s01 = cov[1]->data()[i] - m0 * m1,
+                s02 = cov[2]->data()[i] - m0 * m2, s11 = cov[3]->data()[i] - m1 * m1 + eps,
+                s12 = cov[4]->data()[i] - m1 * m2, s22 = cov[5]->data()[i] - m2 * m2 + eps;
+    const float c0 = mIp[0]->data()[i] - m0 * mp, c1 = mIp[1]->data()[i] - m1 * mp, c2 = mIp[2]->data()[i] - m2 * mp;
+    // Inverse of the symmetric 3x3 matrix via cofactors.
+    const float i00 = s11 * s22 - s12 * s12, i01 = s02 * s12 - s01 * s22, i02 = s01 * s12 - s02 * s11;
+    const float i11 = s00 * s22 - s02 * s02, i12 = s01 * s02 - s00 * s12, i22 = s00 * s11 - s01 * s01;
+    const float det = s00 * i00 + s01 * i01 + s02 * i02;
+    float a0 = 0, a1 = 0, a2 = 0;
+    if (std::fabs(det) > 1e-12f) {
+      const float inv = 1.0f / det;
+      a0 = (i00 * c0 + i01 * c1 + i02 * c2) * inv;
+      a1 = (i01 * c0 + i11 * c1 + i12 * c2) * inv;
+      a2 = (i02 * c0 + i12 * c1 + i22 * c2) * inv;
+    }
+    mIp[0]->data()[i] = a0;
+    mIp[1]->data()[i] = a1;
+    mIp[2]->data()[i] = a2;
+    mP->data()[i] = mp - a0 * m0 - a1 * m1 - a2 * m2;
+  }
+  for (int c = 0; c < 3; ++c) {
+    if (Error e = boxBlur(*mIp[c], meanA[c], r, token); e.status != PP_OK) return e;
+  }
+  return boxBlur(*mP, meanB, r, token);
+}
+
 }  // namespace detail
 
 Result<Plane> refineMask(const Plane& coarse, const Plane& guide, int32_t radius, float eps,

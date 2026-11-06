@@ -3,6 +3,7 @@
 // Small shared helpers for the portrait and style tools.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 
@@ -143,6 +144,11 @@ inline Result<Plane> lumaOf(const ImageBuffer& img, const CancellationToken* tok
 // output = mean(a)·I + mean(b). Defined in matte.cpp.
 Error guidedCoefficients(const Plane& I, const Plane& p, int32_t r, float eps, Plane& meanA, Plane& meanB,
                          const CancellationToken* token);
+
+// The same with a colour guide (three planes, e.g. gamma R, G, B): out =
+// meanA[0]·R + meanA[1]·G + meanA[2]·B + meanB. Defined in matte.cpp.
+Error guidedCoefficientsColor(const std::array<const Plane*, 3>& I, const Plane& p, int32_t r, float eps,
+                              std::array<Plane, 3>& meanA, Plane& meanB, const CancellationToken* token);
 
 inline uint8_t toByte(float v) { return static_cast<uint8_t>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f)); }
 

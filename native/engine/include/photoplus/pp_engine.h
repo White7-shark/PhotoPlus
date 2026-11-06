@@ -28,7 +28,7 @@ extern "C" {
 #endif
 
 #define PP_ENGINE_VERSION_MAJOR 0
-#define PP_ENGINE_VERSION_MINOR 2
+#define PP_ENGINE_VERSION_MINOR 3
 #define PP_ENGINE_VERSION_PATCH 0
 
 typedef enum pp_status {
@@ -369,9 +369,20 @@ pp_status pp_focus_peaking(const uint8_t* luma, int32_t width, int32_t height, i
 
 typedef struct pp_portrait_params {
   float blur;     /* background blur 0..1 (0 = none) */
-  float retouch;  /* skin smoothing and spot removal 0..1 */
+  float retouch;  /* skin smoothing and spot removal 0..1 (the Glow presets) */
   float brighten; /* gentle lift of the subject's light and skin 0..1 */
   float pop;      /* subject clarity and separation 0..1 */
+  /* Advanced skin (Phase 5), 0..1; negative = follow `retouch`. */
+  float smooth;  /* texture softening (a share of real texture always stays) */
+  float blemish; /* spot healing */
+  float even;    /* blotch evening toward the person's own tone */
+  /* Selective background, -1..1 (0 = unchanged). */
+  float bg_light; /* in stops; highlights roll off */
+  float bg_color; /* -1 = black and white ... +1 = richer */
+  /* Edge refinement 0..1: colour matte (hair against similar-brightness
+   * backgrounds) and colour decontamination of edge pixels. */
+  float edge;
+  float reserved[5];
 } pp_portrait_params;
 
 typedef struct pp_portrait_report {
@@ -381,6 +392,8 @@ typedef struct pp_portrait_report {
   float blur_radius; /* largest blur radius, pixels */
   float focus_depth; /* the subject's depth, 0 (far) .. 1 (near) */
   int32_t depth_estimated; /* 1 when no depth map was given */
+  float edge_cleaned;      /* fraction of the frame whose edge colour was decontaminated */
+  float reserved[3];
 } pp_portrait_report;
 
 void pp_portrait_default_params(pp_portrait_params* out);
@@ -395,6 +408,59 @@ void pp_portrait_default_params(pp_portrait_params* out);
 pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* faces, const pp_image* protect,
                       const pp_image* depth, const pp_portrait_params* params, const pp_cancel_token* token,
                       pp_portrait_report* report);
+
+/* ---- Faces (Phase 5) -----------------------------------------------------
+ * Landmarks of one face, normalised 0..1 in the image (x, y pairs), in the
+ * layout of on-device face contour detection. Index ranges: */
+#define PP_FACE_OVAL 0                 /* 36 points around the face */
+#define PP_FACE_LEFT_BROW_TOP 36       /* 5 */
+#define PP_FACE_LEFT_BROW_BOTTOM 41    /* 5 */
+#define PP_FACE_RIGHT_BROW_TOP 46      /* 5 */
+#define PP_FACE_RIGHT_BROW_BOTTOM 51   /* 5 */
+#define PP_FACE_LEFT_EYE 56            /* 16 around the eye opening */
+#define PP_FACE_RIGHT_EYE 72           /* 16 */
+#define PP_FACE_UPPER_LIP_TOP 88       /* 11, corner to corner */
+#define PP_FACE_UPPER_LIP_BOTTOM 99    /* 9 */
+#define PP_FACE_LOWER_LIP_TOP 108      /* 9 */
+#define PP_FACE_LOWER_LIP_BOTTOM 117   /* 9 */
+#define PP_FACE_NOSE_BRIDGE 126        /* 2 */
+#define PP_FACE_NOSE_BOTTOM 128        /* 3 */
+#define PP_FACE_POINTS 131
+
+typedef struct pp_face {
+  float points[PP_FACE_POINTS * 2];
+  int32_t detailed; /* 1: every contour measured; 0: approximated from a few landmarks */
+  float roll;       /* head tilt in degrees (informational) */
+  float yaw;        /* head turn in degrees (informational) */
+  float reserved[5];
+} pp_face;
+
+/* Face-precise adjustments, all 0..1 (0 = off) unless noted. */
+typedef struct pp_face_params {
+  float eyes;         /* brighter whites, clearer irises */
+  float teeth;        /* whiter teeth (inside the open mouth only) */
+  float lips;         /* richer lip colour and definition */
+  float under_eye;    /* softens dark circles toward the cheek's own tone */
+  float shine;        /* tames shiny highlights on the skin */
+  float slim;         /* gently narrows the jaw and cheeks (a few % at most) */
+  float face_light;   /* opens shadows on the face; lifts a backlit face */
+  float studio_light; /* soft directional key light shaped to the face */
+  float light_angle;  /* studio light from -1 (picture left) .. 1 (right) */
+  float reserved[7];
+} pp_face_params;
+
+typedef struct pp_face_report {
+  int32_t faces;     /* faces given */
+  int32_t adjusted;  /* faces large enough to adjust */
+  float light_gain;  /* face exposure gain applied (1 = none), largest face */
+  float reserved[5];
+} pp_face_report;
+
+void pp_face_default_params(pp_face_params* out); /* all off */
+/* Adjusts each face in `image` (RGBA8/BGRA8) in place. Faces smaller than
+ * ~24 px are left alone. Landmarks outside the image are allowed. */
+pp_status pp_face_adjust(pp_image* image, const pp_face* faces, size_t count, const pp_face_params* params,
+                         const pp_cancel_token* token, pp_face_report* report);
 
 /* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
  * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */
