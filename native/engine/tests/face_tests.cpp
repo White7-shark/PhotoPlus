@@ -48,6 +48,7 @@ struct FaceOptions {
   bool darkCircles = true;
   bool sideShadow = false;
   bool backlit = false;
+  bool whiteWall = false;  // a bright background, but the face is lit from the front
 };
 
 // A head-and-shoulders photo in a 240x300 design space scaled by k, with
@@ -64,7 +65,7 @@ struct Face {
   Face(Rgbf skin, FaceOptions o, int scale = 2, unsigned seed = 3) : k(scale), w(240 * scale), h(300 * scale) {
     px.resize(static_cast<size_t>(w) * h);
     region.assign(px.size(), 0);
-    const Rgbf bg = o.backlit ? Rgbf{0.92f, 0.94f, 0.97f} : Rgbf{0.32f, 0.42f, 0.36f};
+    const Rgbf bg = (o.backlit || o.whiteWall) ? Rgbf{0.92f, 0.94f, 0.97f} : Rgbf{0.32f, 0.42f, 0.36f};
     const float light = o.backlit ? 0.45f : 1.0f;
     for (int y = 0; y < h; ++y)
       for (int x = 0; x < w; ++x) {
@@ -450,6 +451,21 @@ TEST(face_light_lifts_a_backlit_face_whatever_the_skin_tone_but_not_a_well_lit_o
     EXPECT_TRUE(std::fabs(hueDeg(c1) - hueDeg(c0)) < 3.0f);
     pp_image_destroy(out);
     pp_image_destroy(ref);
+  }
+  // Deep skin lit from the front in front of a white wall (with a white
+  // shirt): bright surroundings, but the face has its own highlights. This
+  // is a well-exposed photo and must not be lightened.
+  for (const Rgbf& tone : {kTones[0], kTones[1]}) {
+    FaceOptions wall;
+    wall.whiteWall = true;
+    const Face f(tone, wall);
+    pp_face_params p = none();
+    p.face_light = 1.0f;
+    pp_face_report r{};
+    pp_image* out = adjusted(f, p, &r);
+    std::printf("    white wall, tone %.2f: gain %.2f\n", static_cast<double>(tone.r), static_cast<double>(r.light_gain));
+    EXPECT_NEAR(r.light_gain, 1.0, 1e-6);
+    pp_image_destroy(out);
   }
   // Deep skin in an ordinary, evenly lit photo is not "corrected" lighter.
   FaceOptions even;

@@ -142,27 +142,11 @@ Result<Plane> blurred(const Plane& src, float sigma, const CancellationToken* to
 // Highlights roll off instead of clipping when a gain lifts them.
 inline float applyGain(float v, float g) { return g > 1.0f ? v * g / (1.0f + v * (g - 1.0f)) : v * g; }
 
-// The whole photo's brightness at a coarse level (for backlight checks).
-float sceneQuantile(const ImageBuffer& image, float q) {
-  const Rgb o = offsets(image);
-  const int32_t step = std::max<int32_t>(1, std::max(image.width(), image.height()) / 256);
-  std::vector<float> v;
-  for (int32_t y = step / 2; y < image.height(); y += step) {
-    const uint8_t* row = image.row(y);
-    for (int32_t x = step / 2; x < image.width(); x += step) {
-      const uint8_t* p = row + x * 4;
-      v.push_back((0.299f * p[o.r] + 0.587f * p[o.g] + 0.114f * p[o.b]) / 255.0f);
-    }
-  }
-  return quantile(std::move(v), q);
-}
-
 struct Planes {
   Plane y, cb, cr;
 };
 
-Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p, float sceneHi,
-                const CancellationToken* token, FaceReport* report) {
+Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p, const CancellationToken* token, FaceReport* report) {
   const int32_t W = image.width(), H = image.height();
   std::vector<Pt> pts(kFacePoints);
   for (int i = 0; i < kFacePoints; ++i) {
@@ -316,7 +300,6 @@ Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p
     }
   }
   if (skY.size() < 30) return ok();  // too little visible skin to judge
-  const float skinHi = quantile(skY, 0.95f);
   const float skinY = medianOf(skY), skinCb = medianOf(skCb), skinCr = medianOf(skCr);
   std::vector<float> dev;
   dev.reserve(skY.size());
@@ -350,14 +333,29 @@ Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p
   std::fill(gain->data(), gain->data() + gain->size(), 1.0f);
 
   // ---- Low-frequency corrections on the grid --------------------------------
-  // Backlight: a bright scene (sky, window) with the face's own highlights
-  // far below it. Judged on the light, not the skin: a deep skin tone in an
-  // ordinary photo is never "corrected" lighter. At most one stop.
+  // Backlight: judged on the light, never on the skin. Two signs together:
+  //  - the background right around the head (beside and above it, never
+  //    the clothes below) is bright, like a window or sky;
+  //  - the face has no bright highlights. A face lit from the front shows
+  //    highlights (forehead, nose, cheekbones) whatever its tone, so a deep
+  //    skin tone in front of a white wall is not "corrected" lighter.
+  // At most one stop.
   float lightGain = 1.0f;
   if (p.faceLight > 0.0f) {
-    const float faceHiL = toLinear(skinHi), sceneHiL = toLinear(sceneHi);
-    if (sceneHi >= 0.7f && sceneHiL > 2.5f * faceHiL) {
-      lightGain = std::pow(std::clamp(toLinear(0.6f) / std::max(faceHiL, 1e-3f), 1.0f, 2.0f), p.faceLight);
+    std::vector<float> ring;
+    for (int32_t gy = 0; gy < gh; ++gy)
+      for (int32_t gx = 0; gx < gw; ++gx) {
+        const Pt q{static_cast<float>(r.x0) + (static_cast<float>(gx) + 0.5f) * static_cast<float>(g),
+                   static_cast<float>(r.y0) + (static_cast<float>(gy) + 0.5f) * static_cast<float>(g)};
+        const float u = along(q, right) / halfW, v = along(q, down) / halfH;
+        const float d = std::sqrt(u * u + v * v);
+        if (d > 1.2f && d < 1.9f && v < 0.3f) ring.push_back(G.y.row(gy)[gx]);
+      }
+    const float ringHi = quantile(ring, 0.75f);
+    const float faceTop = quantile(skY, 0.98f);
+    const float ringL = toLinear(ringHi), faceTopL = toLinear(faceTop);
+    if (ring.size() >= 20 && ringHi >= 0.75f && faceTop < 0.45f && ringL > 3.0f * faceTopL) {
+      lightGain = std::pow(std::clamp(toLinear(0.55f) / std::max(faceTopL, 1e-3f), 1.0f, 2.0f), p.faceLight);
     }
   }
   if (report != nullptr && report->lightGain == 1.0f) report->lightGain = lightGain;
@@ -617,10 +615,9 @@ Error adjustFaces(ImageBuffer& image, const std::vector<FaceLandmarks>& faces, c
       if (!std::isfinite(v) || std::fabs(v) > 4.0f) return makeError(PP_ERROR_INVALID_ARGUMENT, "Face landmarks must be finite, near the image");
   if (report != nullptr) *report = FaceReport{static_cast<int32_t>(faces.size()), 0, 1.0f};
   if (!p.any() || faces.empty()) return ok();
-  const float sceneHi = sceneQuantile(image, 0.9f);
   for (const auto& f : faces) {
     if (isCancelled(token)) return cancelledError();
-    if (Error e = adjustOne(image, f, p, sceneHi, token, report); e.status != PP_OK) return e;
+    if (Error e = adjustOne(image, f, p, token, report); e.status != PP_OK) return e;
   }
   return ok();
 }

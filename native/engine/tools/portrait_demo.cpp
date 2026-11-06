@@ -7,9 +7,15 @@
 //                 [--protect cx,cy,rx,ry]... [--blur v] [--retouch v] [--brighten v] [--pop v]
 //                 [--look REF.ppm] [--strength v]
 //                 [--subject-mask M.pgm] [--faces-mask F.pgm] [--protect-mask P.pgm] [--depth-mask D.pgm]
+//                 [--smooth v] [--blemish v] [--even v] [--bg-light v] [--bg-color v] [--edge v]
+//                 [--landmarks FACES.txt] [--eyes v] [--teeth v] [--lips v] [--under-eye v] [--shine v]
+//                 [--slim v] [--face-light v] [--studio v] [--light-angle v]
 // Mask files replace taps/ellipses (e.g. masks from an on-device model).
+// FACES.txt holds one face per line: 262 numbers (131 x, y pairs, 0..1) in
+// the PP_FACE_* layout, as produced by face contour detection.
 // Coordinates are normalised to 0..1. Prints a one-line JSON report.
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -132,7 +138,9 @@ int main(int argc, char** argv) {
   std::vector<std::vector<float>> faces, protect;
   pp_portrait_params params{};
   pp_portrait_default_params(&params);
-  std::string look, subjectFile, facesFile, protectFile, depthFile;
+  std::string look, subjectFile, facesFile, protectFile, depthFile, landmarksFile;
+  pp_face_params faceParams{};
+  pp_face_default_params(&faceParams);
   float strength = 0.8f;
   for (; i + 1 < argc; i += 2) {
     const std::string k = argv[i];
@@ -150,6 +158,26 @@ int main(int argc, char** argv) {
     else if (k == "--faces-mask") facesFile = argv[i + 1];
     else if (k == "--protect-mask") protectFile = argv[i + 1];
     else if (k == "--depth-mask") depthFile = argv[i + 1];
+    else if (k == "--smooth") params.smooth = v.at(0);
+    else if (k == "--blemish") params.blemish = v.at(0);
+    else if (k == "--even") params.even = v.at(0);
+    else if (k == "--bg-light") params.bg_light = v.at(0);
+    else if (k == "--bg-color") params.bg_color = v.at(0);
+    else if (k == "--edge") params.edge = v.at(0);
+    else if (k == "--landmarks") landmarksFile = argv[i + 1];
+    else if (k == "--eyes") faceParams.eyes = v.at(0);
+    else if (k == "--teeth") faceParams.teeth = v.at(0);
+    else if (k == "--lips") faceParams.lips = v.at(0);
+    else if (k == "--under-eye") faceParams.under_eye = v.at(0);
+    else if (k == "--shine") faceParams.shine = v.at(0);
+    else if (k == "--slim") faceParams.slim = v.at(0);
+    else if (k == "--face-light") faceParams.face_light = v.at(0);
+    else if (k == "--studio") faceParams.studio_light = v.at(0);
+    else if (k == "--light-angle") faceParams.light_angle = v.at(0);
+    else {
+      std::fprintf(stderr, "unknown or malformed option %s\n", k.c_str());
+      return 2;
+    }
   }
   pp_image_info info{};
   pp_image_get_info(img, &info);
@@ -176,11 +204,30 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "portrait failed: %s\n", pp_last_error_message());
     return 1;
   }
+  pp_face_report fr{};
+  if (!landmarksFile.empty()) {
+    std::vector<pp_face> found;
+    std::ifstream lf(landmarksFile);
+    for (std::string line; std::getline(lf, line);) {
+      const auto v = nums(line.c_str());
+      if (v.size() != PP_FACE_POINTS * 2) continue;
+      pp_face f{};
+      std::copy(v.begin(), v.end(), f.points);
+      f.detailed = 1;
+      found.push_back(f);
+    }
+    if (pp_face_adjust(img, found.data(), found.size(), &faceParams, nullptr, &fr) != PP_OK) {
+      std::fprintf(stderr, "face adjust failed: %s\n", pp_last_error_message());
+      return 1;
+    }
+  }
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   if (!maskOut.empty()) writePgm(maskOut, subject);
   writePpm(argv[2], img);
-  std::printf("{\"ms\":%.1f,\"subject\":%.3f,\"skin\":%.4f,\"spots\":%d,\"blurRadius\":%.1f,\"focus\":%.2f,\"estimated\":%d}\n", ms,
-              r.subject_coverage, r.skin_coverage, r.spots_removed, r.blur_radius, r.focus_depth, r.depth_estimated);
+  std::printf("{\"ms\":%.1f,\"subject\":%.3f,\"skin\":%.4f,\"spots\":%d,\"blurRadius\":%.1f,\"focus\":%.2f,\"estimated\":%d,"
+              "\"edgeCleaned\":%.4f,\"faces\":%d,\"facesAdjusted\":%d,\"lightGain\":%.2f}\n",
+              ms, r.subject_coverage, r.skin_coverage, r.spots_removed, r.blur_radius, r.focus_depth, r.depth_estimated,
+              r.edge_cleaned, fr.faces, fr.adjusted, fr.light_gain);
   pp_image_destroy(subject);
   pp_image_destroy(faceMask);
   pp_image_destroy(protectMask);
