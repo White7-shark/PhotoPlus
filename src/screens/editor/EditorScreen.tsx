@@ -61,11 +61,11 @@ import {
   FramesPanel,
   LooksPanel,
   PropsPanel,
-  RetouchPanel,
   SpotlightEditPanel,
   TransformEditPanel,
   type ToolId,
 } from './panels';
+import { PortraitPanel, SpotlightAdvanced } from './PortraitPanel';
 import { WatermarkUnlock } from '../WatermarkUnlock';
 import { WatermarkPanel } from './WatermarkPanel';
 
@@ -829,8 +829,30 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
               onPremium={() => askPremium('advancedRetouchGrade')}
             />
           ) : null}
-          {tool === 'spotlight' ? <SpotlightEditPanel doc={doc} update={update} /> : null}
-          {tool === 'retouch' ? <RetouchPanel doc={doc} update={update} /> : null}
+          {tool === 'spotlight' ? (
+            <SpotlightEditPanel
+              doc={doc}
+              update={update}
+              advanced={
+                <SpotlightAdvanced
+                  doc={doc}
+                  update={update}
+                  commit={commit}
+                  locked={!can('advancedPortrait').allowed}
+                  onPremium={() => askPremium('advancedPortrait')}
+                />
+              }
+            />
+          ) : null}
+          {tool === 'retouch' ? (
+            <PortraitPanel
+              doc={doc}
+              update={update}
+              commit={commit}
+              locked={!can('advancedPortrait').allowed}
+              onPremium={() => askPremium('advancedPortrait')}
+            />
+          ) : null}
           {tool === 'focus' ? <FocusPanel doc={doc} update={update} commit={commit} /> : null}
           {tool === 'transform' ? (
             <TransformEditPanel

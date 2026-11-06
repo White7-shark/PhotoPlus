@@ -400,19 +400,35 @@ struct WrappedBitmap {
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePortrait(
     JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject faces, jobject protect, jobject depth,
     jfloatArray params, jlong token, jfloatArray reportOut) {
-  constexpr jsize kReport = 6;
-  if (env->GetArrayLength(params) < 4 || env->GetArrayLength(reportOut) < kReport || subject == nullptr) {
+  constexpr jsize kReport = 7;
+  const jsize n = env->GetArrayLength(params);
+  if ((n != 4 && n != 10) || env->GetArrayLength(reportOut) < kReport || subject == nullptr) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad portrait arguments");
     return;
   }
-  jfloat p[4];
-  env->GetFloatArrayRegion(params, 0, 4, p);
+  // 4 values: blur, retouch, brighten, pop (the advanced controls follow the
+  // engine defaults); 10 adds smooth, blemish, even, bg light, bg colour, edge.
+  jfloat p[10];
+  env->GetFloatArrayRegion(params, 0, n, p);
   WrappedBitmap img, subj, fac, prot, dep;
   if (!img.open(env, bitmap, false) || !subj.open(env, subject, true) || !fac.open(env, faces, true) ||
       !prot.open(env, protect, true) || !dep.open(env, depth, true)) {
     return;
   }
-  const pp_portrait_params pp{p[0], p[1], p[2], p[3]};
+  pp_portrait_params pp{};
+  pp_portrait_default_params(&pp);
+  pp.blur = p[0];
+  pp.retouch = p[1];
+  pp.brighten = p[2];
+  pp.pop = p[3];
+  if (n == 10) {
+    pp.smooth = p[4];
+    pp.blemish = p[5];
+    pp.even = p[6];
+    pp.bg_light = p[7];
+    pp.bg_color = p[8];
+    pp.edge = p[9];
+  }
   pp_portrait_report report{};
   const pp_status st = pp_portrait(img.image, subj.image, fac.image, prot.image, dep.image, &pp,
                                    reinterpret_cast<const pp_cancel_token*>(token), &report);
@@ -425,8 +441,63 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePortrait(
                                   static_cast<jfloat>(report.spots_removed),
                                   report.blur_radius,
                                   report.focus_depth,
-                                  static_cast<jfloat>(report.depth_estimated)};
+                                  static_cast<jfloat>(report.depth_estimated),
+                                  report.edge_cleaned};
   env->SetFloatArrayRegion(reportOut, 0, kReport, values);
+}
+
+// Face-precise adjustments. `faces` holds count * 262 floats (PP_FACE_POINTS
+// x, y pairs, normalised to the bitmap), `detailed` one flag per face,
+// `params` 9 floats (eyes, teeth, lips, under-eye, shine, slim, face light,
+// studio light, light angle). `reportOut` (3) = faces, adjusted, light gain.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeFaceAdjust(
+    JNIEnv* env, jobject, jobject bitmap, jfloatArray faces, jintArray detailed, jfloatArray params, jlong token,
+    jfloatArray reportOut) {
+  constexpr jsize kPer = PP_FACE_POINTS * 2;
+  if (faces == nullptr || detailed == nullptr || params == nullptr || reportOut == nullptr) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad face arguments");
+    return;
+  }
+  const jsize total = env->GetArrayLength(faces);
+  const jsize count = env->GetArrayLength(detailed);
+  if (total != count * kPer || count > 32 || env->GetArrayLength(params) != 9 || env->GetArrayLength(reportOut) < 3) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad face arguments");
+    return;
+  }
+  std::vector<pp_face> list(static_cast<size_t>(count));
+  std::vector<jfloat> pts(static_cast<size_t>(total));
+  std::vector<jint> det(static_cast<size_t>(count));
+  if (total > 0) env->GetFloatArrayRegion(faces, 0, total, pts.data());
+  if (count > 0) env->GetIntArrayRegion(detailed, 0, count, det.data());
+  jfloat p[9];
+  env->GetFloatArrayRegion(params, 0, 9, p);
+  if (env->ExceptionCheck()) return;
+  for (jsize i = 0; i < count; ++i) {
+    std::copy_n(pts.data() + static_cast<size_t>(i) * kPer, kPer, list[static_cast<size_t>(i)].points);
+    list[static_cast<size_t>(i)].detailed = det[static_cast<size_t>(i)];
+  }
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  pp_face_params fp{};
+  pp_face_default_params(&fp);
+  fp.eyes = p[0];
+  fp.teeth = p[1];
+  fp.lips = p[2];
+  fp.under_eye = p[3];
+  fp.shine = p[4];
+  fp.slim = p[5];
+  fp.face_light = p[6];
+  fp.studio_light = p[7];
+  fp.light_angle = p[8];
+  pp_face_report report{};
+  const pp_status st = pp_face_adjust(img.image, list.data(), list.size(), &fp,
+                                      reinterpret_cast<const pp_cancel_token*>(token), &report);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat values[3] = {static_cast<jfloat>(report.faces), static_cast<jfloat>(report.adjusted), report.light_gain};
+  env->SetFloatArrayRegion(reportOut, 0, 3, values);
 }
 
 // Lens analysis ("Transform"): fills `out` (7) with detail blur, corner blur,

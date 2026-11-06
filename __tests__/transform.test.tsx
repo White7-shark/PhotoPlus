@@ -348,3 +348,19 @@ describe('Transform on a photo', () => {
     expect(screen.getByText('1 free Transform left today')).toBeTruthy();
   });
 });
+
+describe('camera beauty is remembered for Transform', () => {
+  const beauty = { retouch: 0.75, brighten: 0.4, eyes: 0.3, underEye: 0.45, shine: 0.35, faceLight: 0.2 };
+  it('a beauty capture records it and Transform re-applies it after restoring the original', () => {
+    const r = captureRecipe({ path: '/p.jpg', mode: 'enhance', originalPath: '/p_original.jpg', beauty });
+    expect(r?.steps).toEqual([{ kind: 'clarity' }, { kind: 'beauty', ...beauty }]);
+    expect(isRecipe(r)).toBe(true);
+    const plan = transformPlan({ path: '/p.jpg', metadata: { recipe: r } });
+    expect(plan).toMatchObject({ inputPath: '/p_original.jpg', beauty, spotlight: null, replayed: 1 });
+  });
+  it('a malformed beauty step is refused', () => {
+    const r = captureRecipe({ path: '/p.jpg', mode: 'standard', originalPath: '/o.jpg', beauty });
+    const bad = { ...r!, steps: [{ kind: 'beauty', ...beauty, eyes: 3 }] };
+    expect(isRecipe(bad)).toBe(false);
+  });
+});

@@ -47,6 +47,12 @@ export const FEATURES = {
   shootReplication: f('replication.simulate', 'Photoshoot simulation & replication', 'replication', 'premium'),
   lightingShadows: f('replication.lighting', 'Advanced lighting & shadow effects', 'replication', 'premium'),
   advancedRetouchGrade: f('editing.advancedRetouchGrade', 'Advanced retouching & colour grading', 'editing', 'premium'),
+  advancedPortrait: f(
+    'editing.advancedPortrait',
+    'Advanced portrait: precise face, light and background controls',
+    'editing',
+    'premium',
+  ),
   premiumExport: f('editing.premiumExport', 'Premium export options', 'editing', 'premium'),
   customWatermark: f('editing.customWatermark', 'Custom watermark & branding', 'editing', 'premium'),
   premiumProps: f('editing.premiumProps', 'The full props collection', 'editing', 'premium'),

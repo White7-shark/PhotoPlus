@@ -1,6 +1,69 @@
 import type { PropPlacement } from './placement';
 
 /**
+ * Advanced portrait controls (Premium), mirrored by EditDocument.kt's
+ * PortraitChoice. All 0..1 except lightAngle, bgLight and bgColor (-1..1).
+ */
+export interface PortraitAdvanced {
+  // Skin (replace the Glow preset's single strength)
+  smooth: number;
+  blemish: number;
+  even: number;
+  shine: number;
+  underEye: number;
+  // Face
+  eyes: number;
+  teeth: number;
+  lips: number;
+  slim: number;
+  // Light
+  faceLight: number;
+  studio: number;
+  /** Studio light from picture left (-1) to right (1). */
+  lightAngle: number;
+  // Background (with Spotlight's subject)
+  bgLight: number;
+  bgColor: number;
+  /** Finer edges (hair) and no fringe of the old background. */
+  edge: number;
+}
+
+export const NEUTRAL_PORTRAIT: PortraitAdvanced = {
+  smooth: 0,
+  blemish: 0,
+  even: 0,
+  shine: 0,
+  underEye: 0,
+  eyes: 0,
+  teeth: 0,
+  lips: 0,
+  slim: 0,
+  faceLight: 0,
+  studio: 0,
+  lightAngle: -0.5,
+  bgLight: 0,
+  bgColor: 0,
+  edge: 0,
+};
+
+/** Advanced controls that start where a Glow preset left the photo (so switching changes nothing). */
+export function portraitFromGlow(retouch: number): PortraitAdvanced {
+  return { ...NEUTRAL_PORTRAIT, smooth: retouch, blemish: retouch, even: retouch };
+}
+
+const SIGNED_PORTRAIT_KEYS = new Set<keyof PortraitAdvanced>(['lightAngle', 'bgLight', 'bgColor']);
+
+export function isPortraitAdvanced(v: unknown): v is PortraitAdvanced {
+  if (!v || typeof v !== 'object') return false;
+  const p = v as Record<string, unknown>;
+  return (Object.keys(NEUTRAL_PORTRAIT) as (keyof PortraitAdvanced)[]).every(k => {
+    const x = p[k];
+    const min = SIGNED_PORTRAIT_KEYS.has(k) ? -1 : 0;
+    return typeof x === 'number' && Number.isFinite(x) && x >= min && x <= 1;
+  });
+}
+
+/**
  * A photo's edits (mirrored and validated natively by EditDocument.kt). The
  * original photo is never changed: this document is replayed on it every
  * time, so every edit can be undone or changed later.
@@ -29,6 +92,8 @@ export interface EditDocument {
   focus: { kind: 'radial' | 'tilt'; x: number; y: number; size: number; angle: number; strength: number } | null;
   /** The high-end lens look (Premium; a few a day on the free plan). */
   transform: boolean;
+  /** Advanced portrait controls (Premium), or null for the Glow presets only. */
+  portrait: PortraitAdvanced | null;
   props: PropPlacement[];
   frame: { id: string; zoom: number; x: number; y: number } | null;
 }
@@ -51,6 +116,7 @@ export const EMPTY_DOCUMENT: EditDocument = {
   spotlight: null,
   focus: null,
   transform: false,
+  portrait: null,
   props: [],
   frame: null,
 };
@@ -75,6 +141,8 @@ export function isEditDocument(v: unknown): v is EditDocument {
     isNum(d.sharpen, 0, 1) &&
     isNum(d.retouch, 0, 1) &&
     typeof d.transform === 'boolean' &&
+    // Added later (older saved edits have none: see withDefaults).
+    (d.portrait === undefined || d.portrait === null || isPortraitAdvanced(d.portrait)) &&
     Array.isArray(d.props) &&
     d.props.length <= 12
   );

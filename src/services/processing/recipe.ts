@@ -20,13 +20,24 @@ export interface SpotlightStep {
   pop: number;
 }
 
+/** Camera beauty (Glow and its face touches) on a photo taken outside Spotlight. */
+export interface BeautyStep {
+  kind: 'beauty';
+  retouch: number;
+  brighten: number;
+  eyes: number;
+  underEye: number;
+  shine: number;
+  faceLight: number;
+}
+
 export interface LookStep {
   kind: 'look';
   look: number[];
   strength: number;
 }
 
-export type RecipeStep = { kind: 'clarity' } | SpotlightStep | LookStep;
+export type RecipeStep = { kind: 'clarity' } | SpotlightStep | BeautyStep | LookStep;
 
 export interface Recipe {
   /** The photo the steps start from. */
@@ -55,6 +66,8 @@ function isStep(v: unknown): v is RecipeStep {
         s.points.every(isUnit) &&
         [s.blur, s.retouch, s.brighten, s.pop].every(isUnit)
       );
+    case 'beauty':
+      return [s.retouch, s.brighten, s.eyes, s.underEye, s.shine, s.faceLight].every(isUnit);
     case 'look':
       return (
         Array.isArray(s.look) &&
@@ -97,11 +110,13 @@ export function captureRecipe(shot: {
   /** The photo without the Photo Plus mark (free plan). */
   cleanPath?: string | null;
   spotlight?: { points: number[]; blur: number; retouch: number; brighten: number; pop: number } | null;
+  beauty?: Omit<BeautyStep, 'kind'> | null;
   look?: { look: number[]; strength: number } | null;
 }): Recipe | null {
   const steps: RecipeStep[] = [];
   if (shot.mode === 'enhance') steps.push({ kind: 'clarity' });
   if (shot.spotlight) steps.push({ kind: 'spotlight', ...shot.spotlight });
+  if (shot.beauty) steps.push({ kind: 'beauty', ...shot.beauty });
   if (shot.look) steps.push({ kind: 'look', look: shot.look.look, strength: shot.look.strength });
   const original = str(shot.originalPath);
   const recipe: Recipe =
@@ -115,6 +130,7 @@ export function captureRecipe(shot: {
 function looksStyled(metadata: Metadata): boolean {
   const mode = str(metadata.captureMode);
   return metadata.look === true || !!metadata.portrait || mode === 'spotlight' || mode === 'look';
+  // (Camera beauty is recorded as a recipe step, so it never needs this guess.)
 }
 
 /** The recipe of a photo, or the best stand-in for photos saved before recipes existed. */
@@ -142,6 +158,7 @@ export interface TransformPlan {
   inputPath: string;
   keepStyle: boolean;
   spotlight: Omit<SpotlightStep, 'kind'> | null;
+  beauty: Omit<BeautyStep, 'kind'> | null;
   look: { look: number[]; strength: number } | null;
   /** Number of effects re-applied (for "your effects are kept"). */
   replayed: number;
@@ -155,11 +172,15 @@ export interface TransformPlan {
 export function transformPlan(image: { path: string; metadata: Metadata }): TransformPlan {
   const r = effectiveRecipe(image);
   let spotlight: TransformPlan['spotlight'] = null;
+  let beauty: TransformPlan['beauty'] = null;
   let look: TransformPlan['look'] = null;
   for (const s of r.steps) {
     if (s.kind === 'spotlight') {
       const { kind: _kind, ...rest } = s;
       spotlight = rest;
+    } else if (s.kind === 'beauty') {
+      const { kind: _kind, ...rest } = s;
+      beauty = rest;
     } else if (s.kind === 'look') {
       look = { look: s.look, strength: s.strength };
     }
@@ -168,7 +189,8 @@ export function transformPlan(image: { path: string; metadata: Metadata }): Tran
     inputPath: r.basePath,
     keepStyle: r.baseStyled,
     spotlight,
+    beauty,
     look,
-    replayed: (spotlight ? 1 : 0) + (look ? 1 : 0),
+    replayed: (spotlight ? 1 : 0) + (beauty ? 1 : 0) + (look ? 1 : 0),
   };
 }

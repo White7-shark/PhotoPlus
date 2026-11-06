@@ -373,3 +373,42 @@ describe('spotlight and vibe match', () => {
     expect(await screen.findByRole('button', { name: 'Choose a style photo' })).toBeTruthy();
   });
 });
+
+describe('camera beauty (Glow outside Spotlight)', () => {
+  const cleanups: (() => void)[] = [];
+  const afterTest = (fn: () => void) => cleanups.push(fn);
+  afterEach(() => cleanups.splice(0).forEach(fn => fn()));
+
+  it('a Glow level travels with every photo and is remembered; Spotlight keeps its own', async () => {
+    const updateSetting = jest.fn(async () => undefined);
+    const real = useAppStore.getState().updateSetting;
+    afterTest(() => useAppStore.setState({ updateSetting: real }));
+    useAppStore.setState({
+      settings: { ...DEFAULT_SETTINGS, cameraGlow: 'smooth' },
+      updateSetting: updateSetting as never,
+    });
+    await renderReadyCamera();
+    // Tapping the chip moves to the next level and saves it.
+    await fireEvent.press(screen.getByTestId('glow-chip'));
+    expect(updateSetting).toHaveBeenCalledWith('cameraGlow', 'flawless');
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(1));
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({
+      beauty: { retouch: 0.75, brighten: 0.4, eyes: 0.3, underEye: 0.45, shine: 0.35, faceLight: 0.2 },
+    });
+    // Spotlight has its own Glow: no camera beauty there.
+    await fireEvent.press(screen.getByTestId('mode-spotlight'));
+    expect(screen.queryByTestId('glow-chip')).toBeNull();
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(2));
+    expect(mockCamera.capturePhoto.mock.calls[1][0]).not.toHaveProperty('beauty');
+  });
+
+  it('with Glow off, photos are taken as they are', async () => {
+    await renderReadyCamera();
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(1));
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).not.toHaveProperty('beauty');
+    expect(screen.getByLabelText('Glow off. Turn on beauty for faces')).toBeTruthy();
+  });
+});

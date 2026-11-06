@@ -136,6 +136,15 @@ export interface TransformRequest {
   keepStyle?: boolean;
   /** Spotlight to re-apply (taps in the upright photo). */
   spotlight?: { points: number[]; blur: number; retouch: number; brighten: number; pop: number } | null;
+  /** Camera beauty to re-apply (Glow and its face touches). */
+  beauty?: {
+    retouch: number;
+    brighten: number;
+    eyes: number;
+    underEye: number;
+    shine: number;
+    faceLight: number;
+  } | null;
   look?: number[] | null;
   lookStrength?: number;
   maxDimension?: number;

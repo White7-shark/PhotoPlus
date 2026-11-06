@@ -36,6 +36,8 @@ import {
   lookCameraSettings,
   modeLabel,
   spotlightSettings,
+  beautySettings,
+  nextGlowLevel,
   toggleSpotlightPoint,
   type BlurLevel,
   type GlowLevel,
@@ -86,6 +88,12 @@ interface Processing {
 }
 
 /** The camera is always dark: controls sit over a live image, not the app theme. */
+const GLOW_LABEL: Record<'natural' | 'smooth' | 'flawless', string> = {
+  natural: 'Natural',
+  smooth: 'Smooth',
+  flawless: 'Flawless',
+};
+
 export function CameraScreen(props: TabScreenProps<'Camera'>) {
   return (
     <ThemeProvider preference="dark">
@@ -325,12 +333,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const takePhoto = useCallback(async () => {
     const captureMode = captureModeFor(effectiveMode, rawActive);
     const look = vibe && captureMode !== 'raw' ? vibe : null;
+    // Camera beauty: Spotlight has its own Glow; RAW stays untouched.
+    const beauty = captureMode === 'spotlight' || captureMode === 'raw' ? null : beautySettings(settings.cameraGlow);
     const processed =
       captureMode === 'enhance' ||
       captureMode === 'night' ||
       captureMode === 'superres' ||
       captureMode === 'spotlight' ||
-      !!look;
+      !!look ||
+      !!beauty;
     if (processed && processing) {
       setToast({ text: friendlyMessage('BUSY'), tone: 'danger' });
       return;
@@ -352,6 +363,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             ? { points: flattenPoints(spotPoints), ...spotlightSettings(blurLevel, glowLevel) }
             : {}),
           ...(look ? { look: look.look, lookStrength: look.strength } : {}),
+          ...(beauty ? { beauty } : {}),
           // Free-plan photos carry the user's chosen watermark (signature style by default).
           watermark: settings.watermark,
           // The prop worn in the preview goes into the photo itself.
@@ -402,6 +414,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     flash,
     settings.mirrorFrontCamera,
     settings.watermark,
+    settings.cameraGlow,
     worn,
     liveProp.face,
     liveProp.adjust,
@@ -647,6 +660,21 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             rotation={rotation}
             testID="props-chip"
           />
+          {effectiveMode !== 'spotlight' ? (
+            <Chip
+              icon="sparkles"
+              label={settings.cameraGlow === 'off' ? undefined : GLOW_LABEL[settings.cameraGlow]}
+              active={settings.cameraGlow !== 'off'}
+              accessibilityLabel={
+                settings.cameraGlow === 'off'
+                  ? 'Glow off. Turn on beauty for faces'
+                  : `Glow ${GLOW_LABEL[settings.cameraGlow]}. Tap for the next level`
+              }
+              onPress={() => updateSetting('cameraGlow', nextGlowLevel(settings.cameraGlow)).catch(() => undefined)}
+              rotation={rotation}
+              testID="glow-chip"
+            />
+          ) : null}
           <Chip
             icon="wand"
             active={!!vibe}

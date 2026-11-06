@@ -27,6 +27,8 @@ export interface AppSettings {
   cameraResolution: 'max' | '12mp' | '8mp' | '5mp' | '2mp';
   /** Save selfies mirrored, as the preview shows them. */
   mirrorFrontCamera: boolean;
+  /** Camera beauty (Glow) for photos outside Spotlight. */
+  cameraGlow: 'off' | 'natural' | 'smooth' | 'flawless';
   /** Vibe Match look in use (premium), or null. */
   vibeLook: VibeLook | null;
   /** The watermark design (free plan: always the Photo Plus mark). */
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraAspectRatio: '4:3',
   cameraResolution: 'max',
   mirrorFrontCamera: true,
+  cameraGlow: 'off',
   vibeLook: null,
   watermark: DEFAULT_WATERMARK,
   brandingPresets: [],
@@ -75,6 +78,7 @@ const VALIDATORS: Validators = {
   cameraAspectRatio: oneOf('4:3', '16:9', '1:1'),
   cameraResolution: oneOf('max', '12mp', '8mp', '5mp', '2mp'),
   mirrorFrontCamera: isBool,
+  cameraGlow: oneOf('off', 'natural', 'smooth', 'flawless'),
   vibeLook: (v): v is VibeLook | null => v === null || isVibeLook(v),
   watermark: isWatermarkSpec,
   brandingPresets: isBrandingPresets,

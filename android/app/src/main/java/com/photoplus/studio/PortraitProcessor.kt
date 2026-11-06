@@ -15,6 +15,8 @@ import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.google.mlkit.vision.face.FaceLandmark
+import com.photoplus.edit.PropFit.Pt
 import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
@@ -25,17 +27,36 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.util.concurrent.TimeUnit
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/** Spotlight settings (all 0..1). */
+/**
+ * Spotlight and Glow settings. blur, retouch, brighten, pop are 0..1 (the
+ * free presets). The advanced (Premium) controls: smooth, blemish, even
+ * (0..1; negative = follow retouch), background light and colour (-1..1)
+ * and edge refinement (0..1).
+ */
 data class PortraitParams(
   val blur: Float = 0.6f,
   val retouch: Float = 0.75f,
   val brighten: Float = 0.4f,
   val pop: Float = 0.5f,
+  val smooth: Float = -1f,
+  val blemish: Float = -1f,
+  val even: Float = -1f,
+  val bgLight: Float = 0f,
+  val bgColor: Float = 0f,
+  val edge: Float = 0f,
 ) {
-  fun toArray() = floatArrayOf(blur, retouch, brighten, pop)
+  fun toArray() = floatArrayOf(blur, retouch, brighten, pop, smooth, blemish, even, bgLight, bgColor, edge)
+
+  private fun follow(v: Float) = if (v < 0f) retouch else v
+
+  /** Whether the engine's subject/skin pass has anything to do. */
+  val needsPortrait: Boolean
+    get() = blur > 0f || pop > 0f || brighten > 0f || follow(smooth) > 0f || follow(blemish) > 0f ||
+      follow(even) > 0f || bgLight != 0f || bgColor != 0f
 
   companion object {
     fun fromMap(map: Map<String, Any?>): PortraitParams {
@@ -52,6 +73,22 @@ data class PortraitParams(
   }
 }
 
+/** Face-precise adjustments (all 0..1 except [lightAngle], -1 picture left .. 1 right). */
+data class FaceTuning(
+  val eyes: Float = 0f,
+  val teeth: Float = 0f,
+  val lips: Float = 0f,
+  val underEye: Float = 0f,
+  val shine: Float = 0f,
+  val slim: Float = 0f,
+  val faceLight: Float = 0f,
+  val studio: Float = 0f,
+  val lightAngle: Float = 0f,
+) {
+  val any: Boolean get() = listOf(eyes, teeth, lips, underEye, shine, slim, faceLight, studio).any { it > 0f }
+  fun toArray() = floatArrayOf(eyes, teeth, lips, underEye, shine, slim, faceLight, studio, lightAngle)
+}
+
 data class PortraitReport(
   val subjectCoverage: Float,
   val skinCoverage: Float,
@@ -60,6 +97,8 @@ data class PortraitReport(
   val source: String,
   /** True when depth came from the photo's depth estimate (not the built-in ground-plane guess). */
   val depthFromPhoto: Boolean = false,
+  /** Faces given precise adjustments (0 when none were asked for). */
+  val facesAdjusted: Int = 0,
 )
 
 /**
@@ -87,6 +126,7 @@ class PortraitProcessor {
       FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
         .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
+        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
         .setMinFaceSize(0.06f)
         .build(),
     )
@@ -103,19 +143,92 @@ class PortraitProcessor {
     Segmentation.getClient(SelfieSegmenterOptions.Builder().setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE).build())
   }
 
-  fun apply(bitmap: Bitmap, rotation: Int, points: List<Pair<Float, Float>>, params: PortraitParams, token: Long): PortraitReport {
-    val masks = buildMasks(bitmap, rotation, points, wantDepth = params.blur > 0f)
+  fun apply(
+    bitmap: Bitmap,
+    rotation: Int,
+    points: List<Pair<Float, Float>>,
+    params: PortraitParams,
+    token: Long,
+    tuning: FaceTuning = FaceTuning(),
+  ): PortraitReport {
+    var report = PortraitReport(0f, 0f, 0, 0, "", false)
+    var landmarks: List<FaceLandmarks> = emptyList()
+    if (params.needsPortrait) {
+      val masks = buildMasks(bitmap, rotation, points, wantDepth = params.blur > 0f)
+      try {
+        val out = FloatArray(NativeEngine.PORTRAIT_REPORT_SIZE)
+        NativeEngine.nativePortrait(bitmap, masks.subject, masks.faces, masks.protect, masks.depth, params.toArray(), token, out)
+        report = PortraitReport(out[0], out[1], out[2].toInt(), masks.people, masks.source, depthFromPhoto = out[5] < 0.5f && masks.depth != null)
+        landmarks = masks.landmarks
+      } finally {
+        masks.subject.recycle()
+        masks.faces?.recycle()
+        masks.protect?.recycle()
+        masks.depth?.recycle()
+      }
+    } else if (tuning.any) {
+      landmarks = findLandmarks(bitmap, rotation)
+      report = report.copy(people = landmarks.size)
+    }
+    if (tuning.any && landmarks.isNotEmpty()) {
+      val (pts, detailed) = FaceLandmarks.pack(landmarks.take(MAX_FACES))
+      val out = FloatArray(NativeEngine.FACE_REPORT_SIZE)
+      NativeEngine.nativeFaceAdjust(bitmap, pts, detailed, tuning.toArray(), token, out)
+      report = report.copy(facesAdjusted = out[1].toInt())
+    }
+    return report
+  }
+
+  /** Landmarks of every face, in the bitmap's own orientation (no segmentation needed). */
+  fun findLandmarks(bitmap: Bitmap, rotation: Int): List<FaceLandmarks> {
+    val rot = MaskGeometry.normalise(rotation)
+    val upright = scaledUpright(bitmap, rot, ANALYSIS_EDGE)
     try {
-      val report = FloatArray(NativeEngine.PORTRAIT_REPORT_SIZE)
-      NativeEngine.nativePortrait(bitmap, masks.subject, masks.faces, masks.protect, masks.depth, params.toArray(), token, report)
-      return PortraitReport(report[0], report[1], report[2].toInt(), masks.people, masks.source, depthFromPhoto = report[5] < 0.5f && masks.depth != null)
+      val faces = runCatching { Tasks.await(faceDetector.process(InputImage.fromBitmap(upright, 0)), ML_TIMEOUT_S, TimeUnit.SECONDS) }
+        .onFailure { Log.w(TAG, "face detection unavailable", it) }.getOrNull() ?: return emptyList()
+      return toBitmapLandmarks(withContours(upright, faces.map { FaceShape.of(it) }), upright.width, upright.height, rot)
     } finally {
-      masks.subject.recycle()
-      masks.faces?.recycle()
-      masks.protect?.recycle()
-      masks.depth?.recycle()
+      upright.recycle()
     }
   }
+
+  /**
+   * Face detection measures full contours only for the most prominent face.
+   * Each other face is looked at again on its own (an enlarged crop where it
+   * is the main face), so everyone in a group photo gets precise outlines.
+   */
+  private fun withContours(upright: Bitmap, faces: List<FaceShape>): List<FaceShape> {
+    var extra = 0
+    return faces.map { face ->
+      if (face.contour(FaceContour.FACE) != null || extra >= MAX_FACES) return@map face
+      extra++
+      val b = face.box
+      val side = max(b.width(), b.height()) * 1.8f
+      val x0 = (b.centerX() - side / 2).roundToInt().coerceIn(0, upright.width - 1)
+      val y0 = (b.centerY() - side / 2).roundToInt().coerceIn(0, upright.height - 1)
+      val cw = side.roundToInt().coerceAtMost(upright.width - x0)
+      val ch = side.roundToInt().coerceAtMost(upright.height - y0)
+      if (cw < 16 || ch < 16) return@map face
+      val scale = (CROP_EDGE.toFloat() / max(cw, ch)).coerceIn(1f, MAX_CROP_ZOOM)
+      val crop = Bitmap.createBitmap(upright, x0, y0, cw, ch, Matrix().apply { postScale(scale, scale) }, true)
+      try {
+        val found = runCatching { Tasks.await(faceDetector.process(InputImage.fromBitmap(crop, 0)), ML_TIMEOUT_S, TimeUnit.SECONDS) }
+          .getOrNull().orEmpty()
+        val s = crop.width.toFloat() / cw
+        found.map { FaceShape.of(it, s, x0.toFloat(), y0.toFloat()) }
+          .filter { it.contour(FaceContour.FACE) != null }
+          .minByOrNull { hypot(it.box.centerX() - b.centerX(), it.box.centerY() - b.centerY()) }
+          ?.takeIf { hypot(it.box.centerX() - b.centerX(), it.box.centerY() - b.centerY()) < 0.5f * b.width() }
+          ?: face
+      } finally {
+        crop.recycle()
+      }
+    }
+  }
+
+  private fun toBitmapLandmarks(faces: List<FaceShape>, w: Int, h: Int, rot: Int): List<FaceLandmarks> =
+    faces.mapNotNull { it.landmarks(w.toFloat(), h.toFloat()) }
+      .map { lm -> lm.mapped { x, y -> MaskGeometry.uprightToBitmap(x, y, rot) } }
 
   private data class Masks(
     val subject: Bitmap,
@@ -124,11 +237,24 @@ class PortraitProcessor {
     val depth: Bitmap?,
     val people: Int,
     val source: String,
+    val landmarks: List<FaceLandmarks> = emptyList(),
   )
 
   /** A detected face, in upright analysis-image coordinates. */
-  private class FaceShape(val box: RectF, val contours: Map<Int, List<PointF>>) {
+  private class FaceShape(val box: RectF, val contours: Map<Int, List<PointF>>, val marks: Map<Int, PointF>) {
     fun contour(type: Int) = contours[type]
+
+    /** Landmarks normalised to the [w] x [h] analysis image: measured contours, else approximated. */
+    fun landmarks(w: Float, h: Float): FaceLandmarks? {
+      val measured = LAYOUT.mapNotNull { (type, c) -> contours[type]?.let { pts -> c to pts.map { Pt(it.x, it.y) } } }.toMap()
+      if (measured.size == LAYOUT.size) FaceLandmarks.fromContours(measured, w, h)?.let { return it }
+      fun mark(type: Int) = marks[type]?.let { Pt(it.x, it.y) }
+      return FaceLandmarks.approximate(
+        box.left, box.top, box.right, box.bottom,
+        mark(FaceLandmark.LEFT_EYE), mark(FaceLandmark.RIGHT_EYE),
+        mark(FaceLandmark.MOUTH_LEFT), mark(FaceLandmark.MOUTH_RIGHT), mark(FaceLandmark.MOUTH_BOTTOM), w, h,
+      )
+    }
 
     companion object {
       /** [face] found in a crop scaled by [scale] whose origin is ([dx], [dy]) in the analysis image. */
@@ -136,17 +262,34 @@ class PortraitProcessor {
         val inv = 1f / scale
         val b = face.boundingBox
         val box = RectF(b.left * inv + dx, b.top * inv + dy, b.right * inv + dx, b.bottom * inv + dy)
-        val contours = CONTOURS.mapNotNull { type ->
-          face.getContour(type)?.points?.let { pts -> type to pts.map { PointF(it.x * inv + dx, it.y * inv + dy) } }
+        val contours = LAYOUT.mapNotNull { (type, _) ->
+          face.getContour(type)?.points?.takeIf { it.isNotEmpty() }
+            ?.let { pts -> type to pts.map { PointF(it.x * inv + dx, it.y * inv + dy) } }
         }.toMap()
-        return FaceShape(box, contours)
+        val marks = MARKS.mapNotNull { type ->
+          face.getLandmark(type)?.position?.let { type to PointF(it.x * inv + dx, it.y * inv + dy) }
+        }.toMap()
+        return FaceShape(box, contours, marks)
       }
 
-      private val CONTOURS = listOf(
-        FaceContour.FACE, FaceContour.LEFT_EYE, FaceContour.RIGHT_EYE,
-        FaceContour.LEFT_EYEBROW_TOP, FaceContour.LEFT_EYEBROW_BOTTOM,
-        FaceContour.RIGHT_EYEBROW_TOP, FaceContour.RIGHT_EYEBROW_BOTTOM,
-        FaceContour.UPPER_LIP_TOP, FaceContour.LOWER_LIP_BOTTOM, FaceContour.NOSE_BOTTOM,
+      /** Face contour types → the engine's landmark layout. */
+      val LAYOUT = listOf(
+        FaceContour.FACE to FaceLandmarks.OVAL,
+        FaceContour.LEFT_EYEBROW_TOP to FaceLandmarks.LEFT_BROW_TOP,
+        FaceContour.LEFT_EYEBROW_BOTTOM to FaceLandmarks.LEFT_BROW_BOTTOM,
+        FaceContour.RIGHT_EYEBROW_TOP to FaceLandmarks.RIGHT_BROW_TOP,
+        FaceContour.RIGHT_EYEBROW_BOTTOM to FaceLandmarks.RIGHT_BROW_BOTTOM,
+        FaceContour.LEFT_EYE to FaceLandmarks.LEFT_EYE,
+        FaceContour.RIGHT_EYE to FaceLandmarks.RIGHT_EYE,
+        FaceContour.UPPER_LIP_TOP to FaceLandmarks.UPPER_LIP_TOP,
+        FaceContour.UPPER_LIP_BOTTOM to FaceLandmarks.UPPER_LIP_BOTTOM,
+        FaceContour.LOWER_LIP_TOP to FaceLandmarks.LOWER_LIP_TOP,
+        FaceContour.LOWER_LIP_BOTTOM to FaceLandmarks.LOWER_LIP_BOTTOM,
+        FaceContour.NOSE_BRIDGE to FaceLandmarks.NOSE_BRIDGE,
+        FaceContour.NOSE_BOTTOM to FaceLandmarks.NOSE_BOTTOM,
+      )
+      private val MARKS = listOf(
+        FaceLandmark.LEFT_EYE, FaceLandmark.RIGHT_EYE, FaceLandmark.MOUTH_LEFT, FaceLandmark.MOUTH_RIGHT, FaceLandmark.MOUTH_BOTTOM,
       )
     }
   }
@@ -189,6 +332,7 @@ class PortraitProcessor {
       val (subjectBytes, source) = subjectMask(image, upright.width, upright.height, points, faces, subjects)
         ?: (null to "")
       if (faces.isEmpty() && subjectBytes != null) faces = smallFaces(upright, subjectBytes)
+      faces = withContours(upright, faces)
       val subject = if (subjectBytes != null) {
         val (b, w, h) = MaskGeometry.rotateMask(subjectBytes, upright.width, upright.height, -rot)
         alphaBitmap(b, w, h)
@@ -204,7 +348,10 @@ class PortraitProcessor {
         val (b, w, h) = MaskGeometry.rotateMask(it.bytes, it.width, it.height, -rot)
         alphaBitmap(b, w, h)
       }
-      return Masks(subject, faceMask, protectMask, depth, faces.size, if (subjectBytes != null) source else "taps")
+      return Masks(
+        subject, faceMask, protectMask, depth, faces.size, if (subjectBytes != null) source else "taps",
+        toBitmapLandmarks(faces, upright.width, upright.height, rot),
+      )
     } finally {
       upright.recycle()
     }
@@ -345,6 +492,9 @@ class PortraitProcessor {
     private const val ML_TIMEOUT_S = 10L
     private const val SMALL_FACE_EDGE = 720
     private const val MAX_CROP_ZOOM = 4f
+    /** Faces given precise outlines and adjustments (larger groups: the biggest faces). */
+    private const val MAX_FACES = 8
+    private const val CROP_EDGE = 480
 
     private fun polygon(points: List<PointF>) = Path().apply {
       moveTo(points[0].x, points[0].y)

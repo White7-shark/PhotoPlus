@@ -103,13 +103,27 @@ data class CaptureOptions(
   val watermark: com.photoplus.edit.WatermarkSpec = com.photoplus.edit.WatermarkSpec(),
   /** Props worn in the preview, composited into the photo (not RAW). */
   val props: List<CameraProps.Placed> = emptyList(),
+  /** Camera beauty (Glow) for photos taken outside Spotlight: skin retouch strength and its lift (0..1). */
+  val beautyRetouch: Float = 0f,
+  val beautyBrighten: Float = 0f,
+  /** Face-precise touches that come with the beauty level (eyes, under-eye, shine, face light). */
+  val beauty: com.photoplus.studio.FaceTuning = com.photoplus.studio.FaceTuning(),
 ) {
-  /** RAW stays untouched; every other capture with a look is decoded and graded. */
-  val needsProcessing: Boolean get() = mode != CaptureMode.RAW && (mode.processed || look != null)
+  val beautyActive: Boolean get() = beautyRetouch > 0f || beauty.any
+
+  /** RAW stays untouched; every other capture with a look or beauty is decoded and processed. */
+  val needsProcessing: Boolean get() = mode != CaptureMode.RAW && (mode.processed || look != null || beautyActive)
   /** Bursts never fire the flash: repeated flashes would differ frame to frame and break the merge. */
   val effectiveFlash: FlashSetting get() = if (mode.burst) FlashSetting.OFF else flash
 
   companion object {
+    /** The face touches of a beauty level (finite, 0..1; anything else is ignored). */
+    fun beautyTuning(m: Map<*, *>?): com.photoplus.studio.FaceTuning {
+      if (m == null) return com.photoplus.studio.FaceTuning()
+      fun v(k: String) = (m[k] as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+      return com.photoplus.studio.FaceTuning(eyes = v("eyes"), underEye = v("underEye"), shine = v("shine"), faceLight = v("faceLight"))
+    }
+
     fun fromMap(map: Map<String, Any?>): CaptureOptions {
       fun unit(key: String, default: Float) = ((map[key] as? Number)?.toFloat() ?: default).coerceIn(0f, 1f)
       return CaptureOptions(
@@ -128,6 +142,9 @@ data class CaptureOptions(
           ?.takeIf { it.size == com.photoplus.engine.NativeEngine.STYLE_FLOATS && it.all { v -> v.isFinite() } }
           ?.toFloatArray(),
         lookStrength = unit("lookStrength", 0.8f),
+        beautyRetouch = (map["beauty"] as? Map<*, *>)?.let { (it["retouch"] as? Number)?.toFloat()?.coerceIn(0f, 1f) } ?: 0f,
+        beautyBrighten = (map["beauty"] as? Map<*, *>)?.let { (it["brighten"] as? Number)?.toFloat()?.coerceIn(0f, 1f) } ?: 0f,
+        beauty = beautyTuning(map["beauty"] as? Map<*, *>),
         watermark = runCatching {
           @Suppress("UNCHECKED_CAST")
           com.photoplus.edit.WatermarkSpec.fromMap(map["watermark"] as? Map<String, Any?>)

@@ -5,7 +5,14 @@ import { EditorScreen } from '../src/screens/editor/EditorScreen';
 import { aspectCrop, containRect, isFullCrop, viewToPhoto } from '../src/screens/editor/geometry';
 import { DEFAULT_SETTINGS, isValidSetting } from '../src/services/database/repositories/SettingsRepository';
 import { PROPS } from '../src/services/edit/catalog';
-import { EMPTY_DOCUMENT, geometryOf, hasEdits, isEditDocument, withDefaults } from '../src/services/edit/document';
+import {
+  EMPTY_DOCUMENT,
+  geometryOf,
+  hasEdits,
+  isEditDocument,
+  portraitFromGlow,
+  withDefaults,
+} from '../src/services/edit/document';
 import { canRedo, canUndo, historyReducer, MAX_STEPS, startHistory } from '../src/services/edit/history';
 import { defaultPlacement, fitToFace, mainFace, type FaceGeometry } from '../src/services/edit/placement';
 import { DEFAULT_WATERMARK, freeSpec, isBrandingPresets, isWatermarkSpec } from '../src/services/edit/watermark';
@@ -184,6 +191,20 @@ describe('editor geometry', () => {
     const small = aspectCrop(1, { width: 3000, height: 4000 }, 0.5, 0, 0);
     expect(small.x).toBe(0); // kept inside the photo
     expect(isFullCrop(aspectCrop(null, { width: 3000, height: 4000 }))).toBe(true);
+  });
+});
+
+describe('portrait settings in saved edits', () => {
+  it('older documents open without them; bad values are refused', () => {
+    expect(isEditDocument({ ...EMPTY_DOCUMENT })).toBe(true);
+    const { portrait: _p, ...old } = EMPTY_DOCUMENT;
+    expect(isEditDocument(old)).toBe(true);
+    expect(withDefaults(old as never).portrait).toBeNull();
+    const good = { ...EMPTY_DOCUMENT, portrait: { ...portraitFromGlow(0.5), bgColor: -1, lightAngle: 1 } };
+    expect(isEditDocument(good)).toBe(true);
+    expect(isEditDocument({ ...good, portrait: { ...good.portrait, eyes: 2 } })).toBe(false);
+    expect(isEditDocument({ ...good, portrait: { ...good.portrait, smooth: -0.1 } })).toBe(false);
+    expect(isEditDocument({ ...good, portrait: { eyes: 0.5 } })).toBe(false);
   });
 });
 
@@ -397,6 +418,63 @@ describe('the photo editor', () => {
     await fireEvent.press(screen.getByTestId('undo'));
     await fireEvent.press(screen.getByTestId('undo'));
     await waitFor(() => expect(lastPreviewDoc().perspectiveV).toBe(0));
+  });
+
+  it('Portrait: Glow presets, then every control on its own, live, undoable and restorable', async () => {
+    setup();
+    await wrap(
+      <EditorScreen navigation={{ goBack: jest.fn() } as never} route={{ params: { imageId: 'img_1' } } as never} />,
+    );
+    await waitFor(() => expect(mockEngine.renderEdit).toHaveBeenCalled());
+    await fireEvent.press(screen.getByTestId('editor-tool-retouch'));
+    // Basic: a Glow preset.
+    await fireEvent.press(screen.getByRole('radio', { name: 'Smooth' }));
+    await waitFor(() => expect(lastPreviewDoc().retouch).toBe(0.75));
+    // Advanced starts where the preset left the photo.
+    await fireEvent.press(screen.getByRole('radio', { name: 'Advanced' }));
+    const step = async (id: string) =>
+      act(async () => {
+        fireEvent(screen.getByTestId(id), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+      });
+    await step('portrait-eyes');
+    await waitFor(() => expect(lastPreviewDoc().portrait?.eyes).toBeGreaterThan(0));
+    expect(lastPreviewDoc().portrait).toMatchObject({ smooth: 0.75, blemish: 0.75, even: 0.75 });
+    await step('portrait-studio');
+    // Studio light reveals its direction control.
+    await step('portrait-lightAngle');
+    await waitFor(() => expect(lastPreviewDoc().portrait?.lightAngle).toBeGreaterThan(-0.5));
+    // Undo walks back one control at a time.
+    await fireEvent.press(screen.getByTestId('undo'));
+    await waitFor(() => expect(lastPreviewDoc().portrait?.lightAngle).toBe(-0.5));
+    // Reset to Glow keeps the preset's skin and clears the fine-tuning.
+    await fireEvent.press(screen.getByTestId('portrait-reset'));
+    await waitFor(() => expect(lastPreviewDoc().portrait).toMatchObject({ eyes: 0, studio: 0, smooth: 0.75 }));
+    // Restore original: the face as it was.
+    await fireEvent.press(screen.getByTestId('portrait-restore'));
+    await waitFor(() => expect(lastPreviewDoc().retouch).toBe(0));
+    expect(lastPreviewDoc().portrait).toBeNull();
+  });
+
+  it('Spotlight background controls: blur amount, light, black-and-white, edges', async () => {
+    setup();
+    await wrap(
+      <EditorScreen navigation={{ goBack: jest.fn() } as never} route={{ params: { imageId: 'img_1' } } as never} />,
+    );
+    await waitFor(() => expect(mockEngine.renderEdit).toHaveBeenCalled());
+    await fireEvent.press(screen.getByTestId('editor-tool-spotlight'));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Medium' }));
+    await waitFor(() => expect(lastPreviewDoc().spotlight?.blur).toBe(0.6));
+    const step = async (id: string, actionName: 'increment' | 'decrement') =>
+      act(async () => {
+        fireEvent(screen.getByTestId(id), 'accessibilityAction', { nativeEvent: { actionName } });
+      });
+    await step('spotlight-blur', 'increment');
+    await waitFor(() => expect(lastPreviewDoc().spotlight?.blur).toBeGreaterThan(0.6));
+    await step('portrait-bgColor', 'decrement');
+    await step('portrait-edge', 'increment');
+    await waitFor(() => expect(lastPreviewDoc().portrait).toMatchObject({ edge: expect.any(Number) }));
+    expect(lastPreviewDoc().portrait?.bgColor).toBeLessThan(0);
+    expect(lastPreviewDoc().portrait?.edge).toBeGreaterThan(0);
   });
 
   it('free users style the Photo Plus mark; custom branding asks for Premium', async () => {

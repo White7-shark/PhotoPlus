@@ -116,15 +116,18 @@ object NativeEngine {
   ): Float
 
   /** Size of [nativePortrait]'s report. */
-  const val PORTRAIT_REPORT_SIZE = 6
+  const val PORTRAIT_REPORT_SIZE = 7
 
   /**
    * Portrait ("Spotlight") in place on [bitmap] (ARGB_8888). Masks are
    * ALPHA_8 (or ARGB_8888) bitmaps of any size: [subject] required, [faces],
    * [protect] and [depth] (0 far … 255 near) optional; without [depth] the
    * engine estimates a ground plane. [params] = blur, retouch, brighten, pop
-   * (0..1). [reportOut] ([PORTRAIT_REPORT_SIZE]) = subject coverage, skin
-   * coverage, spots, blur radius, focus depth, depth estimated (0/1).
+   * (0..1), optionally followed by smooth, blemish, even (0..1, negative =
+   * follow retouch), background light, background colour (-1..1) and edge
+   * refinement (0..1): 4 or 10 values. [reportOut] ([PORTRAIT_REPORT_SIZE]) =
+   * subject coverage, skin coverage, spots, blur radius, focus depth, depth
+   * estimated (0/1), share of the frame whose edge colour was cleaned.
    */
   external fun nativePortrait(
     bitmap: Bitmap,
@@ -132,6 +135,30 @@ object NativeEngine {
     faces: Bitmap?,
     protect: Bitmap?,
     depth: Bitmap?,
+    params: FloatArray,
+    token: Long,
+    reportOut: FloatArray,
+  )
+
+  /** Floats per face in [nativeFaceAdjust] (131 landmark x, y pairs). */
+  const val FACE_FLOATS = 262
+
+  /** Size of [nativeFaceAdjust]'s params and report. */
+  const val FACE_PARAMS = 9
+  const val FACE_REPORT_SIZE = 3
+
+  /**
+   * Face-precise adjustments in place on [bitmap]: [faces] holds
+   * [FACE_FLOATS] per face (landmarks normalised to the bitmap, the
+   * com.photoplus.studio.FaceLandmarks layout), [detailed] one 0/1 per face.
+   * [params] ([FACE_PARAMS]) = eyes, teeth, lips, under-eye, shine, slim, face
+   * light, studio light (0..1) and light angle (-1..1). [reportOut] = faces,
+   * adjusted, light gain.
+   */
+  external fun nativeFaceAdjust(
+    bitmap: Bitmap,
+    faces: FloatArray,
+    detailed: IntArray,
     params: FloatArray,
     token: Long,
     reportOut: FloatArray,

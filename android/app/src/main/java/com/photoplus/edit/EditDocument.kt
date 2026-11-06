@@ -35,6 +35,8 @@ data class EditDocument(
   /** Transform: the high-end lens look, applied to the untouched photo first. */
   val transform: Boolean = false,
   val focus: FocusChoice? = null,
+  /** Advanced portrait controls (Premium), or null for the presets only. */
+  val portrait: PortraitChoice? = null,
   val props: List<PropPlacement> = emptyList(),
   val frame: FrameChoice? = null,
 ) {
@@ -45,7 +47,36 @@ data class EditDocument(
   data class PropPlacement(val id: String, val cx: Float, val cy: Float, val width: Float, val rotation: Float, val flip: Boolean)
   data class FrameChoice(val id: String, val zoom: Float, val x: Float, val y: Float)
 
-  val hasPortraitWork: Boolean get() = retouch > 0f || spotlight != null
+  /**
+   * Fine portrait controls. Skin: smooth, blemish, even (0..1, they replace
+   * the Glow preset's single strength). Face: eyes, teeth, lips, under-eye,
+   * shine, slim, face light, studio light (0..1) and its side (-1..1).
+   * Background: light and colour (-1..1). Edges: refinement (0..1).
+   */
+  data class PortraitChoice(
+    val smooth: Float = 0f,
+    val blemish: Float = 0f,
+    val even: Float = 0f,
+    val eyes: Float = 0f,
+    val teeth: Float = 0f,
+    val lips: Float = 0f,
+    val underEye: Float = 0f,
+    val shine: Float = 0f,
+    val slim: Float = 0f,
+    val faceLight: Float = 0f,
+    val studio: Float = 0f,
+    val lightAngle: Float = 0f,
+    val bgLight: Float = 0f,
+    val bgColor: Float = 0f,
+    val edge: Float = 0f,
+  ) {
+    val skin: Boolean get() = smooth > 0f || blemish > 0f || even > 0f
+    val background: Boolean get() = bgLight != 0f || bgColor != 0f
+    fun tuning() = com.photoplus.studio.FaceTuning(eyes, teeth, lips, underEye, shine, slim, faceLight, studio, lightAngle)
+    val active: Boolean get() = skin || background || tuning().any
+  }
+
+  val hasPortraitWork: Boolean get() = retouch > 0f || spotlight != null || portrait?.active == true
 
   /** Turn, mirror, perspective and straighten (crop needs the resulting size: [cropOp]). */
   fun geometryOps(): List<EngineOp> = buildList {
@@ -146,6 +177,15 @@ data class EditDocument(
         if (!isKnownProp(id)) invalid("Unknown prop '$id'")
         PropPlacement(id, num("cx", -0.5f, 1.5f, p), num("cy", -0.5f, 1.5f, p), num("width", 0.01f, 3f, p), num("rotation", -180f, 180f, p), p["flip"] == true)
       }
+      val portrait = (map["portrait"] as? Map<*, *>)?.let { q ->
+        PortraitChoice(
+          smooth = num("smooth", 0f, 1f, q), blemish = num("blemish", 0f, 1f, q), even = num("even", 0f, 1f, q),
+          eyes = num("eyes", 0f, 1f, q), teeth = num("teeth", 0f, 1f, q), lips = num("lips", 0f, 1f, q),
+          underEye = num("underEye", 0f, 1f, q), shine = num("shine", 0f, 1f, q), slim = num("slim", 0f, 1f, q),
+          faceLight = num("faceLight", 0f, 1f, q), studio = num("studio", 0f, 1f, q), lightAngle = num("lightAngle", -1f, 1f, q),
+          bgLight = num("bgLight", -1f, 1f, q), bgColor = num("bgColor", -1f, 1f, q), edge = num("edge", 0f, 1f, q),
+        )
+      }
       val frame = (map["frame"] as? Map<*, *>)?.let { f ->
         val id = f["id"] as? String ?: invalid("frame id is required")
         if (FrameStyles.byId(id) == null) invalid("Unknown frame '$id'")
@@ -173,6 +213,7 @@ data class EditDocument(
         },
         transform = map["transform"] == true,
         focus = focus,
+        portrait = portrait,
         props = props,
         frame = frame,
       )

@@ -24,7 +24,7 @@ export const EDITOR_TOOLS: readonly { id: ToolId; label: string; icon: IconName;
   { id: 'crop', label: 'Crop', icon: 'aspect' },
   { id: 'looks', label: 'Looks', icon: 'image' },
   { id: 'spotlight', label: 'Spotlight', icon: 'target' },
-  { id: 'retouch', label: 'Retouch', icon: 'sparkles' },
+  { id: 'retouch', label: 'Portrait', icon: 'sparkles' },
   { id: 'focus', label: 'Focus', icon: 'exposure' },
   { id: 'transform', label: 'Transform', icon: 'aperture', premium: true },
   { id: 'props', label: 'Props', icon: 'wand' },
@@ -313,7 +313,16 @@ const blurOf = (v: number): BlurLevel | 'off' =>
 const glowOf = (v: number): GlowLevel =>
   GLOW_LEVELS.reduce((a, b) => (Math.abs(b.retouch - v) < Math.abs(a.retouch - v) ? b : a)).id;
 
-export function SpotlightEditPanel({ doc, update }: { doc: EditDocument; update: Update }) {
+export function SpotlightEditPanel({
+  doc,
+  update,
+  advanced,
+}: {
+  doc: EditDocument;
+  update: Update;
+  /** Premium background controls, shown under the presets. */
+  advanced?: React.ReactNode;
+}) {
   const s = doc.spotlight;
   const count = (s?.points.length ?? 0) / 2;
   return (
@@ -348,22 +357,7 @@ export function SpotlightEditPanel({ doc, update }: { doc: EditDocument; update:
           onPress={() => update({ spotlight: { ...s, points: [] } })}
         />
       ) : null}
-    </View>
-  );
-}
-
-export function RetouchPanel({ doc, update }: { doc: EditDocument; update: Update }) {
-  return (
-    <View style={{ gap: 12 }}>
-      <AppText variant="body" tone="secondary">
-        Glow smooths skin, clears blemishes and evens tone, keeping each person’s own colour.
-      </AppText>
-      <SegmentedControl
-        label="Glow"
-        value={glowOf(doc.retouch)}
-        onChange={id => update({ retouch: GLOW_LEVELS.find(g => g.id === id)?.retouch ?? 0 })}
-        options={GLOW_LEVELS.map(g => ({ value: g.id, label: g.label }))}
-      />
+      {advanced}
     </View>
   );
 }

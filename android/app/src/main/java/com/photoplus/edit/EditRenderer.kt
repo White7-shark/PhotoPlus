@@ -118,13 +118,23 @@ class EditRenderer(
     }
     if (doc.hasPortraitWork) {
       val s = doc.spotlight
+      val adv = doc.portrait
+      val presetWork = doc.retouch > 0f || s != null || adv?.skin == true
       val params = PortraitParams(
         blur = s?.blur ?: 0f,
         retouch = doc.retouch,
-        brighten = if (doc.retouch > 0f) 0.35f else 0.2f,
+        brighten = if (!presetWork) 0f else if (doc.retouch > 0f || adv?.skin == true) 0.35f else 0.2f,
         pop = if (s != null) 0.5f else 0f,
+        // Advanced skin controls replace the preset's single strength.
+        smooth = if (adv?.skin == true) adv.smooth else -1f,
+        blemish = if (adv?.skin == true) adv.blemish else -1f,
+        even = if (adv?.skin == true) adv.even else -1f,
+        bgLight = adv?.bgLight ?: 0f,
+        bgColor = adv?.bgColor ?: 0f,
+        edge = adv?.edge ?: 0f,
       )
-      report(portrait().apply(cur, 0, s?.points ?: emptyList(), params, token))
+      val tuning = adv?.tuning() ?: com.photoplus.studio.FaceTuning()
+      report(portrait().apply(cur, 0, s?.points ?: emptyList(), params, token, tuning))
     }
     return cur
   }
@@ -172,7 +182,7 @@ class EditRenderer(
 
   companion object {
     fun heavyKey(d: EditDocument) =
-      listOf(d.transform, d.quarterTurns, d.flipH, d.perspectiveV, d.perspectiveH, d.straighten, d.crop, d.retouch, d.spotlight)
+      listOf(d.transform, d.quarterTurns, d.flipH, d.perspectiveV, d.perspectiveH, d.straighten, d.crop, d.retouch, d.spotlight, d.portrait)
         .joinToString("|")
   }
 }

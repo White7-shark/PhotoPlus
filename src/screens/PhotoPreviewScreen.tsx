@@ -339,6 +339,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
                 upscale: transformDetail === 'double' ? 2 : 1,
                 keepStyle: plan.keepStyle,
                 spotlight: plan.spotlight,
+                beauty: plan.beauty,
                 look: plan.look?.look ?? null,
                 lookStrength: plan.look?.strength,
                 watermark,
@@ -550,7 +551,11 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
   const suggestion = enhanceSuggestion(original ? null : quality);
   const notice = result ? null : lensNotice(lens, lensProfiles[str(image.metadata.lens) ?? ''] ?? undefined);
   const plan = transformPlan(image);
-  const kept = [plan.spotlight ? 'Spotlight' : null, plan.look ? 'Vibe Match' : null].filter(Boolean);
+  const kept = [
+    plan.spotlight ? 'Spotlight' : null,
+    plan.beauty ? 'Glow' : null,
+    plan.look ? 'Vibe Match' : null,
+  ].filter(Boolean);
   const transformTool = TOOLS.find(t => t.id === 'transform');
   const exposureTime = num(exif?.exposureTime);
   const choosing = tool === 'spotlight' && !result;

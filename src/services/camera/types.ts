@@ -99,6 +99,8 @@ export interface CaptureOptions {
   retouch?: number;
   brighten?: number;
   pop?: number;
+  /** Camera beauty outside Spotlight (Glow and its face touches). */
+  beauty?: { retouch: number; brighten: number; eyes: number; underEye: number; shine: number; faceLight: number };
   /** Vibe Match look numbers and how strongly to apply them. */
   look?: number[];
   lookStrength?: number;
@@ -169,6 +171,15 @@ export interface CaptureResult {
   portrait?: SpotlightReport | null;
   /** The Spotlight settings used, with taps in the upright photo (re-applied by Transform). */
   spotlight?: { points: number[]; blur: number; retouch: number; brighten: number; pop: number } | null;
+  /** Camera beauty used outside Spotlight (re-applied by Transform). */
+  beauty?: {
+    retouch: number;
+    brighten: number;
+    eyes: number;
+    underEye: number;
+    shine: number;
+    faceLight: number;
+  } | null;
   look?: boolean;
   timings?: { captureMs?: number; processMs?: number; totalMs: number };
 }

@@ -292,6 +292,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
     val keepStyle = map["keepStyle"] as? Boolean ?: false
     @Suppress("UNCHECKED_CAST")
     val spotlight = map["spotlight"] as? Map<String, Any?>
+    val beauty = map["beauty"] as? Map<*, *>
     val look = lookOf(map["look"])
     val lookStrength = ((map["lookStrength"] as? Number)?.toFloat() ?: 0.8f).coerceIn(0f, 1f)
     // The output (not the input) is what the budget bounds.
@@ -313,6 +314,12 @@ class EngineModule(reactContext: ReactApplicationContext) :
         // Decoding applied EXIF orientation, so the bitmap is already upright.
         val portrait = spotlight?.let {
           portraitProcessor.apply(output, 0, PortraitParams.points(it["points"]), PortraitParams.fromMap(it), token)
+        } ?: beauty?.let { b ->
+          fun unit(k: String) = (b[k] as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+          portraitProcessor.apply(
+            output, 0, emptyList(), PortraitParams(blur = 0f, retouch = unit("retouch"), brighten = unit("brighten"), pop = 0f),
+            token, com.photoplus.camera.CaptureOptions.beautyTuning(b),
+          )
         }
         look?.let { NativeEngine.nativeStyleApply(output, it, lookStrength, token) }
         ImageCodec.encode(output, io.second, OutputFormat.JPEG, 95)

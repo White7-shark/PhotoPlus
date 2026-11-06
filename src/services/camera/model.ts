@@ -307,6 +307,40 @@ export function spotlightSettings(blur: BlurLevel, glow: GlowLevel): SpotlightSe
   return { blur: b.value, retouch: g.retouch, brighten: g.brighten, pop: 0.5 };
 }
 
+/**
+ * Camera beauty for photos outside Spotlight: Glow (skin) plus gentle,
+ * face-precise touches that grow with the level. Applied when the photo is
+ * taken; the editor's Portrait tool fine-tunes any of them later.
+ */
+export interface BeautySettings {
+  retouch: number;
+  brighten: number;
+  eyes: number;
+  underEye: number;
+  shine: number;
+  faceLight: number;
+}
+
+const BEAUTY_TOUCHES: Record<GlowLevel, Omit<BeautySettings, 'retouch' | 'brighten'>> = {
+  off: { eyes: 0, underEye: 0, shine: 0, faceLight: 0 },
+  natural: { eyes: 0.2, underEye: 0.3, shine: 0.2, faceLight: 0 },
+  smooth: { eyes: 0.3, underEye: 0.45, shine: 0.35, faceLight: 0.2 },
+  flawless: { eyes: 0.4, underEye: 0.6, shine: 0.5, faceLight: 0.3 },
+};
+
+/** The beauty a level applies, or null when it is off. */
+export function beautySettings(level: GlowLevel): BeautySettings | null {
+  if (level === 'off') return null;
+  const g = GLOW_LEVELS.find(l => l.id === level) ?? GLOW_LEVELS[0];
+  return { retouch: g.retouch, brighten: g.brighten, ...BEAUTY_TOUCHES[level] };
+}
+
+/** The next level when the Glow chip is tapped (Off → Natural → Smooth → Flawless → Off). */
+export function nextGlowLevel(level: GlowLevel): GlowLevel {
+  const i = GLOW_LEVELS.findIndex(l => l.id === level);
+  return GLOW_LEVELS[(i + 1) % GLOW_LEVELS.length].id;
+}
+
 export const MAX_SPOTLIGHT_POINTS = 4;
 
 /**

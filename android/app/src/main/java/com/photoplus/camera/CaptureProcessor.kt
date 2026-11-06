@@ -22,6 +22,7 @@ import com.photoplus.engine.NativeCancelTokens
 import com.photoplus.engine.NativeEngine
 import com.photoplus.engine.OutputFormat
 import com.photoplus.studio.MaskGeometry
+import com.photoplus.studio.PortraitParams
 import com.photoplus.studio.PortraitProcessor
 import com.photoplus.studio.PortraitReport
 import java.io.File
@@ -417,7 +418,12 @@ class CaptureProcessor(
       var portrait: PortraitReport? = null
       if (request.mode == CaptureMode.PORTRAIT) {
         listener.onProgress(request.captureId, "styling", 0.6)
-        portrait = portraitProcessor.apply(work, geometry.remainingRotation, burst.points, request.portrait, token)
+        portrait = portraitProcessor.apply(work, geometry.remainingRotation, burst.points, request.portrait, token, request.beauty)
+      } else if (request.beautyActive) {
+        // Camera beauty: Glow and its face touches, no background change.
+        listener.onProgress(request.captureId, "styling", 0.6)
+        val params = PortraitParams(blur = 0f, retouch = request.beautyRetouch, brighten = request.beautyBrighten, pop = 0f)
+        portrait = portraitProcessor.apply(work, geometry.remainingRotation, emptyList(), params, token, request.beauty)
       }
       request.look?.let { NativeEngine.nativeStyleApply(work, it, request.lookStrength, token) }
       val processMs = SystemClock.elapsedRealtime() - processStarted
@@ -460,13 +466,24 @@ class CaptureProcessor(
         },
         // What Spotlight used, in the upright photo, so the effect can be
         // re-applied exactly later (e.g. after Transform restores the original).
-        "spotlight" to portrait?.let {
+        "spotlight" to portrait?.takeIf { request.mode == CaptureMode.PORTRAIT }?.let {
           mapOf(
             "points" to burst.points.flatMap { (x, y) -> listOf(x.toDouble(), y.toDouble()) },
             "blur" to request.portrait.blur.toDouble(),
             "retouch" to request.portrait.retouch.toDouble(),
             "brighten" to request.portrait.brighten.toDouble(),
             "pop" to request.portrait.pop.toDouble(),
+          )
+        },
+        // Camera beauty used, so it can be re-applied (e.g. after Transform).
+        "beauty" to portrait?.takeIf { request.mode != CaptureMode.PORTRAIT }?.let {
+          mapOf(
+            "retouch" to request.beautyRetouch.toDouble(),
+            "brighten" to request.beautyBrighten.toDouble(),
+            "eyes" to request.beauty.eyes.toDouble(),
+            "underEye" to request.beauty.underEye.toDouble(),
+            "shine" to request.beauty.shine.toDouble(),
+            "faceLight" to request.beauty.faceLight.toDouble(),
           )
         },
         "timings" to mapOf(
