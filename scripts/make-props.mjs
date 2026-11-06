@@ -48,8 +48,16 @@ const defs = `
   <feBlend in="SourceGraphic" in2="t" mode="overlay"/>
 </filter>
 <filter id="tortoise" x="0" y="0" width="100%" height="100%">
-  <feTurbulence type="fractalNoise" baseFrequency="0.018 0.03" numOctaves="4" seed="21" result="n"/>
-  <feColorMatrix in="n" type="matrix" values="1.6 0 0 0 -0.35  1.0 0 0 0 -0.32  0.35 0 0 0 -0.12  0 0 0 0 1" result="c"/>
+  <!-- Acetate tortoiseshell: deep brown with honey-amber clouds and darker
+       flecks. Noise is stretched to a grey ramp, then mapped through the
+       shell's colour ramp. -->
+  <feTurbulence type="fractalNoise" baseFrequency="0.028 0.045" numOctaves="5" seed="21" result="n"/>
+  <feColorMatrix in="n" type="matrix" values="1.5 1.5 1.5 0 -1.85  1.5 1.5 1.5 0 -1.85  1.5 1.5 1.5 0 -1.85  0 0 0 0 1" result="g"/>
+  <feComponentTransfer in="g" result="c">
+    <feFuncR type="table" tableValues="0.09 0.11 0.16 0.34 0.62 0.80 0.86"/>
+    <feFuncG type="table" tableValues="0.035 0.04 0.06 0.15 0.33 0.50 0.58"/>
+    <feFuncB type="table" tableValues="0.015 0.015 0.02 0.04 0.09 0.16 0.22"/>
+  </feComponentTransfer>
   <feComposite in="c" in2="SourceGraphic" operator="in"/>
 </filter>
 <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
@@ -269,7 +277,8 @@ const PROPS = {
 <path d="M460,150 C490,128 510,128 540,150" fill="none" stroke="#000" stroke-width="26"/>
 <path d="M140,140 L45,128 M860,140 L955,128" stroke="#000" stroke-width="22" stroke-linecap="round"/></g>
 <path d="M175,100 C250,92 330,95 380,105 C320,160 250,220 190,260" fill="url(#glint)" opacity="0.45"/>
-<g fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="4"><rect x="128" y="68" width="344" height="254" rx="56"/><rect x="528" y="68" width="344" height="254" rx="56"/></g>`,
+<g fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="4"><rect x="128" y="68" width="344" height="254" rx="56"/><rect x="528" y="68" width="344" height="254" rx="56"/></g>
+<g fill="none" stroke="#FFF6E8" stroke-opacity="0.35" stroke-width="5" stroke-linecap="round"><path d="M180,72 L420,72"/><path d="M580,72 L820,72"/></g>`,
   },
   // Black satin bow tie. Knot centre at x 500, y 160.
   bowtie: {

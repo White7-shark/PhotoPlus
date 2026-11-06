@@ -1,4 +1,4 @@
-# Photo Plus — Architecture (Phases 1–2)
+# Photo Plus — Architecture (Phases 1–3)
 
 ```
 ┌──────────────────────────── React Native (TypeScript) ────────────────────────────┐
@@ -100,3 +100,22 @@ photo ─▶ recipe (untouched base + effects) ─▶ decode base ─▶ pp_tran
 - The engine never allocates full-size scratch planes for portraits (~30 MB working set at any size).
 - Premium checks go through `useFeature` / `checkFeature` (enforcement stays off until Play Billing ships); the feature catalogue lists Clarity, Spotlight and Share as free, and multi-shot modes and Vibe Match as Premium.
 - User-facing text uses brand names only; native error codes map to plain sentences in `services/errors.ts`.
+
+## Photo editor (Phase 3)
+
+```
+EditorScreen ─ history (whole-document undo/redo) ─▶ renderEdit(base, document, preview|save)
+                                                      │
+EditRenderer (Kotlin): decode base ─▶ [Transform] ─▶ geometry (rotate · flip · straighten · crop)
+   ─▶ [Spotlight / Glow via PortraitProcessor] ─▶ tone · warmth · saturation · look · focus · sharpen
+   ─▶ props (pp_place_prop, fitted with ML Kit face landmarks) ─▶ frame (pp_frame) ─▶ watermark ─▶ JPEG + EXIF
+```
+
+- **Non-destructive.** An edit is a small JSON document replayed on the untouched base in a fixed order. `EditDocument.kt` clamps every value, and allows only known prop and frame ids. The slow stages (Transform, Spotlight) are cached by input, so a preview while dragging a slider only re-runs the fast stages.
+- **Watermark.** `WatermarkRenderer` draws the mark with Android Canvas into a stamp (fonts and emblem from assets). The engine composites the stamp (`pp_overlay`) and reports how many of its pixels are visible.
+- **Export policy.** `ExportPolicy.resolve` / `verify` decide what the mark must be from the native entitlement (`Entitlements.kt`). A free export whose mark did not render fails with `WATERMARK_MISSING`, and nothing is written. Sharing accepts only files from the exports folder.
+- **Clean companions.**
+  - Free-plan captures and tool results are saved with the mark baked in, next to an unmarked `<name>_clean.jpg`. The app never shows or shares that copy.
+  - Edits and re-exports start from the clean copy, so the mark is never doubled.
+  - Deleting a photo deletes its clean copy too.
+- **Props and frames** are engine operations at full resolution. Prop art is generated SVG (`scripts/make-props.mjs`) bundled as PNG. Frames are signed-distance shapes, so their edges are smooth at any size.

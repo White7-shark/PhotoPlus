@@ -405,6 +405,8 @@ describe('plans and names', () => {
     expect(modeLabel('night')).toBe('Moonlight');
     expect(friendlyMessage('BUDGET_EXCEEDED')).not.toMatch(/budget|memory budget|engine/i);
     expect(friendlyMessage('SOMETHING_NEW')).toBe('Something went wrong. Please try again.');
+    expect(friendlyMessage('WATERMARK_MISSING')).toMatch(/couldn’t be prepared/);
+    expect(friendlyMessage('WATERMARK_MISSING')).not.toMatch(/watermark|pixel|render/i);
   });
 });
 

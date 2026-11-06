@@ -508,7 +508,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
       headerRight={
         <View style={{ flexDirection: 'row', gap: 6 }}>
           <IconButton
-            icon="chevronLeft"
+            icon="undo"
             label="Undo"
             onPress={() => dispatch({ type: 'undo' })}
             disabled={!canUndo(history)}
@@ -516,7 +516,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
             testID="undo"
           />
           <IconButton
-            icon="chevronRight"
+            icon="redo"
             label="Redo"
             onPress={() => dispatch({ type: 'redo' })}
             disabled={!canRedo(history)}

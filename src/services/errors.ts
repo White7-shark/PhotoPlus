@@ -18,6 +18,7 @@ const MESSAGES: Record<string, string> = {
   NO_ACTIVITY: 'Please bring Photo Plus to the front and try again.',
   SHARE_FAILED: 'Sharing didn’t work this time. Please try again.',
   PERMISSION_DENIED: 'Photo Plus needs permission for that.',
+  WATERMARK_MISSING: 'This photo couldn’t be prepared for sharing. Please try again.',
 };
 
 export function friendlyMessage(

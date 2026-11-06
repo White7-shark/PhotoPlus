@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
       pr.p.shadow = std::strtof(argv[++i], nullptr);
       pr.p.opacity = 1.0f;
       props.push_back(pr);
-    } else if (a == "--frame" && i + 28 < argc) {
+    } else if (a == "--frame" && i + 27 < argc) {
       hasFrame = true;
       canvasW = std::atoi(argv[++i]);
       canvasH = std::atoi(argv[++i]);
@@ -155,6 +155,9 @@ int main(int argc, char** argv) {
       sx = std::atoi(argv[++i]);
       sy = std::atoi(argv[++i]);
       sop = std::strtof(argv[++i], nullptr);
+    } else {
+      std::fprintf(stderr, "unknown or incomplete argument: %s\n", a.c_str());
+      return 2;
     }
   }
   if (!ops.empty()) {

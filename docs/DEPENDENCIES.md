@@ -73,6 +73,18 @@
 
 A clean `npm ci` reports **0 deprecated packages** and **0 warnings**. `@parcel/watcher`'s optional build-from-source install script is explicitly denied in `allowScripts`, since prebuilt binaries are used.
 
+## Bundled fonts and generated art (Phase 3)
+
+| Asset | Version / source | Licence |
+|---|---|---|
+| Poppins SemiBold ("Modern") | Google Fonts | SIL OFL 1.1 |
+| DM Serif Display ("Elegant") | Google Fonts | SIL OFL 1.1 |
+| Great Vibes ("Signature", and the watermark's "Created with") | Google Fonts | SIL OFL 1.1 |
+| Bebas Neue ("Bold") | Google Fonts | SIL OFL 1.1 |
+| Space Mono ("Type") | Google Fonts | SIL OFL 1.1 |
+
+The licence texts ship in `android/app/src/main/assets/fonts/LICENSES.txt`. Prop artwork is original: `scripts/make-props.mjs` draws it as SVG and renders it with the Playwright/Chromium already used for the design previews. It is a build-time tool only, not an app dependency. The editor preview script uses Pillow and MediaPipe (desktop only), as the Spotlight preview does.
+
 ## Patched upstream: `@react-native/gradle-plugin` 0.88.1
 
 `patches/@react-native+gradle-plugin+0.88.1.patch` is applied automatically by `postinstall`. It brings React Native's own Gradle plugin up to the toolchain above:

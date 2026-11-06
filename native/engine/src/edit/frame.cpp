@@ -222,7 +222,9 @@ Error frame(const ImageBuffer& photo, ImageBuffer& canvas, const FrameParams& fp
   };
   // Film sprocket holes along the top and bottom margins.
   const float holeH = 0.35f * std::min(wy, static_cast<float>(CH) - (wy + wh));
-  const float holeW = holeH * 1.3f, holePitch = holeW * 2.0f;
+  // A whole number of holes across the strip, so none is cut at the edges.
+  const float holeW = holeH * 1.3f;
+  const float holePitch = static_cast<float>(CW) / std::max(1.0f, std::round(static_cast<float>(CW) / (holeW * 2.0f)));
 
   const bool done = parallelFor(CH, token, [&](int32_t begin, int32_t end) {
     for (int32_t y = begin; y < end; ++y) {
@@ -272,7 +274,7 @@ Error frame(const ImageBuffer& photo, ImageBuffer& canvas, const FrameParams& fp
         // Film sprocket holes.
         if (fp.decoration == 1 && holeH > 1.0f && (fy < wy || fy > wy + wh)) {
           const float mid = fy < wy ? 0.5f * wy : 0.5f * (wy + wh + static_cast<float>(CH));
-          const float lx = std::fmod(fx + 0.25f * holePitch, holePitch) - 0.5f * holePitch;
+          const float lx = std::fmod(fx, holePitch) - 0.5f * holePitch;
           const float hd = sdRoundRect({lx, fy - mid}, 0.5f * holeW, 0.5f * holeH, 0.25f * holeH);
           c = mix(c, {0.88f, 0.86f, 0.82f}, std::clamp(0.5f - hd, 0.0f, 1.0f));
         }
