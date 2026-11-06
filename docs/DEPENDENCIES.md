@@ -41,6 +41,7 @@
 | ML Kit selfie segmentation (bundled) | **16.0.0-beta6** | 16.0.0-beta6 (Google ships it only as beta) |
 | ML Kit subject segmentation (Play services) | **16.0.0-beta1** | 16.0.0-beta1 (Google ships it only as beta) |
 | LiteRT (on-device inference, 16 KB page aligned) | **2.3.2** | 2.3.2 |
+| LiteRT GPU accelerator (`litert-gpu`, Phase 4; +3.2 MB on arm64) | **2.3.2** | 2.3.2 |
 | Depth Anything V2 Small, LiteRT 8-bit weights (Apache-2.0; fetched and SHA-256-verified at build time, revision `178427e`) | **2024 release** | — |
 | JUnit (Jupiter, via BOM) | **6.1.3** | 6.1.3 (migrated from JUnit 4, which is maintenance-only) |
 | org.json (tests) | **20260814** | 20260814 |
@@ -86,6 +87,16 @@ A clean `npm ci` reports **0 deprecated packages** and **0 warnings**. `@parcel/
 | Space Mono ("Type") | Google Fonts | SIL OFL 1.1 |
 
 The licence texts ship in `android/app/src/main/assets/fonts/LICENSES.txt`. Prop artwork and the brand mark's camera are original: `scripts/make-props.mjs` and `scripts/make-brand-mark.mjs` draw them as SVG and renders it with the Playwright/Chromium already used for the design previews. It is a build-time tool only, not an app dependency. The editor preview script uses Pillow and MediaPipe (desktop only), as the Spotlight preview does.
+
+## Native engine libraries (Phase 4)
+
+| Library | Version | Licence | Notes |
+|---|---|---|---|
+| stb_image | **v2.30** (latest) | Public domain / MIT | Vendored in `native/engine/third_party/stb`, SHA-256 `594c2fe35d49…` (`stb_image.h`). Only JPEG, PNG, BMP and GIF are compiled in; max 16 384 px per side; allocations go through the engine's memory budget |
+| stb_image_write | **v1.16** (latest) | Public domain / MIT | SHA-256 `cbd5f0ad7a9c…`. PNG and JPEG encoding |
+| OpenGL ES 3.1 + EGL | platform (NDK) | — | GPU previews; verified against the CPU at start-up |
+| OpenCV | 5.0.0 (latest; **not shipped**) | Apache-2.0 | Evaluated for the app: the official Android SDK (4.12 AAR) is 118 MB. Used only on the development machine as the test oracle (`scripts/verify-engine-against-opencv.py`, `opencv-python-headless` 5.0.0.93). See PHASE4_REPORT "OpenCV decision" |
+| ai-edge-litert (Python) | 2.3.0 | Apache-2.0 | Development only: host measurements in MODEL_EVALUATION.md |
 
 ## Ads (Phase 3 update)
 

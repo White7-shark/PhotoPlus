@@ -811,6 +811,8 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
               }}
               onAutoPerspective={autoPerspective}
               autoPerspectiveBusy={findingLines}
+              perspectiveLocked={!can('advancedEditing').allowed}
+              onPremium={() => askPremium('advancedEditing')}
               cropSize={cropSize}
               onCropSize={v => {
                 setCropSize(v);

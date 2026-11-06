@@ -118,6 +118,8 @@ export function CropPanel({
   onCropSize,
   onAutoPerspective,
   autoPerspectiveBusy = false,
+  perspectiveLocked = false,
+  onPremium,
 }: {
   doc: EditDocument;
   update: Update;
@@ -129,6 +131,9 @@ export function CropPanel({
   /** Straightens leaning walls and buildings automatically. */
   onAutoPerspective?: () => void;
   autoPerspectiveBusy?: boolean;
+  /** Perspective is an advanced (Premium) tool. */
+  perspectiveLocked?: boolean;
+  onPremium?: () => void;
 }) {
   const signed = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 100)}`;
   return (
@@ -163,36 +168,24 @@ export function CropPanel({
         onChange={v => update({ straighten: Math.round(v * 2) / 2 }, 'straighten')}
         onEnd={commit}
       />
-      <ValueSlider
-        label="Vertical perspective"
-        value={doc.perspectiveV}
-        min={-1}
-        max={1}
-        format={signed}
-        onChange={v => update({ perspectiveV: Math.round(v * 100) / 100 }, 'perspective-v')}
-        onEnd={commit}
-        testID="perspective-v"
-      />
-      <ValueSlider
-        label="Horizontal perspective"
-        value={doc.perspectiveH}
-        min={-1}
-        max={1}
-        format={signed}
-        onChange={v => update({ perspectiveH: Math.round(v * 100) / 100 }, 'perspective-h')}
-        onEnd={commit}
-        testID="perspective-h"
-      />
-      {onAutoPerspective ? (
+      {perspectiveLocked ? (
         <Button
-          label={autoPerspectiveBusy ? 'Finding lines…' : 'Auto straighten lines'}
-          icon="wand"
+          label="Fix leaning walls & buildings"
+          icon="crown"
           variant="glass"
-          onPress={onAutoPerspective}
-          disabled={autoPerspectiveBusy}
-          testID="perspective-auto"
+          onPress={() => onPremium?.()}
+          testID="perspective-locked"
         />
-      ) : null}
+      ) : (
+        <PerspectiveControls
+          doc={doc}
+          update={update}
+          commit={commit}
+          signed={signed}
+          onAuto={onAutoPerspective}
+          busy={autoPerspectiveBusy}
+        />
+      )}
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <Button
           label="Rotate"
@@ -216,6 +209,58 @@ export function CropPanel({
         Drag on the photo to move the crop.
       </AppText>
     </View>
+  );
+}
+
+/** Keystone sliders and the automatic fix (Premium: advanced editing). */
+function PerspectiveControls({
+  doc,
+  update,
+  commit,
+  signed,
+  onAuto,
+  busy,
+}: {
+  doc: EditDocument;
+  update: Update;
+  commit: () => void;
+  signed: (v: number) => string;
+  onAuto?: () => void;
+  busy: boolean;
+}) {
+  return (
+    <>
+      <ValueSlider
+        label="Vertical perspective"
+        value={doc.perspectiveV}
+        min={-1}
+        max={1}
+        format={signed}
+        onChange={v => update({ perspectiveV: Math.round(v * 100) / 100 }, 'perspective-v')}
+        onEnd={commit}
+        testID="perspective-v"
+      />
+      <ValueSlider
+        label="Horizontal perspective"
+        value={doc.perspectiveH}
+        min={-1}
+        max={1}
+        format={signed}
+        onChange={v => update({ perspectiveH: Math.round(v * 100) / 100 }, 'perspective-h')}
+        onEnd={commit}
+        testID="perspective-h"
+      />
+      {onAuto ? (
+        <Button
+          label={busy ? 'Finding lines…' : 'Auto straighten lines'}
+          icon="wand"
+          variant="glass"
+          onPress={onAuto}
+          disabled={busy}
+          testID="perspective-auto"
+        />
+      ) : null}
+    </>
   );
 }
 

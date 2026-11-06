@@ -4,8 +4,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -30,7 +30,8 @@ class JobProgressTest {
 
   /** Every callback in order, as text ("p:0.5", "SUCCEEDED", "done"). */
   private class Events : JobListener<Unit> {
-    val log: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    // Read while the ticker appends: a copy-on-write list iterates safely.
+    val log = CopyOnWriteArrayList<String>()
     val finished = CountDownLatch(1)
     override fun onStateChanged(jobId: String, state: JobState) { log.add(state.name) }
     override fun onProgress(jobId: String, fraction: Float) { log.add("p:$fraction") }

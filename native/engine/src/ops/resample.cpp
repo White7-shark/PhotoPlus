@@ -423,7 +423,12 @@ float detectVerticalKeystone(const ImageBuffer& src, const CancellationToken* to
   // Near-vertical edges vote with their lean (sideways shift per unit up) at
   // their position across the frame: converging verticals lean in proportion
   // to their distance from the centre. Fit lean = kappa * u + roll.
-  double sw = 0, su = 0, suu = 0, sl = 0, sul = 0;
+  struct Vote {
+    float u, lean, weight;
+  };
+  std::vector<Vote> votes;
+  votes.reserve(static_cast<std::size_t>(w) * h / 8);
+  double total = 0;
   for (int32_t y = 1; y < h - 1; ++y) {
     for (int32_t x = 1; x < w - 1; ++x) {
       auto at = [&](int32_t xx, int32_t yy) { return luma[static_cast<std::size_t>(yy) * w + xx]; };
@@ -433,14 +438,36 @@ float detectVerticalKeystone(const ImageBuffer& src, const CancellationToken* to
       if (mag < 80.0f || std::fabs(gx) < 1e-3f) continue;
       const float lean = gy / gx;
       if (std::fabs(lean) > 0.35f) continue;
-      const double u = (x + 0.5) / w - 0.5;
-      sw += mag, su += mag * u, suu += mag * u * u, sl += mag * lean, sul += mag * u * lean;
+      votes.push_back({static_cast<float>((x + 0.5) / w - 0.5), lean, mag});
+      total += mag;
     }
   }
-  if (sw < 2000.0 * (w * h) / (512.0 * 384.0)) return 0.0f;  // too few vertical lines to judge
-  const double det = sw * suu - su * su;
-  if (std::fabs(det) < 1e-9) return 0.0f;
-  const double kappa = (sw * sul - su * sl) / det;
+  if (total < 2000.0 * (w * h) / (512.0 * 384.0)) return 0.0f;  // too few vertical lines to judge
+  // Weighted least squares over the votes within `band` of the current
+  // model. Texture edges that are not part of any straight vertical line
+  // still vote, with leans unrelated to their position; left in, they pull
+  // the slope towards zero (under-correction). So the fit is repeated with
+  // a narrowing band, keeping only the edges that agree with the lines.
+  double kappa = 0, roll = 0;
+  bool fitted = false;
+  for (const double band : {1.0, 0.12, 0.06, 0.03}) {
+    double sw = 0, su = 0, suu = 0, sl = 0, sul = 0;
+    for (const Vote& v : votes) {
+      if (fitted && std::fabs(v.lean - (kappa * v.u + roll)) > band) continue;
+      sw += v.weight, su += v.weight * v.u, suu += v.weight * v.u * v.u, sl += v.weight * v.lean,
+          sul += v.weight * v.u * v.lean;
+    }
+    // Keep the previous fit if too little agrees with it to refine further.
+    if (fitted && sw < 0.1 * total) break;
+    const double det = sw * suu - su * su;
+    if (std::fabs(det) < 1e-9) {
+      if (!fitted) return 0.0f;
+      break;
+    }
+    kappa = (sw * sul - su * sl) / det;
+    roll = (sl - kappa * su) / sw;
+    fitted = true;
+  }
   // Our correction with amount a narrows the source top by a*w, which makes
   // a line at u lean by a*u*w/h: kappa = a*w/h, and the correction undoes it.
   const double a = -kappa * static_cast<double>(h) / static_cast<double>(w);

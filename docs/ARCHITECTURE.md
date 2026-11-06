@@ -1,4 +1,4 @@
-# Photo Plus — Architecture (Phases 1–3)
+# Photo Plus — Architecture (Phases 1–4)
 
 ```
 ┌──────────────────────────── React Native (TypeScript) ────────────────────────────┐
@@ -18,8 +18,11 @@
 ┌─────────────────────────────── C/C++ engine (native/engine) ────────▼─────────────┐
 │ pp_engine.h — stable C ABI                                                         │
 │ ImageBuffer (RAII, 64-byte aligned) · MemoryTracker (budget) · CancellationToken   │
-│ Pipeline · Operations (tone, grayscale, saturation, flip, rotate, crop, resize,    │
-│ sharpen) · Profiler                                                                │
+│ Pipeline (previews at max_edge, estimates, progress) · ThreadPool · buffer reuse   │
+│ Ops: resize (area/bilinear/Lanczos) · blur · luma sharpen · denoise · warp/keystone│
+│      LUT 3D · colour matrix · 12 blend modes · masks + guided refine · Profiler    │
+│ Codec (stb: JPEG/PNG/BMP/GIF, EXIF, budget-checked) · Tensors (model in/out)       │
+│ GPU: GLES 3.1 compute, self-tested against the CPU, previews only                  │
 │ Enhance: align · robust merge · super-resolution · denoise · deconvolve · tone     │
 │ pp_enhance_into (writes into a caller bitmap) · pp_focus_peaking (reads Y in place)│
 └────────────────────────────────────────────────────────────────────────────────────┘
@@ -138,3 +141,28 @@ capture ─▶ CaptureOptions.props ─▶ CameraProps.kt: preview → upright p
 ### Watermark-free unlock (rewarded ads)
 
 `AdsModule` handles consent (User Messaging Platform) and Google Mobile Ads rewarded ads. `AdRewards` counts rewards per photo from the SDK's reward callback only. `EngineModule.exportImage` asks `AdRewards.isUnlocked(photo)` and `ExportPolicy.resolveForExport` before choosing the mark, so an unlocked free photo exports clean and nothing else does.
+
+## Native engine (Phase 4)
+
+Full report: [`PHASE4_REPORT.md`](PHASE4_REPORT.md). Model choices: [`MODEL_EVALUATION.md`](MODEL_EVALUATION.md).
+
+```
+JS  ImageProcessingService ── onProgress ◄── PhotoPlusJobProgress ◄──┐
+Kotlin  EngineModule ─ JobManager (executor + progress ticker) ──────┘
+        EditRenderer: preview → nativeProcessEx(max_edge, AUTO)    save/export → (0, CPU)
+        ModelRuntime (ml/) ─ InferenceSession (LiteRT GPU → CPU, warm-up check, memory gate)
+C ABI   pp_process_ex · pp_process_estimate · pp_decode/encode · pp_warp_perspective ·
+        pp_detect_keystone · pp_apply_lut3d · pp_color_matrix · pp_blend · pp_mask_* ·
+        pp_image_to_tensor · pp_tensor_to_mask · pp_gpu_* · pp_memory_trim
+C++     validate everything → estimate peak vs budget → [reduce for preview] →
+        runs of GPU-capable ops on the verified GPU, everything else (and any GPU
+        failure) on the CPU thread pool → result
+```
+
+| Concern | How |
+|---|---|
+| Memory | One `MemoryTracker` budget for every buffer (set from device RAM by `MemoryBudgetPolicy`, lowered under pressure). The pipeline's peak is estimated before work starts. Freed buffers are reused (exact size, ≤ ¼ of budget) and trimmed under pressure |
+| Threads | One persistent pool (≤ 4 workers). The calling thread joins in, and waiting threads help, so nested parallel loops cannot deadlock. Every chunk checks the cancel token and reports progress |
+| Errors | `pp_status` + message → `EngineException(code)` → `ProcessingError.code`. Nothing throws across the C ABI |
+| Consistency | Saves and exports use only the CPU path. The GPU is used for previews only after matching the CPU within 2 levels on that device. The operations are cross-checked against OpenCV 5.0 on the host |
+| Models | Every model is declared in `ModelRegistry` with its licence and measured memory. It loads only when the phone can spare that memory, is released under pressure, and the feature falls back if the model is unavailable |

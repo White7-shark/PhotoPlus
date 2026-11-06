@@ -420,7 +420,9 @@ TEST(core_perspective_warps_and_detects_keystone) {
   // The warped image's corners come from the quad's corners.
   EXPECT_TRUE(std::abs(px(warped.ptr, 0, 0)[0] - px(src.ptr, 10, 5)[0]) < 40);
   const float concave[8] = {0, 0, 100, 0, 20, 20, 0, 100};
-  EXPECT_EQ(pp_warp_perspective(src.ptr, concave, 100, 80, nullptr, &warped.ptr), PP_ERROR_INVALID_ARGUMENT);
+  Img rejected;
+  EXPECT_EQ(pp_warp_perspective(src.ptr, concave, 100, 80, nullptr, &rejected.ptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_TRUE(rejected.ptr == nullptr);
   (void)rect;
 
   // Vertical stripes made to converge upwards (as when shooting a building
@@ -444,6 +446,27 @@ TEST(core_perspective_warps_and_detects_keystone) {
   ASSERT_OK(pp_detect_keystone(fixed.ptr, nullptr, &after));
   std::printf("    after correction: %.2f\n", static_cast<double>(after));
   EXPECT_TRUE(std::fabs(after) < std::fabs(v) * 0.5f);
+
+  // Real photos also have texture whose edges lean every which way (leaves,
+  // gravel, round shapes). Those must not water the estimate down: the
+  // amount found stays close to the true one, in both directions.
+  Img textured{fill(800, 600, [](int x, int y, uint8_t* p) {
+    const int cx = x / 24, cy = y / 24;
+    const unsigned hsh = static_cast<unsigned>(cx) * 73856093u ^ static_cast<unsigned>(cy) * 19349663u;
+    const int jx = static_cast<int>(hsh % 11) - 5, jy = static_cast<int>((hsh / 11) % 11) - 5;
+    const int dx = x - (cx * 24 + 12 + jx), dy = y - (cy * 24 + 12 + jy);
+    const bool disc = dx * dx + dy * dy < 49;
+    p[0] = p[1] = p[2] = disc ? 128 : ((x / 40) % 2 ? 230 : 30);
+  })};
+  for (const float truth : {-0.5f, 0.5f}) {
+    Img tilted;
+    const pp_op t[] = {op(PP_OP_PERSPECTIVE, -truth, 0)};
+    ASSERT_OK(pp_process(textured.ptr, t, 1, nullptr, &tilted.ptr));
+    float found = 0;
+    ASSERT_OK(pp_detect_keystone(tilted.ptr, nullptr, &found));
+    std::printf("    textured scene: needs %.2f, found %.2f\n", static_cast<double>(truth), static_cast<double>(found));
+    EXPECT_NEAR(found, truth, 0.05);
+  }
 }
 
 // ---- colour --------------------------------------------------------------------------------

@@ -75,6 +75,15 @@ class ModelInterfaceTest {
     assertEquals(com.photoplus.studio.DepthMath.IN_H, ModelRegistry.DEPTH.input.height)
   }
 
+  @Test fun modelsLoadOnlyWhenTheDeviceCanSpareTheirMemory() {
+    val mb = 1024L * 1024
+    assertTrue(AcceleratorPlan.canLoad(240 * mb, 1024 * mb, systemLow = false, critical = false))
+    assertTrue(AcceleratorPlan.canLoad(240 * mb, 300 * mb, systemLow = false, critical = false)) // exactly +25%
+    assertFalse(AcceleratorPlan.canLoad(240 * mb, 299 * mb, systemLow = false, critical = false))
+    assertFalse(AcceleratorPlan.canLoad(240 * mb, 4096 * mb, systemLow = true, critical = false))
+    assertFalse(AcceleratorPlan.canLoad(240 * mb, 4096 * mb, systemLow = false, critical = true))
+  }
+
   @Test fun statisticsSummariseRuns() {
     val s = InferenceStats()
     assertEquals(0.0, s.snapshot()["averageMs"])
@@ -82,11 +91,13 @@ class ModelInterfaceTest {
     s.record(10.0)
     s.record(30.0)
     s.fail()
+    s.skip()
     val snap = s.snapshot()
     assertEquals("gpu", snap["accelerator"])
     assertEquals(2.0, snap["runs"])
     assertEquals(20.0, snap["averageMs"])
     assertEquals(30.0, snap["worstMs"])
     assertEquals(1.0, snap["failures"])
+    assertEquals(1.0, snap["skippedLowMemory"])
   }
 }

@@ -15,7 +15,11 @@ data class ModelSpec(
   val input: TensorInput,
   /** Tried in order; the first that loads and passes its warm-up check is used. */
   val accelerators: List<Accel> = listOf(Accel.GPU, Accel.CPU),
-  /** Rough working memory while loaded (weights + activations), for budgeting. */
+  /**
+   * Working memory while loaded (weights as unpacked by the runtime +
+   * activations), measured; a model is not loaded when the device cannot
+   * spare it ([AcceleratorPlan.canLoad]).
+   */
   val memoryBytes: Long,
 )
 
@@ -60,7 +64,9 @@ object ModelRegistry {
     license = "Apache-2.0",
     source = "Depth Anything V2 Small (LiteRT 8-bit weights)",
     input = TensorInput(686, 518, TensorInput.Layout.NCHW, TensorInput.Fit.STRETCH, IMAGENET_MEAN, IMAGENET_STD),
-    memoryBytes = 160L * 1024 * 1024,
+    // Measured: +234 MB peak on the CPU path (int8 weights unpacked to float);
+    // see docs/MODEL_EVALUATION.md.
+    memoryBytes = 240L * 1024 * 1024,
   )
 
   val ALL: List<ModelSpec> = listOf(DEPTH)

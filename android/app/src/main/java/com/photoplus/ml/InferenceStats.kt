@@ -6,6 +6,7 @@ class InferenceStats {
   private var totalMs = 0.0
   private var worstMs = 0.0
   private var failures = 0L
+  private var skipped = 0L
   var accelerator: Accel? = null
     @Synchronized get
     @Synchronized set
@@ -25,6 +26,12 @@ class InferenceStats {
     failures++
   }
 
+  /** Not loaded for lack of memory (the feature used its fallback). */
+  @Synchronized
+  fun skip() {
+    skipped++
+  }
+
   @Synchronized
   fun snapshot(): Map<String, Any?> = mapOf(
     "accelerator" to accelerator?.name?.lowercase(),
@@ -32,6 +39,7 @@ class InferenceStats {
     "averageMs" to if (runs == 0L) 0.0 else totalMs / runs,
     "worstMs" to worstMs,
     "failures" to failures.toDouble(),
+    "skippedLowMemory" to skipped.toDouble(),
     "loadMs" to loadMs,
   )
 }
@@ -58,6 +66,14 @@ object AcceleratorPlan {
     }
     return nonZero
   }
+
+  /**
+   * Whether loading a model that needs [modelBytes] is safe now: not while
+   * the system is critically low on memory, and only with that much plus a
+   * quarter to spare (the rest of the app keeps working meanwhile).
+   */
+  fun canLoad(modelBytes: Long, availableBytes: Long, systemLow: Boolean, critical: Boolean): Boolean =
+    !systemLow && !critical && availableBytes >= modelBytes + modelBytes / 4
 
   /** A structured warm-up input (a diagonal ramp, in normalised units). */
   fun warmupInput(input: TensorInput): FloatArray {

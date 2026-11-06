@@ -1,5 +1,6 @@
 package com.photoplus.ml
 
+import android.app.ActivityManager
 import android.content.Context
 import android.content.res.AssetManager
 import android.os.SystemClock
@@ -19,6 +20,7 @@ object ModelRuntime {
   private const val TAG = "PhotoPlusML"
 
   @Volatile private var assets: AssetManager? = null
+  @Volatile private var activity: ActivityManager? = null
   private class Slot {
     val lock = ReentrantLock()
     var session: InferenceSession? = null
@@ -34,6 +36,7 @@ object ModelRuntime {
   fun install(context: Context) {
     if (assets != null) return
     assets = context.applicationContext.assets
+    activity = context.applicationContext.getSystemService(ActivityManager::class.java)
     MemoryPressureMonitor.addListener { level ->
       if (level != MemoryPressureMonitor.Level.NORMAL) releaseAll()
     }
@@ -71,6 +74,12 @@ object ModelRuntime {
       Log.i(TAG, "${spec.id}: not bundled; features use their built-in fallback")
       return null
     }
+    if (!roomFor(spec)) {
+      // Not now (other apps need the memory); tried again on next use.
+      s.stats.skip()
+      Log.i(TAG, "${spec.id}: skipped, not enough free memory; using the built-in fallback")
+      return null
+    }
     val started = SystemClock.elapsedRealtime()
     val session = InferenceSession.open(am, spec, AcceleratorPlan.order(spec, gpuBlocked)) { gpuBlocked = true }
     if (session == null) {
@@ -81,6 +90,15 @@ object ModelRuntime {
     s.stats.loadMs = (SystemClock.elapsedRealtime() - started).toDouble()
     s.session = session
     return session
+  }
+
+  private fun roomFor(spec: ModelSpec): Boolean {
+    val am = activity ?: return true
+    val info = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+    return AcceleratorPlan.canLoad(
+      spec.memoryBytes, info.availMem, info.lowMemory,
+      MemoryPressureMonitor.lastLevel == MemoryPressureMonitor.Level.CRITICAL,
+    )
   }
 
   /** Frees every loaded model; models in use are freed right after their run. */

@@ -54,6 +54,7 @@ const mockEngine = {
     watermark: { applied: true, enforced: false, plan: 'free' },
   })),
   detectFaces: jest.fn(async () => ({ faces: [face] })),
+  detectPerspective: jest.fn(async () => ({ vertical: 0.42 })),
   cancel: jest.fn(),
 };
 const mockStorage = {
@@ -373,6 +374,29 @@ describe('the photo editor', () => {
       }),
     );
     expect(internal.get('usage.daily')).toMatchObject({ counts: { transform: 1 } });
+  });
+
+  it('Auto straighten lines applies the detected perspective, then sliders fine-tune and undo it', async () => {
+    setup();
+    await wrap(
+      <EditorScreen navigation={{ goBack: jest.fn() } as never} route={{ params: { imageId: 'img_1' } } as never} />,
+    );
+    await waitFor(() => expect(mockEngine.renderEdit).toHaveBeenCalled());
+    await fireEvent.press(screen.getByTestId('editor-tool-crop'));
+    await fireEvent.press(screen.getByTestId('perspective-auto'));
+    await waitFor(() => expect(lastPreviewDoc().perspectiveV).toBe(0.42));
+    expect(mockEngine.detectPerspective).toHaveBeenCalledWith(
+      expect.objectContaining({ inputPath: '/data/captures/PP_1_clean.jpg' }),
+    );
+    await act(async () => {
+      fireEvent(screen.getByTestId('perspective-h'), 'accessibilityAction', {
+        nativeEvent: { actionName: 'increment' },
+      });
+    });
+    await waitFor(() => expect(lastPreviewDoc().perspectiveH).toBeGreaterThan(0));
+    await fireEvent.press(screen.getByTestId('undo'));
+    await fireEvent.press(screen.getByTestId('undo'));
+    await waitFor(() => expect(lastPreviewDoc().perspectiveV).toBe(0));
   });
 
   it('free users style the Photo Plus mark; custom branding asks for Premium', async () => {
