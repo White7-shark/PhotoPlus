@@ -8,6 +8,7 @@ type Listener = (p: { jobId: string; state: 'queued' | 'running' | 'succeeded' |
 function fakeEngine(opts: { delayMs?: number; failWith?: string } = {}) {
   const listeners = new Set<Listener>();
   const pending = new Map<string, (e: Error) => void>();
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
   let current = 0;
   let peak = 0;
   const engine = {
@@ -24,7 +25,7 @@ function fakeEngine(opts: { delayMs?: number; failWith?: string } = {}) {
             return;
           }
           pending.set(jobId, reject);
-          setTimeout(() => {
+          const timer = setTimeout(() => {
             if (!pending.has(jobId)) return;
             pending.delete(jobId);
             current -= 1000;
@@ -40,11 +41,13 @@ function fakeEngine(opts: { delayMs?: number; failWith?: string } = {}) {
               timings: { decodeMs: 1, processMs: 4, totalMs: 6 },
             });
           }, opts.delayMs ?? 0);
+          timers.set(jobId, timer);
         }),
     ),
     cancel: jest.fn((jobId: string) => {
       const reject = pending.get(jobId);
       if (reject) {
+        clearTimeout(timers.get(jobId));
         pending.delete(jobId);
         current -= 1000;
         reject(Object.assign(new Error('Processing was cancelled'), { code: 'CANCELLED' }));
@@ -198,5 +201,70 @@ describe('runSelfTest', () => {
     setTimeout(() => controller.abort(), 5);
     await expect(run).rejects.toMatchObject({ code: 'CANCELLED' });
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
+  });
+});
+
+describe('job progress and perspective (engine phase 4)', () => {
+  type Payload = { jobId: string; state?: string; progress?: number };
+  function namedEvents() {
+    const byName = new Map<string, Set<(p: Payload) => void>>();
+    return {
+      addListener: (name: string, l: (p: Payload) => void) => {
+        if (!byName.has(name)) byName.set(name, new Set());
+        byName.get(name)!.add(l);
+        return { remove: () => byName.get(name)!.delete(l) };
+      },
+      emit: (name: string, p: Payload) => byName.get(name)?.forEach(l => l(p)),
+      count: () => [...byName.values()].reduce((n, s) => n + s.size, 0),
+    };
+  }
+
+  it('reports progress for its own job only, clamped, and stops listening afterwards', async () => {
+    const { engine } = fakeEngine();
+    const events = namedEvents();
+    const renderEdit = jest.fn(async (jobId: string) => {
+      events.emit('PhotoPlusJobProgress', { jobId, progress: 0.4 });
+      events.emit('PhotoPlusJobProgress', { jobId: 'someone-else', progress: 0.9 });
+      events.emit('PhotoPlusJobProgress', { jobId, progress: Number.NaN });
+      events.emit('PhotoPlusJobProgress', { jobId, progress: 1.7 });
+      return { outputPath: '/cache/o.jpg' };
+    });
+    const svc = new ImageProcessingService(Object.assign(engine, { renderEdit }), events as never);
+    const seen: number[] = [];
+    await svc.renderEdit({ inputPath: '/cache/a.jpg', outputPath: '/cache/b.jpg', doc: null } as never, {
+      jobId: 'e1',
+      onProgress: p => seen.push(p),
+    });
+    expect(seen).toEqual([0.4, 1]);
+    expect(events.count()).toBe(0);
+  });
+
+  it('process() reports progress alongside its states', async () => {
+    const { engine } = fakeEngine();
+    const events = namedEvents();
+    engine.process.mockImplementationOnce(async (jobId: string) => {
+      events.emit('PhotoPlusJobState', { jobId, state: 'running' });
+      events.emit('PhotoPlusJobProgress', { jobId, progress: 0.5 });
+      return { outputPath: '/cache/out.jpg' };
+    });
+    const svc = new ImageProcessingService(engine, events as never);
+    const log: string[] = [];
+    await svc.process(request, { jobId: 'p1', onState: s => log.push(s), onProgress: p => log.push(`p${p}`) });
+    expect(log).toEqual(['running', 'p0.5']);
+    expect(events.count()).toBe(0);
+  });
+
+  it('detectPerspective returns a safe value whatever the native side does', async () => {
+    const { engine, events } = fakeEngine();
+    const detect = jest.fn();
+    const svc = new ImageProcessingService(Object.assign(engine, { detectPerspective: detect }), events);
+    detect.mockResolvedValueOnce({ vertical: 0.3 });
+    expect(await svc.detectPerspective('/cache/a.jpg', null)).toBe(0.3);
+    detect.mockResolvedValueOnce({ vertical: 4 });
+    expect(await svc.detectPerspective('/cache/a.jpg', null)).toBe(1);
+    detect.mockResolvedValueOnce({ vertical: 'x' });
+    expect(await svc.detectPerspective('/cache/a.jpg', null)).toBe(0);
+    detect.mockRejectedValueOnce(new Error('no'));
+    expect(await svc.detectPerspective('/cache/a.jpg', null)).toBe(0);
   });
 });

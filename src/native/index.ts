@@ -48,6 +48,8 @@ export const nativeModules = {
 export const NativeEvents = {
   memoryPressure: 'PhotoPlusMemoryPressure',
   jobState: 'PhotoPlusJobState',
+  /** { jobId, progress 0..1 } while a job runs (only when it moves). */
+  jobProgress: 'PhotoPlusJobProgress',
 } as const;
 
 /** Error shape produced by rejected native promises. */

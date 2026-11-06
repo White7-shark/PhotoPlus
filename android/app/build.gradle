@@ -173,6 +173,8 @@ dependencies {
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
     // On-device inference for Spotlight's depth estimate (16 KB page aligned).
     implementation("com.google.ai.edge.litert:litert:2.3.2")
+    // GPU accelerator for on-device models (OpenCL/OpenGL); models fall back to the CPU if it can't run.
+    implementation("com.google.ai.edge.litert:litert-gpu:2.3.2")
     // Rewarded ads (free plan: four ads unlock one watermark-free photo) and consent.
     implementation("com.google.android.gms:play-services-ads:25.5.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")

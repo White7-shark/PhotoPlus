@@ -10,6 +10,9 @@ export interface EditDocument {
   flipH: boolean;
   /** Degrees, -45..45. */
   straighten: number;
+  /** Perspective fix, -1..1: vertical > 0 widens the top (buildings shot from below), horizontal > 0 the right. */
+  perspectiveV: number;
+  perspectiveH: number;
   /** Fractions of the turned and straightened photo, or null for none. */
   crop: { x: number; y: number; w: number; h: number } | null;
   exposure: number;
@@ -34,6 +37,8 @@ export const EMPTY_DOCUMENT: EditDocument = {
   quarterTurns: 0,
   flipH: false,
   straighten: 0,
+  perspectiveV: 0,
+  perspectiveH: 0,
   crop: null,
   exposure: 0,
   brightness: 0,
@@ -62,6 +67,8 @@ export function isEditDocument(v: unknown): v is EditDocument {
     [0, 1, 2, 3].includes(d.quarterTurns as number) &&
     typeof d.flipH === 'boolean' &&
     isNum(d.straighten, -45, 45) &&
+    // Added later: older saved edits have no perspective (see withDefaults).
+    [d.perspectiveV, d.perspectiveH].every(v => v === undefined || isNum(v, -1, 1)) &&
     (crop === null || (!!crop && ['x', 'y', 'w', 'h'].every(k => isNum(crop[k], 0, 1)))) &&
     ['exposure'].every(k => isNum(d[k], -2, 2)) &&
     ['brightness', 'contrast', 'saturation', 'warmth'].every(k => isNum(d[k], -1, 1)) &&
@@ -73,12 +80,26 @@ export function isEditDocument(v: unknown): v is EditDocument {
   );
 }
 
+/** A saved document with any fields added since it was saved filled in. */
+export function withDefaults(d: EditDocument): EditDocument {
+  return { ...EMPTY_DOCUMENT, ...d };
+}
+
 /** Whether anything was changed. */
 export function hasEdits(d: EditDocument): boolean {
   return JSON.stringify(d) !== JSON.stringify(EMPTY_DOCUMENT);
 }
 
 /** The geometry part (what face positions and props are measured against). */
-export function geometryOf(d: EditDocument): Pick<EditDocument, 'quarterTurns' | 'flipH' | 'straighten' | 'crop'> {
-  return { quarterTurns: d.quarterTurns, flipH: d.flipH, straighten: d.straighten, crop: d.crop };
+export function geometryOf(
+  d: EditDocument,
+): Pick<EditDocument, 'quarterTurns' | 'flipH' | 'perspectiveV' | 'perspectiveH' | 'straighten' | 'crop'> {
+  return {
+    quarterTurns: d.quarterTurns,
+    flipH: d.flipH,
+    perspectiveV: d.perspectiveV,
+    perspectiveH: d.perspectiveH,
+    straighten: d.straighten,
+    crop: d.crop,
+  };
 }

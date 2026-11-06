@@ -33,6 +33,12 @@ class EditRenderer(
     val maxEdge: Int = 4096,
     /** Identifies the source photo for the stage cache (null: no caching). */
     val cacheKey: String? = null,
+    /**
+     * An on-screen preview: per-pixel steps may run on the GPU once it has
+     * passed its self-test. Saves and exports always render on the CPU, so the
+     * files are identical on every device.
+     */
+    val preview: Boolean = false,
   )
 
   data class Result(
@@ -57,7 +63,7 @@ class EditRenderer(
     if (key != null && key == stageKey && cached != null && !cached.isRecycled) {
       cur = cached.copy(Bitmap.Config.ARGB_8888, true).also { mark(it) }
     } else {
-      cur = heavy(source, doc, token) { portraitReport = it }
+      cur = heavy(source, doc, opts.preview, token) { portraitReport = it }
       if (key != null) {
         stage?.recycle()
         stage = cur.copy(Bitmap.Config.ARGB_8888, false)
@@ -65,7 +71,7 @@ class EditRenderer(
       }
     }
     // 4: light, colour, look, focus, sharpening.
-    cur = runOps(cur, doc.toneOps(), token, owned = true)
+    cur = runOps(cur, doc.toneOps(maxOf(cur.width, cur.height)), opts.preview, token, owned = true)
     // 5: props.
     doc.props.forEachIndexed { i, p ->
       if (i in opts.skipProps) return@forEachIndexed
@@ -93,7 +99,7 @@ class EditRenderer(
   }
 
   /** Transform, geometry and Spotlight/Glow: everything before the fast steps. */
-  private fun heavy(source: Bitmap, doc: EditDocument, token: Long, report: (PortraitReport) -> Unit): Bitmap {
+  private fun heavy(source: Bitmap, doc: EditDocument, preview: Boolean, token: Long, report: (PortraitReport) -> Unit): Bitmap {
     var cur: Bitmap = source
     var owned = false
     if (doc.transform) {
@@ -102,9 +108,9 @@ class EditRenderer(
       cur = out
       owned = true
     }
-    cur = runOps(cur, doc.geometryOps(), token, owned).also { if (it !== cur) owned = true }
+    cur = runOps(cur, doc.geometryOps(), preview, token, owned).also { if (it !== cur) owned = true }
     doc.cropOp(cur.width, cur.height)?.let { crop ->
-      cur = runOps(cur, listOf(crop), token, owned)
+      cur = runOps(cur, listOf(crop), preview, token, owned)
       owned = true
     }
     if (!owned) {
@@ -124,13 +130,19 @@ class EditRenderer(
   }
 
   /** Runs engine operations, returning a new bitmap (the input is recycled if [owned]). */
-  private fun runOps(input: Bitmap, ops: List<EngineOp>, token: Long, owned: Boolean): Bitmap {
+  private fun runOps(input: Bitmap, ops: List<EngineOp>, preview: Boolean, token: Long, owned: Boolean): Bitmap {
     if (ops.isEmpty()) return input
     val types = ops.map { it.typeId }.toIntArray()
     val params = FloatArray(ops.size * EngineOp.PARAMS).also { out ->
       ops.forEachIndexed { i, op -> op.params().copyInto(out, i * EngineOp.PARAMS) }
     }
-    val handle = NativeEngine.nativeProcess(input, types, params, token)
+    // A preview's input is already preview-sized: its own long edge keeps the
+    // pixel settings as they are while allowing the verified GPU.
+    val handle = if (preview) {
+      NativeEngine.nativeProcessEx(input, types, params, maxOf(input.width, input.height), NativeEngine.BACKEND_AUTO, token)
+    } else {
+      NativeEngine.nativeProcessEx(input, types, params, 0, NativeEngine.BACKEND_CPU, token)
+    }
     try {
       val out = createBitmap(NativeEngine.nativeResultWidth(handle), NativeEngine.nativeResultHeight(handle), Bitmap.Config.ARGB_8888)
       mark(out)
@@ -159,6 +171,8 @@ class EditRenderer(
   }
 
   companion object {
-    fun heavyKey(d: EditDocument) = listOf(d.transform, d.quarterTurns, d.flipH, d.straighten, d.crop, d.retouch, d.spotlight).joinToString("|")
+    fun heavyKey(d: EditDocument) =
+      listOf(d.transform, d.quarterTurns, d.flipH, d.perspectiveV, d.perspectiveH, d.straighten, d.crop, d.retouch, d.spotlight)
+        .joinToString("|")
   }
 }

@@ -3,24 +3,32 @@ package com.photoplus.engine
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 /** Abstraction over native cancel tokens so the manager is JVM-testable. */
 interface CancelTokens {
   fun create(): Long
   fun cancel(handle: Long)
   fun destroy(handle: Long)
+  /** How far the job using this token has got, 0..1. */
+  fun progress(handle: Long): Float = 0f
 }
 
 object NativeCancelTokens : CancelTokens {
   override fun create() = NativeEngine.nativeCreateToken()
   override fun cancel(handle: Long) = NativeEngine.nativeCancelToken(handle)
   override fun destroy(handle: Long) = NativeEngine.nativeDestroyToken(handle)
+  override fun progress(handle: Long) = NativeEngine.nativeTokenProgress(handle)
 }
 
 enum class JobState { QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED }
 
 interface JobListener<T> {
   fun onStateChanged(jobId: String, state: JobState) {}
+  /** Progress while running (0..1, rising), reported at most every tick and only when it moves. */
+  fun onProgress(jobId: String, fraction: Float) {}
   fun onSuccess(jobId: String, result: T)
   fun onFailure(jobId: String, error: EngineException)
 }
@@ -33,10 +41,13 @@ interface JobListener<T> {
  * - Each job owns a native cancel token. Token access is serialised per job
  *   so a cancel racing job completion can never touch a destroyed token.
  * - Duplicate job ids are rejected rather than silently replaced.
+ * - With a [ticker], running jobs report progress read from their token.
  */
 class JobManager(
   private val executor: ExecutorService,
   private val tokens: CancelTokens,
+  private val ticker: ScheduledExecutorService? = null,
+  private val tickMs: Long = 200,
 ) {
   private class Job(val id: String) {
     @Volatile var cancelled = false
@@ -67,7 +78,26 @@ class JobManager(
     data class Failure(val error: EngineException) : Outcome<Nothing>()
   }
 
+  private fun <T> startProgress(job: Job, listener: JobListener<T>): ScheduledFuture<*>? {
+    val t = ticker ?: return null
+    var last = 0f
+    return t.scheduleWithFixedDelay({
+      // Reported under the job's lock, so no progress can follow the job's
+      // final state (the token is cleared under the same lock first).
+      synchronized(job) {
+        if (job.token != 0L && !job.cancelled) {
+          val p = tokens.progress(job.token)
+          if (p - last >= 0.01f) {
+            last = p
+            listener.onProgress(job.id, p.coerceIn(0f, 1f))
+          }
+        }
+      }
+    }, tickMs, tickMs, TimeUnit.MILLISECONDS)
+  }
+
   private fun <T> run(job: Job, listener: JobListener<T>, work: (Long) -> T) {
+    var tick: ScheduledFuture<*>? = null
     val outcome: Outcome<T> = try {
       if (job.cancelled) throw cancelledError()
       synchronized(job) {
@@ -75,6 +105,7 @@ class JobManager(
         job.token = tokens.create()
       }
       listener.onStateChanged(job.id, JobState.RUNNING)
+      tick = startProgress(job, listener)
       val value = work(job.token)
       if (job.cancelled) throw cancelledError()
       Outcome.Success(value)
@@ -87,6 +118,7 @@ class JobManager(
     } finally {
       // Release native resources and deregister BEFORE notifying, so when
       // JavaScript sees the result the job no longer holds memory or a token.
+      tick?.cancel(false)
       synchronized(job) {
         if (job.token != 0L) tokens.destroy(job.token)
         job.token = 0L
@@ -122,6 +154,7 @@ class JobManager(
   fun shutdown() {
     cancelAll()
     executor.shutdown()
+    ticker?.shutdown()
   }
 
   private fun cancelledError() = EngineException(EngineException.CANCELLED, "Processing was cancelled")

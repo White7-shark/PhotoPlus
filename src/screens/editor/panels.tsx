@@ -116,6 +116,8 @@ export function CropPanel({
   onAspect,
   cropSize,
   onCropSize,
+  onAutoPerspective,
+  autoPerspectiveBusy = false,
 }: {
   doc: EditDocument;
   update: Update;
@@ -124,7 +126,11 @@ export function CropPanel({
   onAspect: (id: string) => void;
   cropSize: number;
   onCropSize: (v: number) => void;
+  /** Straightens leaning walls and buildings automatically. */
+  onAutoPerspective?: () => void;
+  autoPerspectiveBusy?: boolean;
 }) {
+  const signed = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 100)}`;
   return (
     <View style={{ gap: 12 }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -157,6 +163,36 @@ export function CropPanel({
         onChange={v => update({ straighten: Math.round(v * 2) / 2 }, 'straighten')}
         onEnd={commit}
       />
+      <ValueSlider
+        label="Vertical perspective"
+        value={doc.perspectiveV}
+        min={-1}
+        max={1}
+        format={signed}
+        onChange={v => update({ perspectiveV: Math.round(v * 100) / 100 }, 'perspective-v')}
+        onEnd={commit}
+        testID="perspective-v"
+      />
+      <ValueSlider
+        label="Horizontal perspective"
+        value={doc.perspectiveH}
+        min={-1}
+        max={1}
+        format={signed}
+        onChange={v => update({ perspectiveH: Math.round(v * 100) / 100 }, 'perspective-h')}
+        onEnd={commit}
+        testID="perspective-h"
+      />
+      {onAutoPerspective ? (
+        <Button
+          label={autoPerspectiveBusy ? 'Finding lines…' : 'Auto straighten lines'}
+          icon="wand"
+          variant="glass"
+          onPress={onAutoPerspective}
+          disabled={autoPerspectiveBusy}
+          testID="perspective-auto"
+        />
+      ) : null}
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <Button
           label="Rotate"

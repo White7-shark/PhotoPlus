@@ -33,11 +33,13 @@ sealed class EngineOp(val typeId: Int) {
         maxOf(1, (height * factor).toInt()),
       )
   }
-  data class Resize(val width: Int, val height: Int) : EngineOp(6) {
-    override fun params() = floatArrayOf(width.toFloat(), height.toFloat(), 0f, 0f)
+  /** [filter]: 0 auto (area shrinking, Lanczos enlarging), 1 bilinear, 2 area, 3 Lanczos. */
+  data class Resize(val width: Int, val height: Int, val filter: Int = 0) : EngineOp(6) {
+    override fun params() = floatArrayOf(width.toFloat(), height.toFloat(), filter.toFloat(), 0f)
   }
-  data class Sharpen(val amount: Float) : EngineOp(7) {
-    override fun params() = floatArrayOf(amount, 0f, 0f, 0f)
+  /** Luminance unsharp mask: [radius] in pixels (0 = 1 px), [threshold] 0..0.2. */
+  data class Sharpen(val amount: Float, val radius: Float = 0f, val threshold: Float = 0f) : EngineOp(7) {
+    override fun params() = floatArrayOf(amount, radius, threshold, 0f)
   }
   data class Saturation(val amount: Float) : EngineOp(8) {
     override fun params() = floatArrayOf(amount, 0f, 0f, 0f)
@@ -64,6 +66,19 @@ sealed class EngineOp(val typeId: Int) {
     val feather: Float,
   ) : EngineOp(12) {
     override fun params() = floatArrayOf(kind.toFloat(), cx, cy, size, angle, strength, feather)
+  }
+
+  /** Gaussian blur, sigma in pixels. */
+  data class Blur(val sigma: Float) : EngineOp(13) {
+    override fun params() = floatArrayOf(sigma)
+  }
+  /** Noise reduction scaled to the photo's own noise, 0..1. */
+  data class Denoise(val strength: Float) : EngineOp(14) {
+    override fun params() = floatArrayOf(strength)
+  }
+  /** Keystone: [vertical] > 0 widens the top, [horizontal] > 0 the right side (-1..1). */
+  data class Perspective(val vertical: Float, val horizontal: Float) : EngineOp(15) {
+    override fun params() = floatArrayOf(vertical, horizontal)
   }
 
   companion object {

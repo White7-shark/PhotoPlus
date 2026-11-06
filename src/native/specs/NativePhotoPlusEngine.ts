@@ -27,6 +27,8 @@ export interface Spec extends TurboModule {
   exportImage(jobId: string, request: Object): Promise<Object>;
   /** Faces (for fitting props) in the photo after its turn/straighten/crop. */
   detectFaces(request: Object): Promise<Object>;
+  /** Suggested perspective fix for the photo after its turn/mirror ({ vertical }). */
+  detectPerspective(request: Object): Promise<Object>;
   /** Every frame design around a photo, small (paths by frame id). */
   frameThumbnails(request: Object): Promise<Object>;
   /** Premium: cuts the tapped object out of a photo and saves it as a prop. */

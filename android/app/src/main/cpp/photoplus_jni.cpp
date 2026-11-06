@@ -201,11 +201,12 @@ JNIEXPORT jlongArray JNICALL Java_com_photoplus_engine_NativeEngine_nativeMemory
                                                                                         jobject) {
   pp_memory_stats s{};
   pp_memory_get_stats(&s);
-  const jlong values[6] = {static_cast<jlong>(s.current_bytes),     static_cast<jlong>(s.peak_bytes),
+  const jlong values[8] = {static_cast<jlong>(s.current_bytes),     static_cast<jlong>(s.peak_bytes),
                            static_cast<jlong>(s.budget_bytes),      static_cast<jlong>(s.live_allocations),
-                           static_cast<jlong>(s.total_allocations), static_cast<jlong>(s.failed_allocations)};
-  jlongArray out = env->NewLongArray(6);
-  if (out != nullptr) env->SetLongArrayRegion(out, 0, 6, values);
+                           static_cast<jlong>(s.total_allocations), static_cast<jlong>(s.failed_allocations),
+                           static_cast<jlong>(s.cached_bytes),      static_cast<jlong>(s.reused_allocations)};
+  jlongArray out = env->NewLongArray(8);
+  if (out != nullptr) env->SetLongArrayRegion(out, 0, 8, values);
   return out;
 }
 
@@ -678,6 +679,109 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStyleApply(J
   if (!img.open(env, bitmap, false)) return;
   const pp_status st = pp_style_apply(img.image, &s, strength, reinterpret_cast<const pp_cancel_token*>(token));
   if (st != PP_OK) throwStatus(env, st);
+}
+
+// pp_process_ex: maxEdge > 0 marks a preview (reduced if larger; the engine
+// may use the verified GPU); backend is a pp_backend value.
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeProcessEx(
+    JNIEnv* env, jobject, jobject bitmap, jintArray types, jfloatArray params, jint maxEdge, jint backend, jlong token) {
+  const jsize count = env->GetArrayLength(types);
+  constexpr jsize kParams = PP_OP_PARAMS;
+  if (env->GetArrayLength(params) != count * kParams) {
+    throwEngineException(env, "INVALID_ARGUMENT", "params must contain 8 floats per operation");
+    return 0;
+  }
+  std::vector<pp_op> ops(static_cast<size_t>(count));
+  if (count > 0) {
+    std::vector<jint> t(static_cast<size_t>(count));
+    std::vector<jfloat> p(static_cast<size_t>(count) * kParams);
+    env->GetIntArrayRegion(types, 0, count, t.data());
+    env->GetFloatArrayRegion(params, 0, count * kParams, p.data());
+    if (env->ExceptionCheck()) return 0;
+    for (jsize i = 0; i < count; ++i) {
+      ops[i].type = t[i];
+      for (int k = 0; k < kParams; ++k) ops[i].p[k] = p[i * kParams + k];
+    }
+  }
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return 0;
+  pp_render_options options{};
+  options.max_edge = maxEdge;
+  options.backend = backend;
+  pp_image* output = nullptr;
+  const pp_status status = pp_process_ex(img.image, ops.data(), ops.size(), &options,
+                                         reinterpret_cast<const pp_cancel_token*>(token), &output);
+  if (status != PP_OK) {
+    throwStatus(env, status);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(output);
+}
+
+JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeTokenProgress(JNIEnv*, jobject, jlong handle) {
+  return pp_cancel_token_progress(reinterpret_cast<const pp_cancel_token*>(handle));
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeMemoryTrim(JNIEnv*, jobject) { pp_memory_trim(); }
+
+// [compiled, available, maxDifference, renderer, reason]
+JNIEXPORT jobjectArray JNICALL Java_com_photoplus_engine_NativeEngine_nativeGpuInit(JNIEnv* env, jobject) {
+  pp_gpu_status s{};
+  pp_gpu_init(&s);
+  jobjectArray out = env->NewObjectArray(5, env->FindClass("java/lang/String"), nullptr);
+  if (out == nullptr) return nullptr;
+  const std::string values[5] = {std::to_string(s.compiled), std::to_string(s.available), std::to_string(s.max_difference),
+                                 s.renderer, s.reason};
+  for (int i = 0; i < 5; ++i) {
+    jstring v = env->NewStringUTF(values[i].c_str());
+    env->SetObjectArrayElement(out, i, v);
+    env->DeleteLocalRef(v);
+  }
+  return out;
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeGpuShutdown(JNIEnv*, jobject) { pp_gpu_shutdown(); }
+
+JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeDetectKeystone(JNIEnv* env, jobject, jobject bitmap) {
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return 0.0f;
+  float v = 0.0f;
+  const pp_status st = pp_detect_keystone(img.image, nullptr, &v);
+  if (st != PP_OK) throwStatus(env, st);
+  return v;
+}
+
+// Fills `out` (width*height*3 floats) with the model input for `bitmap`;
+// `placement` (4 floats, may be null) receives scaleX, scaleY, offsetX, offsetY.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeImageToTensor(
+    JNIEnv* env, jobject, jobject bitmap, jint width, jint height, jint layout, jint fit, jfloatArray mean,
+    jfloatArray stdv, jfloatArray out, jfloatArray placement) {
+  if (mean == nullptr || stdv == nullptr || out == nullptr || env->GetArrayLength(mean) < 3 || env->GetArrayLength(stdv) < 3) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad tensor arguments");
+    return;
+  }
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  pp_tensor_spec spec{};
+  spec.width = width;
+  spec.height = height;
+  spec.layout = layout;
+  spec.fit = fit;
+  env->GetFloatArrayRegion(mean, 0, 3, spec.mean);
+  env->GetFloatArrayRegion(stdv, 0, 3, spec.std);
+  const jsize n = env->GetArrayLength(out);
+  std::vector<float> buffer(static_cast<size_t>(n));
+  pp_tensor_placement where{};
+  const pp_status st = pp_image_to_tensor(img.image, &spec, buffer.data(), buffer.size(), nullptr, &where);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  env->SetFloatArrayRegion(out, 0, n, buffer.data());
+  if (placement != nullptr && env->GetArrayLength(placement) >= 4) {
+    const float p[4] = {where.scale_x, where.scale_y, where.offset_x, where.offset_y};
+    env->SetFloatArrayRegion(placement, 0, 4, p);
+  }
 }
 
 }  // extern "C"

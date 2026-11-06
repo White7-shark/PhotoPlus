@@ -38,8 +38,43 @@ object NativeEngine {
   external fun nativeCopyResultToBitmap(handle: Long, bitmap: Bitmap)
   external fun nativeReleaseResult(handle: Long)
 
-  /** [current, peak, budget, live, total, failed] */
+  /**
+   * pp_process_ex: [maxEdge] > 0 marks a preview (reduced if larger, with
+   * pixel-measured settings scaled; may run on the verified GPU); [backend] is
+   * [BACKEND_AUTO], [BACKEND_CPU] or [BACKEND_GPU].
+   */
+  external fun nativeProcessEx(bitmap: Bitmap, types: IntArray, params: FloatArray, maxEdge: Int, backend: Int, token: Long): Long
+
+  /** How far the job using [handle] has got, 0..1. */
+  external fun nativeTokenProgress(handle: Long): Float
+
+  /** [current, peak, budget, live, total, failed, cached, reused] */
   external fun nativeMemoryStats(): LongArray
+
+  /** Frees buffers kept for reuse (memory pressure). */
+  external fun nativeMemoryTrim()
+
+  /** Initialises and verifies the GPU: [compiled, available, maxDifference, renderer, reason]. */
+  external fun nativeGpuInit(): Array<String>
+  external fun nativeGpuShutdown()
+
+  /** Suggested vertical perspective correction (-1..1), 0 if unclear. */
+  external fun nativeDetectKeystone(bitmap: Bitmap): Float
+
+  /**
+   * Model input for [bitmap]: [out] gets width*height*3 floats ([layout] 0
+   * NHWC, 1 NCHW; [fit] 0 stretch, 1 letterbox, 2 centre crop; value =
+   * (pixel/255 - mean) / std). [placement] (4 floats, optional) receives where
+   * the photo landed: scaleX, scaleY, offsetX, offsetY.
+   */
+  external fun nativeImageToTensor(
+    bitmap: Bitmap, width: Int, height: Int, layout: Int, fit: Int, mean: FloatArray, std: FloatArray,
+    out: FloatArray, placement: FloatArray?,
+  )
+
+  const val BACKEND_AUTO = 0
+  const val BACKEND_CPU = 1
+  const val BACKEND_GPU = 2
   external fun nativeSetMemoryBudget(bytes: Long)
   external fun nativeProfileReport(): String
   external fun nativeResetProfiler()

@@ -87,13 +87,18 @@ export interface ProcessOptions {
   jobId?: string;
   signal?: AbortSignal;
   onState?: (state: JobState) => void;
+  /** 0..1 while the job runs (rising; reported a few times a second at most). */
+  onProgress?: (fraction: number) => void;
+}
+
+interface JobEvent {
+  jobId: string;
+  state?: JobState;
+  progress?: number;
 }
 
 interface EventSource {
-  addListener(
-    event: string,
-    listener: (payload: { jobId: string; state: JobState }) => void,
-  ): EventSubscription | { remove(): void };
+  addListener(event: string, listener: (payload: JobEvent) => void): EventSubscription | { remove(): void };
 }
 
 /**
@@ -152,11 +157,12 @@ export class ImageProcessingService {
     const jobId = options.jobId ?? createId('job');
     const subscription = options.onState
       ? this.events.addListener(NativeEvents.jobState, payload => {
-          if (payload.jobId === jobId) {
+          if (payload.jobId === jobId && payload.state) {
             options.onState?.(payload.state);
           }
         })
       : null;
+    const progress = this.watchProgress(jobId, options.onProgress);
     const onAbort = () => this.cancel(jobId);
     options.signal?.addEventListener('abort', onAbort);
     this.active.add(jobId);
@@ -173,7 +179,18 @@ export class ImageProcessingService {
       this.active.delete(jobId);
       options.signal?.removeEventListener('abort', onAbort);
       subscription?.remove();
+      progress?.remove();
     }
+  }
+
+  private watchProgress(jobId: string, onProgress?: (fraction: number) => void) {
+    if (!onProgress) return null;
+    return this.events.addListener(NativeEvents.jobProgress, payload => {
+      const p = payload.progress;
+      if (payload.jobId === jobId && typeof p === 'number' && Number.isFinite(p)) {
+        onProgress(Math.min(1, Math.max(0, p)));
+      }
+    });
   }
 
   /** Restores an existing photo (denoise, deblur, tone, optional 2x). Cancellable like process(). */
@@ -222,6 +239,20 @@ export class ImageProcessingService {
       return Array.isArray(r.faces) ? r.faces : [];
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * How much vertical perspective fix the photo (turned and mirrored as in
+   * `doc`) needs, -1..1, or 0 when nothing reliable was found.
+   */
+  async detectPerspective(inputPath: string, doc: EditDocument | null): Promise<number> {
+    try {
+      const r = (await this.engine.detectPerspective({ inputPath, doc })) as unknown as { vertical?: unknown };
+      const v = r.vertical;
+      return typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(-1, v)) : 0;
+    } catch {
+      return 0;
     }
   }
 
@@ -318,6 +349,7 @@ export class ImageProcessingService {
     const jobId = options.jobId ?? createId(prefix);
     const onAbort = () => this.cancel(jobId);
     options.signal?.addEventListener('abort', onAbort);
+    const progress = this.watchProgress(jobId, options.onProgress);
     this.active.add(jobId);
     try {
       return await start(jobId);
@@ -326,6 +358,7 @@ export class ImageProcessingService {
     } finally {
       this.active.delete(jobId);
       options.signal?.removeEventListener('abort', onAbort);
+      progress?.remove();
     }
   }
 

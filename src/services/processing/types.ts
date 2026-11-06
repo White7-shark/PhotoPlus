@@ -42,6 +42,10 @@ export interface EngineInfo {
   maxDecodeDimension: number;
   operations: string[];
   outputFormats: string[];
+  /** GPU acceleration for previews (on only once it matched the CPU in a self-test). */
+  gpu?: { ready: boolean; checked: boolean; renderer: string | null };
+  /** On-device models by name: loaded, accelerator, timings. */
+  models?: Record<string, unknown>;
 }
 
 export interface EngineMemoryStats {
@@ -52,6 +56,9 @@ export interface EngineMemoryStats {
   totalAllocations: number;
   failedAllocations: number;
   activeJobs: number;
+  /** Freed buffers kept for reuse (count against the budget, released first). */
+  cachedBytes?: number;
+  reusedAllocations?: number;
 }
 
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';

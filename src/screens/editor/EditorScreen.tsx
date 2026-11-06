@@ -18,7 +18,14 @@ import { toggleSpotlightPoint } from '../../services/camera/model';
 import type { ImageRecord } from '../../services/database/repositories/ImagesRepository';
 import { createId } from '../../services/database/ids';
 import { allProps, findProp, propSource, type PropCategory, type PropDef } from '../../services/edit/catalog';
-import { EMPTY_DOCUMENT, geometryOf, hasEdits, isEditDocument, type EditDocument } from '../../services/edit/document';
+import {
+  EMPTY_DOCUMENT,
+  geometryOf,
+  hasEdits,
+  isEditDocument,
+  withDefaults,
+  type EditDocument,
+} from '../../services/edit/document';
 import { canRedo, canUndo, historyReducer, startHistory } from '../../services/edit/history';
 import {
   defaultPlacement,
@@ -108,6 +115,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
   } | null>(null);
   const [cropAspect, setCropAspect] = useState('original');
   const [cropSize, setCropSize] = useState(1);
+  const [findingLines, setFindingLines] = useState(false);
   const [premiumFor, setPremiumFor] = useState<FeatureKey | null>(null);
   const [premiumMessage, setPremiumMessage] = useState<string | null>(null);
   const [usage, setUsage] = useState<DailyUsage | null>(null);
@@ -151,7 +159,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
       }
       // A saved edit re-opens on its untouched photo, with its edits.
       const savedBase = str(record.metadata.editBase);
-      const saved = isEditDocument(record.metadata.edit) ? record.metadata.edit : null;
+      const saved = isEditDocument(record.metadata.edit) ? withDefaults(record.metadata.edit) : null;
       setBase(savedBase && saved ? savedBase : cleanOf(record));
       dispatch({ type: 'reset', doc: savedBase && saved ? saved : EMPTY_DOCUMENT });
       const used = await repos?.settings.getInternal<unknown>(USAGE_KEY).catch(() => null);
@@ -173,6 +181,11 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
     [history.present],
   );
   const commit = useCallback(() => dispatch({ type: 'commit' }), []);
+  // For results that arrive later (the photo may have been edited meanwhile).
+  const latestUpdate = useRef(update);
+  useEffect(() => {
+    latestUpdate.current = update;
+  }, [update]);
 
   // ---- live preview -------------------------------------------------------------
   const photoTool = PHOTO_TOOLS.includes(tool);
@@ -251,6 +264,22 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
     faces.current.set(key, found);
     return found;
   }, [base, doc]);
+  const autoPerspective = useCallback(async () => {
+    if (!base || findingLines) return;
+    setFindingLines(true);
+    try {
+      const vertical = await getProcessingService().detectPerspective(base, doc);
+      if (Math.abs(vertical) < 0.02) {
+        Alert.alert('Lines look straight', 'No leaning walls or buildings to fix in this photo.');
+        return;
+      }
+      // Props were placed on the old geometry: keep them, the user can move them.
+      latestUpdate.current({ perspectiveV: Math.round(vertical * 100) / 100, perspectiveH: 0 });
+      commit();
+    } finally {
+      setFindingLines(false);
+    }
+  }, [base, doc, findingLines, commit]);
   const photoAspect = preview && preview.height > 0 ? preview.width / preview.height : 0.75;
   const placementFor = useCallback(
     async (def: PropDef, current?: PropPlacement): Promise<PropPlacement> => {
@@ -780,6 +809,8 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
                 applyCrop(id, cropSize);
                 commit();
               }}
+              onAutoPerspective={autoPerspective}
+              autoPerspectiveBusy={findingLines}
               cropSize={cropSize}
               onCropSize={v => {
                 setCropSize(v);

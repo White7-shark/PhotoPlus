@@ -16,6 +16,9 @@ data class EditDocument(
   val quarterTurns: Int = 0,
   val flipH: Boolean = false,
   val straighten: Float = 0f,
+  /** Perspective (keystone) correction, -1..1: vertical > 0 widens the top, horizontal > 0 the right. */
+  val perspectiveV: Float = 0f,
+  val perspectiveH: Float = 0f,
   /** Crop in fractions of the turned and straightened photo, or null. */
   val crop: CropRect? = null,
   val exposure: Float = 0f,
@@ -44,12 +47,19 @@ data class EditDocument(
 
   val hasPortraitWork: Boolean get() = retouch > 0f || spotlight != null
 
-  /** Turn, mirror and straighten (crop needs the resulting size: [cropOp]). */
+  /** Turn, mirror, perspective and straighten (crop needs the resulting size: [cropOp]). */
   fun geometryOps(): List<EngineOp> = buildList {
     if (quarterTurns != 0) add(EngineOp.Rotate(quarterTurns))
     if (flipH) add(EngineOp.Flip(horizontal = true, vertical = false))
+    if (perspectiveV != 0f || perspectiveH != 0f) add(EngineOp.Perspective(perspectiveV, perspectiveH))
     if (straighten != 0f) add(EngineOp.Straighten(straighten))
   }
+
+  /** Only the geometry (turn, mirror, perspective, straighten, crop): what faces and props are measured on. */
+  fun geometryOnly() = EditDocument(
+    quarterTurns = quarterTurns, flipH = flipH, perspectiveV = perspectiveV, perspectiveH = perspectiveH,
+    straighten = straighten, crop = crop,
+  )
 
   /** The crop in pixels of a [width] x [height] image, or null for none. */
   fun cropOp(width: Int, height: Int): EngineOp.Crop? {
@@ -62,14 +72,18 @@ data class EditDocument(
     return EngineOp.Crop(x, y, w, h)
   }
 
-  /** Light, colour, look, focus and sharpening, in that order. */
-  fun toneOps(): List<EngineOp> = buildList {
+  /**
+   * Light, colour, look, focus and sharpening, in that order, for an image
+   * whose longest edge is [longEdge] pixels. Sharpening's radius follows the
+   * size, so a small preview and the full-size save look alike.
+   */
+  fun toneOps(longEdge: Int = 0): List<EngineOp> = buildList {
     if (exposure != 0f || brightness != 0f || contrast != 0f) add(EngineOp.Tone(exposure, brightness, contrast))
     if (warmth != 0f) add(EngineOp.Warmth(warmth, 0f))
     if (saturation != 0f) add(EngineOp.Saturation(saturation))
     look?.let { if (it.strength > 0f) add(EngineOp.Filter(it.engineId, it.strength)) }
     focus?.let { if (it.strength > 0f) add(EngineOp.Focus(it.kind, it.x, it.y, it.size, it.angle, it.strength, 0.5f)) }
-    if (sharpen > 0f) add(EngineOp.Sharpen(sharpen * 1.2f))
+    if (sharpen > 0f) add(EngineOp.Sharpen(sharpen * 1.2f, sharpenRadius(longEdge), SHARPEN_THRESHOLD))
   }
 
   companion object {
@@ -92,6 +106,12 @@ data class EditDocument(
     fun isKnownProp(id: String) = id in PROPS || CUSTOM_PROP.matches(id)
 
     const val MAX_PROPS = 12
+
+    /** Leaves flat areas and noise alone when sharpening (0..0.2). */
+    const val SHARPEN_THRESHOLD = 0.01f
+
+    /** One pixel per 2000 of the longest edge (0: the engine's 1 px). */
+    fun sharpenRadius(longEdge: Int): Float = if (longEdge <= 0) 0f else (longEdge / 2000f).coerceIn(0.6f, 4f)
 
     fun fromMap(map: Map<String, Any?>?): EditDocument {
       if (map == null) return EditDocument()
@@ -135,6 +155,8 @@ data class EditDocument(
         quarterTurns = (((map["quarterTurns"] as? Number)?.toInt() ?: 0) % 4 + 4) % 4,
         flipH = map["flipH"] == true,
         straighten = num("straighten", -45f, 45f),
+        perspectiveV = num("perspectiveV", -1f, 1f),
+        perspectiveH = num("perspectiveH", -1f, 1f),
         crop = crop,
         exposure = num("exposure", -2f, 2f),
         brightness = num("brightness", -1f, 1f),

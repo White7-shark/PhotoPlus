@@ -27,6 +27,7 @@ import com.photoplus.edit.CustomProps
 import com.photoplus.util.emitSafely
 import com.photoplus.util.toWritableMap
 import java.io.File
+import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
@@ -45,15 +46,29 @@ class EngineModule(reactContext: ReactApplicationContext) :
   )
   private val engineAvailable = NativeEngine.ensureLoaded()
   private val portraitProcessor by lazy { com.photoplus.studio.PortraitProcessor() }
-  private val jobs = JobManager(createExecutor(budget.workers), NativeCancelTokens)
+  private val jobs = JobManager(
+    createExecutor(budget.workers),
+    NativeCancelTokens,
+    Executors.newSingleThreadScheduledExecutor(namedThreads("pp-progress")),
+  )
   private val ioExecutor = ThreadPoolExecutor(1, 1, 30, TimeUnit.SECONDS, LinkedBlockingQueue(), namedThreads("pp-io")).apply {
     allowCoreThreadTimeOut(true)
   }
 
+  /** GPU status from the start-up self-test (null until it has run). */
+  @Volatile private var gpu: Array<String>? = null
+
   init {
-    if (engineAvailable) NativeEngine.nativeSetMemoryBudget(budget.engineBytes)
+    if (engineAvailable) {
+      NativeEngine.nativeSetMemoryBudget(budget.engineBytes)
+      // The GPU self-test compiles shaders and compares against the CPU, so it
+      // runs off the UI thread; previews use the CPU until it has passed.
+      startGpu()
+    }
     MemoryPressureMonitor.addListener(this)
   }
+
+  private fun startGpu() = ioExecutor.execute { gpu = runCatching { NativeEngine.nativeGpuInit() }.getOrNull() }
 
   override fun getName() = NAME
 
@@ -66,8 +81,16 @@ class EngineModule(reactContext: ReactApplicationContext) :
         "workers" to budget.workers,
         "memoryBudgetBytes" to budget.engineBytes.toDouble(),
         "maxDecodeDimension" to budget.maxDecodeDimension,
-        "operations" to listOf("tone", "grayscale", "rotate", "flip", "crop", "resize", "sharpen", "saturation"),
+        "operations" to OPERATIONS,
         "outputFormats" to OutputFormat.entries.map { it.name.lowercase() },
+        "gpu" to gpu.let { g ->
+          mapOf(
+            "ready" to (g?.getOrNull(1) == "true"),
+            "checked" to (g != null),
+            "renderer" to g?.getOrNull(3)?.takeIf { it.isNotEmpty() },
+          )
+        },
+        "models" to com.photoplus.ml.ModelRuntime.stats(),
       ).toWritableMap(),
     )
   }
@@ -90,13 +113,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
       return
     }
 
-    jobs.submit(jobId, object : JobListener<Map<String, Any?>> {
-      override fun onStateChanged(jobId: String, state: JobState) {
-        reactApplicationContext.emitSafely(EVENT_JOB_STATE, mapOf("jobId" to jobId, "state" to state.name.lowercase()))
-      }
-      override fun onSuccess(jobId: String, result: Map<String, Any?>) = promise.resolve(result.toWritableMap())
-      override fun onFailure(jobId: String, error: EngineException) = promise.reject(error.code, error.message, error)
-    }) { token -> runJob(parsed, input, output, token) }
+    jobs.submit(jobId, jobListener(promise)) { token -> runJob(parsed, input, output, token) }
   }
 
   private fun runJob(request: ProcessRequest, input: File, output: File, token: Long): Map<String, Any?> {
@@ -166,13 +183,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
     // Output size is bounded by the budget's decode limit whatever the upscale.
     val maxDim = minOf(requestedMax, budget.maxDecodeDimension) / upscale
 
-    jobs.submit(jobId, object : JobListener<Map<String, Any?>> {
-      override fun onStateChanged(jobId: String, state: JobState) {
-        reactApplicationContext.emitSafely(EVENT_JOB_STATE, mapOf("jobId" to jobId, "state" to state.name.lowercase()))
-      }
-      override fun onSuccess(jobId: String, result: Map<String, Any?>) = promise.resolve(result.toWritableMap())
-      override fun onFailure(jobId: String, error: EngineException) = promise.reject(error.code, error.message, error)
-    }) { token ->
+    jobs.submit(jobId, jobListener(promise)) { token ->
       val started = SystemClock.elapsedRealtime()
       val decoded = ImageCodec.decode(input, maxDim)
       var result: Bitmap? = null
@@ -441,7 +452,11 @@ class EngineModule(reactContext: ReactApplicationContext) :
       try {
         val r = editRenderer.render(
           source, doc,
-          EditRenderer.Options(skipProps, skipFrame, if (preview) mark else null, maxDim, if (preview) io.first.absolutePath else null),
+          EditRenderer.Options(
+            skipProps, skipFrame, if (preview) mark else null, maxDim,
+            cacheKey = if (preview) io.first.absolutePath else null,
+            preview = preview,
+          ),
           token,
         )
         try {
@@ -574,13 +589,44 @@ class EngineModule(reactContext: ReactApplicationContext) :
     val map = request.toHashMap()
     ioExecutor.execute {
       try {
-        val full = docOf(map)
-        val doc = EditDocument(quarterTurns = full.quarterTurns, flipH = full.flipH, straighten = full.straighten, crop = full.crop)
+        val doc = docOf(map).geometryOnly()
         val source = ImageCodec.decode(paths.resolve(map["inputPath"] as? String ?: ""), 1600).bitmap
         try {
           val r = EditRenderer(reactApplicationContext.assets, paths.customProps) { portraitProcessor }.render(source, doc, EditRenderer.Options(), 0L)
           try {
             promise.resolve(mapOf("faces" to FaceFinder.find(r.bitmap)).toWritableMap())
+          } finally {
+            r.bitmap.recycle()
+          }
+        } finally {
+          source.recycle()
+        }
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+      } catch (e: Exception) {
+        promise.reject(EngineException.INTERNAL, e.message, e)
+      }
+    }
+  }
+
+  /**
+   * The perspective fix the photo needs, from its near-vertical lines (walls,
+   * doors, buildings), measured after its turn and mirror. { vertical: -1..1 },
+   * 0 when nothing reliable was found.
+   */
+  override fun detectPerspective(request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    ioExecutor.execute {
+      try {
+        val full = docOf(map)
+        val doc = EditDocument(quarterTurns = full.quarterTurns, flipH = full.flipH)
+        val source = ImageCodec.decode(paths.resolve(map["inputPath"] as? String ?: ""), PERSPECTIVE_DIMENSION).bitmap
+        try {
+          val r = EditRenderer(reactApplicationContext.assets, paths.customProps) { portraitProcessor }.render(source, doc, EditRenderer.Options(), 0L)
+          try {
+            val v = NativeEngine.nativeDetectKeystone(r.bitmap)
+            promise.resolve(mapOf("vertical" to (if (v.isFinite()) v.coerceIn(-1f, 1f) else 0f).toDouble()).toWritableMap())
           } finally {
             r.bitmap.recycle()
           }
@@ -748,6 +794,9 @@ class EngineModule(reactContext: ReactApplicationContext) :
     override fun onStateChanged(jobId: String, state: JobState) {
       reactApplicationContext.emitSafely(EVENT_JOB_STATE, mapOf("jobId" to jobId, "state" to state.name.lowercase()))
     }
+    override fun onProgress(jobId: String, fraction: Float) {
+      reactApplicationContext.emitSafely(EVENT_JOB_PROGRESS, mapOf("jobId" to jobId, "progress" to fraction.toDouble()))
+    }
     override fun onSuccess(jobId: String, result: Map<String, Any?>) = promise.resolve(result.toWritableMap())
     override fun onFailure(jobId: String, error: EngineException) = promise.reject(error.code, error.message, error)
   }
@@ -803,6 +852,8 @@ class EngineModule(reactContext: ReactApplicationContext) :
         "liveAllocations" to s[3].toDouble(),
         "totalAllocations" to s[4].toDouble(),
         "failedAllocations" to s[5].toDouble(),
+        "cachedBytes" to s.getOrElse(6) { 0L }.toDouble(),
+        "reusedAllocations" to s.getOrElse(7) { 0L }.toDouble(),
         "activeJobs" to jobs.activeJobCount,
       ).toWritableMap(),
     )
@@ -865,6 +916,20 @@ class EngineModule(reactContext: ReactApplicationContext) :
       MemoryPressureMonitor.Level.CRITICAL -> MemoryBudgetPolicy.underPressure(budget, severe = true)
     }
     NativeEngine.nativeSetMemoryBudget(applied.engineBytes)
+    if (level == MemoryPressureMonitor.Level.NORMAL) {
+      // Pressure is over: bring the GPU back if it was released.
+      if (gpu == null) startGpu()
+    } else {
+      // Give back the engine's reusable buffers; under severe pressure also
+      // the GPU's (it starts again, with its self-test, when next needed).
+      NativeEngine.nativeMemoryTrim()
+      if (level == MemoryPressureMonitor.Level.CRITICAL) {
+        ioExecutor.execute {
+          NativeEngine.nativeGpuShutdown()
+          gpu = null
+        }
+      }
+    }
   }
 
   override fun invalidate() {
@@ -883,7 +948,16 @@ class EngineModule(reactContext: ReactApplicationContext) :
   companion object {
     const val NAME = "PhotoPlusEngine"
     const val EVENT_JOB_STATE = "PhotoPlusJobState"
+    const val EVENT_JOB_PROGRESS = "PhotoPlusJobProgress"
+
+    /** What the engine can do (reported to the app and diagnostics). */
+    val OPERATIONS = listOf(
+      "tone", "grayscale", "rotate", "flip", "crop", "resize", "sharpen", "saturation", "warmth",
+      "blur", "denoise", "perspective", "lut", "colorMatrix", "blend", "masks", "maskRefine",
+    )
     private const val ANALYSIS_DIMENSION = 1600
+    /** Lines are found as well at this size and it is quick. */
+    private const val PERSPECTIVE_DIMENSION = 1024
 
     private fun namedThreads(prefix: String): ThreadFactory {
       val counter = AtomicInteger()

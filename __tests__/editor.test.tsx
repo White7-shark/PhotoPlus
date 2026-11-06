@@ -5,7 +5,7 @@ import { EditorScreen } from '../src/screens/editor/EditorScreen';
 import { aspectCrop, containRect, isFullCrop, viewToPhoto } from '../src/screens/editor/geometry';
 import { DEFAULT_SETTINGS, isValidSetting } from '../src/services/database/repositories/SettingsRepository';
 import { PROPS } from '../src/services/edit/catalog';
-import { EMPTY_DOCUMENT, hasEdits, isEditDocument } from '../src/services/edit/document';
+import { EMPTY_DOCUMENT, geometryOf, hasEdits, isEditDocument, withDefaults } from '../src/services/edit/document';
 import { canRedo, canUndo, historyReducer, MAX_STEPS, startHistory } from '../src/services/edit/history';
 import { defaultPlacement, fitToFace, mainFace, type FaceGeometry } from '../src/services/edit/placement';
 import { DEFAULT_WATERMARK, freeSpec, isBrandingPresets, isWatermarkSpec } from '../src/services/edit/watermark';
@@ -183,6 +183,24 @@ describe('editor geometry', () => {
     const small = aspectCrop(1, { width: 3000, height: 4000 }, 0.5, 0, 0);
     expect(small.x).toBe(0); // kept inside the photo
     expect(isFullCrop(aspectCrop(null, { width: 3000, height: 4000 }))).toBe(true);
+  });
+});
+
+describe('perspective in saved edits', () => {
+  it('older documents without perspective still open, and gain it unchanged', () => {
+    const { perspectiveV: _v, perspectiveH: _h, ...old } = { ...EMPTY_DOCUMENT, exposure: 0.4 };
+    expect(isEditDocument(old)).toBe(true);
+    const filled = withDefaults(old as never);
+    expect(filled.perspectiveV).toBe(0);
+    expect(filled.perspectiveH).toBe(0);
+    expect(filled.exposure).toBe(0.4);
+    expect(hasEdits(withDefaults({ ...EMPTY_DOCUMENT }))).toBe(false);
+    expect(isEditDocument({ ...EMPTY_DOCUMENT, perspectiveV: 2 })).toBe(false);
+    expect(isEditDocument({ ...EMPTY_DOCUMENT, perspectiveH: Number.NaN })).toBe(false);
+  });
+  it('perspective changes the geometry that faces and props are measured on', () => {
+    expect(geometryOf({ ...EMPTY_DOCUMENT, perspectiveV: 0.3 })).not.toEqual(geometryOf(EMPTY_DOCUMENT));
+    expect(geometryOf({ ...EMPTY_DOCUMENT, exposure: 1 })).toEqual(geometryOf(EMPTY_DOCUMENT));
   });
 });
 
