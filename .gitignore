@@ -76,3 +76,6 @@ yarn-error.log
 
 # Host build of the C++ engine
 native/engine/build/
+
+# Python
+__pycache__/
