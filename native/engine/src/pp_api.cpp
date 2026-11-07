@@ -16,6 +16,7 @@
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
 #include "photoplus/face.hpp"
+#include "photoplus/video.hpp"
 #include "photoplus/plane.hpp"
 #include "photoplus/edit.hpp"
 #include "photoplus/image.hpp"
@@ -583,6 +584,109 @@ pp_status pp_portrait(pp_image* image, const pp_image* subject, const pp_image* 
       report->edge_cleaned = r.edgeCleaned;
     }
     return succeed();
+  });
+}
+
+pp_status pp_video_estimate_motion(const pp_image* previous, const pp_image* current, pp_video_motion* out) {
+  return guarded([&]() -> pp_status {
+    if (previous == nullptr || current == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    auto m = photoplus::video::estimateMotion(previous->buffer, current->buffer, nullptr);
+    if (!m) return fail(m.error());
+    *out = pp_video_motion{};
+    out->a = static_cast<float>(m->m.a);
+    out->b = static_cast<float>(m->m.b);
+    out->tx = static_cast<float>(m->m.tx);
+    out->ty = static_cast<float>(m->m.ty);
+    out->confidence = m->confidence;
+    return succeed();
+  });
+}
+
+pp_status pp_video_stabilize(const pp_video_motion* motions, size_t count, int32_t width, int32_t height, float strength,
+                             float max_zoom, float* warps, float* report) {
+  return guarded([&]() -> pp_status {
+    if (motions == nullptr || warps == nullptr || count == 0 || count > 100000) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Need motions and room for the warps");
+    }
+    std::vector<photoplus::video::Motion> ms(count);
+    for (size_t i = 0; i < count; ++i) {
+      ms[i].m = {motions[i].a, motions[i].b, motions[i].tx, motions[i].ty};
+      ms[i].confidence = motions[i].confidence;
+    }
+    if (count > 0) ms[0].m = {};
+    auto plan = photoplus::video::stabilize(ms, width, height, strength, max_zoom);
+    if (!plan) return fail(plan.error());
+    for (size_t i = 0; i < count; ++i)
+      for (int k = 0; k < 6; ++k) warps[i * 6 + static_cast<size_t>(k)] = static_cast<float>(plan->warps[i][static_cast<size_t>(k)]);
+    if (report != nullptr) {
+      report[0] = plan->zoom;
+      report[1] = plan->shakeBefore;
+      report[2] = plan->shakeAfter;
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_video_warp(const pp_image* src, const float warp[6], pp_image* dst, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (src == nullptr || warp == nullptr || dst == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::video::Affine m{};
+    for (int k = 0; k < 6; ++k) m[static_cast<size_t>(k)] = warp[k];
+    const photoplus::Error e = photoplus::video::warp(src->buffer, m, dst->buffer, token ? &token->token : nullptr);
+    return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
+pp_status pp_video_fit_curves(const pp_image* before, const pp_image* after, uint8_t curves[768]) {
+  return guarded([&]() -> pp_status {
+    if (before == nullptr || after == nullptr || curves == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    auto c = photoplus::video::fitCurves(before->buffer, after->buffer);
+    if (!c) return fail(c.error());
+    for (int ch = 0; ch < 3; ++ch) std::copy(c->rgb[static_cast<size_t>(ch)].begin(), c->rgb[static_cast<size_t>(ch)].end(), curves + ch * 256);
+    return succeed();
+  });
+}
+
+pp_status pp_video_apply_curves(pp_image* image, const uint8_t curves[768], const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || curves == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::video::Curves c;
+    for (int ch = 0; ch < 3; ++ch) std::copy(curves + ch * 256, curves + ch * 256 + 256, c.rgb[static_cast<size_t>(ch)].begin());
+    const photoplus::Error e = photoplus::video::applyCurves(image->buffer, c, token ? &token->token : nullptr);
+    return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
+pp_status pp_video_enhance_frame(const pp_image* frame, const pp_image* previous, const pp_image* next,
+                                 const pp_video_motion* from_previous, const pp_video_motion* to_next,
+                                 const pp_video_frame_params* params, const uint8_t curves[768], pp_image* dst,
+                                 const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (frame == nullptr || params == nullptr || dst == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    auto sim = [](const pp_video_motion* m) {
+      return m == nullptr ? photoplus::video::Similarity{} : photoplus::video::Similarity{m->a, m->b, m->tx, m->ty};
+    };
+    photoplus::video::FrameParams fp;
+    fp.noiseSigma = params->noise_sigma;
+    fp.blurSigma = params->blur_sigma;
+    fp.denoise = params->denoise;
+    fp.sharpen = params->sharpen;
+    photoplus::video::Curves c;
+    if (curves != nullptr) {
+      for (int ch = 0; ch < 3; ++ch) std::copy(curves + ch * 256, curves + ch * 256 + 256, c.rgb[static_cast<size_t>(ch)].begin());
+    }
+    const photoplus::Error e = photoplus::video::enhanceFrame(
+        frame->buffer, previous ? &previous->buffer : nullptr, next ? &next->buffer : nullptr, sim(from_previous),
+        sim(to_next), fp, curves ? &c : nullptr, dst->buffer, token ? &token->token : nullptr);
+    return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
+pp_status pp_video_steady_mask(pp_image* previous, const pp_image* current, float smoothing) {
+  return guarded([&]() -> pp_status {
+    if (previous == nullptr || current == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    const photoplus::Error e = photoplus::video::steadyMask(previous->buffer, current->buffer, smoothing);
+    return e.status == PP_OK ? succeed() : fail(e);
   });
 }
 

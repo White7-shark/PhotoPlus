@@ -486,6 +486,54 @@ typedef struct pp_style {
 pp_status pp_style_analyze(const pp_image* image, pp_style* out);
 pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token);
 
+/* ---- Video: "Glide" (Phase 6) ------------------------------------------------
+ * A short handheld clip made steady and clean, one frame at a time:
+ *   pass 1: pp_video_estimate_motion(previous, current) for every frame;
+ *   plan:   pp_video_stabilize(all motions) -> one warp per frame + crop zoom;
+ *   once:   noise and blur measured on a middle frame (pp_analyze_quality),
+ *           tone curves fitted from it (pp_video_fit_curves);
+ *   pass 2: per frame, pp_video_enhance_frame (temporal denoise with the
+ *           neighbours, lens deblur, the clip's tone), portrait tools, then
+ *           pp_video_warp. */
+typedef struct pp_video_motion {
+  /* x' = a x - b y + tx, y' = b x + a y + ty (pixels, origin at the image
+   * centre): where content of the previous frame appears in this one. */
+  float a, b, tx, ty;
+  float confidence; /* share of image blocks that agree, 0..1 */
+  float reserved[3];
+} pp_video_motion;
+
+pp_status pp_video_estimate_motion(const pp_image* previous, const pp_image* current, pp_video_motion* out);
+/* motions[k] relates frame k-1 to k (motions[0] ignored). strength 0..1,
+ * max_zoom 1..1.5. `warps` receives count * 6 floats: output pixel -> source
+ * pixel affine (sx = w0 x + w1 y + w2, sy = w3 x + w4 y + w5). `report` (3,
+ * may be NULL) = zoom, shake before, shake after (px per frame). */
+pp_status pp_video_stabilize(const pp_video_motion* motions, size_t count, int32_t width, int32_t height, float strength,
+                             float max_zoom, float* warps, float* report);
+/* dst: same format as src (any size), filled through the warp. */
+pp_status pp_video_warp(const pp_image* src, const float warp[6], pp_image* dst, const pp_cancel_token* token);
+/* Per-channel tone curves (768 bytes: R, G, B) turning `before` into `after`. */
+pp_status pp_video_fit_curves(const pp_image* before, const pp_image* after, uint8_t curves[768]);
+pp_status pp_video_apply_curves(pp_image* image, const uint8_t curves[768], const pp_cancel_token* token);
+typedef struct pp_video_frame_params {
+  float noise_sigma; /* the clip's noise (pp_quality_report.noise_sigma) */
+  float blur_sigma;  /* the clip's blur (pp_quality_report.blur_sigma) */
+  float denoise;     /* 0..1 */
+  float sharpen;     /* 0..1 */
+  float reserved[4];
+} pp_video_frame_params;
+/* One frame of the clip, cleaned into `dst` (same size and format).
+ * `previous`/`next` (may be NULL at the ends) are the neighbouring frames;
+ * `from_previous` is this frame's motion, `to_next` the next frame's.
+ * `curves` (may be NULL) is the clip's tone. */
+pp_status pp_video_enhance_frame(const pp_image* frame, const pp_image* previous, const pp_image* next,
+                                 const pp_video_motion* from_previous, const pp_video_motion* to_next,
+                                 const pp_video_frame_params* params, const uint8_t curves[768], pp_image* dst,
+                                 const pp_cancel_token* token);
+/* Temporal smoothing of a subject mask (GRAY8): `previous` becomes the
+ * steadied mask for `current`. smoothing 0..0.9. */
+pp_status pp_video_steady_mask(pp_image* previous, const pp_image* current, float smoothing);
+
 /* ---- Codec (Phase 4) ---------------------------------------------------- */
 /* JPEG and PNG (read and write), BMP and GIF (read). Decoded images are RGBA8
  * with straight alpha, upright (JPEG EXIF orientation applied). Dimensions are
