@@ -3,8 +3,9 @@
  * with optional Spotlight (background blur) and Glow (beauty). Pure logic —
  * request building, timing and labels — so every rule is unit-tested.
  */
+import { isActive, type BeautyRecipe } from '../beauty/recipe';
 import type { WatermarkSpec } from '../edit/watermark';
-import { BLUR_LEVELS, beautySettings, type BeautySettings, type BlurLevel, type GlowLevel } from './model';
+import { BLUR_LEVELS, type BeautySettings, type BlurLevel } from './model';
 
 /** The longest Glide clip (the native recorder enforces the same limit). */
 export const GLIDE_MAX_MS = 7_000;
@@ -31,8 +32,10 @@ export interface GlideRequest {
   /** Spotlight background blur 0..1 (0 = off) and subject pop. */
   blur: number;
   pop: number;
-  /** Glow and face touches (null = off). */
+  /** Glow and face touches (null = off). Older clips; beauty presets use [beautyRecipe]. */
   beauty: BeautySettings | null;
+  /** The beauty preset (and Spotlight's blur when on), resolved; replaces blur and beauty above. */
+  beautyRecipe?: BeautyRecipe;
   /** Free-plan clips carry the mark in every frame, as photos do. */
   watermark?: WatermarkSpec;
 }
@@ -59,14 +62,21 @@ export interface GlideClip extends GlideResult {
 
 export type GlideStage = 'analysing' | 'measuring' | 'crafting' | 'done';
 
+/** Spotlight's blur level for a clip, 0..1 (0 = off). */
+export function glideBlur(spotlight: GlideSpotlight): number {
+  return spotlight === 'off' ? 0 : (BLUR_LEVELS.find(l => l.id === spotlight)?.value ?? 0);
+}
+
 export function glideRequest(args: {
   inputPath: string;
   outputPath: string;
   spotlight: GlideSpotlight;
-  glow: GlowLevel;
+  /** The beauty preset with Spotlight's blur (cameraRecipe), or null. */
+  recipe: BeautyRecipe | null;
   watermark?: WatermarkSpec;
 }): GlideRequest {
-  const blur = args.spotlight === 'off' ? 0 : (BLUR_LEVELS.find(l => l.id === args.spotlight)?.value ?? 0);
+  const recipe = args.recipe && isActive(args.recipe) ? args.recipe : null;
+  const blur = recipe ? 0 : glideBlur(args.spotlight);
   return {
     inputPath: args.inputPath,
     outputPath: args.outputPath,
@@ -76,7 +86,8 @@ export function glideRequest(args: {
     sharpen: 1,
     blur,
     pop: blur > 0 ? 0.4 : 0,
-    beauty: beautySettings(args.glow),
+    beauty: null,
+    ...(recipe ? { beautyRecipe: recipe } : {}),
     ...(args.watermark ? { watermark: args.watermark } : {}),
   };
 }

@@ -1,3 +1,5 @@
+import { isBeautyAdjust } from '../beauty/camera';
+import type { BeautyAdjust, BeautyRecipe } from '../beauty/recipe';
 import type { PropPlacement } from './placement';
 
 /**
@@ -96,6 +98,8 @@ export interface EditDocument {
   portrait: PortraitAdvanced | null;
   props: PropPlacement[];
   frame: { id: string; zoom: number; x: number; y: number } | null;
+  /** A beauty filter: the preset, its sliders, and the recipe they resolve to (what the engine applies). */
+  beauty: { preset: string; adjust: BeautyAdjust; recipe: BeautyRecipe } | null;
 }
 
 export const EMPTY_DOCUMENT: EditDocument = {
@@ -119,10 +123,17 @@ export const EMPTY_DOCUMENT: EditDocument = {
   portrait: null,
   props: [],
   frame: null,
+  beauty: null,
 };
 
 const isNum = (v: unknown, min: number, max: number): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+
+function isBeautyChoice(v: unknown): boolean {
+  if (!v || typeof v !== 'object') return false;
+  const b = v as Record<string, unknown>;
+  return typeof b.preset === 'string' && isBeautyAdjust(b.adjust) && !!b.recipe && typeof b.recipe === 'object';
+}
 
 /** True for a well-formed document (e.g. read back from a saved photo). */
 export function isEditDocument(v: unknown): v is EditDocument {
@@ -143,6 +154,7 @@ export function isEditDocument(v: unknown): v is EditDocument {
     typeof d.transform === 'boolean' &&
     // Added later (older saved edits have none: see withDefaults).
     (d.portrait === undefined || d.portrait === null || isPortraitAdvanced(d.portrait)) &&
+    (d.beauty === undefined || d.beauty === null || isBeautyChoice(d.beauty)) &&
     Array.isArray(d.props) &&
     d.props.length <= 12
   );

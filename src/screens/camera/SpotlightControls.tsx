@@ -112,27 +112,25 @@ export function SpotlightPanel({
   );
 }
 
-/** Glide options: Spotlight for the clip (Glow follows the camera's Glow chip). */
+/** Glide options: Spotlight for the clip (beauty follows the camera's Beauty filter). */
 export function GlidePanel({
   spotlight,
-  glow,
+  look,
   audio,
   onSpotlight,
 }: {
   spotlight: GlideSpotlight;
-  glow: GlowLevel;
+  /** The beauty filter's name, when one is on. */
+  look: string | undefined;
   audio: boolean;
   onSpotlight: (s: GlideSpotlight) => void;
 }) {
-  const glowLabel = GLOW_LEVELS.find(l => l.id === glow)?.label ?? 'Off';
   return (
     <View style={styles.panel} testID="glide-panel">
       <View style={styles.hintRow}>
         <Icon name="play" size={14} color="#FFFFFF" strokeWidth={2} />
         <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.86)', flex: 1 }}>
-          {`Up to 7 seconds · steadied, cleaned and sharpened${glow === 'off' ? '' : ` · Glow ${glowLabel}`}${
-            audio ? '' : ' · no sound'
-          }`}
+          {`Up to 7 seconds · steadied, cleaned and sharpened${look ? ` · ${look}` : ''}${audio ? '' : ' · no sound'}`}
         </AppText>
       </View>
       <AppText variant="caption" style={[styles.rowLabel, { width: undefined }]}>

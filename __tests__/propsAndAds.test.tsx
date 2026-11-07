@@ -48,6 +48,8 @@ const fedora = PROPS.find(p => p.id === 'fedora')!;
 
 const mockCamera = {
   isSessionReady: jest.fn(async () => true),
+  setLiveBeauty: jest.fn(),
+  setBeautyOriginal: jest.fn(),
   getCapabilities: jest.fn(async () => rawCameraCaps()),
   configure: jest.fn(),
   capturePhoto: jest.fn(async (o: { mode: string; captureId: string }) => ({

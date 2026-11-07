@@ -163,6 +163,7 @@ class GlideProcessor {
         val toNext = FloatArray(5)
         val report = FloatArray(NativeEngine.PORTRAIT_REPORT_SIZE)
         val faceReport = FloatArray(NativeEngine.FACE_REPORT_SIZE)
+        val beautyReport = FloatArray(NativeEngine.BEAUTY_REPORT_SIZE)
         try {
           for (i in 0 until n) {
             val prev = if (i > 0) source.frame(i - 1) else null
@@ -188,13 +189,20 @@ class GlideProcessor {
               }
               val (faceMask, protect) = if (landmarks.isEmpty()) null to null else FaceMasks.draw(landmarks, aw, ah)
               try {
-                NativeEngine.nativePortrait(work, steady!!, faceMask, protect, null, portraitParams, token, report)
+                val recipe = options.recipe
+                if (recipe != null && options.beautyLook) {
+                  // The beauty preset: skin, face, light, background and colour in one pass.
+                  val (pts, detailed) = FaceLandmarks.pack(landmarks.take(4))
+                  NativeEngine.nativeBeauty(work, steady!!, faceMask, protect, null, pts, detailed, recipe.toArray(), token, beautyReport)
+                } else {
+                  NativeEngine.nativePortrait(work, steady!!, faceMask, protect, null, portraitParams, token, report)
+                }
               } finally {
                 faceMask?.recycle()
                 protect?.recycle()
               }
             }
-            if (options.faces && landmarks.isNotEmpty()) {
+            if (options.faces && !options.beautyLook && landmarks.isNotEmpty()) {
               val (pts, detailed) = FaceLandmarks.pack(landmarks.take(4))
               NativeEngine.nativeFaceAdjust(work, pts, detailed, options.beauty.toArray(), token, faceReport)
             }

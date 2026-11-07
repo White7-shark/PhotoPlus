@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { Image, Pressable, View, type ImageSourcePropType } from 'react-native';
 
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
@@ -12,6 +12,7 @@ import { Icon, type IconName } from './Icon';
 export function PreviewTile({
   label,
   uri,
+  source,
   selected,
   locked,
   onPress,
@@ -23,6 +24,8 @@ export function PreviewTile({
 }: {
   label: string;
   uri?: string | null;
+  /** A bundled picture filling the tile (beauty presets). */
+  source?: ImageSourcePropType | null;
   selected?: boolean;
   /** Premium and not available on this plan. */
   locked?: boolean;
@@ -57,7 +60,9 @@ export function PreviewTile({
           backgroundColor: dark ? 'rgba(10,9,17,0.55)' : theme.colors.glassFill,
         }}
       >
-        {uri ? (
+        {source ? (
+          <Image source={source} style={{ width, height, opacity: locked ? 0.7 : 1 }} resizeMode="cover" />
+        ) : uri ? (
           <Image
             source={{ uri }}
             style={{ width: width - 10, height: height - 10, opacity: locked ? 0.85 : 1 }}

@@ -20,6 +20,10 @@ export interface Spec extends TurboModule {
   startVideo(options: Object): Promise<Object>;
   /** Ends a Glide recording early (startVideo then resolves). */
   stopVideo(): void;
+  /** Beauty: the resolved recipe shown live on the preview (null = none); never rebinds. */
+  setLiveBeauty(recipe: Object | null): void;
+  /** Beauty: while true the preview shows the camera untouched ("Original"). */
+  setBeautyOriginal(original: boolean): void;
   setZoom(ratio: number): Promise<number>;
   setExposureCompensation(index: number): Promise<number>;
   focusAt(x: number, y: number): Promise<boolean>;

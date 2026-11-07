@@ -35,12 +35,7 @@ import {
   flattenPoints,
   lookCameraSettings,
   modeLabel,
-  spotlightSettings,
-  beautySettings,
-  nextGlowLevel,
   toggleSpotlightPoint,
-  type BlurLevel,
-  type GlowLevel,
   exposureIndices,
   formatEv,
   formatFocusDistance,
@@ -67,9 +62,18 @@ import { Countdown, FocusRing, GridOverlay, ShutterFlash, StatusPill } from './O
 import { captureRecipe } from '../../services/processing/recipe';
 import { ProPanel } from './ProPanel';
 import { StopDial } from './StopDial';
-import { GlidePanel, SpotlightMarkers, SpotlightPanel } from './SpotlightControls';
+import { GlidePanel, SpotlightMarkers } from './SpotlightControls';
+import { BeautyTray, OriginalButton, PortraitControlsPanel } from './BeautyControls';
+import { beautyChipLabel, cameraRecipe, effectivePreset, type CameraBeauty } from '../../services/beauty/camera';
+import { isActive, type PortraitControls } from '../../services/beauty/recipe';
 import { useGlide, type GlideClip } from './useGlide';
-import { glideStageLabel, glideSummary, secondsLeft, type GlideSpotlight } from '../../services/camera/glide';
+import {
+  glideBlur,
+  glideStageLabel,
+  glideSummary,
+  secondsLeft,
+  type GlideSpotlight,
+} from '../../services/camera/glide';
 import { useCameraSession } from './useCameraSession';
 import { LivePropOverlay, PropTray, livePlacement, propRequest, useLiveProp } from './CameraProps';
 import { allProps, findProp, type PropCategory, type PropDef } from '../../services/edit/catalog';
@@ -88,13 +92,6 @@ interface Processing {
   stage: CaptureStage;
   frames: number;
 }
-
-/** The camera is always dark: controls sit over a live image, not the app theme. */
-const GLOW_LABEL: Record<'natural' | 'smooth' | 'flawless', string> = {
-  natural: 'Natural',
-  smooth: 'Smooth',
-  flawless: 'Flawless',
-};
 
 export function CameraScreen(props: TabScreenProps<'Camera'>) {
   return (
@@ -125,8 +122,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const [timer, setTimer] = useState<(typeof TIMER_CYCLE)[number]>(0);
   const [mode, setMode] = useState<UiMode>(DEFAULT_MODE);
   const [spotPoints, setSpotPoints] = useState<{ x: number; y: number }[]>([]);
-  const [blurLevel, setBlurLevel] = useState<BlurLevel>('medium');
-  const [glowLevel, setGlowLevel] = useState<GlowLevel>('smooth');
+  const [beautyOpen, setBeautyOpen] = useState(false);
+  const [liveNote, setLiveNote] = useState<string | null>(null);
   const [glideSpotlight, setGlideSpotlight] = useState<GlideSpotlight>('off');
   const [lastClip, setLastClip] = useState<GlideClip | null>(null);
   const [vibeOpen, setVibeOpen] = useState(false);
@@ -210,9 +207,57 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
 
   // ---- session configuration (stored natively, applied on every bind)
   const rawActive = mode === 'pro' && raw && !!caps?.raw;
+  // ---- Beauty: the preset (and Portrait mode's own controls in Spotlight),
+  // shown live on the preview and applied to every photo and clip.
+  const beauty = settings.cameraBeauty;
+  const portraitControls = settings.portraitControls;
+  const premiumBeauty = can('beautyPremium').allowed;
+  const spotlightMode = effectiveMode === 'spotlight';
+  const photoRecipe = useMemo(
+    () => (rawActive ? null : cameraRecipe(beauty, premiumBeauty, spotlightMode ? portraitControls : null)),
+    [rawActive, beauty, premiumBeauty, spotlightMode, portraitControls],
+  );
+  const liveRecipe = !glideMode && photoRecipe && isActive(photoRecipe) ? photoRecipe : null;
+  const liveOn = liveRecipe !== null;
+  // Turning the live preview on or off rebinds the camera.
+  const [wasLive, setWasLive] = useState(liveOn);
+  if (liveOn !== wasLive) {
+    setWasLive(liveOn);
+    setState('starting');
+  }
+  const updateBeauty = useCallback(
+    (next: CameraBeauty) => updateSetting('cameraBeauty', next).catch(() => undefined),
+    [updateSetting],
+  );
+  const updatePortrait = useCallback(
+    (next: PortraitControls) => updateSetting('portraitControls', next).catch(() => undefined),
+    [updateSetting],
+  );
+
   useEffect(() => {
-    camera.configure({ aspectRatio: frameAspect, resolution, raw: rawActive, video: glideMode });
-  }, [camera, frameAspect, resolution, rawActive, glideMode]);
+    camera.configure({ aspectRatio: frameAspect, resolution, raw: rawActive, video: glideMode, beauty: liveOn });
+  }, [camera, frameAspect, resolution, rawActive, glideMode, liveOn]);
+
+  // The live recipe follows every slider without rebinding.
+  const liveKey = liveRecipe ? JSON.stringify(liveRecipe) : '';
+  useEffect(() => {
+    camera.setLiveBeauty(liveKey ? JSON.parse(liveKey) : null);
+  }, [camera, liveKey]);
+  useEffect(
+    () => () => {
+      camera.setLiveBeauty(null);
+      camera.setBeautyOriginal(false);
+    },
+    [camera],
+  );
+  useEffect(() => {
+    const sub = camera.on(CameraEvents.beautyLive, e =>
+      setLiveNote(
+        e.requested && !e.live ? 'This phone shows the camera as it is here. Your photos still get the filter.' : null,
+      ),
+    );
+    return () => sub.remove();
+  }, [camera]);
 
   useEffect(() => {
     camera.setFlash(flash);
@@ -341,15 +386,16 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const takePhoto = useCallback(async () => {
     const captureMode = captureModeFor(effectiveMode, rawActive);
     const look = vibe && captureMode !== 'raw' ? vibe : null;
-    // Camera beauty: Spotlight has its own Glow; RAW stays untouched.
-    const beauty = captureMode === 'spotlight' || captureMode === 'raw' ? null : beautySettings(settings.cameraGlow);
+    // Beauty (and Portrait mode's controls in Spotlight); RAW stays untouched.
+    const recipe = captureMode === 'raw' || !photoRecipe || !isActive(photoRecipe) ? null : photoRecipe;
+    const presetId = recipe && beauty.on ? effectivePreset(beauty, premiumBeauty)?.id : undefined;
     const processed =
       captureMode === 'enhance' ||
       captureMode === 'night' ||
       captureMode === 'superres' ||
       captureMode === 'spotlight' ||
       !!look ||
-      !!beauty;
+      !!recipe;
     if (processed && processing) {
       setToast({ text: friendlyMessage('BUSY'), tone: 'danger' });
       return;
@@ -367,11 +413,9 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           flash,
           mirrorFront: settings.mirrorFrontCamera,
           ...(processed ? tuning : {}),
-          ...(captureMode === 'spotlight'
-            ? { points: flattenPoints(spotPoints), ...spotlightSettings(blurLevel, glowLevel) }
-            : {}),
+          ...(captureMode === 'spotlight' ? { points: flattenPoints(spotPoints) } : {}),
           ...(look ? { look: look.look, lookStrength: look.strength } : {}),
-          ...(beauty ? { beauty } : {}),
+          ...(recipe ? { beautyRecipe: recipe, ...(presetId ? { beautyPreset: presetId } : {}) } : {}),
           // Free-plan photos carry the user's chosen watermark (signature style by default).
           watermark: settings.watermark,
           // The prop worn in the preview goes into the photo itself.
@@ -422,7 +466,9 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     flash,
     settings.mirrorFrontCamera,
     settings.watermark,
-    settings.cameraGlow,
+    photoRecipe,
+    beauty,
+    premiumBeauty,
     worn,
     liveProp.face,
     liveProp.adjust,
@@ -430,8 +476,6 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     previewFrame,
     tuning,
     spotPoints,
-    blurLevel,
-    glowLevel,
     saveRecord,
   ]);
 
@@ -444,7 +488,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     camera,
     enabled: glideMode && active,
     active: active && state === 'ready',
-    settings: { spotlight: glideSpotlight, glow: settings.cameraGlow, watermark: settings.watermark },
+    settings: {
+      spotlight: glideSpotlight,
+      recipe: cameraRecipe(
+        beauty,
+        premiumBeauty,
+        glideSpotlight === 'off' ? null : { ...portraitControls, depthBlur: glideBlur(glideSpotlight) },
+      ),
+      watermark: settings.watermark,
+    },
     onDone: clip => {
       setLastClip(clip);
       setToast({
@@ -706,26 +758,31 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
               active={propsOpen || worn !== null}
               tint={worn ? theme.colors.premium : undefined}
               accessibilityLabel={worn ? `Wearing ${worn.name}. Change props` : 'Props. Try on hats, glasses and more'}
-              onPress={() => setPropsOpen(o => !o)}
+              onPress={() => {
+                setPropsOpen(o => !o);
+                setBeautyOpen(false);
+              }}
               rotation={rotation}
               testID="props-chip"
             />
           ) : null}
-          {effectiveMode !== 'spotlight' ? (
-            <Chip
-              icon="sparkles"
-              label={settings.cameraGlow === 'off' ? undefined : GLOW_LABEL[settings.cameraGlow]}
-              active={settings.cameraGlow !== 'off'}
-              accessibilityLabel={
-                settings.cameraGlow === 'off'
-                  ? 'Glow off. Turn on beauty for faces'
-                  : `Glow ${GLOW_LABEL[settings.cameraGlow]}. Tap for the next level`
-              }
-              onPress={() => updateSetting('cameraGlow', nextGlowLevel(settings.cameraGlow)).catch(() => undefined)}
-              rotation={rotation}
-              testID="glow-chip"
-            />
-          ) : null}
+          <Chip
+            icon="sparkles"
+            label={beautyChipLabel(beauty, premiumBeauty)}
+            active={beauty.on || beautyOpen}
+            tint={beauty.on ? theme.colors.premium : undefined}
+            accessibilityLabel={
+              beauty.on
+                ? `Beauty: ${beautyChipLabel(beauty, premiumBeauty)}. Change filter`
+                : 'Beauty. Choose a beauty filter'
+            }
+            onPress={() => {
+              setBeautyOpen(o => !o);
+              setPropsOpen(false);
+            }}
+            rotation={rotation}
+            testID="beauty-chip"
+          />
           {!glideMode ? (
             <Chip
               icon="wand"
@@ -912,21 +969,31 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           />
         ) : null}
 
-        {effectiveMode === 'spotlight' && !propsOpen ? (
-          <SpotlightPanel
-            blur={blurLevel}
-            glow={glowLevel}
+        {beautyOpen && !propsOpen && !recording ? (
+          <BeautyTray
+            beauty={beauty}
+            premiumAllowed={premiumBeauty}
+            liveNote={liveNote}
+            onChange={updateBeauty}
+            onLocked={() => setPremiumFor('beautyPremium')}
+          />
+        ) : null}
+
+        {spotlightMode && !propsOpen && !beautyOpen ? (
+          <PortraitControlsPanel
+            controls={portraitControls}
+            intensity={beauty.on ? beauty.adjust.intensity : null}
             points={spotPoints.length}
-            onBlur={setBlurLevel}
-            onGlow={setGlowLevel}
+            onControls={updatePortrait}
+            onIntensity={v => void updateBeauty({ ...beauty, adjust: { ...beauty.adjust, intensity: v } })}
             onClear={() => setSpotPoints([])}
           />
         ) : null}
 
-        {glideMode && glide.phase === 'idle' ? (
+        {glideMode && glide.phase === 'idle' && !beautyOpen ? (
           <GlidePanel
             spotlight={glideSpotlight}
-            glow={settings.cameraGlow}
+            look={beautyChipLabel(beauty, premiumBeauty)}
             audio={glide.audio}
             onSpotlight={setGlideSpotlight}
           />
@@ -957,6 +1024,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             />
           </View>
         ) : null}
+
+        {liveOn && ready && !recording ? <OriginalButton onHold={held => camera.setBeautyOriginal(held)} /> : null}
 
         {!recording ? (
           <ModeSwitcher

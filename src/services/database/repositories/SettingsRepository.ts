@@ -8,6 +8,14 @@ import {
 import { isCustomProps, type CustomProp } from '../../edit/catalog';
 import { isVibeLook, type VibeLook } from '../../looks/types';
 import type { SqlExecutor } from '../SqlExecutor';
+import {
+  DEFAULT_CAMERA_BEAUTY,
+  DEFAULT_PORTRAIT,
+  isCameraBeauty,
+  isPortraitControls,
+  type CameraBeauty,
+} from '../../beauty/camera';
+import type { PortraitControls } from '../../beauty/recipe';
 
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type ExportFormat = 'jpeg' | 'png' | 'webp';
@@ -27,8 +35,12 @@ export interface AppSettings {
   cameraResolution: 'max' | '12mp' | '8mp' | '5mp' | '2mp';
   /** Save selfies mirrored, as the preview shows them. */
   mirrorFrontCamera: boolean;
-  /** Camera beauty (Glow) for photos outside Spotlight. */
+  /** Camera beauty (Glow) for photos outside Spotlight. Superseded by cameraBeauty; kept for saved settings. */
   cameraGlow: 'off' | 'natural' | 'smooth' | 'flawless';
+  /** Beauty mode: on/off, the preset and its sliders. */
+  cameraBeauty: CameraBeauty;
+  /** Portrait mode's own controls (depth blur, subject and background light, tone, edges). */
+  portraitControls: PortraitControls;
   /** Vibe Match look in use (premium), or null. */
   vibeLook: VibeLook | null;
   /** The watermark design (free plan: always the Photo Plus mark). */
@@ -52,6 +64,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraResolution: 'max',
   mirrorFrontCamera: true,
   cameraGlow: 'off',
+  cameraBeauty: DEFAULT_CAMERA_BEAUTY,
+  portraitControls: DEFAULT_PORTRAIT,
   vibeLook: null,
   watermark: DEFAULT_WATERMARK,
   brandingPresets: [],
@@ -79,6 +93,8 @@ const VALIDATORS: Validators = {
   cameraResolution: oneOf('max', '12mp', '8mp', '5mp', '2mp'),
   mirrorFrontCamera: isBool,
   cameraGlow: oneOf('off', 'natural', 'smooth', 'flawless'),
+  cameraBeauty: isCameraBeauty,
+  portraitControls: isPortraitControls,
   vibeLook: (v): v is VibeLook | null => v === null || isVibeLook(v),
   watermark: isWatermarkSpec,
   brandingPresets: isBrandingPresets,

@@ -19,6 +19,13 @@
 //              darker than its backlit surroundings lifted (in linear light)
 //   studio     a soft key light shaped by the face (an ellipsoid model),
 //              from the chosen side
+//   blush      colour on the cheek apples, scaled to the person's own tone
+//   contour    soft shading under the cheekbones, at the temples and jaw
+//   highlight  soft light on the nose bridge, forehead, cheekbone tops, chin
+//
+// Blush, contour and highlight are analytic functions of the face frame
+// (u across, v down, in face half-widths), which the live camera shader
+// evaluates the same way.
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -145,6 +152,38 @@ inline float applyGain(float v, float g) { return g > 1.0f ? v * g / (1.0f + v *
 struct Planes {
   Plane y, cb, cr;
 };
+
+inline float bump(float u, float v, float cu, float cv, float ru, float rv) {
+  const float du = (u - cu) / ru, dv = (v - cv) / rv;
+  return std::exp(-0.5f * (du * du + dv * dv));
+}
+
+}  // namespace
+
+// Make-up weights at face-frame (u, v): u across (−1 left edge … 1 right
+// edge of the face), v down (−1 hairline … 1 chin). Mirrored by the live
+// camera shader (beauty_composite.frag, makeupAt), so keep them in step.
+MakeupWeights makeupAt(float u, float v, const MakeupFrame& f) {
+  MakeupWeights m;
+  const float au = std::fabs(u);
+  // Cheek apples: below the eyes, beside the nose, a little outward.
+  const float appleV = f.eyeV + 0.55f * (f.noseV - f.eyeV) + 0.08f;
+  m.blush = bump(au, v, 0.48f, appleV, 0.2f, 0.15f);
+  // Contour: hollows under the cheekbones (diagonal toward the mouth
+  // corner), the temples and the sides of the jaw.
+  const float hollowV = f.noseV + 0.08f;
+  m.contour = std::min(1.0f, bump(au, v + 0.35f * (au - 0.7f), 0.7f, hollowV, 0.2f, 0.09f) +
+                                 0.7f * bump(au, v, 0.82f, f.eyeV - 0.42f, 0.14f, 0.22f) +
+                                 0.8f * smoothstep(0.62f, 0.92f, au) * smoothstep(f.eyeV + 0.1f, f.noseV + 0.1f, v));
+  // Highlight: nose bridge, centre forehead, cheekbone tops, chin.
+  m.highlight = std::min(1.0f, bump(u, v, 0.0f, 0.5f * (f.eyeV + f.noseV), 0.07f, 0.28f) +
+                                   0.8f * bump(u, v, 0.0f, f.eyeV - 0.5f, 0.24f, 0.15f) +
+                                   0.75f * bump(au, v, 0.46f, f.eyeV + 0.24f, 0.17f, 0.07f) +
+                                   0.6f * bump(u, v, 0.0f, 0.86f, 0.12f, 0.07f));
+  return m;
+}
+
+namespace {
 
 Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p, const CancellationToken* token, FaceReport* report) {
   const int32_t W = image.width(), H = image.height();
@@ -385,6 +424,19 @@ Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p
       }
   }
   const float shadeMean = shadeW > 0 ? static_cast<float>(shadeSum / shadeW) : 0.0f;
+  // Make-up: the face frame (eye line, nose and mouth in face units).
+  const bool makeup = p.blush > 0.0f || p.contour > 0.0f || p.highlight > 0.0f;
+  MakeupFrame frame;
+  frame.eyeV = along(centre({eyeCa, eyeCb}), down) / halfH;
+  frame.noseV = along(centre(range(pts, kNoseBottom, 3)), down) / halfH;
+  frame.mouthV = along(centre(mouthIn), down) / halfH;
+  std::array<float, 2> blushDir{0.0f, 0.0f};
+  {
+    float by, bcb, bcr;
+    rgbToYcc(p.blushColor[0], p.blushColor[1], p.blushColor[2], by, bcb, bcr);
+    const float n = std::hypot(bcb, bcr);
+    if (n > 1e-4f) blushDir = {bcb / n, bcr / n};
+  }
 
   for (size_t i = 0; i < G.y.size(); ++i) {
     const float base = Yb->data()[i];
@@ -418,10 +470,27 @@ Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p
       const float w = ovalSoft->data()[i] * (1.0f - 0.6f * feat.data()[i]);
       dy += p.faceLight * 0.65f * w * std::max(0.0f, skinY - Yl->data()[i]);
     }
+    float gn = 1.0f;
+    if (makeup) {
+      const auto gx = static_cast<int32_t>(i % static_cast<size_t>(gw)), gy = static_cast<int32_t>(i / static_cast<size_t>(gw));
+      const Pt q{static_cast<float>(r.x0) + (static_cast<float>(gx) + 0.5f) * static_cast<float>(g),
+                 static_cast<float>(r.y0) + (static_cast<float>(gy) + 0.5f) * static_cast<float>(g)};
+      const MakeupWeights m = makeupAt(along(q, right) / halfW, along(q, down) / halfH, frame);
+      const float onSkin = ovalSoft->data()[i] * (1.0f - feat.data()[i]);
+      if (p.blush > 0.0f && m.blush > 0.0f) {
+        // Chroma toward the blush colour, sized to the person's own tone
+        // (deeper skin carries a deeper, richer blush); a touch darker.
+        const float k = p.blush * m.blush * onSkin;
+        dcb += k * 0.055f * blushDir[0] * (0.6f + 0.6f * skinY);
+        dcr += k * 0.055f * blushDir[1] * (0.6f + 0.6f * skinY);
+        dy -= k * 0.02f * skinY;
+      }
+      if (p.contour > 0.0f) gn *= 1.0f - p.contour * 0.2f * m.contour * ovalSoft->data()[i];
+      if (p.highlight > 0.0f) gn *= 1.0f + p.highlight * 0.28f * m.highlight * onSkin;
+    }
     dY->data()[i] = dy;
     dCb->data()[i] = dcb;
     dCr->data()[i] = dcr;
-    float gn = 1.0f;
     if (!shade.empty()) gn *= 1.0f + p.studio * ovalSoft->data()[i] * (0.55f * (shade[i] - shadeMean) + 0.05f);
     gain->data()[i] = gn;
   }
@@ -621,7 +690,45 @@ Error adjustOne(ImageBuffer& image, const FaceLandmarks& lm, const FaceParams& p
 }  // namespace
 
 bool FaceParams::any() const {
-  return eyes > 0 || teeth > 0 || lips > 0 || underEye > 0 || shine > 0 || slim > 0 || faceLight > 0 || studio > 0;
+  return eyes > 0 || teeth > 0 || lips > 0 || underEye > 0 || shine > 0 || slim > 0 || faceLight > 0 || studio > 0 ||
+         blush > 0 || contour > 0 || highlight > 0;
+}
+
+float estimateLightAngle(const ImageBuffer& image, const FaceLandmarks& lm) {
+  if (!isColour(image) || image.width() < 16 || image.height() < 16) return 0.35f;
+  const auto W = static_cast<float>(image.width()), H = static_cast<float>(image.height());
+  std::vector<Pt> pts(kFacePoints);
+  for (int i = 0; i < kFacePoints; ++i) {
+    pts[static_cast<size_t>(i)] = {lm.points[static_cast<size_t>(2 * i)] * W, lm.points[static_cast<size_t>(2 * i + 1)] * H};
+  }
+  Pt a = centre(range(pts, kLeftEye, 16)), b = centre(range(pts, kRightEye, 16));
+  if (a[0] > b[0]) std::swap(a, b);
+  const float eyeDist = std::hypot(b[0] - a[0], b[1] - a[1]);
+  if (!(eyeDist > 8.0f)) return 0.35f;
+  const Pt right{(b[0] - a[0]) / eyeDist, (b[1] - a[1]) / eyeDist}, down{-right[1], right[0]};
+  const Rgb o = offsets(image);
+  // Mean luma of each cheek (below the eye, beside the nose), in linear light.
+  auto cheek = [&](const Pt& eye) {
+    const Pt c{eye[0] + down[0] * 0.75f * eyeDist, eye[1] + down[1] * 0.75f * eyeDist};
+    const float rad = 0.22f * eyeDist;
+    double sum = 0;
+    int n = 0;
+    for (int dy = -4; dy <= 4; ++dy)
+      for (int dx = -4; dx <= 4; ++dx) {
+        const int x = static_cast<int>(c[0] + rad * static_cast<float>(dx) / 4.0f);
+        const int y = static_cast<int>(c[1] + rad * static_cast<float>(dy) / 4.0f);
+        if (x < 0 || y < 0 || x >= image.width() || y >= image.height()) continue;
+        const uint8_t* q = image.row(y) + x * 4;
+        sum += toLinear((0.299f * q[o.r] + 0.587f * q[o.g] + 0.114f * q[o.b]) / 255.0f);
+        ++n;
+      }
+    return n > 20 ? static_cast<float>(sum / n) : -1.0f;
+  };
+  const float l = cheek(a), r = cheek(b);
+  if (l < 0.0f || r < 0.0f) return 0.35f;
+  const float contrast = (r - l) / (r + l + 0.02f);
+  if (std::fabs(contrast) < 0.06f) return 0.35f;
+  return std::clamp(3.0f * contrast, -1.0f, 1.0f);
 }
 
 Error adjustFaces(ImageBuffer& image, const std::vector<FaceLandmarks>& faces, const FaceParams& params,
@@ -629,7 +736,8 @@ Error adjustFaces(ImageBuffer& image, const std::vector<FaceLandmarks>& faces, c
   ScopedTimer timer("portrait.faces");
   if (!isColour(image)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Face adjustments need an RGBA image");
   FaceParams p = params;
-  for (float* v : {&p.eyes, &p.teeth, &p.lips, &p.underEye, &p.shine, &p.slim, &p.faceLight, &p.studio}) {
+  for (float* v : {&p.eyes, &p.teeth, &p.lips, &p.underEye, &p.shine, &p.slim, &p.faceLight, &p.studio, &p.blush,
+                   &p.contour, &p.highlight, &p.blushColor[0], &p.blushColor[1], &p.blushColor[2]}) {
     if (!std::isfinite(*v)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Non-finite face parameter");
     *v = std::clamp(*v, 0.0f, 1.0f);
   }

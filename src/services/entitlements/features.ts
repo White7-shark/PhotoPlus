@@ -22,6 +22,7 @@ export const FEATURES = {
   cameraCapture: f('camera.capture', 'Camera capture & basic settings', 'camera', 'free'),
   clarity: f('camera.clarity', 'Clarity: sharper, cleaner single photos', 'camera', 'free'),
   spotlight: f('camera.spotlight', 'Spotlight portraits & Glow skin retouch', 'camera', 'free'),
+  beautyFilters: f('camera.beauty', 'Beauty mode: Natural Glow & Soft Radiance, live in the camera', 'camera', 'free'),
   glide: f('camera.glide', 'Glide: 7-second pro video, steady and sharp, with Spotlight & Glow', 'camera', 'free'),
   shareTo: f('library.share', 'Share to other apps', 'editing', 'free'),
   cropRotate: f('editing.cropRotate', 'Crop and rotate', 'editing', 'free'),
@@ -48,6 +49,7 @@ export const FEATURES = {
   shootReplication: f('replication.simulate', 'Photoshoot simulation & replication', 'replication', 'premium'),
   lightingShadows: f('replication.lighting', 'Advanced lighting & shadow effects', 'replication', 'premium'),
   advancedRetouchGrade: f('editing.advancedRetouchGrade', 'Advanced retouching & colour grading', 'editing', 'premium'),
+  beautyPremium: f('camera.beautyPremium', 'The full beauty collection: 11 premium filters', 'camera', 'premium'),
   advancedPortrait: f(
     'editing.advancedPortrait',
     'Advanced portrait: precise face, light and background controls',

@@ -179,6 +179,40 @@ class PortraitProcessor {
     return report
   }
 
+  /**
+   * A beauty preset (with Portrait mode's controls when it is a Spotlight
+   * photo): masks and landmarks as for Spotlight, then the engine's beauty
+   * compositor — skin, face, lighting, background and colour in one pass.
+   */
+  fun applyBeauty(
+    bitmap: Bitmap,
+    rotation: Int,
+    points: List<Pair<Float, Float>>,
+    recipe: com.photoplus.beauty.BeautyRecipe,
+    token: Long,
+  ): PortraitReport {
+    val masks = buildMasks(bitmap, rotation, points, wantDepth = recipe.blur > 0f)
+    try {
+      val (pts, detailed) = FaceLandmarks.pack(masks.landmarks.take(MAX_FACES))
+      val out = FloatArray(NativeEngine.BEAUTY_REPORT_SIZE)
+      NativeEngine.nativeBeauty(bitmap, masks.subject, masks.faces, masks.protect, masks.depth, pts, detailed, recipe.toArray(), token, out)
+      return PortraitReport(
+        subjectCoverage = out[1],
+        skinCoverage = out[2],
+        spots = out[5].toInt(),
+        people = masks.people,
+        source = masks.source,
+        depthFromPhoto = masks.depth != null && recipe.blur > 0f,
+        facesAdjusted = out[6].toInt(),
+      )
+    } finally {
+      masks.subject.recycle()
+      masks.faces?.recycle()
+      masks.protect?.recycle()
+      masks.depth?.recycle()
+    }
+  }
+
   /** Landmarks of every face, in the bitmap's own orientation (no segmentation needed). */
   fun findLandmarks(bitmap: Bitmap, rotation: Int): List<FaceLandmarks> {
     val rot = MaskGeometry.normalise(rotation)

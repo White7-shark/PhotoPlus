@@ -1,6 +1,7 @@
 import { DeviceEventEmitter, type EventSubscription } from 'react-native';
 
 import { errorCode, errorMessage, nativeModules, requireNative, type CameraSpec } from '../../native';
+import type { BeautyRecipe } from '../beauty/recipe';
 import { parseCameraCapabilities } from './parse';
 import {
   type CameraCapabilities,
@@ -101,6 +102,16 @@ export class CameraService {
   /** Ends a Glide recording early (startVideo then resolves with the clip). */
   stopVideo(): void {
     this.native.stopVideo();
+  }
+
+  /** Beauty: the recipe shown live on the preview (null = none). Never rebinds the camera. */
+  setLiveBeauty(recipe: BeautyRecipe | null): void {
+    this.native.setLiveBeauty(recipe);
+  }
+
+  /** Beauty: while true the preview shows the camera untouched ("Original"). */
+  setBeautyOriginal(original: boolean): void {
+    this.native.setBeautyOriginal(original);
   }
 
   cancelCapture(captureId: string): void {

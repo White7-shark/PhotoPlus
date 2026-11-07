@@ -17,12 +17,23 @@ import { useTheme } from '../../theme';
 import { CROP_ASPECTS } from './geometry';
 
 export type ToolId =
-  'adjust' | 'crop' | 'looks' | 'spotlight' | 'retouch' | 'focus' | 'transform' | 'props' | 'frames' | 'watermark';
+  | 'adjust'
+  | 'crop'
+  | 'looks'
+  | 'beauty'
+  | 'spotlight'
+  | 'retouch'
+  | 'focus'
+  | 'transform'
+  | 'props'
+  | 'frames'
+  | 'watermark';
 
 export const EDITOR_TOOLS: readonly { id: ToolId; label: string; icon: IconName; premium?: boolean }[] = [
   { id: 'adjust', label: 'Adjust', icon: 'sliders' },
   { id: 'crop', label: 'Crop', icon: 'aspect' },
   { id: 'looks', label: 'Looks', icon: 'image' },
+  { id: 'beauty', label: 'Beauty', icon: 'sun' },
   { id: 'spotlight', label: 'Spotlight', icon: 'target' },
   { id: 'retouch', label: 'Portrait', icon: 'sparkles' },
   { id: 'focus', label: 'Focus', icon: 'exposure' },

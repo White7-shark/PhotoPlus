@@ -11,7 +11,7 @@ import {
   type GlideSpotlight,
   type GlideStage,
 } from '../../services/camera/glide';
-import type { GlowLevel } from '../../services/camera/model';
+import type { BeautyRecipe } from '../../services/beauty/recipe';
 import type { WatermarkSpec } from '../../services/edit/watermark';
 import { createLogger } from '../../services/logging/logger';
 import { getPermissionService } from '../../services/permissions/PermissionService';
@@ -26,7 +26,8 @@ export type GlidePhase = 'idle' | 'recording' | 'crafting';
 
 export interface GlideSettings {
   spotlight: GlideSpotlight;
-  glow: GlowLevel;
+  /** The beauty preset (with Spotlight's blur when on), resolved; null = a plain steady clip. */
+  recipe: BeautyRecipe | null;
   watermark: WatermarkSpec;
 }
 
@@ -99,7 +100,13 @@ export function useGlide({
     abort.current = controller;
     try {
       const result = await getProcessingService().glide(
-        glideRequest({ inputPath: rawPath, outputPath, spotlight: s.spotlight, glow: s.glow, watermark: s.watermark }),
+        glideRequest({
+          inputPath: rawPath,
+          outputPath,
+          spotlight: s.spotlight,
+          recipe: s.recipe,
+          watermark: s.watermark,
+        }),
         { signal: controller.signal, onProgress: setFraction, onStage: setStage },
       );
       // Clips are kept in the gallery (like any camera's videos); a failed

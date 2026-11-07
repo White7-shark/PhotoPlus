@@ -6,6 +6,7 @@ import { CameraScreen } from '../src/screens/camera/CameraScreen';
 import { CameraService } from '../src/services/camera/CameraService';
 import {
   GLIDE_MAX_MS,
+  glideBlur,
   glideFileName,
   glideRequest,
   glideStageLabel,
@@ -17,6 +18,8 @@ import {
   type GlideClip,
 } from '../src/services/camera/glide';
 import { modeLabel } from '../src/services/camera/model';
+import { cameraRecipe } from '../src/services/beauty/camera';
+import { DEFAULT_ADJUST, DEFAULT_PORTRAIT, resolveRecipe } from '../src/services/beauty/recipe';
 import { DEFAULT_SETTINGS } from '../src/services/database/repositories/SettingsRepository';
 import { DEFAULT_WATERMARK } from '../src/services/edit/watermark';
 import { friendlyMessage } from '../src/services/errors';
@@ -31,6 +34,8 @@ let finishRecording: ((clip: { path: string; durationMs: number }) => void) | nu
 
 const mockCamera = {
   isSessionReady: jest.fn(async () => true),
+  setLiveBeauty: jest.fn(),
+  setBeautyOriginal: jest.fn(),
   getCapabilities: jest.fn(async () => rawCameraCaps()),
   configure: jest.fn(),
   capturePhoto: jest.fn(),
@@ -128,8 +133,8 @@ beforeEach(() => {
 // ------------------------------------------------------------- pure logic
 
 describe('Glide logic', () => {
-  it('builds the engine request from Spotlight and Glow', () => {
-    const plain = glideRequest({ inputPath: '/a.mp4', outputPath: '/b.mp4', spotlight: 'off', glow: 'off' });
+  it('builds the engine request from Spotlight and the beauty filter', () => {
+    const plain = glideRequest({ inputPath: '/a.mp4', outputPath: '/b.mp4', spotlight: 'off', recipe: null });
     expect(plain).toEqual({
       inputPath: '/a.mp4',
       outputPath: '/b.mp4',
@@ -141,17 +146,36 @@ describe('Glide logic', () => {
       pop: 0,
       beauty: null,
     });
+    // Spotlight alone (no recipe): the clip's own blur.
+    expect(glideRequest({ inputPath: '/a.mp4', outputPath: '/b.mp4', spotlight: 'strong', recipe: null }).blur).toBe(
+      0.9,
+    );
+    // A beauty filter with Spotlight: one recipe carries both; the old fields stay neutral.
+    const recipe = cameraRecipe({ on: true, preset: 'golden_goddess', adjust: DEFAULT_ADJUST }, true, {
+      ...DEFAULT_PORTRAIT,
+      depthBlur: glideBlur('strong'),
+    });
     const full = glideRequest({
       inputPath: '/a.mp4',
       outputPath: '/b.mp4',
       spotlight: 'strong',
-      glow: 'natural',
+      recipe,
       watermark: DEFAULT_WATERMARK,
     });
-    expect(full.blur).toBe(0.9);
-    expect(full.pop).toBe(0.4);
-    expect(full.beauty).toEqual({ retouch: 0.5, brighten: 0.3, eyes: 0.2, underEye: 0.3, shine: 0.2, faceLight: 0 });
+    expect(full.blur).toBe(0);
+    expect(full.beauty).toBeNull();
+    expect(full.beautyRecipe?.portrait.blur).toBe(0.9);
+    expect(full.beautyRecipe?.grade.bgGlow).toBe(0.5);
     expect(full.watermark).toBe(DEFAULT_WATERMARK);
+    // A recipe that changes nothing is not sent.
+    expect(
+      glideRequest({
+        inputPath: '/a',
+        outputPath: '/b',
+        spotlight: 'off',
+        recipe: resolveRecipe(null, DEFAULT_ADJUST),
+      }),
+    ).not.toHaveProperty('beautyRecipe');
   });
 
   it('times the 7-second recording', () => {
@@ -241,7 +265,7 @@ describe('Glide services', () => {
       inputPath: '/c/r.mp4',
       outputPath: '/exports/o.mp4',
       spotlight: 'off',
-      glow: 'off',
+      recipe: null,
     });
     const r = await service.glide(request, { onStage: s => stages.push(s), onProgress: p => progress.push(p) });
     expect(r.outputPath).toBe('/exports/o.mp4');
@@ -281,6 +305,7 @@ describe('Glide in the camera', () => {
       resolution: 'max',
       raw: false,
       video: true,
+      beauty: false,
     });
     expect(mockEnsure).toHaveBeenCalledWith('microphone');
     expect(screen.getByTestId('glide-panel')).toBeTruthy();
@@ -303,10 +328,10 @@ describe('Glide in the camera', () => {
     const request = mockEngine.glide.mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(request).toMatchObject({
       inputPath: '/captures/glide/GLIDE_1_raw.mp4',
-      blur: 0.6,
-      pop: 0.4,
       steady: 1,
-      beauty: null, // Glow chip is off by default
+      beauty: null,
+      // Spotlight Medium with beauty off: Portrait mode's controls, no preset.
+      beautyRecipe: { portrait: { blur: 0.6, smooth: 0 }, face: { blush: 0 } },
       watermark: DEFAULT_SETTINGS.watermark,
     });
     expect(request.outputPath).toMatch(/^\/exports\/PhotoPlus_Glide_\d{8}_\d{6}\.mp4$/);
@@ -324,18 +349,20 @@ describe('Glide in the camera', () => {
     expect(screen.getByTestId('watch-last-clip')).toBeTruthy();
   });
 
-  it('keeps Glow from the camera chip and records silently without the microphone', async () => {
+  it('keeps the beauty filter from the camera and records silently without the microphone', async () => {
     mockEnsure.mockImplementation(async (p: string) => (p === 'microphone' ? 'denied' : 'granted'));
-    useAppStore.setState(st => ({ settings: { ...st.settings, cameraGlow: 'smooth' } }));
+    useAppStore.setState(st => ({
+      settings: { ...st.settings, cameraBeauty: { on: true, preset: 'peach_perfection', adjust: DEFAULT_ADJUST } },
+    }));
     await renderGlideCamera();
-    expect(screen.getByText(/Glow Smooth · no sound/)).toBeTruthy();
+    expect(screen.getByText(/Peach Perfection · no sound/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: false, maxMs: 7000 }));
     await act(async () => finishRecording?.({ path: '/captures/glide/GLIDE_2_raw.mp4', durationMs: 7000 }));
     await waitFor(() => expect(mockEngine.glide).toHaveBeenCalled());
     expect(mockEngine.glide.mock.calls[0][1]).toMatchObject({
       blur: 0,
-      beauty: { retouch: 0.75, brighten: 0.4, eyes: 0.3 },
+      beautyRecipe: { portrait: { blur: 0, smooth: 0.55 }, face: { blush: 0.4 }, grade: { skinSheen: 0.5 } },
     });
     mockEnsure.mockImplementation(async () => 'granted');
   });
@@ -371,6 +398,7 @@ describe('Glide in the camera', () => {
         resolution: 'max',
         raw: false,
         video: false,
+        beauty: false,
       }),
     );
     expect(screen.queryByTestId('glide-panel')).toBeNull();

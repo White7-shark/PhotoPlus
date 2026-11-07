@@ -13,6 +13,7 @@
 #include <cmath>
 #include <vector>
 
+#include "photoplus/beauty.hpp"
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
 #include "photoplus/face.hpp"
@@ -717,6 +718,10 @@ pp_status pp_face_adjust(pp_image* image, const pp_face* faces, size_t count, co
     p.faceLight = params->face_light;
     p.studio = params->studio_light;
     p.lightAngle = params->light_angle;
+    p.blush = params->blush;
+    p.blushColor = {params->blush_color[0], params->blush_color[1], params->blush_color[2]};
+    p.contour = params->contour;
+    p.highlight = params->highlight;
     photoplus::portrait::FaceReport r;
     const photoplus::Error e = photoplus::portrait::adjustFaces(image->buffer, lm, p, token ? &token->token : nullptr, &r);
     if (e.status != PP_OK) return fail(e);
@@ -725,6 +730,195 @@ pp_status pp_face_adjust(pp_image* image, const pp_face* faces, size_t count, co
       report->faces = r.faces;
       report->adjusted = r.adjusted;
       report->light_gain = r.lightGain;
+    }
+    return succeed();
+  });
+}
+
+static_assert(sizeof(pp_beauty_grade) == PP_BEAUTY_GRADE_FLOATS * sizeof(float), "pp_beauty_grade must be all floats");
+
+}  // extern "C" (C++ helpers below return engine types)
+
+namespace {
+
+photoplus::portrait::Params portraitOf(const pp_portrait_params& in) {
+  photoplus::portrait::Params p;
+  p.blur = in.blur;
+  p.retouch = in.retouch;
+  p.brighten = in.brighten;
+  p.pop = in.pop;
+  p.smooth = in.smooth;
+  p.blemish = in.blemish;
+  p.even = in.even;
+  p.bgLight = in.bg_light;
+  p.bgColor = in.bg_color;
+  p.edge = in.edge;
+  return p;
+}
+
+photoplus::portrait::FaceParams faceOf(const pp_face_params& in) {
+  photoplus::portrait::FaceParams p;
+  p.eyes = in.eyes;
+  p.teeth = in.teeth;
+  p.lips = in.lips;
+  p.underEye = in.under_eye;
+  p.shine = in.shine;
+  p.slim = in.slim;
+  p.faceLight = in.face_light;
+  p.studio = in.studio_light;
+  p.lightAngle = in.light_angle;
+  p.blush = in.blush;
+  p.blushColor = {in.blush_color[0], in.blush_color[1], in.blush_color[2]};
+  p.contour = in.contour;
+  p.highlight = in.highlight;
+  return p;
+}
+
+photoplus::beauty::Color colorOf(const float* c) { return {c[0], c[1], c[2]}; }
+
+photoplus::beauty::Grade gradeOf(const pp_beauty_grade& in) {
+  photoplus::beauty::Grade g;
+  g.temperature = in.temperature;
+  g.tint = in.tint;
+  g.contrast = in.contrast;
+  g.blacks = in.blacks;
+  g.highlights = in.highlights;
+  g.saturation = in.saturation;
+  g.vibrance = in.vibrance;
+  g.shadowColor = colorOf(in.shadow_color);
+  g.shadowAmount = in.shadow_amount;
+  g.highlightColor = colorOf(in.highlight_color);
+  g.highlightAmount = in.highlight_amount;
+  g.bandColor = colorOf(in.band_color);
+  g.bandWidth = in.band_width;
+  g.bandHueShift = in.band_hue_shift;
+  g.bandSaturation = in.band_saturation;
+  g.skinProtect = in.skin_protect;
+  g.skinWarmth = in.skin_warmth;
+  g.skinRosy = in.skin_rosy;
+  g.skinLuminance = in.skin_luminance;
+  g.subjectLight = in.subject_light;
+  g.lightWarmth = in.light_warmth;
+  g.shadowLift = in.shadow_lift;
+  g.rim = in.rim;
+  g.rimColor = colorOf(in.rim_color);
+  g.bloom = in.bloom;
+  g.softFocus = in.soft_focus;
+  g.skinSheen = in.skin_sheen;
+  g.bgExposure = in.bg_exposure;
+  g.bgSaturation = in.bg_saturation;
+  g.bgTint = colorOf(in.bg_tint);
+  g.bgTintAmount = in.bg_tint_amount;
+  g.bgGlow = in.bg_glow;
+  g.bgGlowX = in.bg_glow_x;
+  g.bgGlowY = in.bg_glow_y;
+  g.bgGlowSize = in.bg_glow_size;
+  g.bgGlowColor = colorOf(in.bg_glow_color);
+  g.bgVignette = in.bg_vignette;
+  g.bgHaze = in.bg_haze;
+  g.bgWarmth = in.bg_warmth;
+  return g;
+}
+
+}  // namespace
+
+extern "C" {
+
+void pp_beauty_default_params(pp_beauty_params* out) {
+  if (out == nullptr) return;
+  *out = pp_beauty_params{};
+  out->portrait.smooth = -1.0f;
+  out->portrait.blemish = -1.0f;
+  out->portrait.even = -1.0f;
+  const photoplus::beauty::Grade g;
+  out->grade.skin_protect = g.skinProtect;
+  for (int i = 0; i < 3; ++i) {
+    out->grade.shadow_color[i] = out->grade.highlight_color[i] = out->grade.band_color[i] = 0.5f;
+    out->grade.rim_color[i] = g.rimColor[static_cast<size_t>(i)];
+    out->grade.bg_tint[i] = 0.5f;
+    out->grade.bg_glow_color[i] = g.bgGlowColor[static_cast<size_t>(i)];
+    out->face.blush_color[i] = photoplus::portrait::FaceParams{}.blushColor[static_cast<size_t>(i)];
+  }
+  out->grade.bg_glow_x = g.bgGlowX;
+  out->grade.bg_glow_y = g.bgGlowY;
+  out->grade.bg_glow_size = g.bgGlowSize;
+  out->auto_light = 1;
+}
+
+pp_status pp_beauty_measure(const pp_image* image, const pp_image* subject, const pp_image* face_mask,
+                            const pp_image* protect, const pp_face* faces, size_t count, pp_beauty_scene* out) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || out == nullptr || (count > 0 && faces == nullptr) || count > 32) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "image and out are required");
+    }
+    std::vector<photoplus::portrait::FaceLandmarks> lm(count);
+    for (size_t i = 0; i < count; ++i) {
+      std::copy(std::begin(faces[i].points), std::end(faces[i].points), lm[i].points.begin());
+      for (float v : lm[i].points) {
+        if (!std::isfinite(v) || std::fabs(v) > 4.0f) return fail(PP_ERROR_INVALID_ARGUMENT, "Face landmarks must be finite, near the image");
+      }
+    }
+    const photoplus::beauty::Scene sc = photoplus::beauty::measure(
+        image->buffer, subject ? &subject->buffer : nullptr, face_mask ? &face_mask->buffer : nullptr,
+        protect ? &protect->buffer : nullptr, lm);
+    *out = pp_beauty_scene{};
+    out->has_skin = sc.hasSkin ? 1 : 0;
+    out->skin_y = sc.skinY;
+    out->skin_cb = sc.skinCb;
+    out->skin_cr = sc.skinCr;
+    out->skin_spread = sc.skinSpread;
+    out->subject_x = sc.subjectX;
+    out->subject_w = sc.subjectW;
+    out->light_angle = sc.lightAngle;
+    out->skin_y_spread = sc.skinYSpread;
+    return succeed();
+  });
+}
+
+pp_status pp_beauty(pp_image* image, const pp_image* subject, const pp_image* face_mask, const pp_image* protect,
+                    const pp_image* depth, const pp_face* faces, size_t count, const pp_beauty_params* params,
+                    const pp_cancel_token* token, pp_beauty_report* report) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || params == nullptr || (count > 0 && faces == nullptr)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "image and params are required");
+    }
+    if (count > 32) return fail(PP_ERROR_INVALID_ARGUMENT, "At most 32 faces");
+    std::vector<photoplus::portrait::FaceLandmarks> lm(count);
+    for (size_t i = 0; i < count; ++i) {
+      std::copy(std::begin(faces[i].points), std::end(faces[i].points), lm[i].points.begin());
+      lm[i].detailed = faces[i].detailed != 0;
+      for (float v : lm[i].points) {
+        if (!std::isfinite(v) || std::fabs(v) > 4.0f) return fail(PP_ERROR_INVALID_ARGUMENT, "Face landmarks must be finite, near the image");
+      }
+    }
+    photoplus::beauty::Recipe r;
+    r.portrait = portraitOf(params->portrait);
+    r.face = faceOf(params->face);
+    r.grade = gradeOf(params->grade);
+    r.autoLight = params->auto_light != 0;
+    const float* raw = reinterpret_cast<const float*>(&params->grade);
+    for (int i = 0; i < PP_BEAUTY_GRADE_FLOATS; ++i) {
+      if (!std::isfinite(raw[i])) return fail(PP_ERROR_INVALID_ARGUMENT, "Non-finite beauty parameter");
+    }
+    for (float v : {r.portrait.blur, r.portrait.retouch, r.portrait.brighten, r.portrait.pop, r.portrait.smooth,
+                    r.portrait.blemish, r.portrait.even, r.portrait.bgLight, r.portrait.bgColor, r.portrait.edge}) {
+      if (!std::isfinite(v)) return fail(PP_ERROR_INVALID_ARGUMENT, "Non-finite beauty parameter");
+    }
+    photoplus::beauty::Report rep;
+    const photoplus::Error e = photoplus::beauty::apply(
+        image->buffer, subject ? &subject->buffer : nullptr, face_mask ? &face_mask->buffer : nullptr,
+        protect ? &protect->buffer : nullptr, depth ? &depth->buffer : nullptr, lm, r, token ? &token->token : nullptr, &rep);
+    if (e.status != PP_OK) return fail(e);
+    if (report != nullptr) {
+      *report = pp_beauty_report{};
+      report->light_angle = rep.lightAngle;
+      report->subject_coverage = rep.grade.subjectCoverage > 0 ? rep.grade.subjectCoverage : rep.portrait.subjectCoverage;
+      report->skin_coverage = rep.grade.skinCoverage;
+      report->clipped_before = rep.grade.clippedBefore;
+      report->clipped_after = rep.grade.clippedAfter;
+      report->spots_removed = rep.portrait.spotsRemoved;
+      report->faces_adjusted = rep.face.adjusted;
+      report->layers = rep.layers;
     }
     return succeed();
   });
@@ -805,6 +999,8 @@ pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength
 
 // ---- Codec ----------------------------------------------------------------------
 
+}  // extern "C" (C++ helpers below return engine types)
+
 namespace {
 
 photoplus::codec::DecodeOptions decodeOptions(const pp_decode_options* o) {
@@ -829,6 +1025,8 @@ void fillDecodeInfo(const photoplus::codec::DecodeInfo& i, pp_decode_info* out) 
 }
 
 }  // namespace
+
+extern "C" {
 
 pp_status pp_decode_memory(const void* data, size_t size, const pp_decode_options* options,
                            const pp_cancel_token* token, pp_image** out, pp_decode_info* info) {

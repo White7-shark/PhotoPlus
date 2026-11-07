@@ -72,6 +72,8 @@ data class SessionConfig(
   val rawEnabled: Boolean = false,
   /** Glide: the session records video (preview + video stream) instead of photos. */
   val video: Boolean = false,
+  /** Live beauty on the preview (GPU effect + live analysis); photos are finished with the recipe either way. */
+  val beauty: Boolean = false,
 ) {
   companion object {
     fun fromMap(map: Map<String, Any?>, current: SessionConfig = SessionConfig()) = SessionConfig(
@@ -79,6 +81,7 @@ data class SessionConfig(
       resolution = if (map.containsKey("resolution")) ResolutionPreset.parse(map["resolution"] as? String) else current.resolution,
       rawEnabled = (map["raw"] as? Boolean) ?: current.rawEnabled,
       video = (map["video"] as? Boolean) ?: current.video,
+      beauty = (map["beauty"] as? Boolean) ?: current.beauty,
     )
   }
 }
@@ -111,8 +114,13 @@ data class CaptureOptions(
   val beautyBrighten: Float = 0f,
   /** Face-precise touches that come with the beauty level (eyes, under-eye, shine, face light). */
   val beauty: com.photoplus.studio.FaceTuning = com.photoplus.studio.FaceTuning(),
+  /** A beauty preset's resolved recipe (the camera's Beauty mode); it supersedes the Glow levels above. */
+  val beautyRecipe: com.photoplus.beauty.BeautyRecipe? = null,
+  /** The preset's id, kept with the photo so it can be re-applied. */
+  val beautyPreset: String? = null,
 ) {
-  val beautyActive: Boolean get() = beautyRetouch > 0f || beauty.any
+  val beautyRecipeActive: Boolean get() = beautyRecipe?.active == true
+  val beautyActive: Boolean get() = beautyRecipeActive || beautyRetouch > 0f || beauty.any
 
   /** RAW stays untouched; every other capture with a look or beauty is decoded and processed. */
   val needsProcessing: Boolean get() = mode != CaptureMode.RAW && (mode.processed || look != null || beautyActive)
@@ -148,6 +156,8 @@ data class CaptureOptions(
         beautyRetouch = (map["beauty"] as? Map<*, *>)?.let { (it["retouch"] as? Number)?.toFloat()?.coerceIn(0f, 1f) } ?: 0f,
         beautyBrighten = (map["beauty"] as? Map<*, *>)?.let { (it["brighten"] as? Number)?.toFloat()?.coerceIn(0f, 1f) } ?: 0f,
         beauty = beautyTuning(map["beauty"] as? Map<*, *>),
+        beautyRecipe = com.photoplus.beauty.BeautyRecipe.fromMap(map["beautyRecipe"] as? Map<*, *>),
+        beautyPreset = (map["beautyPreset"] as? String)?.takeIf { it.length in 1..64 },
         watermark = runCatching {
           @Suppress("UNCHECKED_CAST")
           com.photoplus.edit.WatermarkSpec.fromMap(map["watermark"] as? Map<String, Any?>)

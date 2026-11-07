@@ -451,7 +451,12 @@ typedef struct pp_face_params {
   float face_light;   /* opens shadows on the face; lifts a backlit face */
   float studio_light; /* soft directional key light shaped to the face */
   float light_angle;  /* studio light from -1 (picture left) .. 1 (right) */
-  float reserved[7];
+  /* Beauty make-up (low-frequency light and colour), 0..1. */
+  float blush;          /* colour on the cheek apples */
+  float blush_color[3]; /* gamma sRGB 0..1 */
+  float contour;        /* shading under the cheekbones, temples, jaw */
+  float highlight;      /* light on nose bridge, forehead, cheekbones, chin */
+  float reserved[1];
 } pp_face_params;
 
 typedef struct pp_face_report {
@@ -466,6 +471,73 @@ void pp_face_default_params(pp_face_params* out); /* all off */
  * ~24 px are left alone. Landmarks outside the image are allowed. */
 pp_status pp_face_adjust(pp_image* image, const pp_face* faces, size_t count, const pp_face_params* params,
                          const pp_cancel_token* token, pp_face_report* report);
+
+/* ---- Beauty (layers C, D, E and the compositor) ---------------------------
+ * Every field is a float, in this order (the bridge copies arrays). Ranges:
+ * signed fields -1..1, amounts 0..1, colours gamma sRGB 0..1. */
+typedef struct pp_beauty_grade {
+  /* E: colour */
+  float temperature, tint, contrast, blacks, highlights, saturation, vibrance;
+  float shadow_color[3], shadow_amount, highlight_color[3], highlight_amount; /* split toning */
+  float band_color[3], band_width, band_hue_shift, band_saturation; /* one selective hue band (degrees) */
+  float skin_protect, skin_warmth, skin_rosy, skin_luminance;
+  /* D: lighting */
+  float subject_light, light_warmth, shadow_lift, rim, rim_color[3], bloom, soft_focus, skin_sheen;
+  /* C: background */
+  float bg_exposure, bg_saturation, bg_tint[3], bg_tint_amount;
+  float bg_glow, bg_glow_x, bg_glow_y, bg_glow_size, bg_glow_color[3], bg_vignette, bg_haze;
+  float bg_warmth; /* -1 cool .. 1 warm, the background only */
+  float reserved[7];
+} pp_beauty_grade;
+
+#define PP_BEAUTY_GRADE_FLOATS 58 /* sizeof(pp_beauty_grade) / sizeof(float) */
+
+typedef struct pp_beauty_params {
+  pp_portrait_params portrait; /* A: skin (+ Portrait mode's blur, background, edge) */
+  pp_face_params face;         /* B: face and make-up */
+  pp_beauty_grade grade;       /* C, D, E */
+  int32_t auto_light;          /* 1: key light side judged on the face's shading */
+  float reserved[7];
+} pp_beauty_params;
+
+typedef struct pp_beauty_report {
+  float light_angle;      /* key light side used, -1 .. 1 */
+  float subject_coverage; /* fraction of the frame that is subject */
+  float skin_coverage;    /* fraction graded as skin */
+  float clipped_before;   /* fraction of pixels clipped in any channel */
+  float clipped_after;
+  int32_t spots_removed;
+  int32_t faces_adjusted;
+  int32_t layers; /* bit 0 skin/portrait, 1 face, 2 grade */
+  float reserved[4];
+} pp_beauty_report;
+
+/* What the grade measures about a photo (also fed to the live camera
+ * shader): the person's skin (median luma, chroma, spread), the subject's
+ * centre and width (0..1 of the image width), the key light's side and the
+ * skin's luma spread. */
+typedef struct pp_beauty_scene {
+  int32_t has_skin;
+  float skin_y, skin_cb, skin_cr, skin_spread;
+  float subject_x, subject_w;
+  float light_angle;
+  float skin_y_spread; /* spread of the skin's own luma (shine is judged against it) */
+  float reserved[3];
+} pp_beauty_scene;
+
+pp_status pp_beauty_measure(const pp_image* image, const pp_image* subject, const pp_image* face_mask,
+                            const pp_image* protect, const pp_face* faces, size_t count, pp_beauty_scene* out);
+
+/* Neutral: changes nothing (skin protect 0.75, auto light on). */
+void pp_beauty_default_params(pp_beauty_params* out);
+
+/* The beauty compositor: skin → face → lighting/background/colour, in
+ * place on `image` (RGBA8/BGRA8). Masks are GRAY8 of any size and may be
+ * NULL (`subject` NULL: no background separation). `faces` (landmarks) may
+ * be NULL when count is 0. `report` may be NULL. */
+pp_status pp_beauty(pp_image* image, const pp_image* subject, const pp_image* face_mask, const pp_image* protect,
+                    const pp_image* depth, const pp_face* faces, size_t count, const pp_beauty_params* params,
+                    const pp_cancel_token* token, pp_beauty_report* report);
 
 /* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
  * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */

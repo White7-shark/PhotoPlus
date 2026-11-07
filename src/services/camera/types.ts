@@ -76,6 +76,8 @@ export interface SessionConfig {
   raw?: boolean;
   /** Glide: the session records video (preview + video stream) instead of photos. */
   video?: boolean;
+  /** Beauty: the preview shows the beauty recipe live (GPU); photos get it either way. */
+  beauty?: boolean;
 }
 
 /** Glide recording options (the clip ends at maxMs, at most 7 s). */
@@ -115,6 +117,10 @@ export interface CaptureOptions {
   pop?: number;
   /** Camera beauty outside Spotlight (Glow and its face touches). */
   beauty?: { retouch: number; brighten: number; eyes: number; underEye: number; shine: number; faceLight: number };
+  /** Beauty mode (and Portrait mode's controls in Spotlight): the resolved recipe. Supersedes `beauty`. */
+  beautyRecipe?: import('../beauty/recipe').BeautyRecipe;
+  /** The beauty preset's id, kept with the photo. */
+  beautyPreset?: string;
   /** Vibe Match look numbers and how strongly to apply them. */
   look?: number[];
   lookStrength?: number;
@@ -213,6 +219,8 @@ export const CameraEvents = {
   progress: 'PhotoPlusCaptureProgress',
   /** Glide: a recording started. */
   recording: 'PhotoPlusRecording',
+  /** Beauty: whether the live preview runs on this phone (after each camera start). */
+  beautyLive: 'PhotoPlusBeautyLive',
 } as const;
 
 export type CaptureStage = 'capturing' | 'processing' | 'styling' | 'saving';
@@ -238,6 +246,7 @@ export interface CameraEventPayloads {
   [CameraEvents.shutter]: { captureId: string };
   [CameraEvents.progress]: { captureId: string; stage: CaptureStage; progress: number };
   [CameraEvents.recording]: { recording: boolean; maxMs: number };
+  [CameraEvents.beautyLive]: { requested: boolean; live: boolean; reason: string | null };
 }
 
 export type CameraEventName = keyof CameraEventPayloads;

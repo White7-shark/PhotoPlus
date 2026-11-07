@@ -1,0 +1,508 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "natural_glow",
+      "name": "Natural Glow",
+      "tier": "free",
+      "description": "Natural beauty that never looks done",
+      "skin": {
+        "smooth": 0.35,
+        "blemish": 0.4,
+        "even": 0.35,
+        "brighten": 0.25
+      },
+      "face": {
+        "eyes": 0.2,
+        "underEye": 0.3,
+        "highlight": 0.35
+      },
+      "lighting": {
+        "faceLight": 0.25,
+        "subjectLight": 0.12,
+        "shadowLift": 0.2,
+        "skinSheen": 0.35
+      },
+      "background": {},
+      "color": {
+        "contrast": 0.05,
+        "vibrance": 0.15,
+        "skinLuminance": 0.12
+      }
+    },
+    {
+      "id": "soft_radiance",
+      "name": "Soft Radiance",
+      "tier": "free",
+      "description": "A warm, radiant glow in flattering light",
+      "skin": {
+        "smooth": 0.45,
+        "blemish": 0.4,
+        "even": 0.4,
+        "brighten": 0.35
+      },
+      "face": {
+        "eyes": 0.3,
+        "blush": 0.25,
+        "blushColor": "#C8705A",
+        "highlight": 0.35
+      },
+      "lighting": {
+        "subjectLight": 0.25,
+        "lightWarmth": 0.4,
+        "bloom": 0.4,
+        "softFocus": 0.12,
+        "skinSheen": 0.45
+      },
+      "background": {
+        "bgTint": "#C9946E",
+        "bgTintAmount": 0.35,
+        "bgExposure": 0.15
+      },
+      "color": {
+        "temperature": 0.25,
+        "skinWarmth": 0.25,
+        "contrast": -0.08,
+        "highlights": 0.3,
+        "highlightColor": "#FFD9B0",
+        "highlightAmount": 0.25
+      }
+    },
+    {
+      "id": "velvet_skin",
+      "name": "Velvet Skin",
+      "tier": "premium",
+      "description": "Flawless, even skin that keeps its texture",
+      "skin": {
+        "smooth": 0.8,
+        "blemish": 0.85,
+        "even": 0.75,
+        "brighten": 0.3
+      },
+      "face": {
+        "eyes": 0.25,
+        "underEye": 0.55,
+        "shine": 0.45,
+        "highlight": 0.25
+      },
+      "lighting": {
+        "subjectLight": 0.18,
+        "shadowLift": 0.25,
+        "skinSheen": 0.1
+      },
+      "background": {
+        "bgExposure": -0.45,
+        "bgVignette": 0.3
+      },
+      "color": {
+        "contrast": 0.15,
+        "blacks": -0.1,
+        "vibrance": 0.05,
+        "saturation": -0.05
+      }
+    },
+    {
+      "id": "golden_goddess",
+      "name": "Golden Goddess",
+      "tier": "premium",
+      "description": "Golden-hour warmth and glowing highlights",
+      "skin": {
+        "smooth": 0.4,
+        "blemish": 0.4,
+        "even": 0.35,
+        "brighten": 0.3
+      },
+      "face": {
+        "eyes": 0.15,
+        "blush": 0.15,
+        "blushColor": "#D98A5E",
+        "highlight": 0.45
+      },
+      "lighting": {
+        "subjectLight": 0.2,
+        "lightWarmth": 0.4,
+        "bloom": 0.35,
+        "skinSheen": 0.35
+      },
+      "background": {
+        "bgTint": "#E8B35F",
+        "bgTintAmount": 0.45,
+        "bgGlow": 0.5,
+        "bgGlowX": 0.85,
+        "bgGlowY": 0.25,
+        "bgGlowSize": 0.35,
+        "bgGlowColor": "#FFC874"
+      },
+      "color": {
+        "temperature": 0.45,
+        "skinWarmth": 0.15,
+        "skinProtect": 0.7,
+        "contrast": 0.15,
+        "blacks": -0.1,
+        "highlightColor": "#F2C46B",
+        "highlightAmount": 0.5,
+        "shadowColor": "#6B4226",
+        "shadowAmount": 0.25
+      }
+    },
+    {
+      "id": "crystal_beauty",
+      "name": "Crystal Beauty",
+      "tier": "premium",
+      "description": "Cool, luminous editorial light",
+      "skin": {
+        "smooth": 0.5,
+        "blemish": 0.5,
+        "even": 0.45,
+        "brighten": 0.3
+      },
+      "face": {
+        "eyes": 0.4,
+        "lips": 0.2,
+        "highlight": 0.4
+      },
+      "lighting": {
+        "rim": 0.4,
+        "rimColor": "#9BD3FF",
+        "skinSheen": 0.25
+      },
+      "background": {
+        "bgTint": "#3D7FB5",
+        "bgTintAmount": 0.5,
+        "bgExposure": -0.1
+      },
+      "color": {
+        "temperature": -0.45,
+        "tint": -0.05,
+        "skinProtect": 0.8,
+        "highlights": 0.35,
+        "contrast": 0.2,
+        "saturation": -0.05,
+        "highlightColor": "#CFE6FF",
+        "highlightAmount": 0.3,
+        "shadowColor": "#1E3A5F",
+        "shadowAmount": 0.35
+      }
+    },
+    {
+      "id": "blush_romance",
+      "name": "Blush Romance",
+      "tier": "premium",
+      "description": "Rosy cheeks and a soft pink haze",
+      "skin": {
+        "smooth": 0.6,
+        "blemish": 0.5,
+        "even": 0.5,
+        "brighten": 0.4
+      },
+      "face": {
+        "eyes": 0.25,
+        "lips": 0.35,
+        "blush": 0.55,
+        "blushColor": "#E86C88"
+      },
+      "lighting": {
+        "bloom": 0.3,
+        "softFocus": 0.25
+      },
+      "background": {
+        "bgTint": "#F4B6C8",
+        "bgTintAmount": 0.55,
+        "bgHaze": 0.4,
+        "bgGlowColor": "#FFD6E3"
+      },
+      "color": {
+        "skinRosy": 0.35,
+        "temperature": 0.05,
+        "tint": 0.25,
+        "contrast": -0.15,
+        "blacks": 0.25,
+        "highlights": 0.15,
+        "highlightColor": "#FFD1DC",
+        "highlightAmount": 0.3
+      }
+    },
+    {
+      "id": "bronze_luxe",
+      "name": "Bronze Luxe",
+      "tier": "premium",
+      "description": "Bronzed glow, sculpted and rich",
+      "skin": {
+        "smooth": 0.4,
+        "blemish": 0.4,
+        "even": 0.4,
+        "brighten": 0.2
+      },
+      "face": {
+        "eyes": 0.25,
+        "lips": 0.25,
+        "blush": 0.15,
+        "blushColor": "#B5653F",
+        "contour": 0.65,
+        "highlight": 0.6
+      },
+      "lighting": {
+        "lightWarmth": 0.5,
+        "skinSheen": 0.55,
+        "subjectLight": 0.1
+      },
+      "background": {
+        "bgExposure": -0.6,
+        "bgVignette": 0.55,
+        "bgTint": "#8A5A2B",
+        "bgTintAmount": 0.35
+      },
+      "color": {
+        "temperature": 0.3,
+        "skinWarmth": 0.45,
+        "contrast": 0.35,
+        "blacks": -0.35,
+        "saturation": 0.1,
+        "shadowColor": "#3B2414",
+        "shadowAmount": 0.45,
+        "highlightColor": "#E7B573",
+        "highlightAmount": 0.55
+      }
+    },
+    {
+      "id": "pure_elegance",
+      "name": "Pure Elegance",
+      "tier": "premium",
+      "description": "Bright, clean studio light",
+      "skin": {
+        "smooth": 0.55,
+        "blemish": 0.6,
+        "even": 0.55,
+        "brighten": 0.45
+      },
+      "face": {
+        "eyes": 0.2,
+        "underEye": 0.45,
+        "shine": 0.3,
+        "highlight": 0.2
+      },
+      "lighting": {
+        "faceLight": 0.45,
+        "subjectLight": 0.35,
+        "shadowLift": 0.45
+      },
+      "background": {
+        "bgExposure": 0.8,
+        "bgSaturation": -0.6,
+        "bgHaze": 0.25,
+        "bgGlowColor": "#FFFFFF"
+      },
+      "color": {
+        "highlights": 0.25,
+        "temperature": -0.08,
+        "contrast": -0.1,
+        "skinLuminance": 0.2,
+        "saturation": -0.05
+      }
+    },
+    {
+      "id": "midnight_glam",
+      "name": "Midnight Glam",
+      "tier": "premium",
+      "description": "Dramatic light and deep, rich shadows",
+      "skin": {
+        "smooth": 0.4,
+        "blemish": 0.5,
+        "even": 0.3,
+        "brighten": 0.15
+      },
+      "face": {
+        "eyes": 0.3,
+        "lips": 0.3,
+        "contour": 0.45,
+        "highlight": 0.35
+      },
+      "lighting": {
+        "studio": 0.55,
+        "subjectLight": 0.05,
+        "rim": 0.2,
+        "rimColor": "#FFD9B0"
+      },
+      "background": {
+        "bgExposure": -0.8,
+        "bgVignette": 0.7
+      },
+      "color": {
+        "contrast": 0.55,
+        "blacks": -0.45,
+        "saturation": 0.05,
+        "shadowColor": "#1A1428",
+        "shadowAmount": 0.3,
+        "highlightColor": "#E8C9A8",
+        "highlightAmount": 0.2
+      }
+    },
+    {
+      "id": "peach_perfection",
+      "name": "Peach Perfection",
+      "tier": "premium",
+      "description": "Dewy skin with a peachy flush",
+      "skin": {
+        "smooth": 0.55,
+        "blemish": 0.5,
+        "even": 0.5,
+        "brighten": 0.35
+      },
+      "face": {
+        "eyes": 0.2,
+        "lips": 0.3,
+        "blush": 0.4,
+        "blushColor": "#F08A6E",
+        "highlight": 0.4
+      },
+      "lighting": {
+        "skinSheen": 0.5
+      },
+      "background": {
+        "bgTint": "#F2A07E",
+        "bgTintAmount": 0.55,
+        "bgGlow": 0.3,
+        "bgGlowX": 0.2,
+        "bgGlowY": 0.2,
+        "bgGlowSize": 0.5,
+        "bgGlowColor": "#FFC9A8"
+      },
+      "color": {
+        "skinWarmth": 0.25,
+        "skinRosy": 0.15,
+        "temperature": 0.2,
+        "highlights": 0.2,
+        "contrast": 0.05,
+        "vibrance": 0.2,
+        "highlightColor": "#FFD9C2",
+        "highlightAmount": 0.3
+      }
+    },
+    {
+      "id": "emerald_aura",
+      "name": "Emerald Aura",
+      "tier": "premium",
+      "description": "Emerald surroundings, natural skin",
+      "skin": {
+        "smooth": 0.4,
+        "blemish": 0.4,
+        "even": 0.4,
+        "brighten": 0.3
+      },
+      "face": {
+        "eyes": 0.25,
+        "lips": 0.15,
+        "highlight": 0.3
+      },
+      "lighting": {
+        "subjectLight": 0.1,
+        "rim": 0.3,
+        "rimColor": "#FFD08A"
+      },
+      "background": {
+        "bgTint": "#1E6B4E",
+        "bgTintAmount": 0.35,
+        "bgGlow": 0.45,
+        "bgGlowX": 0.85,
+        "bgGlowY": 0.28,
+        "bgGlowSize": 0.22,
+        "bgGlowColor": "#FFC46B"
+      },
+      "color": {
+        "skinProtect": 0.85,
+        "contrast": 0.25,
+        "blacks": -0.2,
+        "bandColor": "#1F8A5B",
+        "bandWidth": 45,
+        "bandHueShift": 8,
+        "bandSaturation": 0.5,
+        "shadowColor": "#0F3D2E",
+        "shadowAmount": 0.35,
+        "highlightColor": "#F5D7A1",
+        "highlightAmount": 0.2
+      }
+    },
+    {
+      "id": "dreamlight",
+      "name": "Dreamlight",
+      "tier": "premium",
+      "description": "Soft focus and a dreamy light bloom",
+      "skin": {
+        "smooth": 0.6,
+        "blemish": 0.5,
+        "even": 0.5,
+        "brighten": 0.35
+      },
+      "face": {
+        "eyes": 0.3,
+        "lips": 0.2,
+        "blush": 0.2,
+        "blushColor": "#E79AB5"
+      },
+      "lighting": {
+        "softFocus": 0.55,
+        "bloom": 0.55
+      },
+      "background": {
+        "bgHaze": 0.5,
+        "bgTint": "#C9A8E0",
+        "bgTintAmount": 0.4,
+        "bgGlow": 0.4,
+        "bgGlowX": 0.15,
+        "bgGlowY": 0.35,
+        "bgGlowSize": 0.3,
+        "bgGlowColor": "#F7D8FF"
+      },
+      "color": {
+        "contrast": -0.2,
+        "blacks": 0.3,
+        "tint": 0.15,
+        "highlights": 0.2,
+        "saturation": -0.05
+      }
+    },
+    {
+      "id": "studio_royal",
+      "name": "Studio Royal",
+      "tier": "premium",
+      "description": "Professional studio light and atmosphere",
+      "skin": {
+        "smooth": 0.5,
+        "blemish": 0.6,
+        "even": 0.5,
+        "brighten": 0.3
+      },
+      "face": {
+        "eyes": 0.3,
+        "lips": 0.3,
+        "underEye": 0.4,
+        "contour": 0.3,
+        "highlight": 0.3
+      },
+      "lighting": {
+        "studio": 0.6,
+        "faceLight": 0.3,
+        "subjectLight": 0.15,
+        "shadowLift": 0.2,
+        "rim": 0.35,
+        "rimColor": "#E8EEF7"
+      },
+      "background": {
+        "bgTint": "#5A6B80",
+        "bgTintAmount": 0.6,
+        "bgSaturation": -0.3,
+        "bgExposure": -0.3,
+        "bgVignette": 0.55,
+        "bgGlow": 0.25,
+        "bgGlowX": 0.5,
+        "bgGlowY": 0.45,
+        "bgGlowSize": 0.5,
+        "bgGlowColor": "#9AA8BA"
+      },
+      "color": {
+        "contrast": 0.35,
+        "saturation": 0.05
+      }
+    }
+  ]
+}

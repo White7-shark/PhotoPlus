@@ -1,4 +1,4 @@
-# Photo Plus — Architecture (Phases 1–6)
+# Photo Plus — Architecture (Phases 1–7)
 
 ```
 ┌──────────────────────────── React Native (TypeScript) ────────────────────────────┐
@@ -25,6 +25,7 @@
 │ GPU: GLES 3.1 compute, self-tested against the CPU, previews only                  │
 │ Enhance: align · robust merge · super-resolution · denoise · deconvolve · tone     │
 │ Video (Glide): motion · stabilisation plan · warp · clip curves · frame enhance    │
+│ Beauty: grade (lighting · background · colour) · compositor (pp_beauty) · measure  │
 │ pp_enhance_into (writes into a caller bitmap) · pp_focus_peaking (reads Y in place)│
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -212,4 +213,27 @@ GlidePreview: Glide / As recorded, share, save
 | `screens/camera/useGlide.ts` | Record → craft → save flow; microphone asked once (silent clips without it); one clip at a time; cancellable |
 | `GlideOptions.kt` | Request parsing with ranges; bitrate; exact frame times; `LandmarkSmoother` keeps face touches from shimmering |
 | Plan | Free. Free-plan clips are marked in every frame before encoding (`ExportPolicy` + `WatermarkRenderer`) |
+
+## Beauty filters and live camera beauty (Phase 7)
+
+Full report: [`PHASE7_BEAUTY_REPORT.md`](PHASE7_BEAUTY_REPORT.md).
+
+```
+presets.json (13: 2 free, 11 premium) ─ recipe.ts resolveRecipe(preset, Intensity + Skin/Face/Lighting/Background, Portrait controls)
+   │  one resolver for the app, the tests and the desktop tools
+   ├─ camera live:   CameraService.setLiveBeauty(recipe) ─ LiveBeautyState ─ BeautyProcessor (CameraEffect, GLES 3)
+   │                 BeautyAnalyzer: faces, selfie mask, scene (pp_beauty_measure) in preview space
+   ├─ photo:         CaptureOptions.beautyRecipe ─ PortraitProcessor.applyBeauty ─ pp_beauty
+   ├─ Spotlight:     the same recipe + Portrait controls (depth blur, subject/background light, tone, edges)
+   ├─ Glide:         GlideOptions.recipe ─ pp_beauty on every frame
+   └─ editor:        EditDocument.beauty ─ EditRenderer heavy stage ─ pp_beauty
+pp_beauty: skin (portrait::apply) → face (adjustFaces + blush/contour/highlight) → grade (C background, D lighting, E colour)
+```
+
+| Where | What |
+|---|---|
+| `native/engine/src/beauty/beauty.cpp` | The grade as one per-pixel `shade()`, mirrored line for line by `assets/beauty/composite.frag` |
+| `scripts/beauty-gpu-parity.mjs` | Runs the shader files in WebGL2 against the engine on real photos |
+| `scripts/beauty-fixture.mts` | Writes the fixture pinning the Kotlin bridge to the JS resolver and the live uniforms |
+| Fallback | No GLES 3 external textures, low-RAM phone, or a GL error: rebind without the effect; photos still get the recipe |
 

@@ -14,6 +14,8 @@ import { rawCameraCaps } from './helpers/fixtures';
 
 const mockCamera = {
   isSessionReady: jest.fn(async () => true),
+  setLiveBeauty: jest.fn(),
+  setBeautyOriginal: jest.fn(),
   getCapabilities: jest.fn(async () => rawCameraCaps()),
   configure: jest.fn(),
   capturePhoto: jest.fn(async (o: { mode: string; captureId: string }) => ({
@@ -73,6 +75,14 @@ beforeEach(() => {
   useAppStore.setState({ repos: null, settings: { ...DEFAULT_SETTINGS }, isForeground: true });
 });
 
+/** The camera reports ready again (after a rebind, e.g. the live beauty preview turning on). */
+async function readyAgain() {
+  const host = screen.getByTestId('camera-preview');
+  await act(async () => {
+    host.props.onCameraReady({ nativeEvent: { lensFacing: 'back' } });
+  });
+}
+
 async function renderReadyCamera() {
   const navigation = { navigate: jest.fn(), goBack: jest.fn() };
   await render(<CameraScreen navigation={navigation as never} route={{ key: 'c', name: 'Camera' } as never} />);
@@ -94,6 +104,7 @@ describe('camera screen', () => {
       resolution: 'max',
       raw: false,
       video: false,
+      beauty: false,
     });
     for (const id of ['night', 'enhance', 'photo', 'superres', 'glide', 'pro']) {
       expect(screen.getByTestId(`mode-${id}`)).toBeTruthy();
@@ -248,6 +259,7 @@ describe('camera session state', () => {
         resolution: 'max',
         raw: false,
         video: false,
+        beauty: false,
       }),
     );
   });
@@ -257,7 +269,16 @@ describe('spotlight and vibe match', () => {
   it('taps choose what stands out and travel with the capture', async () => {
     await renderReadyCamera();
     await fireEvent.press(screen.getByTestId('mode-spotlight'));
+    // Spotlight shows Portrait mode live: the camera rebinds with the beauty preview.
+    expect(screen.getByTestId('shutter').props.accessibilityState.disabled).toBe(true);
+    await waitFor(() =>
+      expect(mockCamera.configure).toHaveBeenLastCalledWith(expect.objectContaining({ beauty: true })),
+    );
+    await readyAgain();
     expect(screen.getByTestId('spotlight-panel')).toBeTruthy();
+    expect(mockCamera.setLiveBeauty).toHaveBeenLastCalledWith(
+      expect.objectContaining({ portrait: expect.objectContaining({ blur: 0.6 }) }),
+    );
     const host = screen.getByTestId('camera-preview');
     await act(async () => {
       host.props.onFocusTap({ nativeEvent: { x: 0.3, y: 0.4 } });
@@ -270,16 +291,15 @@ describe('spotlight and vibe match', () => {
       host.props.onFocusTap({ nativeEvent: { x: 0.71, y: 0.61 } });
     });
     expect(screen.getByText('1 chosen · tap again to remove')).toBeTruthy();
-    await fireEvent.press(screen.getByRole('radio', { name: 'Flawless' }));
-    await fireEvent.press(screen.getByRole('radio', { name: 'Strong' }));
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalled());
+    // Portrait mode's controls (blur 60 %, edges) travel as the recipe; no preset when beauty is off.
     expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({
       mode: 'spotlight',
       points: [0.3, 0.4],
-      blur: 0.9,
-      retouch: 1,
+      beautyRecipe: { portrait: { blur: 0.6, edge: 0.5, smooth: 0 }, face: { blush: 0 } },
     });
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).not.toHaveProperty('beautyPreset');
     expect(await screen.findByText('Spotlight photo saved')).toBeTruthy();
   });
 
@@ -343,6 +363,7 @@ describe('spotlight and vibe match', () => {
     }));
     await renderReadyCamera();
     await fireEvent.press(screen.getByTestId('mode-spotlight'));
+    await readyAgain();
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(added).toHaveLength(1));
     const id = (mockCamera.capturePhoto.mock.calls[0][0] as { captureId: string }).captureId;
@@ -384,41 +405,87 @@ describe('spotlight and vibe match', () => {
   });
 });
 
-describe('camera beauty (Glow outside Spotlight)', () => {
+describe('camera beauty', () => {
   const cleanups: (() => void)[] = [];
   const afterTest = (fn: () => void) => cleanups.push(fn);
   afterEach(() => cleanups.splice(0).forEach(fn => fn()));
+  const adjust = { intensity: 0.8, skin: 1, face: 1, lighting: 1, background: 1 };
 
-  it('a Glow level travels with every photo and is remembered; Spotlight keeps its own', async () => {
+  it('choosing a filter turns it on and saves it', async () => {
     const updateSetting = jest.fn(async () => undefined);
     const real = useAppStore.getState().updateSetting;
     afterTest(() => useAppStore.setState({ updateSetting: real }));
-    useAppStore.setState({
-      settings: { ...DEFAULT_SETTINGS, cameraGlow: 'smooth' },
-      updateSetting: updateSetting as never,
-    });
+    useAppStore.setState({ updateSetting: updateSetting as never });
     await renderReadyCamera();
-    // Tapping the chip moves to the next level and saves it.
-    await fireEvent.press(screen.getByTestId('glow-chip'));
-    expect(updateSetting).toHaveBeenCalledWith('cameraGlow', 'flawless');
+    expect(screen.getByLabelText('Beauty. Choose a beauty filter')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('beauty-chip'));
+    expect(screen.getByTestId('beauty-tray')).toBeTruthy();
+    for (const id of ['natural_glow', 'soft_radiance', 'golden_goddess', 'studio_royal']) {
+      expect(screen.getByTestId(`beauty-${id}`)).toBeTruthy();
+    }
+    await fireEvent.press(screen.getByTestId('beauty-golden_goddess'));
+    expect(updateSetting).toHaveBeenCalledWith(
+      'cameraBeauty',
+      expect.objectContaining({ on: true, preset: 'golden_goddess' }),
+    );
+  });
+
+  it('a chosen filter shows live, compares with the original, and travels with every photo', async () => {
+    useAppStore.setState(st => ({
+      settings: { ...st.settings, cameraBeauty: { on: true, preset: 'golden_goddess', adjust } },
+    }));
+    await renderReadyCamera();
+    await waitFor(() =>
+      expect(mockCamera.configure).toHaveBeenLastCalledWith(expect.objectContaining({ beauty: true })),
+    );
+    await readyAgain();
+    expect(screen.getByLabelText('Beauty: Golden Goddess. Change filter')).toBeTruthy();
+    const live = mockCamera.setLiveBeauty.mock.calls.at(-1)?.[0] as { grade: { temperature: number; bgGlow: number } };
+    expect(live.grade.temperature).toBeCloseTo(0.45 * 0.8, 5); // intensity scales the look
+    expect(live.grade.bgGlow).toBeCloseTo(0.5 * 0.8, 5);
+    const original = screen.getByTestId('beauty-original');
+    await fireEvent(original, 'pressIn');
+    expect(mockCamera.setBeautyOriginal).toHaveBeenLastCalledWith(true);
+    await fireEvent(original, 'pressOut');
+    expect(mockCamera.setBeautyOriginal).toHaveBeenLastCalledWith(false);
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(1));
     expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({
-      beauty: { retouch: 0.75, brighten: 0.4, eyes: 0.3, underEye: 0.45, shine: 0.35, faceLight: 0.2 },
+      beautyPreset: 'golden_goddess',
+      beautyRecipe: { grade: { temperature: expect.closeTo(0.36, 5) } },
     });
-    // Spotlight has its own Glow: no camera beauty there.
+    // In Spotlight the same filter combines with Portrait mode's own blur.
     await fireEvent.press(screen.getByTestId('mode-spotlight'));
-    expect(screen.queryByTestId('glow-chip')).toBeNull();
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(2));
-    expect(mockCamera.capturePhoto.mock.calls[1][0]).not.toHaveProperty('beauty');
+    expect(mockCamera.capturePhoto.mock.calls[1][0]).toMatchObject({
+      mode: 'spotlight',
+      beautyPreset: 'golden_goddess',
+      beautyRecipe: { portrait: { blur: 0.6 }, grade: { bgGlow: expect.closeTo(0.4, 5) } },
+    });
   });
 
-  it('with Glow off, photos are taken as they are', async () => {
+  it('with beauty off, photos are taken as they are and nothing runs live', async () => {
     await renderReadyCamera();
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(1));
-    expect(mockCamera.capturePhoto.mock.calls[0][0]).not.toHaveProperty('beauty');
-    expect(screen.getByLabelText('Glow off. Turn on beauty for faces')).toBeTruthy();
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).not.toHaveProperty('beautyRecipe');
+    expect(mockCamera.setLiveBeauty).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByTestId('beauty-original')).toBeNull();
+  });
+
+  it('says so when this phone cannot show the filter live', async () => {
+    useAppStore.setState(st => ({
+      settings: { ...st.settings, cameraBeauty: { on: true, preset: 'natural_glow', adjust } },
+    }));
+    const { DeviceEventEmitter } = jest.requireActual('react-native');
+    await renderReadyCamera();
+    await act(async () => {
+      DeviceEventEmitter.emit('PhotoPlusBeautyLive', { requested: true, live: false, reason: 'unsupported' });
+    });
+    await fireEvent.press(screen.getByTestId('beauty-chip'));
+    expect(
+      screen.getByText('This phone shows the camera as it is here. Your photos still get the filter.'),
+    ).toBeTruthy();
   });
 });

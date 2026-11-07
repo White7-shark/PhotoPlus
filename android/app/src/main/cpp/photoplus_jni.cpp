@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -498,6 +499,119 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeFaceAdjust(
   }
   const jfloat values[3] = {static_cast<jfloat>(report.faces), static_cast<jfloat>(report.adjusted), report.light_gain};
   env->SetFloatArrayRegion(reportOut, 0, 3, values);
+}
+
+// Packs `count` faces (count * 262 floats, normalised) into pp_face records.
+static bool readFaces(JNIEnv* env, jfloatArray faces, jintArray detailed, std::vector<pp_face>& out) {
+  constexpr jsize kPer = PP_FACE_POINTS * 2;
+  if (faces == nullptr || detailed == nullptr) return false;
+  const jsize total = env->GetArrayLength(faces);
+  const jsize count = env->GetArrayLength(detailed);
+  if (total != count * kPer || count > 32) return false;
+  std::vector<jfloat> pts(static_cast<size_t>(total));
+  std::vector<jint> det(static_cast<size_t>(count));
+  if (total > 0) env->GetFloatArrayRegion(faces, 0, total, pts.data());
+  if (count > 0) env->GetIntArrayRegion(detailed, 0, count, det.data());
+  if (env->ExceptionCheck()) return false;
+  out.assign(static_cast<size_t>(count), pp_face{});
+  for (jsize i = 0; i < count; ++i) {
+    std::copy_n(pts.data() + static_cast<size_t>(i) * kPer, kPer, out[static_cast<size_t>(i)].points);
+    out[static_cast<size_t>(i)].detailed = det[static_cast<size_t>(i)];
+  }
+  return true;
+}
+
+// The beauty compositor (skin → face → lighting / background / colour).
+// `recipe` holds 78 floats: 6 skin/portrait (blur, smooth, blemish, even,
+// brighten, edge), 13 face (eyes, teeth, lips, under-eye, shine, face light,
+// studio, blush, blush R G B, contour, highlight), PP_BEAUTY_GRADE_FLOATS
+// grade (pp_beauty_grade order) and auto light (0/1). Masks may be null.
+// `reportOut` (8) = light angle, subject, skin, clipped before, clipped after,
+// spots, faces adjusted, layers.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeBeauty(
+    JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject faceMask, jobject protect, jobject depth,
+    jfloatArray faces, jintArray detailed, jfloatArray recipe, jlong token, jfloatArray reportOut) {
+  constexpr jsize kRecipe = 6 + 13 + PP_BEAUTY_GRADE_FLOATS + 1;
+  constexpr jsize kReport = 8;
+  std::vector<pp_face> list;
+  if (recipe == nullptr || reportOut == nullptr || env->GetArrayLength(recipe) != kRecipe ||
+      env->GetArrayLength(reportOut) < kReport || !readFaces(env, faces, detailed, list)) {
+    if (!env->ExceptionCheck()) throwEngineException(env, "INVALID_ARGUMENT", "Bad beauty arguments");
+    return;
+  }
+  jfloat r[kRecipe];
+  env->GetFloatArrayRegion(recipe, 0, kRecipe, r);
+  if (env->ExceptionCheck()) return;
+  WrappedBitmap img, subj, fac, prot, dep;
+  if (!img.open(env, bitmap, false) || !subj.open(env, subject, true) || !fac.open(env, faceMask, true) ||
+      !prot.open(env, protect, true) || !dep.open(env, depth, true)) {
+    return;
+  }
+  pp_beauty_params p{};
+  pp_beauty_default_params(&p);
+  p.portrait.blur = r[0];
+  p.portrait.retouch = 0.0f;
+  p.portrait.brighten = r[4];
+  p.portrait.pop = 0.0f;
+  p.portrait.smooth = r[1];
+  p.portrait.blemish = r[2];
+  p.portrait.even = r[3];
+  p.portrait.edge = r[5];
+  const jfloat* f = r + 6;
+  p.face.eyes = f[0];
+  p.face.teeth = f[1];
+  p.face.lips = f[2];
+  p.face.under_eye = f[3];
+  p.face.shine = f[4];
+  p.face.face_light = f[5];
+  p.face.studio_light = f[6];
+  p.face.blush = f[7];
+  p.face.blush_color[0] = f[8];
+  p.face.blush_color[1] = f[9];
+  p.face.blush_color[2] = f[10];
+  p.face.contour = f[11];
+  p.face.highlight = f[12];
+  std::memcpy(&p.grade, r + 19, sizeof(pp_beauty_grade));
+  p.auto_light = r[kRecipe - 1] > 0.5f ? 1 : 0;
+  pp_beauty_report report{};
+  const pp_status st = pp_beauty(img.image, subj.image, fac.image, prot.image, dep.image, list.empty() ? nullptr : list.data(),
+                                 list.size(), &p, reinterpret_cast<const pp_cancel_token*>(token), &report);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat values[kReport] = {report.light_angle, report.subject_coverage, report.skin_coverage,
+                                  report.clipped_before, report.clipped_after, static_cast<jfloat>(report.spots_removed),
+                                  static_cast<jfloat>(report.faces_adjusted), static_cast<jfloat>(report.layers)};
+  env->SetFloatArrayRegion(reportOut, 0, kReport, values);
+}
+
+// What the beauty grade measures about a frame (the live preview's scene):
+// `out` (9) = has skin, skin Y, Cb, Cr, spread, subject x, subject width,
+// light angle, skin luma spread.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeBeautyMeasure(
+    JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject faceMask, jobject protect, jfloatArray faces,
+    jintArray detailed, jfloatArray out) {
+  std::vector<pp_face> list;
+  if (out == nullptr || env->GetArrayLength(out) < 9 || !readFaces(env, faces, detailed, list)) {
+    if (!env->ExceptionCheck()) throwEngineException(env, "INVALID_ARGUMENT", "Bad measure arguments");
+    return;
+  }
+  WrappedBitmap img, subj, fac, prot;
+  if (!img.open(env, bitmap, false) || !subj.open(env, subject, true) || !fac.open(env, faceMask, true) ||
+      !prot.open(env, protect, true)) {
+    return;
+  }
+  pp_beauty_scene sc{};
+  const pp_status st = pp_beauty_measure(img.image, subj.image, fac.image, prot.image, list.empty() ? nullptr : list.data(),
+                                         list.size(), &sc);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat values[9] = {static_cast<jfloat>(sc.has_skin), sc.skin_y, sc.skin_cb, sc.skin_cr, sc.skin_spread,
+                            sc.subject_x, sc.subject_w, sc.light_angle, sc.skin_y_spread};
+  env->SetFloatArrayRegion(out, 0, 9, values);
 }
 
 // Lens analysis ("Transform"): fills `out` (7) with detail blur, corner blur,

@@ -26,8 +26,29 @@ struct FaceLandmarks {
 struct FaceParams {
   float eyes = 0, teeth = 0, lips = 0, underEye = 0, shine = 0, slim = 0, faceLight = 0, studio = 0;
   float lightAngle = 0;  // -1 picture left .. 1 right
+  // Make-up light and colour (beauty presets), 0..1: blush on the cheek
+  // apples (colour as gamma RGB), contour shading under the cheekbones and
+  // along the jaw, highlight on the nose bridge, forehead, cheekbone tops and
+  // chin. All are low-frequency, so skin texture is untouched.
+  float blush = 0, contour = 0, highlight = 0;
+  std::array<float, 3> blushColor{0.86f, 0.42f, 0.47f};
   bool any() const;
 };
+
+// Where the key light most plausibly comes from, judged on the face's own
+// shading (the brighter cheek): -1 picture left .. 1 right. Faces lit evenly
+// get a classic key from the picture right (0.35).
+float estimateLightAngle(const ImageBuffer& image, const FaceLandmarks& face);
+
+// The face frame's landmarks in face units (see makeupAt) and the make-up
+// weights there, 0..1. Exposed for the live camera shader's parity tests.
+struct MakeupFrame {
+  float eyeV = -0.2f, noseV = 0.2f, mouthV = 0.5f;
+};
+struct MakeupWeights {
+  float blush = 0, contour = 0, highlight = 0;
+};
+MakeupWeights makeupAt(float u, float v, const MakeupFrame& frame);
 
 struct FaceReport {
   int32_t faces = 0;

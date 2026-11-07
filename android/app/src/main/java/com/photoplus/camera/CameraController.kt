@@ -48,6 +48,10 @@ import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
+import com.photoplus.beauty.BeautyAnalyzer
+import com.photoplus.beauty.BeautyEffect
+import com.photoplus.beauty.BeautyProcessor
+import com.photoplus.beauty.LiveBeautyState
 import androidx.camera.view.PreviewView
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
@@ -121,6 +125,9 @@ object CameraController {
   private var peakingEnabled = false
   /** Live face tracking for props worn in the camera. */
   private var facesEnabled = false
+  /** The live beauty effect's GL processor while bound, and whether the GPU let it down this session. */
+  private var beautyProcessor: BeautyProcessor? = null
+  private var beautyFailed = false
   @Volatile var targetRotation = Surface.ROTATION_0
     private set
   private var capabilityInputs: CameraCapabilities.Inputs? = null
@@ -181,11 +188,15 @@ object CameraController {
     analysis = null
     previewView = null
     callbacks = null
+    val processor = beautyProcessor
+    beautyProcessor = null
+    beautyFailed = false
     val future = ProcessCameraProvider.getInstance(context)
     future.addListener({
       if (owner == null) {
         try { future.get().unbindAll() } catch (e: Exception) { Log.w(TAG, "unbind failed", e) }
       }
+      processor?.release()
     }, ContextCompat.getMainExecutor(context))
   }
 
@@ -306,11 +317,32 @@ object CameraController {
         val groupBuilder = UseCaseGroup.Builder().addUseCase(preview)
         if (capture != null) groupBuilder.addUseCase(capture)
         if (video != null) groupBuilder.addUseCase(video)
-        // One analysis stream: face tracking while props are on (they need the
-        // frame rate), otherwise focus peaking when it is enabled.
+        // Live beauty: a GPU effect on the preview, fed by its own analysis
+        // (masks, the face, the scene). Phones that cannot run it still get
+        // every photo finished with the recipe.
+        val oldProcessor = beautyProcessor
+        beautyProcessor = null
+        val liveBeauty = sessionConfig.beauty && video == null && !beautyFailed && BeautyProcessor.supported(context)
+        if (liveBeauty) {
+          val processor = BeautyProcessor(context) { error -> onBeautyFailure(sessionOwner, error) }
+          beautyProcessor = processor
+          groupBuilder.addEffect(BeautyEffect(processor) { error -> onBeautyFailure(sessionOwner, error) })
+        }
+        events?.emit("PhotoPlusBeautyLive", mapOf(
+          "requested" to sessionConfig.beauty,
+          "live" to liveBeauty,
+          "reason" to if (sessionConfig.beauty && !liveBeauty) (LiveBeautyState.unavailableReason ?: "unsupported") else null,
+        ))
+        // One analysis stream: live beauty (which also tracks faces for props),
+        // else face tracking while props are on (they need the frame rate),
+        // otherwise focus peaking when it is enabled.
         FaceTracker.mirrored = lensFacing == "front"
         FaceTracker.reset()
+        BeautyAnalyzer.mirrored = lensFacing == "front"
+        BeautyAnalyzer.reset()
+        LiveBeautyState.reset()
         val analyzer: ImageAnalysis.Analyzer? = when {
+          liveBeauty -> BeautyAnalyzer
           facesEnabled -> FaceTracker
           peakingEnabled -> FocusPeakingAnalyzer
           else -> null
@@ -321,6 +353,7 @@ object CameraController {
         groupBuilder.setViewPort(buildViewPort(view))
 
         provider.unbindAll()
+        oldProcessor?.release()
         val cam = provider.bindToLifecycle(lifecycle, selector, groupBuilder.build())
         camera = cam
         imageCapture = capture
@@ -339,6 +372,17 @@ object CameraController {
         scheduleRetry(sessionOwner, "BIND_FAILED")
       }
     }, ContextCompat.getMainExecutor(context))
+  }
+
+  /** The live preview failed on the GPU: carry on without it (photos still get the recipe). */
+  private fun onBeautyFailure(sessionOwner: Any, error: Throwable) {
+    Log.w(TAG, "live beauty off", error)
+    val context = appContext ?: return
+    ContextCompat.getMainExecutor(context).execute {
+      if (beautyFailed || owner !== sessionOwner) return@execute
+      beautyFailed = true
+      bindUseCases(sessionOwner)
+    }
   }
 
   private fun buildViewPort(view: PreviewView): ViewPort {

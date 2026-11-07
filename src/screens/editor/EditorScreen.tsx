@@ -66,6 +66,7 @@ import {
   type ToolId,
 } from './panels';
 import { PortraitPanel, SpotlightAdvanced } from './PortraitPanel';
+import { BeautyEditPanel } from './BeautyPanel';
 import { WatermarkUnlock } from '../WatermarkUnlock';
 import { WatermarkPanel } from './WatermarkPanel';
 
@@ -827,6 +828,15 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
               commit={commit}
               locked={!can('advancedRetouchGrade').allowed}
               onPremium={() => askPremium('advancedRetouchGrade')}
+            />
+          ) : null}
+          {tool === 'beauty' ? (
+            <BeautyEditPanel
+              doc={doc}
+              update={update}
+              commit={commit}
+              premiumAllowed={can('beautyPremium').allowed}
+              onPremium={() => askPremium('beautyPremium')}
             />
           ) : null}
           {tool === 'spotlight' ? (

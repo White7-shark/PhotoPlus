@@ -64,6 +64,20 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
     main.post { CameraController.setFaceTracking(enabled) }
   }
 
+  /**
+   * The beauty recipe shown live on the preview (null = none). Changing it
+   * never rebinds the camera; turning live beauty on is a session setting
+   * (configure({ beauty: true })).
+   */
+  override fun setLiveBeauty(recipe: ReadableMap?) {
+    com.photoplus.beauty.LiveBeautyState.recipe = com.photoplus.beauty.BeautyRecipe.fromMap(recipe?.toHashMap())
+  }
+
+  /** While "Original" is held, the preview shows the camera untouched. */
+  override fun setBeautyOriginal(original: Boolean) {
+    com.photoplus.beauty.LiveBeautyState.showOriginal = original
+  }
+
   override fun configure(config: ReadableMap) {
     val map = config.toHashMap()
     main.post { CameraController.configure(SessionConfig.fromMap(map, CameraController.sessionConfig)) }
@@ -182,6 +196,8 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
     const val EVENT_PROGRESS = "PhotoPlusCaptureProgress"
     /** Glide: { recording: true, maxMs } when a clip starts. */
     const val EVENT_RECORDING = "PhotoPlusRecording"
+    /** Live beauty: { requested, live, reason } after each bind (live false = photos still get the recipe). */
+    const val EVENT_BEAUTY_LIVE = "PhotoPlusBeautyLive"
 
     fun manualToMap(m: ManualSettings): Map<String, Any?> = mapOf(
       "iso" to m.iso,

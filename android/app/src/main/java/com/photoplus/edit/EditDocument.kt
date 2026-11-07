@@ -39,7 +39,12 @@ data class EditDocument(
   val portrait: PortraitChoice? = null,
   val props: List<PropPlacement> = emptyList(),
   val frame: FrameChoice? = null,
+  /** A beauty preset applied in the editor (its resolved recipe), or null. */
+  val beauty: BeautyChoice? = null,
 ) {
+  data class BeautyChoice(val preset: String, val recipe: com.photoplus.beauty.BeautyRecipe) {
+    override fun toString() = "$preset:${recipe.key()}"
+  }
   data class CropRect(val x: Float, val y: Float, val w: Float, val h: Float)
   data class SpotlightChoice(val points: List<Pair<Float, Float>>, val blur: Float)
   data class LookChoice(val id: String, val engineId: Int, val strength: Float)
@@ -186,6 +191,11 @@ data class EditDocument(
           bgLight = num("bgLight", -1f, 1f, q), bgColor = num("bgColor", -1f, 1f, q), edge = num("edge", 0f, 1f, q),
         )
       }
+      val beauty = (map["beauty"] as? Map<*, *>)?.let { b ->
+        val preset = (b["preset"] as? String)?.takeIf { it.length in 1..64 } ?: invalid("beauty preset is required")
+        val recipe = com.photoplus.beauty.BeautyRecipe.fromMap(b["recipe"] as? Map<*, *>) ?: invalid("beauty recipe is invalid")
+        BeautyChoice(preset, recipe)
+      }
       val frame = (map["frame"] as? Map<*, *>)?.let { f ->
         val id = f["id"] as? String ?: invalid("frame id is required")
         if (FrameStyles.byId(id) == null) invalid("Unknown frame '$id'")
@@ -216,6 +226,7 @@ data class EditDocument(
         portrait = portrait,
         props = props,
         frame = frame,
+        beauty = beauty,
       )
     }
 

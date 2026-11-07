@@ -416,7 +416,13 @@ class CaptureProcessor(
         writeExif(original, burst.exif, geometry.remainingRotation, burst.mirror)
       }
       var portrait: PortraitReport? = null
-      if (request.mode == CaptureMode.PORTRAIT) {
+      val recipe = request.beautyRecipe?.takeIf { it.active }
+      if (recipe != null) {
+        // Beauty preset (with Portrait mode's own controls in Spotlight).
+        listener.onProgress(request.captureId, "styling", 0.6)
+        val points = if (request.mode == CaptureMode.PORTRAIT) burst.points else emptyList()
+        portrait = portraitProcessor.applyBeauty(work, geometry.remainingRotation, points, recipe, token)
+      } else if (request.mode == CaptureMode.PORTRAIT) {
         listener.onProgress(request.captureId, "styling", 0.6)
         portrait = portraitProcessor.apply(work, geometry.remainingRotation, burst.points, request.portrait, token, request.beauty)
       } else if (request.beautyActive) {
@@ -475,8 +481,10 @@ class CaptureProcessor(
             "pop" to request.portrait.pop.toDouble(),
           )
         },
+        // The beauty preset used, so it can be re-applied (e.g. after Transform).
+        "beautyPreset" to request.beautyPreset?.takeIf { recipe != null },
         // Camera beauty used, so it can be re-applied (e.g. after Transform).
-        "beauty" to portrait?.takeIf { request.mode != CaptureMode.PORTRAIT }?.let {
+        "beauty" to portrait?.takeIf { request.mode != CaptureMode.PORTRAIT && recipe == null }?.let {
           mapOf(
             "retouch" to request.beautyRetouch.toDouble(),
             "brighten" to request.beautyBrighten.toDouble(),

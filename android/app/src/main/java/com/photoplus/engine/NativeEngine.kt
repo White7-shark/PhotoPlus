@@ -147,6 +147,12 @@ object NativeEngine {
   const val FACE_PARAMS = 9
   const val FACE_REPORT_SIZE = 3
 
+  /** pp_beauty_grade's float count, the beauty recipe (6 skin + 13 face + grade + auto light) and its report. */
+  const val BEAUTY_GRADE_FLOATS = 58
+  const val BEAUTY_RECIPE_FLOATS = 6 + 13 + BEAUTY_GRADE_FLOATS + 1
+  const val BEAUTY_REPORT_SIZE = 8
+  const val BEAUTY_SCENE_SIZE = 9
+
   /**
    * Face-precise adjustments in place on [bitmap]: [faces] holds
    * [FACE_FLOATS] per face (landmarks normalised to the bitmap, the
@@ -155,6 +161,42 @@ object NativeEngine {
    * light, studio light (0..1) and light angle (-1..1). [reportOut] = faces,
    * adjusted, light gain.
    */
+  /**
+   * The beauty compositor (skin → face → lighting / background / colour) in
+   * place. Masks are ALPHA_8 (any may be null). [faces] = count x 262
+   * normalised landmark floats, [detailed] one flag per face. [recipe] =
+   * [BEAUTY_RECIPE_FLOATS] (see com.photoplus.beauty.BeautyRecipe). [reportOut]
+   * (8) = light angle, subject, skin, clipped before/after, spots, faces
+   * adjusted, layers.
+   */
+  external fun nativeBeauty(
+    bitmap: Bitmap,
+    subject: Bitmap?,
+    faceMask: Bitmap?,
+    protect: Bitmap?,
+    depth: Bitmap?,
+    faces: FloatArray,
+    detailed: IntArray,
+    recipe: FloatArray,
+    token: Long,
+    reportOut: FloatArray,
+  )
+
+  /**
+   * What the beauty grade measures about a frame, for the live preview:
+   * [out] (9) = has skin (0/1), skin Y, Cb, Cr, spread, subject x, subject
+   * width, light angle, skin luma spread.
+   */
+  external fun nativeBeautyMeasure(
+    bitmap: Bitmap,
+    subject: Bitmap?,
+    faceMask: Bitmap?,
+    protect: Bitmap?,
+    faces: FloatArray,
+    detailed: IntArray,
+    out: FloatArray,
+  )
+
   external fun nativeFaceAdjust(
     bitmap: Bitmap,
     faces: FloatArray,

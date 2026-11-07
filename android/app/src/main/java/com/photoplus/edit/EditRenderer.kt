@@ -136,6 +136,9 @@ class EditRenderer(
       val tuning = adv?.tuning() ?: com.photoplus.studio.FaceTuning()
       report(portrait().apply(cur, 0, s?.points ?: emptyList(), params, token, tuning))
     }
+    doc.beauty?.recipe?.takeIf { it.active }?.let { recipe ->
+      report(portrait().applyBeauty(cur, 0, doc.spotlight?.points ?: emptyList(), recipe, token))
+    }
     return cur
   }
 
@@ -182,7 +185,7 @@ class EditRenderer(
 
   companion object {
     fun heavyKey(d: EditDocument) =
-      listOf(d.transform, d.quarterTurns, d.flipH, d.perspectiveV, d.perspectiveH, d.straighten, d.crop, d.retouch, d.spotlight, d.portrait)
+      listOf(d.transform, d.quarterTurns, d.flipH, d.perspectiveV, d.perspectiveH, d.straighten, d.crop, d.retouch, d.spotlight, d.portrait, d.beauty)
         .joinToString("|")
   }
 }

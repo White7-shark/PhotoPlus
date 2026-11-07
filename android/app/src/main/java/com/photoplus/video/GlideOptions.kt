@@ -21,9 +21,12 @@ data class GlideOptions(
   val brighten: Float = 0f,
   /** Face touches that come with Glow. */
   val beauty: FaceTuning = FaceTuning(),
+  /** A beauty preset's resolved recipe (with Spotlight's blur when on); it replaces Glow and the blur above. */
+  val recipe: com.photoplus.beauty.BeautyRecipe? = null,
 ) {
+  val beautyLook: Boolean get() = recipe?.active == true
   val spotlight: Boolean get() = blur > 0f
-  val portrait: Boolean get() = spotlight || retouch > 0f || brighten > 0f
+  val portrait: Boolean get() = spotlight || retouch > 0f || brighten > 0f || beautyLook
   val faces: Boolean get() = beauty.any
 
   companion object {
@@ -47,6 +50,7 @@ data class GlideOptions(
         retouch = b("retouch"),
         brighten = b("brighten"),
         beauty = FaceTuning(eyes = b("eyes"), underEye = b("underEye"), shine = b("shine"), faceLight = b("faceLight")),
+        recipe = com.photoplus.beauty.BeautyRecipe.fromMap(map["beautyRecipe"] as? Map<*, *>),
       )
     }
 
