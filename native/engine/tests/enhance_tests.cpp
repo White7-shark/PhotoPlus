@@ -444,3 +444,34 @@ TEST(detail_budget_caps_texture_gain_and_leaves_moderate_restoration_alone) {
   EXPECT_EQ(photoplus::enhance::applyDetailBudget(*soft, *gentle, 1.7f), 1.0f);
   for (size_t i = 0; i < gentle->size(); ++i) EXPECT_TRUE(gentle->data()[i] == copy->data()[i]);
 }
+
+TEST(auto_levels_brighten_a_dim_photo_without_lifting_its_blacks) {
+  // A dim indoor frame (median ~0.22): mid-tones come up, deep shadows stay
+  // deep (a gamma lift would raise them steeply: a hazy, flat look).
+  const Plane scene = scene::makeScene(320, 240, 8);
+  pp_image* img = nullptr;
+  ASSERT_OK(pp_image_create(320, 240, PP_FORMAT_RGBA8, &img));
+  auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+  for (int i = 0; i < 320 * 240; ++i) {
+    const float v = 0.03f + 0.45f * scene.data()[i] * scene.data()[i];  // dim, with real blacks
+    px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = static_cast<uint8_t>(std::lround(v * 255));
+    px[i * 4 + 3] = 255;
+  }
+  pp_enhance_params p{};
+  pp_enhance_default_params(&p);
+  p.denoise = p.sharpen = p.detail = p.vibrance = 0.0f;
+  pp_image* out = nullptr;
+  ASSERT_OK(pp_enhance(&img, 1, &p, nullptr, &out, nullptr));
+  auto pct = [](pp_image* im, float q) {
+    const auto* d = static_cast<const uint8_t*>(pp_image_pixels(im));
+    std::vector<int> v(320 * 240);
+    for (int i = 0; i < 320 * 240; ++i) v[static_cast<size_t>(i)] = d[i * 4 + 1];
+    std::nth_element(v.begin(), v.begin() + static_cast<long>(q * (v.size() - 1)), v.end());
+    return v[static_cast<size_t>(q * (v.size() - 1))];
+  };
+  std::printf("    median %d -> %d, shadows (5%%) %d -> %d\n", pct(img, 0.5f), pct(out, 0.5f), pct(img, 0.05f), pct(out, 0.05f));
+  EXPECT_TRUE(pct(out, 0.5f) > pct(img, 0.5f) + 10);       // brighter mid-tones
+  EXPECT_TRUE(pct(out, 0.05f) <= pct(img, 0.05f) * 1.6 + 2);  // blacks stay deep
+  pp_image_destroy(img);
+  pp_image_destroy(out);
+}

@@ -88,10 +88,14 @@ Error tone(YccImage& img, const ToneParams& params, const CancellationToken* tok
     const float hi = percentile(img.y, 0.996f);
     const float black = std::min(lo, 0.08f);
     const float gain = std::clamp(0.98f / std::max(hi - black, 0.2f), 1.0f, 1.6f);
-    // Lift dark images towards a natural mid-tone with a gentle gamma.
+    // Lift dark images towards a natural mid-tone. An exposure-style curve
+    // v·(1+k)/(1+k·v) brightens mid-tones while blacks stay deep (a gamma
+    // curve lifts near-black values steeply: a hazy, flat look, measured on a
+    // real dim video). The lift is capped (at most ~1 stop in the shadows).
     const float median = percentile(img.y, 0.5f);
     const float m = std::clamp((median - black) * gain, 0.05f, 0.95f);
-    const float gamma = m < 0.38f ? std::clamp(std::log(0.42f) / std::log(m), 0.6f, 1.0f) : 1.0f;
+    const float target = 0.38f;
+    const float lift = m < target ? std::clamp((target - m) / (m * (1.0f - target)), 0.0f, 1.0f) : 0.0f;
     const bool done = parallelFor(h, token, [&](int32_t begin, int32_t end) {
       for (int32_t y = begin; y < end && !isCancelled(token); ++y) {
         float* py = img.y.row(y);
@@ -100,7 +104,7 @@ Error tone(YccImage& img, const ToneParams& params, const CancellationToken* tok
         for (int32_t x = 0; x < w; ++x) {
           const float before = std::max(py[x], 1e-4f);
           float v = std::clamp((py[x] - black) * gain, 0.0f, 1.0f);
-          if (gamma != 1.0f) v = std::pow(v, gamma);
+          if (lift > 0.0f) v = v * (1.0f + lift) / (1.0f + lift * v);
           // Keep saturation constant as luma changes.
           const float k = std::clamp(v / before, 0.5f, 2.0f);
           py[x] = v;
