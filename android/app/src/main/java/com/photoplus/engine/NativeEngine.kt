@@ -164,6 +164,41 @@ object NativeEngine {
     reportOut: FloatArray,
   )
 
+  // ---- Glide video (Phase 6) ----
+
+  /** Camera motion from [previous] to [current]; [out] (5) = a, b, tx, ty, confidence. */
+  external fun nativeVideoMotion(previous: Bitmap, current: Bitmap, out: FloatArray)
+
+  /**
+   * The steadying plan: [motions] holds 5 floats per frame (frame 0's are
+   * ignored); [warpsOut] receives 6 per frame (output → source); [reportOut]
+   * (3) = crop zoom, shake before, shake after (px per frame).
+   */
+  external fun nativeVideoStabilize(
+    motions: FloatArray, width: Int, height: Int, strength: Float, maxZoom: Float, warpsOut: FloatArray, reportOut: FloatArray,
+  )
+
+  /**
+   * One frame cleaned into [dst]: temporal denoise with [previous]/[next]
+   * (null at the ends; [fromPrevious] is this frame's motion, [toNext] the
+   * next one's), lens deblur and the clip's tone [curves] (768 bytes or null).
+   * [params] = noise, blur px, denoise, sharpen.
+   */
+  external fun nativeVideoEnhanceFrame(
+    frame: Bitmap, previous: Bitmap?, next: Bitmap?, fromPrevious: FloatArray?, toNext: FloatArray?,
+    params: FloatArray, curves: ByteArray?, dst: Bitmap, token: Long,
+  )
+
+  external fun nativeVideoWarp(src: Bitmap, warp: FloatArray, dst: Bitmap, token: Long)
+  external fun nativeVideoFitCurves(before: Bitmap, after: Bitmap, out: ByteArray)
+  /** [previous] (ALPHA_8) becomes the steadied version of [current] (same size). */
+  external fun nativeVideoSteadyMask(previous: Bitmap, current: Bitmap, smoothing: Float)
+  /** ARGB_8888 frame → encoder YUV 4:2:0 planes (direct buffers, with their strides). */
+  external fun nativeRgbaToYuv420(
+    bitmap: Bitmap, y: java.nio.ByteBuffer, u: java.nio.ByteBuffer, v: java.nio.ByteBuffer,
+    yRowStride: Int, uvRowStride: Int, uvPixelStride: Int,
+  )
+
   /** Size of [nativeLensAnalyze]'s report and of [nativeTransform]'s. */
   const val LENS_REPORT_SIZE = 7
   const val TRANSFORM_REPORT_SIZE = 7

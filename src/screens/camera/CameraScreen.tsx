@@ -67,7 +67,9 @@ import { Countdown, FocusRing, GridOverlay, ShutterFlash, StatusPill } from './O
 import { captureRecipe } from '../../services/processing/recipe';
 import { ProPanel } from './ProPanel';
 import { StopDial } from './StopDial';
-import { SpotlightMarkers, SpotlightPanel } from './SpotlightControls';
+import { GlidePanel, SpotlightMarkers, SpotlightPanel } from './SpotlightControls';
+import { useGlide, type GlideClip } from './useGlide';
+import { glideStageLabel, glideSummary, secondsLeft, type GlideSpotlight } from '../../services/camera/glide';
 import { useCameraSession } from './useCameraSession';
 import { LivePropOverlay, PropTray, livePlacement, propRequest, useLiveProp } from './CameraProps';
 import { allProps, findProp, type PropCategory, type PropDef } from '../../services/edit/catalog';
@@ -125,6 +127,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const [spotPoints, setSpotPoints] = useState<{ x: number; y: number }[]>([]);
   const [blurLevel, setBlurLevel] = useState<BlurLevel>('medium');
   const [glowLevel, setGlowLevel] = useState<GlowLevel>('smooth');
+  const [glideSpotlight, setGlideSpotlight] = useState<GlideSpotlight>('off');
+  const [lastClip, setLastClip] = useState<GlideClip | null>(null);
   const [vibeOpen, setVibeOpen] = useState(false);
   const [premiumFor, setPremiumFor] = useState<FeatureKey | null>(null);
   const can = useFeatureCheck();
@@ -186,7 +190,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
 
   // The camera only runs while visible and foregrounded.
   const active = focused && foreground && permission === 'granted';
-  const liveProp = useLiveProp(camera, worn, active && state === 'ready');
+  // Fall back gracefully when the active camera lacks the selected mode.
+  const modes = useMemo(() => availableModes(caps), [caps]);
+  const effectiveMode: UiMode = modes.some(m => m.id === mode) ? mode : 'photo';
+  const glideMode = effectiveMode === 'glide';
+  // Glide records 16:9 video; photos use the chosen ratio.
+  const frameAspect: AspectRatio = glideMode ? '16:9' : aspect;
+
+  // Props are drawn into photos; Glide clips don't carry them.
+  const liveProp = useLiveProp(camera, glideMode ? null : worn, active && state === 'ready');
   const [wasActive, setWasActive] = useState(active);
   if (active !== wasActive) {
     setWasActive(active);
@@ -199,8 +211,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   // ---- session configuration (stored natively, applied on every bind)
   const rawActive = mode === 'pro' && raw && !!caps?.raw;
   useEffect(() => {
-    camera.configure({ aspectRatio: aspect, resolution, raw: rawActive });
-  }, [camera, aspect, resolution, rawActive]);
+    camera.configure({ aspectRatio: frameAspect, resolution, raw: rawActive, video: glideMode });
+  }, [camera, frameAspect, resolution, rawActive, glideMode]);
 
   useEffect(() => {
     camera.setFlash(flash);
@@ -213,7 +225,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
 
   // Vibe Match (premium): the camera leans toward the reference's light and
   // colour; every shot is then finished in its style.
-  const vibe: VibeLook | null = settings.vibeLook && can('vibeMatch').allowed ? settings.vibeLook : null;
+  const vibe: VibeLook | null = settings.vibeLook && can('vibeMatch').allowed && !glideMode ? settings.vibeLook : null;
   const vibeCamera = useMemo(() => (vibe ? lookCameraSettings(vibe.look, caps) : null), [vibe, caps]);
 
   // Manual controls: the user's in Pro mode; otherwise Vibe Match's white
@@ -272,10 +284,6 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     await refreshCapabilities();
   }, [refreshCapabilities]);
 
-  // Fall back gracefully when the active camera lacks the selected mode.
-  const modes = useMemo(() => availableModes(caps), [caps]);
-  const effectiveMode: UiMode = modes.some(m => m.id === mode) ? mode : 'photo';
-
   // ---- capture
   useEffect(() => {
     const shutter = camera.on(CameraEvents.shutter, () => setFlashKey(k => k + 1));
@@ -326,8 +334,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
 
   // The preview frame (sized to the chosen ratio), also where props are placed.
   const previewFrame = useMemo(
-    () => ({ width: window.width, height: Math.min(window.height, window.width / portraitAspect(aspect)) }),
-    [window.width, window.height, aspect],
+    () => ({ width: window.width, height: Math.min(window.height, window.width / portraitAspect(frameAspect)) }),
+    [window.width, window.height, frameAspect],
   );
 
   const takePhoto = useCallback(async () => {
@@ -427,6 +435,32 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     saveRecord,
   ]);
 
+  // ---- Glide: record up to 7 s, then craft the clip
+  const focusedRef = useRef(focused);
+  useEffect(() => {
+    focusedRef.current = focused;
+  }, [focused]);
+  const glide = useGlide({
+    camera,
+    enabled: glideMode && active,
+    active: active && state === 'ready',
+    settings: { spotlight: glideSpotlight, glow: settings.cameraGlow, watermark: settings.watermark },
+    onDone: clip => {
+      setLastClip(clip);
+      setToast({
+        text: clip.galleryUri ? `Glide saved · ${glideSummary(clip)}` : `Glide ready · ${glideSummary(clip)}`,
+        tone: 'success',
+      });
+      if (focusedRef.current) {
+        navigation.navigate('GlidePreview', { clip });
+      }
+    },
+    onError: code =>
+      setToast({ text: friendlyMessage(code, 'That clip didn’t come through. Please try again.'), tone: 'danger' }),
+  });
+  const recording = glide.phase === 'recording';
+  const crafting = glide.phase === 'crafting';
+
   // Premium modes ask before switching (enforcement is off until billing ships).
   const chooseMode = useCallback(
     (m: UiMode, feature: FeatureKey) => {
@@ -434,10 +468,14 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         setPremiumFor(feature);
         return;
       }
+      // Entering or leaving Glide rebinds the camera (video instead of photos).
+      if ((m === 'glide') !== glideMode) {
+        setState('starting');
+      }
       setMode(m);
       setTuning({});
     },
-    [can],
+    [can, glideMode],
   );
 
   const stopCountdown = useCallback(() => {
@@ -453,8 +491,19 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       stopCountdown();
       return;
     }
+    if (glideMode) {
+      if (recording) {
+        glide.stop();
+        return;
+      }
+      if (crafting) {
+        setToast({ text: 'Still crafting your last Glide — one moment.', tone: 'danger' });
+        return;
+      }
+    }
+    const shoot = glideMode ? () => void glide.start() : () => void takePhoto();
     if (timer === 0) {
-      void takePhoto();
+      shoot();
       return;
     }
     let remaining: number = timer;
@@ -463,12 +512,12 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       remaining -= 1;
       if (remaining <= 0) {
         stopCountdown();
-        void takePhoto();
+        shoot();
       } else {
         setCountdown(remaining);
       }
     }, 1000);
-  }, [countdown, timer, takePhoto, stopCountdown]);
+  }, [countdown, timer, takePhoto, stopCountdown, glideMode, recording, crafting, glide]);
 
   // ...and its interval (state is reset during render above).
   useEffect(() => {
@@ -547,9 +596,9 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
 
   // Preview frame sized to the chosen ratio so what you see is what is saved.
   const frameWidth = window.width;
-  const frameHeight = Math.min(window.height, frameWidth / portraitAspect(aspect));
+  const frameHeight = Math.min(window.height, frameWidth / portraitAspect(frameAspect));
   const topBarHeight = insets.top + 56;
-  const frameTop = aspect === '16:9' ? Math.max(0, (window.height - frameHeight) / 2 - 40) : topBarHeight;
+  const frameTop = frameAspect === '16:9' ? Math.max(0, (window.height - frameHeight) / 2 - 40) : topBarHeight;
   const presets = caps ? zoomPresets(caps.zoom.min, caps.zoom.max) : [1];
   const evValues = exposureIndices(caps?.exposureCompensation ?? null);
   const resolutions = resolutionsFor(caps, aspect);
@@ -586,7 +635,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         {effectiveMode === 'spotlight' ? (
           <SpotlightMarkers points={spotPoints} frame={{ width: frameWidth, height: frameHeight }} />
         ) : null}
-        {worn && ready ? (
+        {worn && ready && !glideMode ? (
           <LivePropOverlay
             def={worn}
             frame={{ width: frameWidth, height: frameHeight }}
@@ -632,7 +681,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           rotation={rotation}
         />
         <View style={styles.topGroup}>
-          {caps?.flash !== false ? (
+          {caps?.flash !== false && !glideMode ? (
             <Chip
               icon={flash === 'off' ? 'flashOff' : 'flash'}
               label={flash === 'auto' ? 'A' : undefined}
@@ -651,15 +700,17 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             onPress={() => setTimer(TIMER_CYCLE[(TIMER_CYCLE.indexOf(timer) + 1) % TIMER_CYCLE.length])}
             rotation={rotation}
           />
-          <Chip
-            icon="hat"
-            active={propsOpen || worn !== null}
-            tint={worn ? theme.colors.premium : undefined}
-            accessibilityLabel={worn ? `Wearing ${worn.name}. Change props` : 'Props. Try on hats, glasses and more'}
-            onPress={() => setPropsOpen(o => !o)}
-            rotation={rotation}
-            testID="props-chip"
-          />
+          {!glideMode ? (
+            <Chip
+              icon="hat"
+              active={propsOpen || worn !== null}
+              tint={worn ? theme.colors.premium : undefined}
+              accessibilityLabel={worn ? `Wearing ${worn.name}. Change props` : 'Props. Try on hats, glasses and more'}
+              onPress={() => setPropsOpen(o => !o)}
+              rotation={rotation}
+              testID="props-chip"
+            />
+          ) : null}
           {effectiveMode !== 'spotlight' ? (
             <Chip
               icon="sparkles"
@@ -675,15 +726,17 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
               testID="glow-chip"
             />
           ) : null}
-          <Chip
-            icon="wand"
-            active={!!vibe}
-            tint={vibe ? theme.colors.premium : undefined}
-            accessibilityLabel={vibe ? 'Vibe Match on. Change style' : 'Vibe Match. Shoot in the style of any photo'}
-            onPress={() => (can('vibeMatch').allowed ? setVibeOpen(true) : setPremiumFor('vibeMatch'))}
-            rotation={rotation}
-            testID="vibe-chip"
-          />
+          {!glideMode ? (
+            <Chip
+              icon="wand"
+              active={!!vibe}
+              tint={vibe ? theme.colors.premium : undefined}
+              accessibilityLabel={vibe ? 'Vibe Match on. Change style' : 'Vibe Match. Shoot in the style of any photo'}
+              onPress={() => (can('vibeMatch').allowed ? setVibeOpen(true) : setPremiumFor('vibeMatch'))}
+              rotation={rotation}
+              testID="vibe-chip"
+            />
+          ) : null}
           <Chip
             icon="grid"
             active={settings.cameraGrid}
@@ -705,14 +758,16 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
               rotation={rotation}
             />
           ) : null}
-          <Chip
-            label={aspect}
-            active={menu === 'aspect'}
-            accessibilityLabel={`Aspect ratio ${aspect}`}
-            onPress={() => setMenu(m => (m === 'aspect' ? null : 'aspect'))}
-            rotation={rotation}
-          />
-          {resolutions.length > 1 && currentResolution ? (
+          {!glideMode ? (
+            <Chip
+              label={aspect}
+              active={menu === 'aspect'}
+              accessibilityLabel={`Aspect ratio ${aspect}`}
+              onPress={() => setMenu(m => (m === 'aspect' ? null : 'aspect'))}
+              rotation={rotation}
+            />
+          ) : null}
+          {resolutions.length > 1 && currentResolution && !glideMode ? (
             <Chip
               label={`${Math.round(currentResolution.megapixels)}MP`}
               active={menu === 'resolution'}
@@ -767,6 +822,27 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         {recovering ? (
           <StatusPill label={`Reconnecting camera… (attempt ${session.recoveringAttempt})`} tone="warning" busy />
         ) : null}
+        {recording ? (
+          <View
+            style={styles.recBadge}
+            accessibilityLiveRegion="polite"
+            accessibilityLabel="Recording"
+            testID="glide-recording"
+          >
+            <View style={styles.recDot} />
+            <AppText variant="mono" style={styles.readoutText}>
+              {`${secondsLeft(glide.elapsedMs)}s left`}
+            </AppText>
+          </View>
+        ) : null}
+        {crafting ? (
+          <StatusPill
+            label={glideStageLabel(glide.stage, glide.fraction)}
+            tone="premium"
+            busy
+            onCancel={glide.cancel}
+          />
+        ) : null}
         {processing ? (
           <StatusPill
             label={progressLabel(processing.stage, processing.frames)}
@@ -816,7 +892,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           </View>
         ) : null}
 
-        {propsOpen ? (
+        {propsOpen && !glideMode ? (
           <PropTray
             props={propList}
             category={propCategory}
@@ -847,6 +923,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           />
         ) : null}
 
+        {glideMode && glide.phase === 'idle' ? (
+          <GlidePanel
+            spotlight={glideSpotlight}
+            glow={settings.cameraGlow}
+            audio={glide.audio}
+            onSpotlight={setGlideSpotlight}
+          />
+        ) : null}
+
         {effectiveMode === 'pro' && caps ? (
           <ProPanel
             caps={caps}
@@ -873,11 +958,13 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           </View>
         ) : null}
 
-        <ModeSwitcher
-          modes={modes}
-          value={effectiveMode}
-          onChange={m => chooseMode(m, modes.find(d => d.id === m)?.feature ?? 'cameraCapture')}
-        />
+        {!recording ? (
+          <ModeSwitcher
+            modes={modes}
+            value={effectiveMode}
+            onChange={m => chooseMode(m, modes.find(d => d.id === m)?.feature ?? 'cameraCapture')}
+          />
+        ) : null}
 
         <View style={styles.dock}>
           <View style={{ alignItems: 'center', gap: 6, width: 64 }}>
@@ -891,7 +978,16 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
                 }
               }}
             />
-            {lastShot?.imageId ? (
+            {glideMode && lastClip ? (
+              <Chip
+                icon="play"
+                label="Watch"
+                accessibilityLabel="Watch your last Glide"
+                onPress={() => navigation.navigate('GlidePreview', { clip: lastClip })}
+                rotation={rotation}
+                testID="watch-last-clip"
+              />
+            ) : lastShot?.imageId ? (
               <Chip
                 icon="sliders"
                 label="Edit"
@@ -907,14 +1003,18 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             disabled={!ready || (capturing && countdown === null)}
             busy={capturing}
             countdown={countdown}
+            recording={recording}
             onPress={onShutter}
           />
-          <View style={uprightStyle(rotation)}>
-            <Chip
-              icon="flip"
-              accessibilityLabel={lens === 'back' ? 'Switch to front camera' : 'Switch to back camera'}
-              onPress={switchLens}
-            />
+          <View style={[uprightStyle(rotation), { minWidth: 40 }]}>
+            {/* The lens can't change mid-clip. */}
+            {!recording ? (
+              <Chip
+                icon="flip"
+                accessibilityLabel={lens === 'back' ? 'Switch to front camera' : 'Switch to back camera'}
+                onPress={switchLens}
+              />
+            ) : null}
           </View>
         </View>
         <AppText variant="caption" align="center" style={styles.caption} numberOfLines={1}>
@@ -974,6 +1074,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(10,9,17,0.6)',
   },
   readoutText: { color: '#FFFFFF' },
+  recBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(10,9,17,0.66)',
+  },
+  recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF3B4E' },
   afDot: { width: 6, height: 6, borderRadius: 3 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: 10 },
   evPanel: {

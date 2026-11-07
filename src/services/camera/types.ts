@@ -74,6 +74,20 @@ export interface SessionConfig {
   aspectRatio?: AspectRatio;
   resolution?: ResolutionId;
   raw?: boolean;
+  /** Glide: the session records video (preview + video stream) instead of photos. */
+  video?: boolean;
+}
+
+/** Glide recording options (the clip ends at maxMs, at most 7 s). */
+export interface VideoOptions {
+  audio: boolean;
+  maxMs: number;
+}
+
+/** A finished Glide recording (the untouched clip in app storage). */
+export interface VideoRecording {
+  path: string;
+  durationMs: number;
 }
 
 /** Spotlight settings, 0..1. */
@@ -197,6 +211,8 @@ export const CameraEvents = {
   faces: 'PhotoPlusCameraFaces',
   shutter: 'PhotoPlusCaptureShutter',
   progress: 'PhotoPlusCaptureProgress',
+  /** Glide: a recording started. */
+  recording: 'PhotoPlusRecording',
 } as const;
 
 export type CaptureStage = 'capturing' | 'processing' | 'styling' | 'saving';
@@ -221,6 +237,7 @@ export interface CameraEventPayloads {
   [CameraEvents.faces]: { faces: import('../edit/placement').FaceGeometry[] };
   [CameraEvents.shutter]: { captureId: string };
   [CameraEvents.progress]: { captureId: string; stage: CaptureStage; progress: number };
+  [CameraEvents.recording]: { recording: boolean; maxMs: number };
 }
 
 export type CameraEventName = keyof CameraEventPayloads;

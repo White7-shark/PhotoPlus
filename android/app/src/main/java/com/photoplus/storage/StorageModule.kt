@@ -75,6 +75,38 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
     paths.resolve(path).exists()
   }
 
+  /** Copies a Glide clip (exports only: the watermark policy was applied there) to Movies/Photo Plus. */
+  override fun saveVideoToGallery(path: String, promise: Promise) {
+    executor.execute {
+      try {
+        val file = AppPaths.resolveWithin(path, listOf(paths.exports))
+        if (!file.isFile) throw EngineException(EngineException.IO_ERROR, "Video not found")
+        val resolver = reactApplicationContext.contentResolver
+        val values = android.content.ContentValues().apply {
+          put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, file.name)
+          put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+          put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/Photo Plus")
+          put(android.provider.MediaStore.Video.Media.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+          ?: throw EngineException(EngineException.IO_ERROR, "The gallery is not available")
+        try {
+          resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
+            ?: throw EngineException(EngineException.IO_ERROR, "The gallery is not available")
+          resolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.Video.Media.IS_PENDING, 0) }, null, null)
+        } catch (e: Exception) {
+          resolver.delete(uri, null, null)
+          throw e
+        }
+        promise.resolve(uri.toString())
+      } catch (e: EngineException) {
+        promise.reject(e.code, e.message, e)
+      } catch (e: Exception) {
+        promise.reject(EngineException.IO_ERROR, e.message, e)
+      }
+    }
+  }
+
   override fun pickImage(area: String, promise: Promise) {
     val target = when (area) {
       "looks" -> paths.looks
@@ -155,7 +187,9 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
       } else {
         Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
       }
-      send.type = "image/*"
+      // Glide clips are shared as video, photos as images.
+      val allVideo = (0 until paths.size()).all { paths.getString(it)?.endsWith(".mp4", ignoreCase = true) == true }
+      send.type = if (allVideo) "video/mp4" else "image/*"
       send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
       // ClipData carries the read grant to whichever app the user picks.
       send.clipData = ClipData.newUri(reactApplicationContext.contentResolver, "photo", uris[0]).apply {

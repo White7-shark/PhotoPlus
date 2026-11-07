@@ -16,6 +16,8 @@ export interface Spec extends TurboModule {
   pickImage(area: string): Promise<string | null>;
   /** Opens the system share sheet for photos in app storage. */
   shareImages(paths: string[], title: string): Promise<boolean>;
+  /** Saves a Glide clip from the exports area to the gallery (Movies/Photo Plus); resolves with its content URI. */
+  saveVideoToGallery(path: string): Promise<string>;
 }
 
 export default TurboModuleRegistry.get<Spec>('PhotoPlusStorage');

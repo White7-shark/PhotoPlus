@@ -16,6 +16,10 @@ export interface Spec extends TurboModule {
   configure(config: Object): void;
   capturePhoto(options: Object): Promise<Object>;
   cancelCapture(captureId: string): void;
+  /** Glide (sessions configured with video: true): records up to 7 s; resolves { path, durationMs } when it ends. */
+  startVideo(options: Object): Promise<Object>;
+  /** Ends a Glide recording early (startVideo then resolves). */
+  stopVideo(): void;
   setZoom(ratio: number): Promise<number>;
   setExposureCompensation(index: number): Promise<number>;
   focusAt(x: number, y: number): Promise<boolean>;

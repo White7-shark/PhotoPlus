@@ -70,12 +70,15 @@ data class SessionConfig(
   val aspectRatio: AspectRatioMode = AspectRatioMode.RATIO_4_3,
   val resolution: ResolutionPreset = ResolutionPreset.MAX,
   val rawEnabled: Boolean = false,
+  /** Glide: the session records video (preview + video stream) instead of photos. */
+  val video: Boolean = false,
 ) {
   companion object {
     fun fromMap(map: Map<String, Any?>, current: SessionConfig = SessionConfig()) = SessionConfig(
       aspectRatio = if (map.containsKey("aspectRatio")) AspectRatioMode.parse(map["aspectRatio"] as? String) else current.aspectRatio,
       resolution = if (map.containsKey("resolution")) ResolutionPreset.parse(map["resolution"] as? String) else current.resolution,
       rawEnabled = (map["raw"] as? Boolean) ?: current.rawEnabled,
+      video = (map["video"] as? Boolean) ?: current.video,
     )
   }
 }

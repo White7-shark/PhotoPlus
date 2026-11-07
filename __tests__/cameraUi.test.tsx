@@ -89,8 +89,13 @@ async function renderReadyCamera() {
 describe('camera screen', () => {
   it('configures the session from settings and offers every supported mode', async () => {
     await renderReadyCamera();
-    expect(mockCamera.configure).toHaveBeenCalledWith({ aspectRatio: '4:3', resolution: 'max', raw: false });
-    for (const id of ['night', 'enhance', 'photo', 'superres', 'pro']) {
+    expect(mockCamera.configure).toHaveBeenCalledWith({
+      aspectRatio: '4:3',
+      resolution: 'max',
+      raw: false,
+      video: false,
+    });
+    for (const id of ['night', 'enhance', 'photo', 'superres', 'glide', 'pro']) {
       expect(screen.getByTestId(`mode-${id}`)).toBeTruthy();
     }
     expect(screen.getByRole('radio', { name: 'Zoom 1×' }).props.accessibilityState.selected).toBe(true);
@@ -238,7 +243,12 @@ describe('camera session state', () => {
     await fireEvent.press(screen.getByLabelText('Aspect ratio 16:9'));
     expect(screen.getByTestId('shutter').props.accessibilityState.disabled).toBe(true);
     await waitFor(() =>
-      expect(mockCamera.configure).toHaveBeenLastCalledWith({ aspectRatio: '16:9', resolution: 'max', raw: false }),
+      expect(mockCamera.configure).toHaveBeenLastCalledWith({
+        aspectRatio: '16:9',
+        resolution: 'max',
+        raw: false,
+        video: false,
+      }),
     );
   });
 });

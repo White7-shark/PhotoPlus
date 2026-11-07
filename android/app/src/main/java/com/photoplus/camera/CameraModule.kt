@@ -1,5 +1,7 @@
 package com.photoplus.camera
 
+import java.io.File
+
 import android.os.Handler
 import android.os.Looper
 import com.facebook.react.bridge.Promise
@@ -27,9 +29,8 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
     DeviceInfo.isLowRamDevice(reactContext),
   )
   private val tier = CapturePolicy.tierFor(budget.engineBytes)
-  private val processor = AppPaths(reactContext).let { paths ->
-    CaptureProcessor(paths.captures, tier, com.photoplus.edit.PropArt(reactContext.assets, paths.customProps))
-  }
+  private val paths = AppPaths(reactContext)
+  private val processor = CaptureProcessor(paths.captures, tier, com.photoplus.edit.PropArt(reactContext.assets, paths.customProps))
 
   init {
     // The engine budget is process-wide; set it here too in case the engine
@@ -86,6 +87,39 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
         override fun onFailure(captureId: String, code: String, message: String) = promise.reject(code, message)
       })
     }
+  }
+
+  /**
+   * Glide: records up to 7 s (the session must be configured with video).
+   * Resolves when the clip is finished, at the limit or on [stopVideo], with
+   * { path, durationMs }.
+   */
+  override fun startVideo(options: ReadableMap, promise: Promise) {
+    val map = options.toHashMap()
+    val audio = map["audio"] as? Boolean ?: true
+    val maxMs = ((map["maxMs"] as? Number)?.toLong() ?: com.photoplus.video.GlideOptions.MAX_DURATION_MS)
+      .coerceIn(1_000L, com.photoplus.video.GlideOptions.MAX_DURATION_MS)
+    main.post {
+      val dir = File(paths.captures, "glide").apply { mkdirs() }
+      // Untouched recordings are kept a day (the Glide preview's "As recorded"
+      // view); the finished clips live in the gallery.
+      val cutoff = System.currentTimeMillis() - 24 * 3600 * 1000L
+      dir.listFiles()?.filter { it.isFile && it.lastModified() < cutoff }?.forEach { it.delete() }
+      val file = File(dir, "GLIDE_${System.currentTimeMillis()}_raw.mp4")
+      val started = CameraController.startRecording(file, maxMs, audio) { out, ms, error ->
+        if (out != null) {
+          promise.resolve(mapOf("path" to out.absolutePath, "durationMs" to ms.toDouble()).toWritableMap())
+        } else {
+          promise.reject(error ?: "RECORDING_FAILED", "The video could not be recorded")
+        }
+      }
+      if (!started) promise.reject("NOT_READY", "Video recording is not ready")
+      else emit(EVENT_RECORDING, mapOf("recording" to true, "maxMs" to maxMs.toDouble()))
+    }
+  }
+
+  override fun stopVideo() {
+    main.post { CameraController.stopRecording() }
   }
 
   override fun cancelCapture(captureId: String) {
@@ -146,6 +180,8 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
     const val NAME = "PhotoPlusCamera"
     const val EVENT_SHUTTER = "PhotoPlusCaptureShutter"
     const val EVENT_PROGRESS = "PhotoPlusCaptureProgress"
+    /** Glide: { recording: true, maxMs } when a clip starts. */
+    const val EVENT_RECORDING = "PhotoPlusRecording"
 
     fun manualToMap(m: ManualSettings): Map<String, Any?> = mapOf(
       "iso" to m.iso,

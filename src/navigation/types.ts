@@ -2,6 +2,8 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import type { GlideClip } from '../services/camera/glide';
+
 export type TabParamList = {
   Studio: undefined;
   Projects: undefined;
@@ -18,6 +20,8 @@ export type RootStackParamList = {
   PhotoPreview: { imageId: string };
   Editor: { imageId: string };
   CreateProp: undefined;
+  /** A finished Glide clip (before/after, share, save). */
+  GlidePreview: { clip: GlideClip };
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

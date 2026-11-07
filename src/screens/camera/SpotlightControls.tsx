@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Icon } from '../../components';
+import { GLIDE_SPOTLIGHT_LEVELS, type GlideSpotlight } from '../../services/camera/glide';
 import { BLUR_LEVELS, GLOW_LEVELS, type BlurLevel, type GlowLevel } from '../../services/camera/model';
 import { useTheme } from '../../theme';
 
@@ -105,6 +106,41 @@ export function SpotlightPanel({
         </AppText>
         {GLOW_LEVELS.map(l => (
           <Pill key={l.id} label={l.label} selected={glow === l.id} onPress={() => onGlow(l.id)} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Glide options: Spotlight for the clip (Glow follows the camera's Glow chip). */
+export function GlidePanel({
+  spotlight,
+  glow,
+  audio,
+  onSpotlight,
+}: {
+  spotlight: GlideSpotlight;
+  glow: GlowLevel;
+  audio: boolean;
+  onSpotlight: (s: GlideSpotlight) => void;
+}) {
+  const glowLabel = GLOW_LEVELS.find(l => l.id === glow)?.label ?? 'Off';
+  return (
+    <View style={styles.panel} testID="glide-panel">
+      <View style={styles.hintRow}>
+        <Icon name="play" size={14} color="#FFFFFF" strokeWidth={2} />
+        <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.86)', flex: 1 }}>
+          {`Up to 7 seconds · steadied, cleaned and sharpened${glow === 'off' ? '' : ` · Glow ${glowLabel}`}${
+            audio ? '' : ' · no sound'
+          }`}
+        </AppText>
+      </View>
+      <AppText variant="caption" style={[styles.rowLabel, { width: undefined }]}>
+        Spotlight · background blur
+      </AppText>
+      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Spotlight background blur">
+        {GLIDE_SPOTLIGHT_LEVELS.map(l => (
+          <Pill key={l.id} label={l.label} selected={spotlight === l.id} onPress={() => onSpotlight(l.id)} />
         ))}
       </View>
     </View>

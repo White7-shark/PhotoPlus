@@ -22,6 +22,7 @@ import type { EditDocument } from '../edit/document';
 import type { FaceGeometry } from '../edit/placement';
 import type { WatermarkSpec } from '../edit/watermark';
 import { isLensReport, type LensReport } from './lens';
+import { isGlideStage, type GlideRequest, type GlideResult, type GlideStage } from '../camera/glide';
 
 export interface RenderEditRequest {
   inputPath: string;
@@ -95,6 +96,8 @@ interface JobEvent {
   jobId: string;
   state?: JobState;
   progress?: number;
+  /** Glide reports which step it is on. */
+  stage?: string;
 }
 
 interface EventSource {
@@ -210,6 +213,29 @@ export class ImageProcessingService {
     return this.runJob('tf', request, options, jobId =>
       this.engine.transform(jobId, request),
     ) as Promise<TransformResult>;
+  }
+
+  /**
+   * Glide: makes a recorded clip steady, clean and sharp (plus Spotlight and
+   * Glow). Cancellable like process(); onStage reports the step as it changes.
+   */
+  glide(
+    request: GlideRequest,
+    options: Omit<ProcessOptions, 'onState'> & { onStage?: (stage: GlideStage) => void } = {},
+  ): Promise<GlideResult> {
+    const jobId = options.jobId ?? createId('glide');
+    let last: GlideStage | null = null;
+    const stages = options.onStage
+      ? this.events.addListener(NativeEvents.jobProgress, payload => {
+          if (payload.jobId === jobId && isGlideStage(payload.stage) && payload.stage !== last) {
+            last = payload.stage;
+            options.onStage?.(payload.stage);
+          }
+        })
+      : null;
+    return (
+      this.runJob('glide', request, { ...options, jobId }, id => this.engine.glide(id, request)) as Promise<GlideResult>
+    ).finally(() => stages?.remove());
   }
 
   /** Editor: renders a photo with its edits (a preview, or a copy for the library). */

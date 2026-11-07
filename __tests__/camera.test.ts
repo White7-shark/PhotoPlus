@@ -103,6 +103,7 @@ describe('camera modes and presets', () => {
       'enhance',
       'photo',
       'superres',
+      'glide',
       'pro',
     ]);
     const basic = caps({
@@ -110,7 +111,9 @@ describe('camera modes and presets', () => {
       raw: false,
       manual: { ...rawCameraCaps().manual, exposure: false, focus: false, kelvin: false, whiteBalanceModes: ['auto'] },
     });
-    expect(availableModes(basic).map(m => m.id)).toEqual(['enhance', 'photo']);
+    expect(availableModes(basic).map(m => m.id)).toEqual(['enhance', 'photo', 'glide']);
+    // Glide needs the engine to finish clips.
+    expect(availableModes(caps({ captureModes: ['standard'] })).map(m => m.id)).not.toContain('glide');
     expect(availableModes(null).map(m => m.id)).toEqual(['photo']);
   });
 

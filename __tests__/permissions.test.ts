@@ -31,6 +31,7 @@ describe('permission mapping across Android versions', () => {
     expect(permissionsFor('photos', 33)).toEqual([P.READ_MEDIA_IMAGES]);
     expect(permissionsFor('photos', 34)).toEqual([P.READ_MEDIA_IMAGES, P.READ_MEDIA_VISUAL_USER_SELECTED]);
     expect(permissionsFor('camera', 29)).toEqual([P.CAMERA]);
+    expect(permissionsFor('microphone', 34)).toEqual([P.RECORD_AUDIO]);
   });
 });
 

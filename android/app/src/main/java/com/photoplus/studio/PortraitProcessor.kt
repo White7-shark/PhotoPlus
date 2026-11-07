@@ -488,6 +488,9 @@ class PortraitProcessor {
 
   companion object {
     private const val TAG = "PhotoPlusSpotlight"
+
+    /** A detected face's landmarks, normalised to the [w] x [h] image it was found in (contours, else approximated). */
+    fun landmarksOf(face: Face, w: Float, h: Float): FaceLandmarks? = FaceShape.of(face).landmarks(w, h)
     private const val ANALYSIS_EDGE = 1024
     private const val ML_TIMEOUT_S = 10L
     private const val SMALL_FACE_EDGE = 720

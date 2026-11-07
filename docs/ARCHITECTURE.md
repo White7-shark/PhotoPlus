@@ -1,4 +1,4 @@
-# Photo Plus — Architecture (Phases 1–5)
+# Photo Plus — Architecture (Phases 1–6)
 
 ```
 ┌──────────────────────────── React Native (TypeScript) ────────────────────────────┐
@@ -24,6 +24,7 @@
 │ Codec (stb: JPEG/PNG/BMP/GIF, EXIF, budget-checked) · Tensors (model in/out)       │
 │ GPU: GLES 3.1 compute, self-tested against the CPU, previews only                  │
 │ Enhance: align · robust merge · super-resolution · denoise · deconvolve · tone     │
+│ Video (Glide): motion · stabilisation plan · warp · clip curves · frame enhance    │
 │ pp_enhance_into (writes into a caller bitmap) · pp_focus_peaking (reads Y in place)│
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -190,3 +191,25 @@ ML Kit subject / selfie segmentation ─ DepthEstimator (optional)
 | `CaptureOptions.beauty*` | Camera Glow outside Spotlight. It turns on the processed capture path (never for RAW), and is recorded in the recipe so Transform re-applies it |
 | `PortraitPanel.tsx` | Basic (presets) and Advanced (Premium) modes, Reset to Glow, Restore original; `SpotlightAdvanced` holds the background controls |
 | Fairness rule | Every face threshold is relative to the person's own measurements. Exposure lifts are judged on the light around the head and the presence of frontal highlights, never on skin brightness |
+
+## Glide: 7-second pro video (Phase 6)
+
+Full report: [`PHASE6_GLIDE_REPORT.md`](PHASE6_GLIDE_REPORT.md).
+
+```
+Camera (Glide mode) ── configure({ video: true, aspectRatio: '16:9' }) ── CameraX VideoCapture<Recorder>
+   startVideo ≤ 7 s → captures/glide/*_raw.mp4
+EngineModule.glide → GlideProcessor
+   motion (pp_video_estimate_motion) → plan (pp_video_stabilize) → per frame:
+   pp_video_enhance_frame → pp_portrait / pp_face_adjust (Spotlight, Glow) → pp_video_warp → watermark
+   → GlideEncoder (MediaCodec H.264 + original sound) → exports → gallery (Movies/Photo Plus)
+GlidePreview: Glide / As recorded, share, save
+```
+
+| Where | What |
+|---|---|
+| `services/camera/glide.ts` | Request building (Spotlight level, Glow from the camera chip, watermark), timing, labels, "% steadier" |
+| `screens/camera/useGlide.ts` | Record → craft → save flow; microphone asked once (silent clips without it); one clip at a time; cancellable |
+| `GlideOptions.kt` | Request parsing with ranges; bitrate; exact frame times; `LandmarkSmoother` keeps face touches from shimmering |
+| Plan | Free. Free-plan clips are marked in every frame before encoding (`ExportPolicy` + `WatermarkRenderer`) |
+

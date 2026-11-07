@@ -22,6 +22,7 @@ export const FEATURES = {
   cameraCapture: f('camera.capture', 'Camera capture & basic settings', 'camera', 'free'),
   clarity: f('camera.clarity', 'Clarity: sharper, cleaner single photos', 'camera', 'free'),
   spotlight: f('camera.spotlight', 'Spotlight portraits & Glow skin retouch', 'camera', 'free'),
+  glide: f('camera.glide', 'Glide: 7-second pro video, steady and sharp, with Spotlight & Glow', 'camera', 'free'),
   shareTo: f('library.share', 'Share to other apps', 'editing', 'free'),
   cropRotate: f('editing.cropRotate', 'Crop and rotate', 'editing', 'free'),
   basicAdjustments: f('editing.basicAdjustments', 'Exposure, brightness & contrast', 'editing', 'free'),

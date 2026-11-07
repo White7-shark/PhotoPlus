@@ -11,11 +11,12 @@ import { Linking, PermissionsAndroid, Platform, type Permission } from 'react-na
  * App-private files (captures, projects, exports) need no permission at all.
  */
 
-export type AppPermission = 'camera' | 'photos';
+export type AppPermission = 'camera' | 'photos' | 'microphone';
 export type PermissionStatus = 'granted' | 'limited' | 'denied' | 'blocked' | 'unavailable';
 
 export const ANDROID_PERMISSIONS = {
   CAMERA: 'android.permission.CAMERA',
+  RECORD_AUDIO: 'android.permission.RECORD_AUDIO',
   READ_MEDIA_IMAGES: 'android.permission.READ_MEDIA_IMAGES',
   READ_MEDIA_VISUAL_USER_SELECTED: 'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
   READ_EXTERNAL_STORAGE: 'android.permission.READ_EXTERNAL_STORAGE',
@@ -41,6 +42,9 @@ export function permissionsFor(permission: AppPermission, sdkInt: number): strin
   if (permission === 'camera') {
     return [ANDROID_PERMISSIONS.CAMERA];
   }
+  if (permission === 'microphone') {
+    return [ANDROID_PERMISSIONS.RECORD_AUDIO];
+  }
   if (sdkInt >= 34) {
     return [ANDROID_PERMISSIONS.READ_MEDIA_IMAGES, ANDROID_PERMISSIONS.READ_MEDIA_VISUAL_USER_SELECTED];
   }
@@ -54,6 +58,11 @@ export const RATIONALES: Record<AppPermission, Rationale> = {
   camera: {
     title: 'Camera access',
     message: 'Photo Plus uses the camera to take photos. Nothing is uploaded — your shots stay on this device.',
+    buttonPositive: 'Continue',
+  },
+  microphone: {
+    title: 'Microphone access',
+    message: 'Glide clips keep their sound when the microphone is on. Without it, clips are silent.',
     buttonPositive: 'Continue',
   },
   photos: {

@@ -3,6 +3,8 @@
     <!-- Marketplace & purchase sync (later phases); Metro in debug builds. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Glide video sound (optional: clips record silently without it). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Gallery import: granular media permission on Android 13+, legacy below. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />

@@ -148,18 +148,23 @@ export function ModeSwitcher({
   );
 }
 
+const RECORD_RED = '#FF3B4E';
+
 export function ShutterButton({
   mode,
   disabled,
   busy,
   onPress,
   countdown,
+  recording = false,
 }: {
   mode: UiMode;
   disabled: boolean;
   busy: boolean;
   onPress: () => void;
   countdown: number | null;
+  /** Glide: a clip is recording (the button stops it). */
+  recording?: boolean;
 }) {
   const theme = useTheme();
   const { scale, onPressIn, onPressOut } = usePressScale();
@@ -170,7 +175,15 @@ export function ShutterButton({
       <Pressable
         testID="shutter"
         accessibilityRole="button"
-        accessibilityLabel={countdown !== null ? 'Cancel timer' : 'Take photo'}
+        accessibilityLabel={
+          countdown !== null
+            ? 'Cancel timer'
+            : mode === 'glide'
+              ? recording
+                ? 'Stop recording'
+                : 'Record a Glide clip'
+              : 'Take photo'
+        }
         accessibilityState={{ disabled, busy }}
         disabled={disabled}
         onPress={onPress}
@@ -184,10 +197,17 @@ export function ShutterButton({
         <View
           style={[
             styles.shutterInner,
-            {
-              backgroundImage: mode === 'photo' || mode === 'pro' ? undefined : theme.gradients.spectrum,
-              transform: [{ scale: busy ? 0.84 : 1 }],
-            },
+            mode === 'glide'
+              ? {
+                  backgroundColor: RECORD_RED,
+                  // A red dot to record; a rounded square to stop.
+                  borderRadius: recording ? 10 : 32,
+                  transform: [{ scale: recording ? 0.55 : busy ? 0.84 : 1 }],
+                }
+              : {
+                  backgroundImage: mode === 'photo' || mode === 'pro' ? undefined : theme.gradients.spectrum,
+                  transform: [{ scale: busy ? 0.84 : 1 }],
+                },
           ]}
         >
           {countdown !== null ? (

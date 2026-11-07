@@ -11,6 +11,8 @@ import {
   type FlashMode,
   type ManualSettings,
   type SessionConfig,
+  type VideoOptions,
+  type VideoRecording,
 } from './types';
 
 export * from './types';
@@ -76,6 +78,29 @@ export class CameraService {
     } finally {
       this.inFlight.delete(captureId);
     }
+  }
+
+  /**
+   * Glide: records a clip (the session must be configured with `video`).
+   * Resolves when it ends — at the limit or on stopVideo().
+   */
+  async startVideo(options: VideoOptions): Promise<VideoRecording> {
+    try {
+      const r = (await this.native.startVideo(options)) as unknown as Partial<VideoRecording>;
+      if (typeof r.path !== 'string' || !r.path) {
+        throw new CameraError('No clip was recorded', 'RECORDING_FAILED');
+      }
+      const ms = typeof r.durationMs === 'number' && Number.isFinite(r.durationMs) ? r.durationMs : 0;
+      return { path: r.path, durationMs: ms };
+    } catch (error) {
+      if (error instanceof CameraError) throw error;
+      throw new CameraError(errorMessage(error), errorCode(error) ?? 'RECORDING_FAILED');
+    }
+  }
+
+  /** Ends a Glide recording early (startVideo then resolves with the clip). */
+  stopVideo(): void {
+    this.native.stopVideo();
   }
 
   cancelCapture(captureId: string): void {

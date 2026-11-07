@@ -18,7 +18,7 @@ import type {
 
 // ---------------------------------------------------------------- modes
 
-export type UiMode = 'photo' | 'enhance' | 'spotlight' | 'night' | 'superres' | 'pro';
+export type UiMode = 'photo' | 'enhance' | 'spotlight' | 'night' | 'superres' | 'glide' | 'pro';
 
 export interface ModeDefinition {
   id: UiMode;
@@ -47,6 +47,12 @@ export const MODES: readonly ModeDefinition[] = [
     description: 'Twice the detail from a few quick shots',
     feature: 'multiShot',
   },
+  {
+    id: 'glide',
+    label: 'Glide',
+    description: '7-second pro video: steady, sharp, glowing',
+    feature: 'glide',
+  },
   { id: 'pro', label: 'Pro', description: 'Full manual control', feature: 'advancedCamera' },
 ];
 
@@ -67,6 +73,8 @@ export function modeLabel(mode: string): string {
       return 'Ultra Detail';
     case 'pro':
       return 'Pro';
+    case 'glide':
+      return 'Glide';
     case 'transform':
       return 'Transform';
     case 'edit':
@@ -100,6 +108,9 @@ export function availableModes(caps: CameraCapabilities | null): ModeDefinition[
         return supports('night');
       case 'superres':
         return supports('superres');
+      case 'glide':
+        // Every camera records video; Glide needs the engine to finish it.
+        return caps.captureModes.includes('enhance');
       case 'pro':
         return pro;
     }
@@ -112,6 +123,8 @@ export function captureModeFor(mode: UiMode, rawEnabled: boolean): CaptureModeId
       return 'standard';
     case 'pro':
       return rawEnabled ? 'raw' : 'standard';
+    case 'glide':
+      return 'standard'; // Glide records video; photos are not taken in it
     default:
       return mode;
   }

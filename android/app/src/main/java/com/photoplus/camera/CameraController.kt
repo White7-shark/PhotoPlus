@@ -39,6 +39,15 @@ import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.core.MirrorMode
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
@@ -92,6 +101,10 @@ object CameraController {
   private var camera: Camera? = null
   @Volatile var imageCapture: ImageCapture? = null
     private set
+  /** Glide sessions: the video stream (null in photo sessions). */
+  @Volatile var videoCapture: VideoCapture<Recorder>? = null
+    private set
+  private var recording: Recording? = null
   private var analysis: ImageAnalysis? = null
   private var orientationListener: OrientationEventListener? = null
   private var retries = 0
@@ -114,7 +127,8 @@ object CameraController {
   var captureSize: Size? = null
     private set
 
-  val isReady: Boolean get() = imageCapture != null && camera != null
+  val isReady: Boolean get() = camera != null && (imageCapture != null || videoCapture != null)
+  val isRecording: Boolean get() = recording != null
   val activeLensFacing: String get() = lensFacing
 
   /** Latest values reported by the sensor, for the Pro readout and manual defaults. */
@@ -175,6 +189,50 @@ object CameraController {
     }, ContextCompat.getMainExecutor(context))
   }
 
+  // ---------------------------------------------------------------- Glide
+
+  /** How a recording ended: the file (when usable) or an error code. */
+  fun interface RecordingDone {
+    fun onDone(file: java.io.File?, durationMs: Long, error: String?)
+  }
+
+  /**
+   * Records up to [maxMs] into [file] (Glide sessions only). Ends by itself
+   * at the limit or on [stopRecording]; [done] runs on the main thread.
+   */
+  @android.annotation.SuppressLint("MissingPermission") // checked: audio only when granted
+  fun startRecording(file: java.io.File, maxMs: Long, audio: Boolean, done: RecordingDone): Boolean {
+    val context = appContext ?: return false
+    val vc = videoCapture ?: return false
+    if (recording != null) return false
+    val options = FileOutputOptions.Builder(file).setDurationLimitMillis(maxMs).build()
+    var pending = vc.output.prepareRecording(context, options)
+    val micGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    if (audio && micGranted) pending = pending.withAudioEnabled()
+    recording = pending.start(ContextCompat.getMainExecutor(context)) { event ->
+      if (event is VideoRecordEvent.Finalize) {
+        recording = null
+        val ms = event.recordingStats.recordedDurationNanos / 1_000_000
+        // Reaching the 7-second limit is the normal end; a stream that went
+        // away mid-way still leaves a usable clip.
+        val usable = event.error == VideoRecordEvent.Finalize.ERROR_NONE ||
+          event.error == VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED ||
+          (event.error == VideoRecordEvent.Finalize.ERROR_SOURCE_INACTIVE && file.length() > 0)
+        if (usable && file.length() > 0) {
+          done.onDone(file, ms, null)
+        } else {
+          file.delete()
+          done.onDone(null, ms, "RECORDING_FAILED")
+        }
+      }
+    }
+    return true
+  }
+
+  fun stopRecording() {
+    recording?.stop()
+  }
+
   /** Applies a new session configuration; rebinds only when the streams change. */
   fun configure(config: SessionConfig) {
     val changed = config != sessionConfig
@@ -230,9 +288,24 @@ object CameraController {
         if (sessionConfig.rawEnabled && inputs.rawSupported) {
           captureBuilder.setOutputFormat(ImageCapture.OUTPUT_FORMAT_RAW_JPEG)
         }
-        val capture = captureBuilder.build()
+        // Glide sessions record video: preview + video stream (no still capture,
+        // which keeps the stream combination supported on every camera level).
+        val video = if (sessionConfig.video) {
+          val recorder = Recorder.Builder()
+            .setQualitySelector(QualitySelector.from(Quality.FHD, FallbackStrategy.lowerQualityOrHigherThan(Quality.HD)))
+            .build()
+          VideoCapture.Builder(recorder)
+            .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY) // selfies as the preview shows them
+            .setTargetRotation(targetRotation)
+            .build()
+        } else {
+          null
+        }
+        val capture = if (video == null) captureBuilder.build() else null
 
-        val groupBuilder = UseCaseGroup.Builder().addUseCase(preview).addUseCase(capture)
+        val groupBuilder = UseCaseGroup.Builder().addUseCase(preview)
+        if (capture != null) groupBuilder.addUseCase(capture)
+        if (video != null) groupBuilder.addUseCase(video)
         // One analysis stream: face tracking while props are on (they need the
         // frame rate), otherwise focus peaking when it is enabled.
         FaceTracker.mirrored = lensFacing == "front"
@@ -251,8 +324,9 @@ object CameraController {
         val cam = provider.bindToLifecycle(lifecycle, selector, groupBuilder.build())
         camera = cam
         imageCapture = capture
+        videoCapture = video
         analysis = peaking
-        captureSize = capture.resolutionInfo?.resolution
+        captureSize = capture?.resolutionInfo?.resolution ?: video?.resolutionInfo?.resolution
         observeCamera(cam, lifecycle, sessionOwner)
         applyManualControls()
         callbacks?.onReady(lensFacing)
@@ -260,6 +334,7 @@ object CameraController {
         Log.w(TAG, "Unable to bind camera", e)
         camera = null
         imageCapture = null
+        videoCapture = null
         callbacks?.onError("BIND_FAILED", e.message ?: "Unable to start the camera")
         scheduleRetry(sessionOwner, "BIND_FAILED")
       }

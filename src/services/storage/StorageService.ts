@@ -57,6 +57,11 @@ export class StorageService {
   share(paths: string[], title = 'Share photo'): Promise<boolean> {
     return this.native.shareImages(paths, title);
   }
+
+  /** Saves a Glide clip (from the exports area) to the gallery; resolves with its address there. */
+  saveVideoToGallery(path: string): Promise<string> {
+    return this.native.saveVideoToGallery(path);
+  }
 }
 
 let shared: StorageService | null = null;

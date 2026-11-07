@@ -855,4 +855,186 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeImageToTenso
   }
 }
 
+
+// ---- Glide video (Phase 6) ---------------------------------------------------
+
+namespace {
+bool readMotion(JNIEnv* env, jfloatArray arr, pp_video_motion& m) {
+  if (arr == nullptr) return false;
+  if (env->GetArrayLength(arr) < 4) return false;
+  jfloat v[5] = {1, 0, 0, 0, 1};
+  env->GetFloatArrayRegion(arr, 0, std::min<jsize>(5, env->GetArrayLength(arr)), v);
+  m = pp_video_motion{};
+  m.a = v[0], m.b = v[1], m.tx = v[2], m.ty = v[3], m.confidence = v[4];
+  return true;
+}
+}  // namespace
+
+// out (5): a, b, tx, ty, confidence (see pp_video_motion).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoMotion(JNIEnv* env, jobject, jobject previous,
+                                                                               jobject current, jfloatArray out) {
+  if (out == nullptr || env->GetArrayLength(out) < 5) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Motion needs 5 slots");
+    return;
+  }
+  WrappedBitmap a, b;
+  if (!a.open(env, previous, false) || !b.open(env, current, false)) return;
+  pp_video_motion m{};
+  const pp_status st = pp_video_estimate_motion(a.image, b.image, &m);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat v[5] = {m.a, m.b, m.tx, m.ty, m.confidence};
+  env->SetFloatArrayRegion(out, 0, 5, v);
+}
+
+// motions: count * 5 (a, b, tx, ty, confidence); warpsOut: count * 6; reportOut (3): zoom, shake before/after.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoStabilize(
+    JNIEnv* env, jobject, jfloatArray motions, jint width, jint height, jfloat strength, jfloat maxZoom,
+    jfloatArray warpsOut, jfloatArray reportOut) {
+  const jsize total = env->GetArrayLength(motions);
+  const jsize count = total / 5;
+  if (count < 1 || total != count * 5 || env->GetArrayLength(warpsOut) < count * 6 || env->GetArrayLength(reportOut) < 3) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad stabilisation arguments");
+    return;
+  }
+  std::vector<jfloat> raw(static_cast<size_t>(total));
+  env->GetFloatArrayRegion(motions, 0, total, raw.data());
+  std::vector<pp_video_motion> ms(static_cast<size_t>(count));
+  for (jsize i = 0; i < count; ++i) {
+    const jfloat* v = raw.data() + static_cast<size_t>(i) * 5;
+    ms[static_cast<size_t>(i)] = pp_video_motion{};
+    ms[static_cast<size_t>(i)].a = v[0], ms[static_cast<size_t>(i)].b = v[1], ms[static_cast<size_t>(i)].tx = v[2];
+    ms[static_cast<size_t>(i)].ty = v[3], ms[static_cast<size_t>(i)].confidence = v[4];
+  }
+  std::vector<float> warps(static_cast<size_t>(count) * 6);
+  float report[3] = {1, 0, 0};
+  const pp_status st = pp_video_stabilize(ms.data(), ms.size(), width, height, strength, maxZoom, warps.data(), report);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  env->SetFloatArrayRegion(warpsOut, 0, count * 6, warps.data());
+  env->SetFloatArrayRegion(reportOut, 0, 3, report);
+}
+
+// One frame of the clip into dst. fromPrevious / toNext: 5 floats or null; params (4): noise, blur, denoise, sharpen;
+// curves: 768 bytes or null.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoEnhanceFrame(
+    JNIEnv* env, jobject, jobject frame, jobject previous, jobject next, jfloatArray fromPrevious, jfloatArray toNext,
+    jfloatArray params, jbyteArray curves, jobject dst, jlong token) {
+  if (params == nullptr || env->GetArrayLength(params) < 4 || (curves != nullptr && env->GetArrayLength(curves) < 768)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad frame arguments");
+    return;
+  }
+  jfloat p[4];
+  env->GetFloatArrayRegion(params, 0, 4, p);
+  pp_video_frame_params fp{};
+  fp.noise_sigma = p[0], fp.blur_sigma = p[1], fp.denoise = p[2], fp.sharpen = p[3];
+  pp_video_motion from{}, to{};
+  const bool hasFrom = readMotion(env, fromPrevious, from), hasTo = readMotion(env, toNext, to);
+  uint8_t c[768];
+  if (curves != nullptr) env->GetByteArrayRegion(curves, 0, 768, reinterpret_cast<jbyte*>(c));
+  WrappedBitmap cur, prev, nxt, out;
+  if (!cur.open(env, frame, false) || !prev.open(env, previous, false) || !nxt.open(env, next, false) ||
+      !out.open(env, dst, false)) {
+    return;
+  }
+  const pp_status st = pp_video_enhance_frame(cur.image, prev.image, nxt.image, hasFrom ? &from : nullptr,
+                                              hasTo ? &to : nullptr, &fp, curves ? c : nullptr, out.image,
+                                              reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoWarp(JNIEnv* env, jobject, jobject src,
+                                                                             jfloatArray warp, jobject dst, jlong token) {
+  if (warp == nullptr || env->GetArrayLength(warp) < 6) {
+    throwEngineException(env, "INVALID_ARGUMENT", "A warp needs 6 values");
+    return;
+  }
+  jfloat w[6];
+  env->GetFloatArrayRegion(warp, 0, 6, w);
+  WrappedBitmap a, b;
+  if (!a.open(env, src, false) || !b.open(env, dst, false)) return;
+  const pp_status st = pp_video_warp(a.image, w, b.image, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoFitCurves(JNIEnv* env, jobject, jobject before,
+                                                                                  jobject after, jbyteArray out) {
+  if (out == nullptr || env->GetArrayLength(out) < 768) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Curves need 768 bytes");
+    return;
+  }
+  WrappedBitmap a, b;
+  if (!a.open(env, before, false) || !b.open(env, after, false)) return;
+  uint8_t c[768];
+  const pp_status st = pp_video_fit_curves(a.image, b.image, c);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  env->SetByteArrayRegion(out, 0, 768, reinterpret_cast<const jbyte*>(c));
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoSteadyMask(JNIEnv* env, jobject, jobject previous,
+                                                                                   jobject current, jfloat smoothing) {
+  WrappedBitmap a, b;
+  if (!a.open(env, previous, true) || !b.open(env, current, true)) return;
+  if (a.image == nullptr || b.image == nullptr) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Two masks are required");
+    return;
+  }
+  const pp_status st = pp_video_steady_mask(a.image, b.image, smoothing);
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+// RGBA bitmap → the encoder's YUV 4:2:0 planes (BT.601 limited range, as
+// video players expect), written through direct buffers with the plane strides.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeRgbaToYuv420(
+    JNIEnv* env, jobject, jobject bitmap, jobject yBuf, jobject uBuf, jobject vBuf, jint yRowStride, jint uvRowStride,
+    jint uvPixelStride) {
+  auto* yp = static_cast<uint8_t*>(env->GetDirectBufferAddress(yBuf));
+  auto* up = static_cast<uint8_t*>(env->GetDirectBufferAddress(uBuf));
+  auto* vp = static_cast<uint8_t*>(env->GetDirectBufferAddress(vBuf));
+  const jlong ycap = env->GetDirectBufferCapacity(yBuf), ucap = env->GetDirectBufferCapacity(uBuf),
+              vcap = env->GetDirectBufferCapacity(vBuf);
+  BitmapLock lock(env, bitmap);
+  if (!lock.ok() || yp == nullptr || up == nullptr || vp == nullptr || uvPixelStride < 1) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad YUV conversion arguments");
+    return;
+  }
+  const auto w = static_cast<int32_t>(lock.info().width), h = static_cast<int32_t>(lock.info().height);
+  const auto stride = static_cast<int32_t>(lock.info().stride);
+  const auto* px = static_cast<const uint8_t*>(lock.pixels());
+  if (static_cast<jlong>(yRowStride) * (h - 1) + w > ycap ||
+      static_cast<jlong>(uvRowStride) * (h / 2 - 1) + static_cast<jlong>(uvPixelStride) * (w / 2 - 1) + 1 > std::min(ucap, vcap)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "YUV planes are too small for the frame");
+    return;
+  }
+  for (int32_t y = 0; y < h; ++y) {
+    const uint8_t* r = px + static_cast<size_t>(y) * stride;
+    uint8_t* yo = yp + static_cast<size_t>(y) * yRowStride;
+    for (int32_t x = 0; x < w; ++x) {
+      const int R = r[x * 4], G = r[x * 4 + 1], B = r[x * 4 + 2];
+      yo[x] = static_cast<uint8_t>(std::clamp((66 * R + 129 * G + 25 * B + 128) / 256 + 16, 0, 255));
+    }
+  }
+  for (int32_t y = 0; y < h / 2; ++y) {
+    for (int32_t x = 0; x < w / 2; ++x) {
+      int R = 0, G = 0, B = 0;
+      for (int dy = 0; dy < 2; ++dy)
+        for (int dx = 0; dx < 2; ++dx) {
+          const uint8_t* q = px + static_cast<size_t>(2 * y + dy) * stride + (2 * x + dx) * 4;
+          R += q[0], G += q[1], B += q[2];
+        }
+      R /= 4, G /= 4, B /= 4;
+      const size_t o = static_cast<size_t>(y) * uvRowStride + static_cast<size_t>(x) * uvPixelStride;
+      up[o] = static_cast<uint8_t>(std::clamp((-38 * R - 74 * G + 112 * B + 128) / 256 + 128, 0, 255));
+      vp[o] = static_cast<uint8_t>(std::clamp((112 * R - 94 * G - 18 * B + 128) / 256 + 128, 0, 255));
+    }
+  }
+}
+
 }  // extern "C"

@@ -494,6 +494,41 @@ class EngineModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  private val glideProcessor by lazy { com.photoplus.video.GlideProcessor() }
+
+  /**
+   * Glide: a recorded clip made steady, clean and sharp, with optional
+   * Spotlight and Glow. Free-plan clips carry the mark in every frame, as
+   * free photos do. Progress arrives as job progress events (with a stage).
+   */
+  override fun glide(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val io = resolveIo(map, promise) ?: return
+    val options = com.photoplus.video.GlideOptions.fromMap(map)
+    val mark = if (map["watermark"] != null) ExportPolicy.resolve(watermarkOf(map), Entitlements.plan) else null
+    jobs.submit(jobId, jobListener(promise)) { token ->
+      val r = glideProcessor.process(io.first, io.second, options, token, { stage, fraction ->
+        reactApplicationContext.emitSafely(
+          EVENT_JOB_PROGRESS, mapOf("jobId" to jobId, "progress" to fraction, "stage" to stage),
+        )
+      }) { frame -> mark?.let { com.photoplus.edit.WatermarkRenderer.apply(frame, it) } }
+      mapOf(
+        "outputPath" to io.second.absolutePath,
+        "width" to r.width,
+        "height" to r.height,
+        "frames" to r.frames,
+        "fps" to r.fps.toDouble(),
+        "durationMs" to r.durationMs.toDouble(),
+        "zoom" to r.zoom.toDouble(),
+        "shakeBefore" to r.shakeBefore.toDouble(),
+        "shakeAfter" to r.shakeAfter.toDouble(),
+        "processMs" to r.processMs.toDouble(),
+        "watermarked" to (mark != null),
+      )
+    }
+  }
+
   /**
    * Everything that leaves the app goes through here. The plan is read
    * natively: on the free plan the Photo Plus mark is always drawn (whatever

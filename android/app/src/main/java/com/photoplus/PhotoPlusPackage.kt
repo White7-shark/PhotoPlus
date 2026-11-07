@@ -42,5 +42,5 @@ class PhotoPlusPackage : BaseReactPackage() {
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
-    listOf(CameraPreviewManager())
+    listOf(CameraPreviewManager(), com.photoplus.video.VideoPlayerManager())
 }
