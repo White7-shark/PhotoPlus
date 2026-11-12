@@ -121,6 +121,8 @@ export interface CaptureOptions {
   beautyRecipe?: import('../beauty/recipe').BeautyRecipe;
   /** The beauty preset's id, kept with the photo. */
   beautyPreset?: string;
+  /** The backdrop behind the person (Spotlight: Signature). */
+  backdrop?: import('../backdrops/catalog').BackdropChoice;
   /** Vibe Match look numbers and how strongly to apply them. */
   look?: number[];
   lookStrength?: number;

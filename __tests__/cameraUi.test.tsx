@@ -293,12 +293,13 @@ describe('spotlight and vibe match', () => {
     expect(screen.getByText('1 chosen · tap again to remove')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalled());
-    // Portrait mode's controls (blur 60 %, edges) travel as the recipe; no preset when beauty is off.
+    // The camera's backdrop (Signature) carries Portrait mode's blur; no beauty when it is off.
     expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({
       mode: 'spotlight',
       points: [0.3, 0.4],
-      beautyRecipe: { portrait: { blur: 0.6, edge: 0.5, smooth: 0 }, face: { blush: 0 } },
+      backdrop: { id: 'signature', strength: 0.6 },
     });
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).not.toHaveProperty('beautyRecipe');
     expect(mockCamera.capturePhoto.mock.calls[0][0]).not.toHaveProperty('beautyPreset');
     expect(await screen.findByText('Spotlight photo saved')).toBeTruthy();
   });
@@ -454,14 +455,15 @@ describe('camera beauty', () => {
       beautyPreset: 'golden_goddess',
       beautyRecipe: { grade: { temperature: expect.closeTo(0.36, 5) } },
     });
-    // In Spotlight the same filter combines with Portrait mode's own blur.
+    // In Spotlight the same filter combines with the Signature backdrop.
     await fireEvent.press(screen.getByTestId('mode-spotlight'));
     await fireEvent.press(screen.getByTestId('shutter'));
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(2));
     expect(mockCamera.capturePhoto.mock.calls[1][0]).toMatchObject({
       mode: 'spotlight',
       beautyPreset: 'golden_goddess',
-      beautyRecipe: { portrait: { blur: 0.6 }, grade: { bgGlow: expect.closeTo(0.4, 5) } },
+      backdrop: { id: 'signature', strength: 0.6 },
+      beautyRecipe: { portrait: { blur: 0 }, grade: { bgGlow: expect.closeTo(0.4, 5) } },
     });
   });
 

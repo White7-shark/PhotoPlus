@@ -47,7 +47,14 @@ export interface RenderEditResult {
   sizeBytes: number;
   /** Where the photo sits in the result (x, y, w, h): all of it unless framed. */
   photoRect: [number, number, number, number];
-  portrait: { people: number; spots: number; skin: number; subject: number } | null;
+  portrait: {
+    people: number;
+    spots: number;
+    skin: number;
+    subject: number;
+    /** Skin Tone: false when no face could be measured (the skin was left as it was). */
+    skinToneApplied?: boolean | null;
+  } | null;
 }
 
 export interface ExportRequest {

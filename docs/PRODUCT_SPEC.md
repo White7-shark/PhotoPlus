@@ -85,6 +85,8 @@ Free users can access:
 - Transform (the look of a high-end camera lens): 2 photos a day
 - Glide: 7-second pro video (steadied, cleaned, sharpened), with Spotlight and Glow; free-plan clips carry the watermark
 - Beauty mode with two filters (Natural Glow, Soft Radiance), live in the camera, in Portrait mode, on clips and in the editor
+- Backdrops: Signature (the camera's Spotlight default), Soft Studio and Stage, in the editor
+- Skin Tone: four shades (Ivory, Honey, Caramel, Espresso) for the skin of the face and body, in the editor
 
 **Free users cannot unlock, download for use, or apply photoshoot packs.** They may browse the marketplace to discover what Photo Plus offers; unlocking a pack requires an active Premium entitlement.
 
@@ -104,6 +106,8 @@ Premium users receive:
 - Clothing transformation for compatible packs
 - Transform (the look of a high-end camera lens) without a daily limit
 - The full beauty collection: 11 premium filters (Velvet Skin to Studio Royal)
+- The full Backdrops collection: 11 premium designs (Noir to Dream)
+- Every Skin Tone shade: 9 more (Porcelain Rose to Ebony Glow)
 - New premium tools and capabilities as they are released
 
 ### 2.3 Subscription vs. pack ownership

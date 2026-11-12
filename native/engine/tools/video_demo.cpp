@@ -9,6 +9,8 @@
 //   --no-stabilize    --no-enhance
 //   --retouch v --brighten v --blur v --pop v --bg-color v --edge v   (Spotlight / Glow)
 //   --eyes v --under-eye v --shine v --face-light v --teeth v --lips v (face touches)
+//   --backdrop n --backdrop-strength v                                  (Backdrops)
+//   --skin-tone r g b glow --skin-strength v                            (Skin Tone, sRGB 0..1)
 //
 // Writes OUT_DIR/frame_%04d.ppm and prints a JSON report.
 #include <algorithm>
@@ -111,6 +113,11 @@ int main(int argc, char** argv) {
   pp.blur = pp.retouch = pp.brighten = pp.pop = 0.0f;
   pp_face_params fp{};
   pp_face_default_params(&fp);
+  int backdrop = -1;  // pp_backdrop_design, applied after stabilising so painted backgrounds stay still
+  float backdropStrength = 1.0f;
+  bool skinTone = false;
+  pp_skin_tone_params sp{};
+  sp.strength = 1.0f;
   for (int i = 4; i < argc; ++i) {
     const std::string k = argv[i];
     auto next = [&]() { return i + 1 < argc ? std::strtof(argv[++i], nullptr) : 0.0f; };
@@ -131,6 +138,12 @@ int main(int argc, char** argv) {
     else if (k == "--face-light") fp.face_light = next();
     else if (k == "--teeth") fp.teeth = next();
     else if (k == "--lips") fp.lips = next();
+    else if (k == "--backdrop") backdrop = static_cast<int>(next());
+    else if (k == "--backdrop-strength") backdropStrength = next();
+    else if (k == "--skin-tone") {
+      skinTone = true;
+      sp.shade_r = next(), sp.shade_g = next(), sp.shade_b = next(), sp.glow = next();
+    } else if (k == "--skin-strength") sp.strength = next();
     else {
       std::fprintf(stderr, "unknown option %s\n", k.c_str());
       return 2;
@@ -242,7 +255,7 @@ int main(int argc, char** argv) {
     }
     enhanceMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - e0).count();
     auto p0 = std::chrono::steady_clock::now();
-    if (portrait) {
+    if (portrait || backdrop >= 0 || skinTone) {
       pp_image* subj = readPgm(name(in, "subject", k, "pgm"));
       if (subj != nullptr) {
         if (steady == nullptr) {
@@ -254,8 +267,11 @@ int main(int argc, char** argv) {
         }
         pp_image* fm = readPgm(name(in, "faces", k, "pgm"));
         pp_image* pm = readPgm(name(in, "protect", k, "pgm"));
-        if (pp_portrait(work, steady, fm, pm, nullptr, &pp, nullptr, nullptr) != PP_OK) {
+        if (portrait && pp_portrait(work, steady, fm, pm, nullptr, &pp, nullptr, nullptr) != PP_OK) {
           std::fprintf(stderr, "portrait failed at %d: %s\n", k, pp_last_error_message());
+        }
+        if (skinTone && fm != nullptr && pp_skin_tone(work, steady, fm, pm, &sp, nullptr, nullptr, nullptr) != PP_OK) {
+          std::fprintf(stderr, "skin tone failed at %d: %s\n", k, pp_last_error_message());
         }
         pp_image_destroy(fm);
         pp_image_destroy(pm);
@@ -272,6 +288,30 @@ int main(int argc, char** argv) {
       pp_video_warp(work, &warps[static_cast<size_t>(k) * 6], outImg, nullptr);
       pp_image_destroy(work);
       work = outImg;
+    }
+    if (backdrop >= 0 && steady != nullptr) {
+      // The mask follows the stabilised frame (same warp, at the mask's scale).
+      pp_image_info mi{};
+      pp_image_get_info(steady, &mi);
+      pp_image* mask = steady;
+      pp_image* warped = nullptr;
+      if (stabilize) {
+        const float sx = static_cast<float>(mi.width) / static_cast<float>(info.width);
+        const float sy = static_cast<float>(mi.height) / static_cast<float>(info.height);
+        const float* w = &warps[static_cast<size_t>(k) * 6];
+        const float mw[6] = {w[0], w[1] * sx / sy, w[2] * sx, w[3] * sy / sx, w[4], w[5] * sy};
+        pp_image_create(mi.width, mi.height, PP_FORMAT_GRAY8, &warped);
+        pp_video_warp(steady, mw, warped, nullptr);
+        mask = warped;
+      }
+      pp_backdrop_params bp{};
+      bp.design = backdrop;
+      bp.strength = backdropStrength;
+      bp.seed = 7;
+      if (pp_backdrop(work, mask, nullptr, &bp, nullptr, nullptr) != PP_OK) {
+        std::fprintf(stderr, "backdrop failed at %d: %s\n", k, pp_last_error_message());
+      }
+      if (warped != nullptr) pp_image_destroy(warped);
     }
     writePpm(name(out, "frame", k, "ppm"), work);
     pp_image_destroy(work);

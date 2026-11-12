@@ -21,6 +21,8 @@ export type ToolId =
   | 'crop'
   | 'looks'
   | 'beauty'
+  | 'backdrop'
+  | 'skintone'
   | 'spotlight'
   | 'retouch'
   | 'focus'
@@ -34,6 +36,8 @@ export const EDITOR_TOOLS: readonly { id: ToolId; label: string; icon: IconName;
   { id: 'crop', label: 'Crop', icon: 'aspect' },
   { id: 'looks', label: 'Looks', icon: 'image' },
   { id: 'beauty', label: 'Beauty', icon: 'sun' },
+  { id: 'backdrop', label: 'Backdrop', icon: 'compare' },
+  { id: 'skintone', label: 'Skin Tone', icon: 'drop' },
   { id: 'spotlight', label: 'Spotlight', icon: 'target' },
   { id: 'retouch', label: 'Portrait', icon: 'sparkles' },
   { id: 'focus', label: 'Focus', icon: 'exposure' },

@@ -539,6 +539,58 @@ pp_status pp_beauty(pp_image* image, const pp_image* subject, const pp_image* fa
                     const pp_image* depth, const pp_face* faces, size_t count, const pp_beauty_params* params,
                     const pp_cancel_token* token, pp_beauty_report* report);
 
+/* ---- Backdrops: background designs behind the person --------------------- */
+typedef enum pp_backdrop_design {
+  PP_BACKDROP_SIGNATURE = 0, /* depth-aware lens blur with gentle fall-off (the camera's default) */
+  PP_BACKDROP_SOFT_STUDIO,
+  PP_BACKDROP_STAGE,
+  PP_BACKDROP_NOIR,
+  PP_BACKDROP_PORCELAIN,
+  PP_BACKDROP_CANVAS,
+  PP_BACKDROP_GOLDEN_HOUR,
+  PP_BACKDROP_CITY_LIGHTS,
+  PP_BACKDROP_NEON,
+  PP_BACKDROP_COLOR_POP,
+  PP_BACKDROP_VELOCITY,
+  PP_BACKDROP_SWIRL,
+  PP_BACKDROP_AURORA,
+  PP_BACKDROP_DREAM,
+  PP_BACKDROP_COUNT
+} pp_backdrop_design;
+
+typedef struct pp_backdrop_params {
+  int32_t design;  /* pp_backdrop_design */
+  float strength;  /* 0..1 */
+  uint32_t seed;   /* varies procedural elements (lights, canvas) */
+  float reserved[5];
+} pp_backdrop_params;
+
+/* Replaces or restyles the background of `image` (RGBA8/BGRA8) in place.
+ * `subject` is a GRAY8 mask of any size (required); `depth` (optional,
+ * 0 far .. 255 near) refines Signature's blur. `coverage_out` (optional, 2
+ * floats) receives the subject and edge fractions of the frame. */
+pp_status pp_backdrop(pp_image* image, const pp_image* subject, const pp_image* depth, const pp_backdrop_params* params,
+                      const pp_cancel_token* token, float* coverage_out);
+
+/* ---- Skin Tone: the person's skin moved toward a chosen shade ------------- */
+typedef struct pp_skin_tone_params {
+  float shade_r, shade_g, shade_b; /* the shade, sRGB 0..1 (a mid-tone of that skin) */
+  float glow;                      /* 0..1 soft sheen on the skin's highlights */
+  float strength;                  /* 0..1 */
+  float reserved[5];
+} pp_skin_tone_params;
+
+/* Recolours the skin of the face and the visible body in place (hair, eyes,
+ * brows, lips, clothes and background keep their colours). `face_mask`
+ * (GRAY8, face area from landmarks) is needed to measure the skin; without
+ * a usable face nothing changes and *has_skin_out is 0. `subject` (GRAY8,
+ * optional) extends the search to the body; `protect` (GRAY8, optional)
+ * keeps eyes, brows and lips out. `has_skin_out` and `coverage_out` (share
+ * of the frame recoloured) may be NULL. */
+pp_status pp_skin_tone(pp_image* image, const pp_image* subject, const pp_image* face_mask, const pp_image* protect,
+                       const pp_skin_tone_params* params, const pp_cancel_token* token, int32_t* has_skin_out,
+                       float* coverage_out);
+
 /* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
  * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */
 pp_status pp_subject_mask(const pp_image* image, const float* points, size_t count, const pp_cancel_token* token,

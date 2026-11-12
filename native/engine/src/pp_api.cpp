@@ -13,6 +13,8 @@
 #include <cmath>
 #include <vector>
 
+#include "photoplus/backdrop.hpp"
+#include "photoplus/skintone.hpp"
 #include "photoplus/beauty.hpp"
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
@@ -920,6 +922,50 @@ pp_status pp_beauty(pp_image* image, const pp_image* subject, const pp_image* fa
       report->faces_adjusted = rep.face.adjusted;
       report->layers = rep.layers;
     }
+    return succeed();
+  });
+}
+
+pp_status pp_backdrop(pp_image* image, const pp_image* subject, const pp_image* depth, const pp_backdrop_params* params,
+                      const pp_cancel_token* token, float* coverage_out) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || subject == nullptr || params == nullptr) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "image, subject and params are required");
+    }
+    photoplus::backdrop::Params p;
+    p.design = static_cast<photoplus::backdrop::Design>(params->design);
+    p.strength = params->strength;
+    p.seed = params->seed;
+    photoplus::backdrop::Report r;
+    const photoplus::Error e = photoplus::backdrop::apply(image->buffer, subject->buffer, depth ? &depth->buffer : nullptr, p,
+                                                          token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (coverage_out != nullptr) {
+      coverage_out[0] = r.subjectCoverage;
+      coverage_out[1] = r.edgeCoverage;
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_skin_tone(pp_image* image, const pp_image* subject, const pp_image* face_mask, const pp_image* protect,
+                       const pp_skin_tone_params* params, const pp_cancel_token* token, int32_t* has_skin_out,
+                       float* coverage_out) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || params == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image and params are required");
+    photoplus::skintone::Params p;
+    p.r = params->shade_r;
+    p.g = params->shade_g;
+    p.b = params->shade_b;
+    p.glow = params->glow;
+    p.strength = params->strength;
+    photoplus::skintone::Report r;
+    const photoplus::Error e = photoplus::skintone::apply(image->buffer, subject ? &subject->buffer : nullptr,
+                                                          face_mask ? &face_mask->buffer : nullptr,
+                                                          protect ? &protect->buffer : nullptr, p, token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (has_skin_out != nullptr) *has_skin_out = r.hasSkin ? 1 : 0;
+    if (coverage_out != nullptr) *coverage_out = r.skinCoverage;
     return succeed();
   });
 }

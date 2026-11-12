@@ -66,6 +66,8 @@ import {
   type ToolId,
 } from './panels';
 import { PortraitPanel, SpotlightAdvanced } from './PortraitPanel';
+import { BackdropEditPanel } from './BackdropPanel';
+import { SkinTonePanel } from './SkinTonePanel';
 import { BeautyEditPanel } from './BeautyPanel';
 import { WatermarkUnlock } from '../WatermarkUnlock';
 import { WatermarkPanel } from './WatermarkPanel';
@@ -105,6 +107,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
   const [tool, setTool] = useState<ToolId>('adjust');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [rendering, setRendering] = useState(false);
+  const [skinToneNoFace, setSkinToneNoFace] = useState(false);
   const [viewSize, setViewSize] = useState({ width: 0, height: 0 });
   const [comparing, setComparing] = useState(false);
   const [propCategory, setPropCategory] = useState<PropCategory>('hats');
@@ -224,6 +227,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
         const old = lastPreview.current;
         lastPreview.current = r.outputPath;
         setPreview({ path: r.outputPath, width: r.width, height: r.height, photoRect: r.photoRect });
+        setSkinToneNoFace(r.portrait?.skinToneApplied === false);
         if (old)
           void getStorageService()
             .deleteFile(old)
@@ -675,6 +679,16 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
                   })()}
                 </View>
               ) : null}
+              {tool === 'skintone' ? (
+                <SkinTonePanel
+                  doc={doc}
+                  update={update}
+                  commit={commit}
+                  premiumAllowed={can('skinTonesPremium').allowed}
+                  onPremium={() => askPremium('skinTonesPremium')}
+                  noFace={skinToneNoFace}
+                />
+              ) : null}
               {tool === 'spotlight' ? (
                 <View
                   pointerEvents="none"
@@ -837,6 +851,15 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
               commit={commit}
               premiumAllowed={can('beautyPremium').allowed}
               onPremium={() => askPremium('beautyPremium')}
+            />
+          ) : null}
+          {tool === 'backdrop' ? (
+            <BackdropEditPanel
+              doc={doc}
+              update={update}
+              commit={commit}
+              premiumAllowed={can('backdropsPremium').allowed}
+              onPremium={() => askPremium('backdropsPremium')}
             />
           ) : null}
           {tool === 'spotlight' ? (

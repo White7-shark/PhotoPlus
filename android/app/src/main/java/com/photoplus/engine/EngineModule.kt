@@ -482,7 +482,15 @@ class EngineModule(reactContext: ReactApplicationContext) :
             "height" to r.bitmap.height,
             "sizeBytes" to io.second.length().toDouble(),
             "photoRect" to r.photoRect.map { it.toDouble() },
-            "portrait" to r.portrait?.let { mapOf("people" to it.people, "spots" to it.spots, "skin" to it.skinCoverage.toDouble(), "subject" to it.subjectCoverage.toDouble()) },
+            "portrait" to r.portrait?.let {
+              mapOf(
+                "people" to it.people,
+                "spots" to it.spots,
+                "skin" to it.skinCoverage.toDouble(),
+                "subject" to it.subjectCoverage.toDouble(),
+                "skinToneApplied" to it.skinToneApplied,
+              )
+            },
             "timings" to mapOf("totalMs" to (SystemClock.elapsedRealtime() - started).toDouble()),
           )
         } finally {

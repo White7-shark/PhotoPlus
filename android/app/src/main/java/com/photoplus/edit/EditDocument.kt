@@ -41,6 +41,10 @@ data class EditDocument(
   val frame: FrameChoice? = null,
   /** A beauty preset applied in the editor (its resolved recipe), or null. */
   val beauty: BeautyChoice? = null,
+  /** The backdrop behind the person, or null. */
+  val backdrop: com.photoplus.studio.BackdropChoice? = null,
+  /** A Skin Tone shade for the person's skin, or null. */
+  val skinTone: com.photoplus.studio.SkinToneChoice? = null,
 ) {
   data class BeautyChoice(val preset: String, val recipe: com.photoplus.beauty.BeautyRecipe) {
     override fun toString() = "$preset:${recipe.key()}"
@@ -227,6 +231,12 @@ data class EditDocument(
         props = props,
         frame = frame,
         beauty = beauty,
+        backdrop = (map["backdrop"] as? Map<*, *>)?.let {
+          com.photoplus.studio.BackdropChoice.fromMap(it) ?: invalid("Unknown backdrop")
+        },
+        skinTone = (map["skinTone"] as? Map<*, *>)?.let {
+          com.photoplus.studio.SkinToneChoice.fromMap(it) ?: invalid("Unknown skin tone")
+        },
       )
     }
 

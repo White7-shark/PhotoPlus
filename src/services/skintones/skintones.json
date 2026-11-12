@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "shades": [
+    {
+      "id": "porcelain_rose",
+      "name": "Porcelain Rose",
+      "plan": "premium",
+      "color": "#EABFC3",
+      "glow": 0.15,
+      "note": "Fair with a cool, rosy undertone"
+    },
+    { "id": "ivory", "name": "Ivory", "plan": "free", "color": "#F1DDC6", "glow": 0.0, "note": "Fair and neutral" },
+    {
+      "id": "peach",
+      "name": "Peach",
+      "plan": "premium",
+      "color": "#E9B796",
+      "glow": 0.1,
+      "note": "Light with a warm peach undertone"
+    },
+    {
+      "id": "golden_beige",
+      "name": "Golden Beige",
+      "plan": "premium",
+      "color": "#DCB680",
+      "glow": 0.0,
+      "note": "Light-medium, soft golden beige"
+    },
+    {
+      "id": "honey",
+      "name": "Honey",
+      "plan": "free",
+      "color": "#D6A060",
+      "glow": 0.1,
+      "note": "Medium with a golden-yellow undertone"
+    },
+    {
+      "id": "olive",
+      "name": "Olive",
+      "plan": "premium",
+      "color": "#AC9A6C",
+      "glow": 0.0,
+      "note": "Medium with a green-olive undertone"
+    },
+    {
+      "id": "sun_kissed",
+      "name": "Sun-Kissed",
+      "plan": "premium",
+      "color": "#B7794E",
+      "glow": 0.4,
+      "note": "A warm, glowing tan"
+    },
+    {
+      "id": "caramel",
+      "name": "Caramel",
+      "plan": "free",
+      "color": "#B8743C",
+      "glow": 0.1,
+      "note": "Medium-deep, warm caramel"
+    },
+    {
+      "id": "bronze",
+      "name": "Bronze",
+      "plan": "premium",
+      "color": "#855442",
+      "glow": 0.35,
+      "note": "Deep golden bronze with sheen"
+    },
+    {
+      "id": "cinnamon",
+      "name": "Cinnamon",
+      "plan": "premium",
+      "color": "#8C4E36",
+      "glow": 0.1,
+      "note": "Deep with a red-brown undertone"
+    },
+    {
+      "id": "mocha",
+      "name": "Mocha",
+      "plan": "premium",
+      "color": "#6E5040",
+      "glow": 0.1,
+      "note": "Deep, neutral cocoa"
+    },
+    {
+      "id": "espresso",
+      "name": "Espresso",
+      "plan": "free",
+      "color": "#562C20",
+      "glow": 0.1,
+      "note": "Very deep and rich"
+    },
+    {
+      "id": "ebony_glow",
+      "name": "Ebony Glow",
+      "plan": "premium",
+      "color": "#33241E",
+      "glow": 0.7,
+      "note": "The deepest shade, with a luminous sheen"
+    }
+  ]
+}

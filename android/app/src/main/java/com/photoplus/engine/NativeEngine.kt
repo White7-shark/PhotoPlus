@@ -183,6 +183,32 @@ object NativeEngine {
   )
 
   /**
+   * Backdrops: restyles or replaces the background behind the subject, in
+   * place. [subject] is an ALPHA_8 mask; [depth] (optional) refines the
+   * Signature blur. [design] is com.photoplus.studio.Backdrop.engineId.
+   */
+  external fun nativeBackdrop(bitmap: Bitmap, subject: Bitmap, depth: Bitmap?, design: Int, strength: Float, seed: Int, token: Long)
+
+  /**
+   * Skin Tone: moves the skin of the face and the visible body toward a
+   * shade (sRGB 0..1), in place. [faces] (ALPHA_8 face area) is needed to
+   * measure the skin; [subject] and [protect] are optional. Returns false
+   * when no face could be measured (nothing changed).
+   */
+  external fun nativeSkinTone(
+    bitmap: Bitmap,
+    subject: Bitmap?,
+    faces: Bitmap?,
+    protect: Bitmap?,
+    r: Float,
+    g: Float,
+    b: Float,
+    glow: Float,
+    strength: Float,
+    token: Long,
+  ): Boolean
+
+  /**
    * What the beauty grade measures about a frame, for the live preview:
    * [out] (9) = has skin (0/1), skin Y, Cb, Cr, spread, subject x, subject
    * width, light angle, skin luma spread.

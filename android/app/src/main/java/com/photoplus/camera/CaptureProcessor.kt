@@ -417,11 +417,12 @@ class CaptureProcessor(
       }
       var portrait: PortraitReport? = null
       val recipe = request.beautyRecipe?.takeIf { it.active }
-      if (recipe != null) {
-        // Beauty preset (with Portrait mode's own controls in Spotlight).
+      val backdrop = request.backdrop?.takeIf { it.active }
+      if (recipe != null || backdrop != null) {
+        // Beauty preset (with Portrait mode's own controls in Spotlight), then the backdrop.
         listener.onProgress(request.captureId, "styling", 0.6)
         val points = if (request.mode == CaptureMode.PORTRAIT) burst.points else emptyList()
-        portrait = portraitProcessor.applyBeauty(work, geometry.remainingRotation, points, recipe, token)
+        portrait = portraitProcessor.applyBeauty(work, geometry.remainingRotation, points, recipe, token, backdrop)
       } else if (request.mode == CaptureMode.PORTRAIT) {
         listener.onProgress(request.captureId, "styling", 0.6)
         portrait = portraitProcessor.apply(work, geometry.remainingRotation, burst.points, request.portrait, token, request.beauty)
@@ -483,8 +484,9 @@ class CaptureProcessor(
         },
         // The beauty preset used, so it can be re-applied (e.g. after Transform).
         "beautyPreset" to request.beautyPreset?.takeIf { recipe != null },
+        "backdrop" to backdrop?.let { mapOf("id" to it.design.id, "strength" to it.strength.toDouble()) },
         // Camera beauty used, so it can be re-applied (e.g. after Transform).
-        "beauty" to portrait?.takeIf { request.mode != CaptureMode.PORTRAIT && recipe == null }?.let {
+        "beauty" to portrait?.takeIf { request.mode != CaptureMode.PORTRAIT && recipe == null && backdrop == null }?.let {
           mapOf(
             "retouch" to request.beautyRetouch.toDouble(),
             "brighten" to request.beautyBrighten.toDouble(),

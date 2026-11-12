@@ -237,3 +237,25 @@ pp_beauty: skin (portrait::apply) → face (adjustFaces + blush/contour/highligh
 | `scripts/beauty-fixture.mts` | Writes the fixture pinning the Kotlin bridge to the JS resolver and the live uniforms |
 | Fallback | No GLES 3 external textures, low-RAM phone, or a GL error: rebind without the effect; photos still get the recipe |
 
+## Backdrops and Skin Tone (Phase 8)
+
+Full report: [`PHASE8_BACKDROPS_SKINTONE_REPORT.md`](PHASE8_BACKDROPS_SKINTONE_REPORT.md).
+
+```
+backdrops.json (14: 3 free) ─ catalog.ts ─ camera: Spotlight uses Signature (cameraBackdrop(depth blur))
+                                          └ editor: EditDocument.backdrop
+skintones.json (13: 4 free) ─ catalog.ts ─ editor: EditDocument.skinTone
+                       │ SkinTone.kt / Backdrop.kt mirror the catalogues (unit tests compare them)
+PortraitProcessor.applyBeauty(recipe?, backdrop?, skinTone?): one set of masks (subject, faces, protect, depth)
+   ├─ pp_skin_tone  skin colour first (face + visible body; hair, features, clothes kept)
+   ├─ pp_beauty     retouch, face, grade
+   └─ pp_backdrop   the background last, over the finished person
+```
+
+| Where | What |
+|---|---|
+| `native/engine/src/backdrop/backdrop.cpp` | Matte (hair the mask missed recovered by colour, colour guided filter), clean plates, 14 painted designs, relighting, composite |
+| `native/engine/src/skintone/skintone.cpp` | Skin weight (colour, brightness, texture, region), partial brightness move, full undertone move, highlight-aware |
+| `scripts/backdrop-demo.py`, `scripts/backdrop-video-demo.py` | Sheets and clips on real photos and video |
+| `scripts/skintone-demo.py`, `scripts/skintone-video-demo.py` | Sheets, per-region measurements (face, body, hair, clothes, background) and clips |
+

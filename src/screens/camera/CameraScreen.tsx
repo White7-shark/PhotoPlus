@@ -66,6 +66,7 @@ import { GlidePanel, SpotlightMarkers } from './SpotlightControls';
 import { BeautyTray, OriginalButton, PortraitControlsPanel } from './BeautyControls';
 import { beautyChipLabel, cameraRecipe, effectivePreset, type CameraBeauty } from '../../services/beauty/camera';
 import { isActive, type PortraitControls } from '../../services/beauty/recipe';
+import { cameraBackdrop } from '../../services/backdrops/catalog';
 import { useGlide, type GlideClip } from './useGlide';
 import {
   glideBlur,
@@ -387,7 +388,11 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     const captureMode = captureModeFor(effectiveMode, rawActive);
     const look = vibe && captureMode !== 'raw' ? vibe : null;
     // Beauty (and Portrait mode's controls in Spotlight); RAW stays untouched.
-    const recipe = captureMode === 'raw' || !photoRecipe || !isActive(photoRecipe) ? null : photoRecipe;
+    // Spotlight's background is the Signature backdrop (it carries the blur, so the recipe's own is off).
+    const backdrop = captureMode === 'spotlight' ? cameraBackdrop(portraitControls.depthBlur) : null;
+    const shotRecipe =
+      photoRecipe && backdrop ? { ...photoRecipe, portrait: { ...photoRecipe.portrait, blur: 0 } } : photoRecipe;
+    const recipe = captureMode === 'raw' || !shotRecipe || !isActive(shotRecipe) ? null : shotRecipe;
     const presetId = recipe && beauty.on ? effectivePreset(beauty, premiumBeauty)?.id : undefined;
     const processed =
       captureMode === 'enhance' ||
@@ -395,7 +400,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       captureMode === 'superres' ||
       captureMode === 'spotlight' ||
       !!look ||
-      !!recipe;
+      !!recipe ||
+      !!backdrop;
     if (processed && processing) {
       setToast({ text: friendlyMessage('BUSY'), tone: 'danger' });
       return;
@@ -416,6 +422,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           ...(captureMode === 'spotlight' ? { points: flattenPoints(spotPoints) } : {}),
           ...(look ? { look: look.look, lookStrength: look.strength } : {}),
           ...(recipe ? { beautyRecipe: recipe, ...(presetId ? { beautyPreset: presetId } : {}) } : {}),
+          ...(backdrop ? { backdrop } : {}),
           // Free-plan photos carry the user's chosen watermark (signature style by default).
           watermark: settings.watermark,
           // The prop worn in the preview goes into the photo itself.
@@ -467,6 +474,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     settings.mirrorFrontCamera,
     settings.watermark,
     photoRecipe,
+    portraitControls.depthBlur,
     beauty,
     premiumBeauty,
     worn,

@@ -1,4 +1,6 @@
+import { isBackdropChoice, type BackdropChoice } from '../backdrops/catalog';
 import { isBeautyAdjust } from '../beauty/camera';
+import { isSkinToneChoice, type SkinToneChoice } from '../skintones/catalog';
 import type { BeautyAdjust, BeautyRecipe } from '../beauty/recipe';
 import type { PropPlacement } from './placement';
 
@@ -100,6 +102,10 @@ export interface EditDocument {
   frame: { id: string; zoom: number; x: number; y: number } | null;
   /** A beauty filter: the preset, its sliders, and the recipe they resolve to (what the engine applies). */
   beauty: { preset: string; adjust: BeautyAdjust; recipe: BeautyRecipe } | null;
+  /** A backdrop: a new background behind the person. */
+  backdrop: BackdropChoice | null;
+  /** A Skin Tone shade for the person's skin. */
+  skinTone: SkinToneChoice | null;
 }
 
 export const EMPTY_DOCUMENT: EditDocument = {
@@ -124,6 +130,8 @@ export const EMPTY_DOCUMENT: EditDocument = {
   props: [],
   frame: null,
   beauty: null,
+  backdrop: null,
+  skinTone: null,
 };
 
 const isNum = (v: unknown, min: number, max: number): v is number =>
@@ -155,6 +163,8 @@ export function isEditDocument(v: unknown): v is EditDocument {
     // Added later (older saved edits have none: see withDefaults).
     (d.portrait === undefined || d.portrait === null || isPortraitAdvanced(d.portrait)) &&
     (d.beauty === undefined || d.beauty === null || isBeautyChoice(d.beauty)) &&
+    (d.backdrop === undefined || d.backdrop === null || isBackdropChoice(d.backdrop)) &&
+    (d.skinTone === undefined || d.skinTone === null || isSkinToneChoice(d.skinTone)) &&
     Array.isArray(d.props) &&
     d.props.length <= 12
   );

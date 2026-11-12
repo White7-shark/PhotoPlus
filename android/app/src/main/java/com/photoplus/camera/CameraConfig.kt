@@ -118,9 +118,11 @@ data class CaptureOptions(
   val beautyRecipe: com.photoplus.beauty.BeautyRecipe? = null,
   /** The preset's id, kept with the photo so it can be re-applied. */
   val beautyPreset: String? = null,
+  /** The backdrop behind the person (Spotlight uses Signature), or null. */
+  val backdrop: com.photoplus.studio.BackdropChoice? = null,
 ) {
   val beautyRecipeActive: Boolean get() = beautyRecipe?.active == true
-  val beautyActive: Boolean get() = beautyRecipeActive || beautyRetouch > 0f || beauty.any
+  val beautyActive: Boolean get() = beautyRecipeActive || beautyRetouch > 0f || beauty.any || backdrop?.active == true
 
   /** RAW stays untouched; every other capture with a look or beauty is decoded and processed. */
   val needsProcessing: Boolean get() = mode != CaptureMode.RAW && (mode.processed || look != null || beautyActive)
@@ -158,6 +160,7 @@ data class CaptureOptions(
         beauty = beautyTuning(map["beauty"] as? Map<*, *>),
         beautyRecipe = com.photoplus.beauty.BeautyRecipe.fromMap(map["beautyRecipe"] as? Map<*, *>),
         beautyPreset = (map["beautyPreset"] as? String)?.takeIf { it.length in 1..64 },
+        backdrop = com.photoplus.studio.BackdropChoice.fromMap(map["backdrop"] as? Map<*, *>),
         watermark = runCatching {
           @Suppress("UNCHECKED_CAST")
           com.photoplus.edit.WatermarkSpec.fromMap(map["watermark"] as? Map<String, Any?>)

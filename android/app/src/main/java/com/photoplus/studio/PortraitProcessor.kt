@@ -99,6 +99,8 @@ data class PortraitReport(
   val depthFromPhoto: Boolean = false,
   /** Faces given precise adjustments (0 when none were asked for). */
   val facesAdjusted: Int = 0,
+  /** Skin Tone: true when it was applied, false when no face could be measured, null when not asked for. */
+  val skinToneApplied: Boolean? = null,
 )
 
 /**
@@ -188,22 +190,38 @@ class PortraitProcessor {
     bitmap: Bitmap,
     rotation: Int,
     points: List<Pair<Float, Float>>,
-    recipe: com.photoplus.beauty.BeautyRecipe,
+    recipe: com.photoplus.beauty.BeautyRecipe?,
     token: Long,
+    backdrop: BackdropChoice? = null,
+    skinTone: SkinToneChoice? = null,
   ): PortraitReport {
-    val masks = buildMasks(bitmap, rotation, points, wantDepth = recipe.blur > 0f)
+    val design = backdrop?.takeIf { it.active }
+    val shade = skinTone?.takeIf { it.active }
+    val wantDepth = (recipe?.blur ?: 0f) > 0f || design?.design?.usesDepth == true
+    val masks = buildMasks(bitmap, rotation, points, wantDepth)
     try {
       val (pts, detailed) = FaceLandmarks.pack(masks.landmarks.take(MAX_FACES))
       val out = FloatArray(NativeEngine.BEAUTY_REPORT_SIZE)
-      NativeEngine.nativeBeauty(bitmap, masks.subject, masks.faces, masks.protect, masks.depth, pts, detailed, recipe.toArray(), token, out)
+      // Skin colour first, so the retouch and grade work on the new shade.
+      val toned = shade?.let {
+        NativeEngine.nativeSkinTone(bitmap, masks.subject, masks.faces, masks.protect, it.shade.r, it.shade.g, it.shade.b, it.shade.glow, it.strength, token)
+      }
+      if (recipe != null && recipe.active) {
+        NativeEngine.nativeBeauty(bitmap, masks.subject, masks.faces, masks.protect, masks.depth, pts, detailed, recipe.toArray(), token, out)
+      }
+      // The backdrop goes on last, over the finished person (same masks: the models run once).
+      if (design != null) {
+        NativeEngine.nativeBackdrop(bitmap, masks.subject, masks.depth, design.design.engineId, design.strength, BACKDROP_SEED, token)
+      }
       return PortraitReport(
         subjectCoverage = out[1],
         skinCoverage = out[2],
         spots = out[5].toInt(),
         people = masks.people,
         source = masks.source,
-        depthFromPhoto = masks.depth != null && recipe.blur > 0f,
+        depthFromPhoto = masks.depth != null && wantDepth,
         facesAdjusted = out[6].toInt(),
+        skinToneApplied = toned,
       )
     } finally {
       masks.subject.recycle()
@@ -526,6 +544,8 @@ class PortraitProcessor {
     /** A detected face's landmarks, normalised to the [w] x [h] image it was found in (contours, else approximated). */
     fun landmarksOf(face: Face, w: Float, h: Float): FaceLandmarks? = FaceShape.of(face).landmarks(w, h)
     private const val ANALYSIS_EDGE = 1024
+    /** Fixed, so a backdrop's lights and canvas look the same in the preview and the saved photo. */
+    const val BACKDROP_SEED = 7
     private const val ML_TIMEOUT_S = 10L
     private const val SMALL_FACE_EDGE = 720
     private const val MAX_CROP_ZOOM = 4f

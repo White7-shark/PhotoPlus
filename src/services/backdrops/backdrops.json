@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "backdrops": [
+    { "id": "signature", "name": "Signature", "tier": "free", "description": "A fast lens's soft depth, the person carrying the frame" },
+    { "id": "soft_studio", "name": "Soft Studio", "tier": "free", "description": "A creamy, calm studio wash" },
+    { "id": "stage", "name": "Stage", "tier": "free", "description": "A black stage, light falling off the shoulders" },
+    { "id": "noir", "name": "Noir", "tier": "premium", "description": "Stage light in dramatic black and white" },
+    { "id": "porcelain", "name": "Porcelain", "tier": "premium", "description": "A bright, high-key white studio" },
+    { "id": "canvas", "name": "Canvas", "tier": "premium", "description": "A hand-painted portrait backdrop" },
+    { "id": "golden_hour", "name": "Golden Hour", "tier": "premium", "description": "Low sun, warm haze and a golden rim of light" },
+    { "id": "city_lights", "name": "City Lights", "tier": "premium", "description": "Night falls; the city melts into bokeh" },
+    { "id": "neon", "name": "Neon", "tier": "premium", "description": "Magenta and cyan glow with matching edge lights" },
+    { "id": "color_pop", "name": "Colour Pop", "tier": "premium", "description": "You in colour, the world in black and white" },
+    { "id": "velocity", "name": "Velocity", "tier": "premium", "description": "A zoom burst rushing toward you" },
+    { "id": "swirl", "name": "Swirl", "tier": "premium", "description": "The swirling bokeh of a vintage portrait lens" },
+    { "id": "aurora", "name": "Aurora", "tier": "premium", "description": "Ribbons of northern light" },
+    { "id": "dream", "name": "Dream", "tier": "premium", "description": "Pastel haze and a soft bloom" }
+  ]
+}

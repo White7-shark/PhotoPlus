@@ -23,6 +23,8 @@ export const FEATURES = {
   clarity: f('camera.clarity', 'Clarity: sharper, cleaner single photos', 'camera', 'free'),
   spotlight: f('camera.spotlight', 'Spotlight portraits & Glow skin retouch', 'camera', 'free'),
   beautyFilters: f('camera.beauty', 'Beauty mode: Natural Glow & Soft Radiance, live in the camera', 'camera', 'free'),
+  backdrops: f('editing.backdrops', 'Backdrops: Signature, Soft Studio & Stage backgrounds', 'editing', 'free'),
+  skinTones: f('editing.skinTones', 'Skin Tone: Ivory, Honey, Caramel & Espresso', 'editing', 'free'),
   glide: f('camera.glide', 'Glide: 7-second pro video, steady and sharp, with Spotlight & Glow', 'camera', 'free'),
   shareTo: f('library.share', 'Share to other apps', 'editing', 'free'),
   cropRotate: f('editing.cropRotate', 'Crop and rotate', 'editing', 'free'),
@@ -50,6 +52,18 @@ export const FEATURES = {
   lightingShadows: f('replication.lighting', 'Advanced lighting & shadow effects', 'replication', 'premium'),
   advancedRetouchGrade: f('editing.advancedRetouchGrade', 'Advanced retouching & colour grading', 'editing', 'premium'),
   beautyPremium: f('camera.beautyPremium', 'The full beauty collection: 11 premium filters', 'camera', 'premium'),
+  backdropsPremium: f(
+    'editing.backdropsPremium',
+    'The full Backdrops collection: 11 premium designs',
+    'editing',
+    'premium',
+  ),
+  skinTonesPremium: f(
+    'editing.skinTonesPremium',
+    'Every Skin Tone shade: 9 more, Porcelain Rose to Ebony Glow',
+    'editing',
+    'premium',
+  ),
   advancedPortrait: f(
     'editing.advancedPortrait',
     'Advanced portrait: precise face, light and background controls',
