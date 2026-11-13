@@ -16,6 +16,15 @@ import {
   type CameraBeauty,
 } from '../../beauty/camera';
 import type { PortraitControls } from '../../beauty/recipe';
+import type { PoseDef } from '../../pose/library';
+import {
+  DEFAULT_POSE_ASSISTANT,
+  isGridStyle,
+  isMyPoses,
+  isPoseAssistantSettings,
+  type GridStyle,
+  type PoseAssistantSettings,
+} from '../../pose/settings';
 
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type ExportFormat = 'jpeg' | 'png' | 'webp';
@@ -26,6 +35,12 @@ export interface AppSettings {
   haptics: boolean;
   reduceMotion: 'system' | 'on' | 'off';
   cameraGrid: boolean;
+  /** Which composition grid the camera shows. */
+  cameraGridStyle: GridStyle;
+  /** The pose assistant: level, face guide, chosen pose, guided and automatic capture. */
+  poseAssistant: PoseAssistantSettings;
+  /** Poses taken from the user's own photos (Premium). */
+  myPoses: PoseDef[];
   defaultExportFormat: ExportFormat;
   defaultExportQuality: number;
   /** Longest edge for editing previews/exports; 0 = choose by device tier. */
@@ -59,6 +74,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   haptics: true,
   reduceMotion: 'system',
   cameraGrid: true,
+  cameraGridStyle: 'thirds',
+  poseAssistant: DEFAULT_POSE_ASSISTANT,
+  myPoses: [],
   defaultExportFormat: 'jpeg',
   defaultExportQuality: 92,
   processingMaxDimension: 0,
@@ -89,6 +107,9 @@ const VALIDATORS: Validators = {
   haptics: isBool,
   reduceMotion: oneOf('system', 'on', 'off'),
   cameraGrid: isBool,
+  cameraGridStyle: isGridStyle,
+  poseAssistant: isPoseAssistantSettings,
+  myPoses: isMyPoses,
   defaultExportFormat: oneOf('jpeg', 'png', 'webp'),
   defaultExportQuality: (v): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 60 && v <= 100,
   processingMaxDimension: (v): v is number => v === 0 || v === 2048 || v === 4096 || v === 8192,

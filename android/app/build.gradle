@@ -120,6 +120,7 @@ android {
     androidResources {
         // The depth model is memory-mapped straight from the APK.
         noCompress.add("tflite")
+        noCompress.add("task") // MediaPipe model bundles are memory-mapped too
     }
 
     testOptions {
@@ -176,6 +177,13 @@ dependencies {
     implementation("com.google.ai.edge.litert:litert:2.3.2")
     // GPU accelerator for on-device models (OpenCL/OpenGL); models fall back to the CPU if it can't run.
     implementation("com.google.ai.edge.litert:litert-gpu:2.3.2")
+    // Pose assistant: MediaPipe's pose landmarker (33 body landmarks with
+    // visibility and presence, on-device, offline). The language-model
+    // runtime it pulls in is used only by its image embedder, never by pose
+    // detection, so it is left out (it would add ~22 MB per ABI).
+    implementation("com.google.mediapipe:tasks-vision:1.2.3") {
+        exclude group: "com.google.ai.edge.litertlm", module: "litertlm-android"
+    }
     // Rewarded ads (free plan: four ads unlock one watermark-free photo) and consent.
     implementation("com.google.android.gms:play-services-ads:25.5.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")
@@ -193,6 +201,8 @@ dependencies {
     }
 }
 
+// On-device models are fetched at build time, never stored in the repository.
+//
 // Spotlight depth model: Depth Anything V2 Small (Apache-2.0), LiteRT build
 // with 8-bit weights. Fetched once at a pinned revision, verified against its
 // published SHA-256 and cached outside the build directory; it is packaged
@@ -201,7 +211,8 @@ dependencies {
 // the engine's built-in ground-plane depth estimate.
 import java.security.MessageDigest
 
-abstract class FetchDepthModel extends DefaultTask {
+abstract class FetchModel extends DefaultTask {
+    @Input abstract Property<String> getLabel()
     @Input abstract Property<String> getUrl()
     @Input abstract Property<String> getSha256()
     @Input abstract Property<String> getAssetName()
@@ -224,15 +235,15 @@ abstract class FetchDepthModel extends DefaultTask {
         if (!cache.exists() || digest(cache) != sha256.get()) {
             cache.parentFile.mkdirs()
             def part = new File(cache.path + ".part")
-            logger.lifecycle("Downloading the Spotlight depth model…")
+            logger.lifecycle("Downloading the ${label.get()}…")
             URI.create(url.get()).toURL().withInputStream { i -> part.withOutputStream { o -> o << i } }
             def actual = digest(part)
             if (actual != sha256.get()) {
                 part.delete()
-                throw new GradleException("Depth model checksum mismatch (got $actual)")
+                throw new GradleException("${label.get()} checksum mismatch (got $actual)")
             }
             cache.delete()
-            if (!part.renameTo(cache)) throw new GradleException("Could not store the depth model in ${cache.parent}")
+            if (!part.renameTo(cache)) throw new GradleException("Could not store the ${label.get()} in ${cache.parent}")
         }
         def out = outputDir.get().file(assetName.get()).asFile
         out.parentFile.mkdirs()
@@ -241,7 +252,8 @@ abstract class FetchDepthModel extends DefaultTask {
 }
 
 def depthModelSha = "f74509422e4a9270a354b249a9193abdd4903354be63701262238a7f4b869611"
-def fetchDepthModel = tasks.register("fetchDepthModel", FetchDepthModel) {
+def fetchDepthModel = tasks.register("fetchDepthModel", FetchModel) {
+    label = "Spotlight depth model"
     url = "https://huggingface.co/litert-community/depth-anything-v2-small/resolve/" +
           "178427e448dbf4da93b1e7b1b2abc103ad329bd6/tflite/depth_anything_v2_small_wi8_afp32.tflite"
     sha256 = depthModelSha
@@ -254,6 +266,34 @@ if (providers.gradleProperty("photoplus.depthModel").getOrElse("true").toBoolean
     androidComponents {
         onVariants(selector().all()) { variant ->
             variant.sources.assets?.addGeneratedSourceDirectory(fetchDepthModel, { it.outputDir })
+        }
+    }
+}
+
+// Pose assistant models: MediaPipe pose landmarker (Apache-2.0), version 1,
+// pinned by SHA-256. "Lite" runs on the live camera; "full" reads poses from
+// the user's photos (more accurate, run once per photo). Each bundles a person
+// detector and the 33-landmark model. Offline builds can pass
+// -Pphotoplus.poseModels=false: the pose assistant then reports that it is
+// unavailable and the free grids and level still work.
+def poseModels = [
+    [name: "lite", sha: "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a"],
+    [name: "full", sha: "5134a3aad27a58b93da0088d431f366da362b44e3ccfbe3462b3827a839011b1"],
+]
+def fetchPoseModels = poseModels.collect { m ->
+    tasks.register("fetchPoseModel${m.name.capitalize()}", FetchModel) {
+        label = "pose model (${m.name})"
+        url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${m.name}/float16/1/pose_landmarker_${m.name}.task"
+        sha256 = m.sha
+        assetName = "pose_landmarker_${m.name}.task" // PoseEstimator.LIVE_MODEL / PHOTO_MODEL
+        cacheFile = new File(gradle.gradleUserHomeDir, "caches/photoplus/pose-${m.name}-${m.sha.take(16)}.task")
+        outputDir = layout.buildDirectory.dir("generated/poseModel${m.name.capitalize()}")
+    }
+}
+if (providers.gradleProperty("photoplus.poseModels").getOrElse("true").toBoolean()) {
+    androidComponents {
+        onVariants(selector().all()) { variant ->
+            fetchPoseModels.each { t -> variant.sources.assets?.addGeneratedSourceDirectory(t, { it.outputDir }) }
         }
     }
 }

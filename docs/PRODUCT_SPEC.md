@@ -88,6 +88,7 @@ Free users can access:
 - Backdrops: Signature (the camera's Spotlight default), Soft Studio and Stage, in the editor
 - Skin Tone: four shades (Ivory, Honey, Caramel, Espresso) for the skin of the face and body, in the editor
 - Auto Light on single shots: dark rooms brightened and cleaned (night still looks like night), harsh light balanced, Natural Flash (the flash's detail with the room's own light) and Selfie Light (the screen lights the face)
+- Photo assistant basics, offline: composition grids (thirds, golden, centre, diagonals), a level indicator, face positioning, six simple pose demonstrations with tips, and photography tips
 
 **Free users cannot unlock, download for use, or apply photoshoot packs.** They may browse the marketplace to discover what Photo Plus offers; unlocking a pack requires an active Premium entitlement.
 
@@ -97,7 +98,7 @@ Premium users receive:
 - All free features
 - Advanced camera and editing tools (where supported by the device)
 - Advanced background removal and replacement
-- Pose guidance and pose matching
+- Pose guidance and pose matching, offline: the full library of 25 poses, a pose taken from any photo the user picks, a live silhouette and alignment arrows, a match score, camera-distance and body-position advice in plain words, guided capture, and optional automatic capture once the pose and framing hold
 - Photoshoot simulation and replication
 - Advanced lighting and shadow effects
 - Advanced retouching and color grading

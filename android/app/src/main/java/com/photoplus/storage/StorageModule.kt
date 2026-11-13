@@ -110,6 +110,7 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
   override fun pickImage(area: String, promise: Promise) {
     val target = when (area) {
       "looks" -> paths.looks
+      "poses" -> paths.poses
       else -> paths.imports
     }
     val activity = reactApplicationContext.currentActivity as? ComponentActivity

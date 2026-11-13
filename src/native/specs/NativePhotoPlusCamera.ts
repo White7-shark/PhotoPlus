@@ -34,6 +34,16 @@ export interface Spec extends TurboModule {
   setFocusPeaking(enabled: boolean, color: number, threshold: number): void;
   /** Props in the camera: live face positions arrive as PhotoPlusCameraFaces events. */
   setFaceTracking(enabled: boolean): void;
+  /**
+   * Pose assistant: null turns it off. Otherwise { enabled?, reference?: { landmarks (33 × [x, y, z,
+   * visibility, presence]), aspect }, mirrorReference, framing, strictness }; the live pose (and its
+   * match with the reference) arrives as PhotoPlusPose events, PhotoPlusPoseState says whether it runs.
+   */
+  setPoseGuide(config: Object | null): void;
+  /** The level: PhotoPlusLevel events ({ roll, pitch, orientation } in degrees) while enabled. */
+  setLevel(enabled: boolean): void;
+  /** The pose in a photo (content:// or path): { valid, aspect, landmarks (165 numbers), shot, unit }. */
+  analyzePosePhoto(uri: string): Promise<Object>;
   /** Applies manual controls; resolves with the values actually applied (clamped). */
   setManual(settings: Object): Promise<Object>;
   resetManual(): void;

@@ -59,7 +59,12 @@ import { getPermissionService, type PermissionStatus } from '../../services/perm
 import { useAppStore } from '../../state/store';
 import { ThemeProvider, useTheme } from '../../theme';
 import { Chip, LastShot, ModeSwitcher, ShutterButton, uprightStyle, ZoomPills } from './CameraControls';
-import { Countdown, FocusRing, GridOverlay, ShutterFlash, StatusPill } from './Overlays';
+import { Countdown, FocusRing, ShutterFlash, StatusPill } from './Overlays';
+import { PoseCoach } from './pose/PoseCoach';
+import { CompositionGrid, LevelLine, PoseOverlay } from './pose/PoseOverlay';
+import { PoseSheet } from './pose/PoseSheet';
+import { usePoseAssistant } from './pose/usePoseAssistant';
+import { getStorageService } from '../../services/storage/StorageService';
 import { captureRecipe } from '../../services/processing/recipe';
 import { ProPanel } from './ProPanel';
 import { StopDial } from './StopDial';
@@ -578,6 +583,28 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     setCountdown(null);
   }, []);
 
+  // ---- Photo assistant: grids, level, face position, poses (free demos;
+  // Premium: the full library, poses from your photos, live matching,
+  // guided and automatic capture).
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const posePremium = can('poseGuidance').allowed;
+  const pose = usePoseAssistant({
+    camera,
+    settings: settings.poseAssistant,
+    myPoses: settings.myPoses,
+    premium: posePremium,
+    active: active && state === 'ready' && !glideMode,
+    busy: capturing || processing !== null || countdown !== null,
+    onAutoCapture: () => void takePhoto(),
+  });
+  const [tipIndex, setTipIndex] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTipIndex(i => i + 1), 6000);
+    return () => clearInterval(t);
+  }, []);
+  const assistantOn =
+    settings.cameraGrid || settings.poseAssistant.level || settings.poseAssistant.faceGuide || pose.reference !== null;
+
   const onShutter = useCallback(() => {
     if (countdown !== null) {
       stopCountdown();
@@ -696,6 +723,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const resolutions = resolutionsFor(caps, aspect);
   const currentResolution = resolutions.find(r => r.id === resolution) ?? resolutions[0];
   const ready = state === 'ready';
+
   const md = session.metadata;
 
   const recovering = session.recoveringAttempt !== null && state !== 'error';
@@ -723,7 +751,24 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             }
           }}
         />
-        {settings.cameraGrid ? <GridOverlay /> : null}
+        {settings.cameraGrid ? (
+          <CompositionGrid style={settings.cameraGridStyle} width={frameWidth} height={frameHeight} />
+        ) : null}
+        {!glideMode && settings.poseAssistant.level && pose.level ? (
+          <LevelLine level={pose.level} width={frameWidth} height={frameHeight} />
+        ) : null}
+        {!glideMode && (pose.reference || settings.poseAssistant.faceGuide) ? (
+          <PoseOverlay
+            width={frameWidth}
+            height={frameHeight}
+            live={pose.live}
+            reference={pose.reference}
+            showReference={pose.matching}
+            alignment={pose.matching}
+            faceGuide={settings.poseAssistant.faceGuide}
+            faceOk={pose.face.ok}
+          />
+        ) : null}
         {effectiveMode === 'spotlight' ? (
           <SpotlightMarkers points={spotPoints} frame={{ width: frameWidth, height: frameHeight }} />
         ) : null}
@@ -838,13 +883,25 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
               testID="vibe-chip"
             />
           ) : null}
-          <Chip
-            icon="grid"
-            active={settings.cameraGrid}
-            accessibilityLabel={settings.cameraGrid ? 'Hide grid' : 'Show grid'}
-            onPress={() => updateSetting('cameraGrid', !settings.cameraGrid).catch(() => undefined)}
-            rotation={rotation}
-          />
+          {!glideMode ? (
+            <Chip
+              icon="figure"
+              active={assistantOn || assistantOpen}
+              tint={pose.reference ? theme.colors.premium : undefined}
+              accessibilityLabel="Photo assistant: grid, level, face position and poses"
+              onPress={() => setAssistantOpen(true)}
+              rotation={rotation}
+              testID="assistant-chip"
+            />
+          ) : (
+            <Chip
+              icon="grid"
+              active={settings.cameraGrid}
+              accessibilityLabel={settings.cameraGrid ? 'Hide grid' : 'Show grid'}
+              onPress={() => updateSetting('cameraGrid', !settings.cameraGrid).catch(() => undefined)}
+              rotation={rotation}
+            />
+          )}
           {evValues.length ? (
             <Chip
               icon="exposure"
@@ -881,6 +938,19 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       </View>
 
       {/* Auto Light: what the camera is doing about the light (tap for a short explanation). */}
+      {/* Photo assistant: what to change next (or the pose to copy, and the face guide). */}
+      {!glideMode && ready ? (
+        <View style={[styles.coach, { top: insets.top + 100 }]} pointerEvents="box-none">
+          <PoseCoach
+            assistant={pose}
+            settings={settings.poseAssistant}
+            tipIndex={tipIndex}
+            onUpgrade={() => setPremiumFor('poseGuidance')}
+            rotation={rotation}
+          />
+        </View>
+      ) : null}
+
       {lightBadge && !menu ? (
         <View style={[styles.lightBadge, { top: insets.top + 54 }]} pointerEvents="box-none">
           <Chip
@@ -1164,6 +1234,30 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         }}
         onClose={() => setVibeOpen(false)}
       />
+      <PoseSheet
+        visible={assistantOpen}
+        onClose={() => setAssistantOpen(false)}
+        premium={posePremium}
+        grid={settings.cameraGrid ? settings.cameraGridStyle : 'off'}
+        onGrid={g => {
+          if (g === 'off') {
+            updateSetting('cameraGrid', false).catch(() => undefined);
+          } else {
+            updateSetting('cameraGrid', true).catch(() => undefined);
+            updateSetting('cameraGridStyle', g).catch(() => undefined);
+          }
+        }}
+        settings={settings.poseAssistant}
+        onSettings={s => updateSetting('poseAssistant', s).catch(() => undefined)}
+        myPoses={settings.myPoses}
+        onMyPoses={p => updateSetting('myPoses', p).catch(() => undefined)}
+        pickPhoto={() => getStorageService().pickImage('poses')}
+        analyzePhoto={uri => camera.analyzePosePhoto(uri)}
+        onPremium={() => {
+          setAssistantOpen(false);
+          setPremiumFor('poseGuidance');
+        }}
+      />
       <PremiumSheet feature={premiumFor} onClose={() => setPremiumFor(null)} />
     </View>
   );
@@ -1184,6 +1278,7 @@ const styles = StyleSheet.create({
   },
   topGroup: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   lightBadge: { position: 'absolute', left: 12 },
+  coach: { position: 'absolute', left: 12, right: 12 },
   menu: {
     position: 'absolute',
     right: 12,

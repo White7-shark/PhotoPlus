@@ -132,6 +132,9 @@ object CameraController {
   private var peakingEnabled = false
   /** Live face tracking for props worn in the camera. */
   private var facesEnabled = false
+  /** The pose assistant (live pose, matching, guidance) while the camera shows it. */
+  private var poseEnabled = false
+  private var levelEnabled = false
   /** The live beauty effect's GL processor while bound, and whether the GPU let it down this session. */
   private var beautyProcessor: BeautyProcessor? = null
   private var beautyFailed = false
@@ -215,6 +218,9 @@ object CameraController {
     cancelRetry()
     stopOrientationTracking()
     stopMetering()
+    // Sensors and the pose model rest while the camera is away (the choices stay).
+    com.photoplus.pose.LevelSensor.stop()
+    com.photoplus.pose.PoseAnalyzer.worker.execute { com.photoplus.pose.PoseAnalyzer.stop() }
     camera = null
     imageCapture = null
     analysis?.clearAnalyzer()
@@ -389,11 +395,24 @@ object CameraController {
         BeautyAnalyzer.mirrored = lensFacing == "front"
         BeautyAnalyzer.reset()
         LiveBeautyState.reset()
-        val analyzer: ImageAnalysis.Analyzer? = when {
+        val base: ImageAnalysis.Analyzer? = when {
           liveBeauty -> BeautyAnalyzer
           facesEnabled -> FaceTracker
           peakingEnabled -> FocusPeakingAnalyzer
           else -> null
+        }
+        // The pose assistant shares the stream: it copies each frame it
+        // takes, then the other analyser has it (and closes it).
+        com.photoplus.pose.PoseAnalyzer.mirrored = lensFacing == "front"
+        com.photoplus.pose.PoseAnalyzer.reset()
+        val withPose = poseEnabled && video == null && com.photoplus.pose.PoseAnalyzer.running
+        val analyzer: ImageAnalysis.Analyzer? = when {
+          !withPose -> base
+          base == null -> com.photoplus.pose.PoseAnalyzer
+          else -> ImageAnalysis.Analyzer { image ->
+            com.photoplus.pose.PoseAnalyzer.capture(image)
+            base.analyze(image)
+          }
         }
         val peaking = analyzer?.let { buildAnalysis(aspect, view.display?.rotation ?: Surface.ROTATION_0, it).also { a -> groupBuilder.addUseCase(a) } }
         // What-you-see-is-what-you-get: crop every output to the chosen ratio
@@ -411,6 +430,7 @@ object CameraController {
         observeCamera(cam, lifecycle, sessionOwner)
         applyManualControls()
         startMetering()
+        resumeAssistant(sessionOwner)
         callbacks?.onReady(lensFacing)
       } catch (e: Exception) {
         Log.w(TAG, "Unable to bind camera", e)
@@ -790,6 +810,63 @@ object CameraController {
     peakingEnabled = enabled
     if (!enabled) FocusPeakingAnalyzer.clearOverlay()
     owner?.let { bindUseCases(it) }
+  }
+
+  /**
+   * The pose assistant: the person's pose arrives as PhotoPlusPose events
+   * while [enabled]; with a [guide] reference it is compared with it. The
+   * landmarker loads off the main thread; PhotoPlusPoseState reports whether
+   * it runs.
+   */
+  fun setPoseGuide(enabled: Boolean, guide: com.photoplus.pose.PoseGuide?) {
+    val pose = com.photoplus.pose.PoseAnalyzer
+    pose.guide = guide
+    if (enabled == poseEnabled) return
+    poseEnabled = enabled
+    val context = appContext ?: return
+    if (enabled) {
+      pose.sink = com.photoplus.pose.PoseAnalyzer.Sink { payload -> events?.emit("PhotoPlusPose", payload) }
+      pose.worker.execute {
+        val ok = pose.start(context)
+        main.post {
+          events?.emit("PhotoPlusPoseState", mapOf("running" to ok, "reason" to if (ok) null else "unavailable"))
+          if (poseEnabled) owner?.let { bindUseCases(it) }
+        }
+      }
+    } else {
+      pose.sink = null
+      pose.worker.execute { pose.stop() }
+      owner?.let { bindUseCases(it) }
+    }
+  }
+
+  /** Back from the background: the level and the pose model as they were. */
+  private fun resumeAssistant(sessionOwner: Any) {
+    val context = appContext ?: return
+    if (levelEnabled) com.photoplus.pose.LevelSensor.start(context)
+    val pose = com.photoplus.pose.PoseAnalyzer
+    if (poseEnabled && !pose.running) {
+      pose.worker.execute {
+        val ok = pose.start(context)
+        main.post { if (ok && poseEnabled && owner === sessionOwner) bindUseCases(sessionOwner) }
+      }
+    }
+  }
+
+  /** The level: PhotoPlusLevel events (roll, pitch in degrees) while enabled. */
+  fun setLevel(enabled: Boolean): Boolean {
+    levelEnabled = enabled
+    val level = com.photoplus.pose.LevelSensor
+    val context = appContext ?: return false
+    if (!enabled) {
+      level.stop()
+      level.sink = null
+      return true
+    }
+    level.sink = com.photoplus.pose.LevelSensor.Sink { l ->
+      events?.emit("PhotoPlusLevel", mapOf("roll" to l.roll, "pitch" to l.pitch, "orientation" to l.orientation))
+    }
+    return level.start(context)
   }
 
   /** Props in the camera: faces are reported as PhotoPlusCameraFaces events while enabled. */

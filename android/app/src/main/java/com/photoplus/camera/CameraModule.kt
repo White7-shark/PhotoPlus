@@ -64,6 +64,31 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
     main.post { CameraController.setFaceTracking(enabled) }
   }
 
+  override fun setPoseGuide(config: ReadableMap?) {
+    val map = config?.toHashMap()
+    val enabled = map != null && (map["enabled"] as? Boolean ?: true)
+    val guide = com.photoplus.pose.PoseGuide.fromMap(map)
+    main.post { CameraController.setPoseGuide(enabled, guide) }
+  }
+
+  override fun setLevel(enabled: Boolean) {
+    main.post { CameraController.setLevel(enabled) }
+  }
+
+  override fun analyzePosePhoto(uri: String, promise: Promise) {
+    if (!com.photoplus.engine.NativeEngine.ensureLoaded() || !com.photoplus.pose.PoseEstimator.available(reactApplicationContext)) {
+      promise.reject("UNAVAILABLE", "Pose detection is not available on this build")
+      return
+    }
+    com.photoplus.pose.PoseAnalyzer.worker.execute {
+      try {
+        promise.resolve(com.photoplus.pose.PoseEstimator.analyzePhoto(reactApplicationContext, uri).toWritableMap())
+      } catch (e: Exception) {
+        promise.reject("POSE_FAILED", e.message ?: "The photo could not be read")
+      }
+    }
+  }
+
   /**
    * The beauty recipe shown live on the preview (null = none). Changing it
    * never rebinds the camera; turning live beauty on is a session setting

@@ -14,6 +14,8 @@ import {
   type SessionConfig,
   type VideoOptions,
   type VideoRecording,
+  type PoseGuideConfig,
+  type PosePhotoResult,
 } from './types';
 
 export * from './types';
@@ -158,6 +160,25 @@ export class CameraService {
   /** Props in the camera: live faces arrive as `faces` events while enabled. */
   setFaceTracking(enabled: boolean): void {
     this.native.setFaceTracking(enabled);
+  }
+
+  /**
+   * Pose assistant: null turns it off; otherwise the live pose arrives as
+   * `pose` events, compared with `reference` when given.
+   */
+  setPoseGuide(guide: PoseGuideConfig | null): void {
+    this.native.setPoseGuide?.(guide);
+  }
+
+  /** The level: `level` events while enabled. */
+  setLevel(enabled: boolean): void {
+    this.native.setLevel?.(enabled);
+  }
+
+  /** The pose in a photo, read on the device. */
+  async analyzePosePhoto(uri: string): Promise<PosePhotoResult> {
+    if (!this.native.analyzePosePhoto) throw new CameraError('Pose detection is not available', 'UNAVAILABLE');
+    return (await this.native.analyzePosePhoto(uri)) as unknown as PosePhotoResult;
   }
 
   async setManual(settings: ManualSettings): Promise<ManualSettings> {

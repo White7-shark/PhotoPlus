@@ -231,7 +231,36 @@ export const CameraEvents = {
   beautyLive: 'PhotoPlusBeautyLive',
   /** Auto Light: the scene's light, when it changes. */
   light: 'PhotoPlusCameraLight',
+  /** Pose assistant: the live pose (and its match), about 15 times a second. */
+  pose: 'PhotoPlusPose',
+  /** Pose assistant: whether it runs on this phone. */
+  poseState: 'PhotoPlusPoseState',
+  /** The level: the phone's tilt, about 10 times a second. */
+  level: 'PhotoPlusLevel',
 } as const;
+
+/** What the pose assistant should do (setPoseGuide). */
+export interface PoseGuideConfig {
+  /** The pose to match; omitted = follow the person only (face position, simple guides). */
+  reference?: { landmarks: number[][]; aspect: number };
+  /** Match the reference's mirror image (the other hand). */
+  mirrorReference?: boolean;
+  /** Compare position and size in the frame too. */
+  framing?: boolean;
+  /** 0..1 */
+  strictness?: number;
+}
+
+/** The pose found in a photo. */
+export interface PosePhotoResult {
+  valid: boolean;
+  aspect: number;
+  /** 165 numbers: 33 × x, y, z, visibility, presence. */
+  landmarks?: number[];
+  shot?: string | null;
+  /** A face-on shoulder width as a share of the photo's height. */
+  unit?: number;
+}
 
 /** Auto Light's plan for the scene in view. */
 export type LightPlanId = 'normal' | 'moonlight' | 'flash' | 'brightBalance';
@@ -285,6 +314,9 @@ export interface CameraEventPayloads {
   [CameraEvents.recording]: { recording: boolean; maxMs: number };
   [CameraEvents.beautyLive]: { requested: boolean; live: boolean; reason: string | null };
   [CameraEvents.light]: LightStatus;
+  [CameraEvents.pose]: import('../pose/guidance').LivePose;
+  [CameraEvents.poseState]: { running: boolean; reason: string | null };
+  [CameraEvents.level]: import('../pose/guidance').LevelReading;
 }
 
 export type CameraEventName = keyof CameraEventPayloads;

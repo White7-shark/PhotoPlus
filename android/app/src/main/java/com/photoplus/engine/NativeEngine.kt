@@ -121,6 +121,30 @@ object NativeEngine {
    */
   external fun nativeFlashFuse(ambient: Bitmap, flash: Bitmap, dst: Bitmap, fill: Float, strength: Float, token: Long, reportOut: FloatArray?)
 
+  /** Pose assistant: a tracker per camera session (see pp_pose_tracker). */
+  external fun nativePoseTrackerCreate(): Long
+  external fun nativePoseTrackerDestroy(tracker: Long)
+  /**
+   * One live frame: [live] (33 × x, y, z, visibility, presence; null = nobody)
+   * mirrored for a selfie preview, steadied, compared with [reference] (same
+   * layout, optional) and described. [out] receives PoseStep.OUT floats.
+   */
+  external fun nativePoseStep(
+    tracker: Long,
+    live: FloatArray?,
+    liveAspect: Float,
+    timeMs: Long,
+    mirrorLive: Boolean,
+    reference: FloatArray?,
+    referenceAspect: Float,
+    mirrorReference: Boolean,
+    framing: Boolean,
+    strictness: Float,
+    out: FloatArray,
+  )
+  /** A photo's pose: [out] (5) = valid, shot, scale, anchor x, anchor y. */
+  external fun nativePoseDescribe(points: FloatArray, aspect: Float, out: FloatArray)
+
   /** [noise, blur px, sharpness, mean luma, highlights clipped, shadows clipped] */
   external fun nativeAnalyzeQuality(bitmap: Bitmap): FloatArray
 

@@ -1255,6 +1255,137 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoSteadyM
   if (st != PP_OK) throwStatus(env, st);
 }
 
+// ---- Pose assistant ------------------------------------------------------
+
+namespace {
+constexpr jsize kPoseFloats = PP_POSE_LANDMARKS * 5;
+// nativePoseStep output layout (PoseStep.kt reads the same indices).
+constexpr jsize kPoseOut = 45 + PP_POSE_LANDMARKS * 3;
+
+bool readPoseArray(JNIEnv* env, jfloatArray arr, jfloat aspect, pp_pose& out) {
+  out = pp_pose{};
+  if (arr == nullptr) return true;  // nobody
+  if (env->GetArrayLength(arr) < kPoseFloats || !std::isfinite(aspect) || aspect <= 0.05f || aspect >= 20.0f) return false;
+  jfloat v[kPoseFloats];
+  env->GetFloatArrayRegion(arr, 0, kPoseFloats, v);
+  for (int i = 0; i < PP_POSE_LANDMARKS; ++i) {
+    out.points[i] = pp_pose_point{v[i * 5], v[i * 5 + 1], v[i * 5 + 2], v[i * 5 + 3], v[i * 5 + 4]};
+  }
+  out.aspect = aspect;
+  out.valid = 1;
+  return true;
+}
+}  // namespace
+
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativePoseTrackerCreate(JNIEnv* env, jobject) {
+  pp_pose_tracker* t = nullptr;
+  const pp_status st = pp_pose_tracker_create(&t);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(t);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePoseTrackerDestroy(JNIEnv*, jobject, jlong tracker) {
+  pp_pose_tracker_destroy(reinterpret_cast<pp_pose_tracker*>(tracker));
+}
+
+// One live frame: the detected pose (null = nobody), mirrored for a selfie
+// preview, steadied by the tracker, compared with the reference (optional,
+// mirrored on request) and described. Writes the layout PoseStep.kt reads.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePoseStep(
+    JNIEnv* env, jobject, jlong tracker, jfloatArray live, jfloat liveAspect, jlong timeMs, jboolean mirrorLive,
+    jfloatArray reference, jfloat referenceAspect, jboolean mirrorReference, jboolean framing, jfloat strictness,
+    jfloatArray out) {
+  if (tracker == 0 || out == nullptr || env->GetArrayLength(out) < kPoseOut) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad pose arguments");
+    return;
+  }
+  pp_pose now{}, ref{};
+  if (!readPoseArray(env, live, liveAspect, now) || !readPoseArray(env, reference, referenceAspect, ref)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad pose landmarks");
+    return;
+  }
+  if (now.valid && mirrorLive) {
+    pp_pose m{};
+    pp_pose_mirror(&now, &m);
+    now = m;
+  }
+  if (ref.valid && mirrorReference) {
+    pp_pose m{};
+    pp_pose_mirror(&ref, &m);
+    ref = m;
+  }
+  pp_pose steady{};
+  float still = 0;
+  pp_status st = pp_pose_tracker_update(reinterpret_cast<pp_pose_tracker*>(tracker), now.valid ? &now : nullptr,
+                                        static_cast<int64_t>(timeMs), &steady, &still);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  pp_pose_description d{};
+  if (steady.valid) pp_pose_describe(&steady, &d);
+  pp_pose_match_result m{};
+  if (ref.valid) {
+    pp_pose_match_params mp{};
+    mp.framing = framing ? 1 : 0;
+    mp.strictness = strictness;
+    st = pp_pose_match(&ref, &steady, &mp, &m);
+    if (st != PP_OK) {
+      throwStatus(env, st);
+      return;
+    }
+  }
+  std::vector<jfloat> o(static_cast<size_t>(kPoseOut), 0.0f);
+  o[0] = d.valid ? 1.0f : 0.0f;
+  o[1] = still;
+  o[2] = m.score, o[3] = m.coverage, o[4] = m.pose_score, o[5] = m.framing_score;
+  o[6] = m.offset_x, o[7] = m.offset_y, o[8] = m.size_ratio;
+  o[9] = static_cast<jfloat>(d.shot);
+  o[10] = ref.valid ? 1.0f : 0.0f;
+  o[11] = static_cast<jfloat>(m.advice_count);
+  for (int i = 0; i < 4; ++i) {
+    o[static_cast<size_t>(12 + i * 3)] = static_cast<jfloat>(m.advice[i].part);
+    o[static_cast<size_t>(13 + i * 3)] = static_cast<jfloat>(m.advice[i].action);
+    o[static_cast<size_t>(14 + i * 3)] = m.advice[i].amount;
+  }
+  o[24] = m.left_hand_score, o[25] = m.right_hand_score;
+  for (int b = 0; b < PP_POSE_BONES; ++b) o[static_cast<size_t>(26 + b)] = ref.valid ? m.bone_score[b] : -1.0f;
+  o[38] = d.anchor_x, o[39] = d.anchor_y, o[40] = d.scale, o[41] = d.head_roll;
+  o[42] = steady.points[0].x, o[43] = steady.points[0].y, o[44] = d.reliability[0];
+  for (int i = 0; i < PP_POSE_LANDMARKS; ++i) {
+    o[static_cast<size_t>(45 + i * 3)] = steady.points[i].x;
+    o[static_cast<size_t>(46 + i * 3)] = steady.points[i].y;
+    o[static_cast<size_t>(47 + i * 3)] = d.valid ? d.reliability[i] : 0.0f;
+  }
+  env->SetFloatArrayRegion(out, 0, kPoseOut, o.data());
+}
+
+// A pose from a photo: `out` (5) = valid, shot, scale (shoulder width /
+// image height), anchor x, anchor y.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePoseDescribe(JNIEnv* env, jobject, jfloatArray points,
+                                                                                jfloat aspect, jfloatArray out) {
+  if (points == nullptr || out == nullptr || env->GetArrayLength(out) < 5) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad pose arguments");
+    return;
+  }
+  pp_pose p{};
+  if (!readPoseArray(env, points, aspect, p)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad pose landmarks");
+    return;
+  }
+  pp_pose_description d{};
+  const pp_status st = pp_pose_describe(&p, &d);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat v[5] = {d.valid ? 1.0f : 0.0f, static_cast<jfloat>(d.shot), d.scale, d.anchor_x, d.anchor_y};
+  env->SetFloatArrayRegion(out, 0, 5, v);
+}
+
 // The room remembered behind the person, for one clip (see pp_video_room).
 JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoRoomCreate(JNIEnv* env, jobject) {
   pp_video_room* room = nullptr;

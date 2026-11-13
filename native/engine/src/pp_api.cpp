@@ -16,6 +16,7 @@
 #include "photoplus/backdrop.hpp"
 #include "photoplus/skintone.hpp"
 #include "photoplus/light.hpp"
+#include "photoplus/pose.hpp"
 #include "photoplus/beauty.hpp"
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
@@ -700,6 +701,136 @@ pp_status pp_video_consensus_mask(const pp_image* previous, const pp_image* curr
     const photoplus::Error e = photoplus::video::consensusMask(previous ? &previous->buffer : nullptr, current->buffer,
                                                                 next ? &next->buffer : nullptr, out->buffer);
     return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
+// ---- Pose assistant
+
+namespace {
+bool poseFromC(const pp_pose& in, photoplus::pose::Pose& out) {
+  out = photoplus::pose::Pose{};
+  out.valid = in.valid != 0;
+  out.aspect = std::isfinite(in.aspect) ? in.aspect : 0.0f;
+  if (out.valid && !(out.aspect > 0.05f && out.aspect < 20.0f)) return false;
+  for (int i = 0; i < PP_POSE_LANDMARKS; ++i) {
+    const pp_pose_point& p = in.points[i];
+    auto& q = out.points[static_cast<size_t>(i)];
+    q.x = p.x, q.y = p.y, q.z = p.z, q.visibility = p.visibility, q.presence = p.presence, q.weight = 1.0f;
+  }
+  return true;
+}
+void poseToC(const photoplus::pose::Pose& in, pp_pose& out) {
+  out = pp_pose{};
+  out.valid = in.valid ? 1 : 0;
+  out.aspect = in.aspect;
+  for (int i = 0; i < PP_POSE_LANDMARKS; ++i) {
+    const auto& p = in.points[static_cast<size_t>(i)];
+    // A held landmark's lowered trust is carried in its visibility alone
+    // (its presence still says it is in the picture), chosen so that the
+    // reliability read back is the held one: smoothstep(0.35, 0.7, v') =
+    // w * smoothstep(0.35, 0.7, v).
+    const float w = std::clamp(p.weight, 0.0f, 1.0f);
+    float visibility = p.visibility;
+    if (w < 1.0f) {
+      const float t = std::clamp((p.visibility - 0.35f) / 0.35f, 0.0f, 1.0f);
+      const float y = w * t * t * (3.0f - 2.0f * t);
+      const float back = 0.5f - std::sin(std::asin(std::clamp(1.0f - 2.0f * y, -1.0f, 1.0f)) / 3.0f);
+      visibility = 0.35f + 0.35f * back;
+    }
+    out.points[i] = pp_pose_point{p.x, p.y, p.z, visibility, p.presence};
+  }
+}
+}  // namespace
+
+pp_status pp_pose_mirror(const pp_pose* in, pp_pose* out) {
+  return guarded([&]() -> pp_status {
+    if (in == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::pose::Pose p;
+    if (!poseFromC(*in, p)) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad pose aspect");
+    poseToC(photoplus::pose::mirror(p), *out);
+    return succeed();
+  });
+}
+
+pp_status pp_pose_describe(const pp_pose* pose, pp_pose_description* out) {
+  return guarded([&]() -> pp_status {
+    if (pose == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::pose::Pose p;
+    if (!poseFromC(*pose, p)) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad pose aspect");
+    const auto d = photoplus::pose::describe(p);
+    *out = pp_pose_description{};
+    out->valid = d.valid ? 1 : 0;
+    out->anchor_x = d.anchorX, out->anchor_y = d.anchorY, out->anchor_from_shoulders = d.anchorFromShoulders ? 1 : 0;
+    out->scale = d.scale;
+    for (int i = 0; i < PP_POSE_LANDMARKS; ++i) {
+      out->nx[i] = d.nx[static_cast<size_t>(i)], out->ny[i] = d.ny[static_cast<size_t>(i)];
+      out->reliability[i] = d.reliability[static_cast<size_t>(i)];
+    }
+    for (int b = 0; b < PP_POSE_BONES; ++b) {
+      out->direction[b] = d.direction[static_cast<size_t>(b)], out->bone_reliability[b] = d.boneReliability[static_cast<size_t>(b)];
+    }
+    out->left_elbow_bend = d.leftElbowBend, out->right_elbow_bend = d.rightElbowBend;
+    out->left_knee_bend = d.leftKneeBend, out->right_knee_bend = d.rightKneeBend;
+    out->body_yaw = d.bodyYaw, out->head_yaw = d.headYaw, out->head_roll = d.headRoll;
+    out->body_yaw_reliability = d.bodyYawReliability, out->head_reliability = d.headReliability;
+    out->shot = static_cast<int32_t>(d.shot);
+    out->top = d.top, out->bottom = d.bottom, out->left = d.left, out->right = d.right;
+    return succeed();
+  });
+}
+
+pp_status pp_pose_match(const pp_pose* reference, const pp_pose* live, const pp_pose_match_params* params,
+                        pp_pose_match_result* out) {
+  return guarded([&]() -> pp_status {
+    if (reference == nullptr || live == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::pose::Pose r, l;
+    if (!poseFromC(*reference, r) || !poseFromC(*live, l)) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad pose aspect");
+    photoplus::pose::MatchParams mp;
+    if (params != nullptr) {
+      mp.framing = params->framing != 0;
+      mp.strictness = std::isfinite(params->strictness) ? params->strictness : 0.5f;
+    }
+    const auto m = photoplus::pose::match(r, l, mp);
+    *out = pp_pose_match_result{};
+    out->score = m.score, out->coverage = m.coverage, out->pose_score = m.poseScore, out->framing_score = m.framingScore;
+    for (int b = 0; b < PP_POSE_BONES; ++b) out->bone_score[b] = m.boneScore[static_cast<size_t>(b)];
+    out->left_hand_score = m.leftHandScore, out->right_hand_score = m.rightHandScore;
+    out->offset_x = m.offsetX, out->offset_y = m.offsetY, out->size_ratio = m.sizeRatio;
+    out->advice_count = static_cast<int32_t>(std::min<size_t>(4, m.advice.size()));
+    for (int i = 0; i < out->advice_count; ++i) {
+      const auto& a = m.advice[static_cast<size_t>(i)];
+      out->advice[i] = pp_pose_advice{static_cast<int32_t>(a.part), static_cast<int32_t>(a.action), a.amount};
+    }
+    return succeed();
+  });
+}
+
+struct pp_pose_tracker {
+  photoplus::pose::Tracker tracker;
+};
+
+pp_status pp_pose_tracker_create(pp_pose_tracker** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = new (std::nothrow) pp_pose_tracker();
+    if (*out == nullptr) return fail(PP_ERROR_OUT_OF_MEMORY, "Unable to allocate the tracker");
+    (*out)->tracker.reset();
+    return succeed();
+  });
+}
+
+void pp_pose_tracker_destroy(pp_pose_tracker* tracker) { delete tracker; }
+
+pp_status pp_pose_tracker_update(pp_pose_tracker* tracker, const pp_pose* in, int64_t time_ms, pp_pose* out,
+                                 float* stillness_out) {
+  return guarded([&]() -> pp_status {
+    if (tracker == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::pose::Pose p;
+    if (in != nullptr && !poseFromC(*in, p)) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad pose aspect");
+    const auto steady = tracker->tracker.update(p, time_ms);
+    poseToC(steady, *out);
+    if (stillness_out != nullptr) *stillness_out = tracker->tracker.stillness();
+    return succeed();
   });
 }
 

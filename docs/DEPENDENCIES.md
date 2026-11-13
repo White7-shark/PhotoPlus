@@ -19,7 +19,7 @@
 
 | Item | Version | Latest stable |
 |---|---|---|
-| Gradle | **9.8.2** | 9.8.2 |
+| Gradle | **9.9.1** | 9.9.1 |
 | Android Gradle Plugin | **9.5.0** (built-in Kotlin + new DSL enabled) | 9.5.0 |
 | compileSdk | **37, minor API level 2** (Android 37.2) | 37.2 |
 | targetSdk | **37** | 37 |
@@ -42,6 +42,8 @@
 | ML Kit subject segmentation (Play services) | **16.0.0-beta1** | 16.0.0-beta1 (Google ships it only as beta) |
 | LiteRT (on-device inference, 16 KB page aligned) | **2.3.2** | 2.3.2 |
 | LiteRT GPU accelerator (`litert-gpu`, Phase 4; +3.2 MB on arm64) | **2.3.2** | 2.3.2 |
+| MediaPipe Tasks Vision (pose landmarker; `litertlm-android` excluded, only `ImageEmbedder` uses it) | **1.2.3** | 1.2.3 |
+| MediaPipe Pose Landmarker Lite and Full models (Apache-2.0; float16 version 1, fetched and SHA-256-verified at build time) | **v1** | — |
 | Depth Anything V2 Small, LiteRT 8-bit weights (Apache-2.0; fetched and SHA-256-verified at build time, revision `178427e`) | **2024 release** | — |
 | JUnit (Jupiter, via BOM) | **6.1.3** | 6.1.3 (migrated from JUnit 4, which is maintenance-only) |
 | org.json (tests) | **20260814** | 20260814 |
@@ -115,7 +117,7 @@ Debug builds always use Google's test ad unit. Release IDs come from the Gradle 
 
 `patches/@react-native+gradle-plugin+0.88.1.patch` is applied automatically by `postinstall`. It brings React Native's own Gradle plugin up to the toolchain above:
 
-- Kotlin 2.2.0 → 2.4.21 and AGP 9.2.1 → 9.5.0 in its version catalog. Gradle 9.8.2 embeds Kotlin 2.4, whose metadata the plugin's Kotlin 2.2 compiler can't read.
+- Kotlin 2.2.0 → 2.4.21 and AGP 9.2.1 → 9.5.0 in its version catalog. Gradle 9.8 and later embed Kotlin 2.4, whose metadata the plugin's Kotlin 2.2 compiler can't read.
 - JVM target 11 → 17, which AGP 9.5 requires.
 - Kotlin API level 2.0 → 2.2 (2.0 is deprecated in Kotlin 2.4).
 - `project.properties[...]` → `providers.gradleProperty(...)`, because `Project.getProperties` is deprecated and fails in Gradle 10.
@@ -135,6 +137,8 @@ Those need fixing upstream. They don't affect the app, and we'll pick up fixes a
 ## On-device vision choice
 
 ML Kit was chosen over MediaPipe Tasks Vision 1.2.2 for Spotlight. MediaPipe 1.2.2 was released two days before this work with a reworked API that could not be exercised on a device here, and it adds ~35 MB of native code plus a transitive ~20 MB LLM runtime. ML Kit's APIs are stable. The two segmentation artifacts are Google's latest releases, which Google only publishes as betas, and both have robust fallbacks (the bundled person model, then the engine's own tap cut-out). MediaPipe is used only by the preview script (`scripts/make-spotlight-assets.py`), never by the app.
+
+The pose assistant does use MediaPipe Tasks Vision (1.2.3, now the latest stable release). ML Kit's pose detection is still beta, and MediaPipe reports each landmark's *presence* as well as its visibility, which the assistant needs in order to tell a limb outside the photo from one that is covered. The transitive LLM runtime is excluded. Spotlight still uses ML Kit.
 
 ## Experimental API opt-in
 

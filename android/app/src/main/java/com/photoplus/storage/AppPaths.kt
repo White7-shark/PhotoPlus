@@ -20,6 +20,8 @@ class AppPaths(context: Context) {
   val imports = File(files, "imports")
   /** Reference photos for looks ("Vibe Match"). */
   val looks = File(files, "looks")
+  /** Reference photos for the pose assistant (Premium). */
+  val poses = File(files, "poses")
   /** Props people made from their own photos (Premium). */
   val customProps = File(files, "props")
   val packs = File(files, "packs")
@@ -35,6 +37,7 @@ class AppPaths(context: Context) {
     "exports" to exports,
     "imports" to imports,
     "looks" to looks,
+    "poses" to poses,
     "customProps" to customProps,
     "packs" to packs,
     "models" to models,

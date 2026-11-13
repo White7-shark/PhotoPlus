@@ -10,7 +10,7 @@ export interface Spec extends TurboModule {
   fileExists(path: string): Promise<boolean>;
   /**
    * Opens the system photo picker (no storage permission needed) and copies
-   * the chosen photo into app storage. `area` is 'imports' or 'looks'.
+   * the chosen photo into app storage. `area` is 'imports', 'looks' or 'poses'.
    * Resolves with the new path, or null if the user cancelled.
    */
   pickImage(area: string): Promise<string | null>;

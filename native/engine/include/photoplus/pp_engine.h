@@ -665,6 +665,112 @@ typedef struct pp_flash_fuse_params {
 pp_status pp_flash_fuse(const pp_image* ambient, const pp_image* flash, pp_image* out, const pp_flash_fuse_params* params,
                         const pp_cancel_token* token, float* report_out);
 
+/* ---- Pose assistant: body landmarks, pose matching and guidance ---------
+ * Landmarks are MediaPipe's 33 (BlazePose topology), normalised image
+ * coordinates of an upright image, the person's own left/right. */
+#define PP_POSE_LANDMARKS 33
+#define PP_POSE_BONES 12
+
+typedef struct pp_pose_point {
+  float x, y, z;       /* normalised; z relative depth (x's scale, smaller = nearer) */
+  float visibility;    /* 0..1 not hidden */
+  float presence;      /* 0..1 in the picture */
+} pp_pose_point;
+
+typedef struct pp_pose {
+  pp_pose_point points[PP_POSE_LANDMARKS];
+  float aspect;        /* image width / height */
+  int32_t valid;       /* 0: nobody */
+  float reserved[2];
+} pp_pose;
+
+/* The pose as seen in a mirror: x flipped, left and right swapped. */
+pp_status pp_pose_mirror(const pp_pose* in, pp_pose* out);
+
+typedef enum pp_pose_bone {
+  PP_POSE_LEFT_UPPER_ARM = 0, PP_POSE_RIGHT_UPPER_ARM, PP_POSE_LEFT_FOREARM, PP_POSE_RIGHT_FOREARM,
+  PP_POSE_LEFT_THIGH, PP_POSE_RIGHT_THIGH, PP_POSE_LEFT_SHIN, PP_POSE_RIGHT_SHIN,
+  PP_POSE_TORSO, PP_POSE_SHOULDER_LINE, PP_POSE_HIP_LINE, PP_POSE_HEAD_TILT
+} pp_pose_bone;
+
+typedef enum pp_pose_shot {
+  PP_POSE_SHOT_FACE = 0, PP_POSE_SHOT_HEAD_AND_SHOULDERS, PP_POSE_SHOT_HALF_BODY, PP_POSE_SHOT_THREE_QUARTER,
+  PP_POSE_SHOT_FULL_BODY
+} pp_pose_shot;
+
+/* The pose's representation: independent of where the person stands and
+ * how big they are (body units = a face-on shoulder width). */
+typedef struct pp_pose_description {
+  int32_t valid;
+  float anchor_x, anchor_y;     /* shoulder centre (or the face's), normalised */
+  int32_t anchor_from_shoulders;
+  float scale;                  /* shoulder width / image height */
+  float nx[PP_POSE_LANDMARKS], ny[PP_POSE_LANDMARKS];  /* landmarks in body units from the anchor */
+  float reliability[PP_POSE_LANDMARKS];               /* 0..1 */
+  float direction[PP_POSE_BONES];        /* radians in the image plane (0 = right, +pi/2 = down) */
+  float bone_reliability[PP_POSE_BONES];
+  float left_elbow_bend, right_elbow_bend, left_knee_bend, right_knee_bend;  /* radians, 0 = straight */
+  float body_yaw, head_yaw, head_roll;   /* turn (radians), head turn (-1..1), head tilt (radians) */
+  float body_yaw_reliability, head_reliability;
+  int32_t shot;                          /* pp_pose_shot */
+  float top, bottom, left, right;        /* extent of the reliable landmarks */
+  float reserved[4];
+} pp_pose_description;
+
+pp_status pp_pose_describe(const pp_pose* pose, pp_pose_description* out);
+
+typedef enum pp_pose_part {
+  PP_POSE_PART_BODY = 0, PP_POSE_PART_HEAD, PP_POSE_PART_LEFT_HAND, PP_POSE_PART_RIGHT_HAND, PP_POSE_PART_LEFT_ELBOW,
+  PP_POSE_PART_RIGHT_ELBOW, PP_POSE_PART_LEFT_FOOT, PP_POSE_PART_RIGHT_FOOT, PP_POSE_PART_LEFT_KNEE,
+  PP_POSE_PART_RIGHT_KNEE, PP_POSE_PART_SHOULDERS, PP_POSE_PART_CAMERA
+} pp_pose_part;
+
+/* Directions are the image's (left = toward the image's left edge); "in"
+ * and "out" are toward and away from the body's centre line. */
+typedef enum pp_pose_action {
+  PP_POSE_NO_PERSON = 0, PP_POSE_SHOW, PP_POSE_CLOSER, PP_POSE_BACK, PP_POSE_MOVE_LEFT, PP_POSE_MOVE_RIGHT,
+  PP_POSE_CAMERA_UP, PP_POSE_CAMERA_DOWN, PP_POSE_TURN_LEFT, PP_POSE_TURN_RIGHT, PP_POSE_UP, PP_POSE_DOWN,
+  PP_POSE_IN, PP_POSE_OUT, PP_POSE_TILT_LEFT, PP_POSE_TILT_RIGHT, PP_POSE_LOOK_LEFT, PP_POSE_LOOK_RIGHT,
+  PP_POSE_LEAN_LEFT, PP_POSE_LEAN_RIGHT, PP_POSE_STRAIGHTEN_UP, PP_POSE_HOLD_STILL, PP_POSE_PERFECT
+} pp_pose_action;
+
+typedef struct pp_pose_advice {
+  int32_t part;    /* pp_pose_part */
+  int32_t action;  /* pp_pose_action */
+  float amount;
+} pp_pose_advice;
+
+typedef struct pp_pose_match_params {
+  int32_t framing;   /* 1: compare position and size in the frame too */
+  float strictness;  /* 0..1 */
+  float reserved[2];
+} pp_pose_match_params;
+
+typedef struct pp_pose_match_result {
+  float score;          /* 0..100 */
+  float coverage;       /* 0..1 share of the reference compared */
+  float pose_score, framing_score;  /* 0..100 */
+  float bone_score[PP_POSE_BONES];  /* 0..1, -1 = not compared */
+  float left_hand_score, right_hand_score;  /* 0..1, -1 = not compared */
+  float offset_x, offset_y;  /* person minus reference position (share of the frame) */
+  float size_ratio;          /* person size / reference size */
+  int32_t advice_count;
+  pp_pose_advice advice[4];  /* most important first */
+  float reserved[4];
+} pp_pose_match_result;
+
+pp_status pp_pose_match(const pp_pose* reference, const pp_pose* live, const pp_pose_match_params* params,
+                        pp_pose_match_result* out);
+
+/* Steadies live poses through brief occlusions (a hidden landmark is held,
+ * trusted less, for up to 0.8 s) and measures stillness. `in` may be NULL
+ * or invalid (nobody in this frame). `stillness_out` (optional): 0..1. */
+typedef struct pp_pose_tracker pp_pose_tracker;
+pp_status pp_pose_tracker_create(pp_pose_tracker** out);
+void pp_pose_tracker_destroy(pp_pose_tracker* tracker);
+pp_status pp_pose_tracker_update(pp_pose_tracker* tracker, const pp_pose* in, int64_t time_ms, pp_pose* out,
+                                 float* stillness_out);
+
 /* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
  * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */
 pp_status pp_subject_mask(const pp_image* image, const float* points, size_t count, const pp_cancel_token* token,
