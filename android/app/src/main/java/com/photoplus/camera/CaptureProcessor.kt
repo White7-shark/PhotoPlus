@@ -79,12 +79,28 @@ class CaptureProcessor(
 
   val busy: Boolean get() = processing.get()
 
-  /** Main thread. */
-  fun capture(capture: ImageCapture, request: CaptureOptions, frontCamera: Boolean, deviceDegrees: Int, listener: Listener) {
-    capture.flashMode = when (request.effectiveFlash) {
-      FlashSetting.ON -> ImageCapture.FLASH_MODE_ON
-      FlashSetting.AUTO -> ImageCapture.FLASH_MODE_AUTO
-      FlashSetting.OFF -> ImageCapture.FLASH_MODE_OFF
+  /**
+   * Main thread. [light] is Auto Light's decision for this shot (null: the
+   * shot as asked): it may turn it into a Moonlight or Bright Balance burst,
+   * add a Natural Flash frame, or light a selfie with the screen.
+   */
+  fun capture(
+    capture: ImageCapture,
+    original: CaptureOptions,
+    frontCamera: Boolean,
+    deviceDegrees: Int,
+    listener: Listener,
+    light: LightDecision? = null,
+  ) {
+    val request = if (light != null) original.copy(mode = light.mode) else original
+    capture.flashMode = when {
+      light?.flash == LightFlash.SCREEN -> screenOrOff(capture)
+      light?.flash == LightFlash.NATURAL -> ImageCapture.FLASH_MODE_OFF // the ambient frames; the flash frame comes last
+      else -> when (request.effectiveFlash) {
+        FlashSetting.ON -> ImageCapture.FLASH_MODE_ON
+        FlashSetting.AUTO -> ImageCapture.FLASH_MODE_AUTO
+        FlashSetting.OFF -> ImageCapture.FLASH_MODE_OFF
+      }
     }
     val mirror = frontCamera && request.mirrorFront
     val upright = request.previewPoints.map { (x, y) -> MaskGeometry.previewToUpright(x, y, deviceDegrees, frontCamera) }
@@ -92,9 +108,17 @@ class CaptureProcessor(
     val propFrame = PropFrame(deviceDegrees, frontCamera && !request.mirrorFront)
     when {
       request.mode == CaptureMode.RAW -> captureRaw(capture, request, mirror, listener)
-      request.needsProcessing -> captureProcessed(capture, request, mirror, upright, propFrame, listener)
+      request.needsProcessing || light != null -> captureProcessed(capture, request, mirror, upright, propFrame, listener, light)
       else -> captureStandard(capture, request, mirror, propFrame, listener)
     }
+  }
+
+  private fun screenOrOff(capture: ImageCapture): Int = try {
+    capture.flashMode = ImageCapture.FLASH_MODE_SCREEN
+    ImageCapture.FLASH_MODE_SCREEN
+  } catch (e: Exception) {
+    android.util.Log.w("PhotoPlusCapture", "screen light unavailable", e)
+    ImageCapture.FLASH_MODE_OFF
   }
 
   fun cancel(captureId: String) {
@@ -194,8 +218,16 @@ class CaptureProcessor(
     /** Spotlight taps in the upright photo. */
     val points: List<Pair<Float, Float>>,
     val propFrame: PropFrame,
+    val light: LightDecision?,
+    val capture: ImageCapture,
   ) {
     val frames = ArrayList<Bitmap>(plan.frames)
+    /** Natural Flash: the flash frame, taken after the ambient burst. */
+    var flashFrame: Bitmap? = null
+    var flashRequested = false
+    val wantsFlashFrame: Boolean get() = light?.flash == LightFlash.NATURAL
+    /** Frames to wait for: the burst, plus the flash frame. */
+    val expected: Int get() = plan.frames + if (wantsFlashFrame) 1 else 0
     var received = 0
     var failed = false
     var bufferSize: Pair<Int, Int>? = null
@@ -205,6 +237,8 @@ class CaptureProcessor(
     fun release() {
       frames.forEach { it.recycle() }
       frames.clear()
+      flashFrame?.recycle()
+      flashFrame = null
     }
   }
 
@@ -215,6 +249,7 @@ class CaptureProcessor(
     points: List<Pair<Float, Float>>,
     propFrame: PropFrame,
     listener: Listener,
+    light: LightDecision?,
   ) {
     if (!NativeEngine.ensureLoaded()) {
       listener.onFailure(request.captureId, "ENGINE_UNAVAILABLE", "The processing engine is unavailable on this device")
@@ -227,8 +262,10 @@ class CaptureProcessor(
     }
     // A look on a plain photo is still decoded: size it like Clarity so it is
     // bounded and can step down on low memory (never a full-sensor decode).
-    val plan = CapturePolicy.plan(if (request.mode.processed) request.mode else CaptureMode.ENHANCE, tier)
-    val burst = Burst(request, plan, mirror, SystemClock.elapsedRealtime(), points, propFrame)
+    val base = CapturePolicy.plan(if (request.mode.processed) request.mode else CaptureMode.ENHANCE, tier)
+    // Auto Light sets the burst length (a longer one is decoded smaller).
+    val plan = if (light != null) AutoLight.burstPlan(base, light.frames) else base
+    val burst = Burst(request, plan, mirror, SystemClock.elapsedRealtime(), points, propFrame, light, capture)
     cancelledBursts.remove(request.captureId)
     listener.onProgress(request.captureId, "capturing", 0.0)
     // Queue every frame at once; CameraX pipelines them back to back, which
@@ -290,16 +327,65 @@ class CaptureProcessor(
   private fun frameDone(burst: Burst, listener: Listener) {
     burst.received++
     if (!burst.failed) {
-      listener.onProgress(burst.request.captureId, "capturing", burst.received.toDouble() / burst.plan.frames)
+      listener.onProgress(burst.request.captureId, "capturing", burst.received.toDouble() / burst.expected)
     }
     if (burst.received < burst.plan.frames) return
     if (burst.failed) return
+    if (burst.wantsFlashFrame && !burst.flashRequested && burst.frames.isNotEmpty()) {
+      burst.flashRequested = true
+      main.post { takeFlashFrame(burst, listener) }
+      return
+    }
+    if (burst.flashRequested && burst.received < burst.expected) return
     if (burst.frames.isEmpty()) {
       failBurst(burst, listener, "CAPTURE_FAILED", "No frames were captured")
       return
     }
     listener.onProgress(burst.request.captureId, "processing", 0.0)
     process(burst, listener)
+  }
+
+  /**
+   * Natural Flash: one frame with the flash, after the ambient burst (main
+   * thread). Without it the photo is still the Moonlight merge.
+   */
+  private fun takeFlashFrame(burst: Burst, listener: Listener) {
+    val capture = burst.capture
+    try {
+      capture.flashMode = ImageCapture.FLASH_MODE_ON
+    } catch (e: Exception) {
+      captureExecutor.execute { frameDone(burst, listener) }
+      return
+    }
+    capture.takePicture(captureExecutor, object : ImageCapture.OnImageCapturedCallback() {
+      override fun onCaptureSuccess(image: ImageProxy) {
+        try {
+          if (!burst.failed && !cancelledBursts.contains(burst.request.captureId)) acceptFlashFrame(burst, image)
+        } catch (e: Exception) {
+          android.util.Log.w("PhotoPlusCapture", "flash frame unusable", e)
+        } catch (e: OutOfMemoryError) {
+          android.util.Log.w("PhotoPlusCapture", "no memory for the flash frame", e)
+        } finally {
+          image.close()
+          main.post { restoreFlash(capture) }
+        }
+        frameDone(burst, listener)
+      }
+      override fun onError(exception: ImageCaptureException) {
+        main.post { restoreFlash(capture) }
+        frameDone(burst, listener) // the ambient merge alone
+      }
+    })
+  }
+
+  private fun restoreFlash(capture: ImageCapture) {
+    try { capture.flashMode = ImageCapture.FLASH_MODE_OFF } catch (_: Exception) {}
+  }
+
+  private fun acceptFlashFrame(burst: Burst, image: ImageProxy) {
+    if (burst.bufferSize != (image.width to image.height)) return // a different size cannot be lined up
+    val buffer = image.planes.firstOrNull()?.buffer ?: return
+    burst.flashFrame = decodeFrame(buffer, burst.geometry ?: return)
   }
 
   private fun failBurst(burst: Burst, listener: Listener, code: String, message: String) {
@@ -409,6 +495,9 @@ class CaptureProcessor(
       } else {
         work = first
       }
+      // Auto Light: the flash frame fused in (Natural Flash), then tone for the
+      // light the scene had, before any beauty or look (they see good light).
+      val lightReport = burst.light?.takeIf { enhance }?.let { applyLight(it, burst, frames.size, work, token, listener) }
       val reference = frames[report[2].toInt().coerceIn(0, frames.lastIndex)]
       val (ow, oh) = CaptureGeometry.displaySize(reference.width, reference.height, geometry.remainingRotation)
       if (!enhance) {
@@ -458,6 +547,7 @@ class CaptureProcessor(
         "originalWidth" to ow,
         "originalHeight" to oh,
         "look" to (request.look != null),
+        "light" to lightReport,
         "report" to if (enhance) mapOf(
           "framesInput" to report[0].toInt(),
           "framesUsed" to report[1].toInt(),
@@ -520,6 +610,37 @@ class CaptureProcessor(
    * the mark).
    */
   /** Props go into the photo itself, before the watermark; a failure keeps the photo as captured. */
+  private fun applyLight(light: LightDecision, burst: Burst, frameCount: Int, work: Bitmap, token: Long, listener: Listener): Map<String, Any?> {
+    listener.onProgress(burst.request.captureId, "lighting", 0.5)
+    var fuse: FloatArray? = null
+    val flash = burst.flashFrame
+    if (light.flash == LightFlash.NATURAL && flash != null) {
+      // After a low-memory retry the burst is smaller than the flash frame.
+      val matched = if (flash.width == work.width && flash.height == work.height) flash else flash.scale(work.width, work.height)
+      try {
+        val r = FloatArray(4)
+        NativeEngine.nativeFlashFuse(work, matched, work, NATURAL_FLASH_FILL, 1f, token, r)
+        fuse = r
+      } finally {
+        if (matched !== flash) matched.recycle()
+      }
+    }
+    val tone = light.tone?.let { t -> FloatArray(6).also { r -> NativeEngine.nativeLightTone(work, t.toParams(), token, r) } }
+    return mapOf(
+      "plan" to light.plan.id,
+      "label" to light.label,
+      "frames" to frameCount,
+      "flash" to when (light.flash) {
+        LightFlash.NONE -> null
+        LightFlash.SCREEN -> "screen"
+        LightFlash.NATURAL -> if (fuse != null) "natural" else null
+      },
+      "flashAligned" to fuse?.let { it[0] > 0.5f },
+      "keyBefore" to tone?.get(0)?.toDouble(),
+      "keyAfter" to tone?.get(1)?.toDouble(),
+    )
+  }
+
   private fun applyProps(file: File, request: CaptureOptions, frame: PropFrame) {
     val art = propArt ?: return
     if (request.props.isEmpty()) return
@@ -603,6 +724,8 @@ class CaptureProcessor(
     private const val RAW_PAIR_TIMEOUT_MS = 15_000L
     private const val OUTPUT_QUALITY = 95
     private const val ORIGINAL_QUALITY = 90
+    /** How much of the flash's own light Natural Flash keeps (the rest is the room's light). */
+    private const val NATURAL_FLASH_FILL = 0.3f
 
     private val COPIED_TAGS = listOf(
       ExifInterface.TAG_MAKE,

@@ -49,7 +49,8 @@ import {
   type CapturePreset,
   type UiMode,
 } from '../../services/camera/model';
-import { CameraEvents, type CaptureStage } from '../../services/camera/types';
+import { flashButtonVisible, lightChip, lightShot, lightToast } from '../../services/camera/light';
+import { CameraEvents, type CaptureStage, type LightStatus } from '../../services/camera/types';
 import type { FeatureKey } from '../../services/entitlements/features';
 import { friendlyMessage } from '../../services/errors';
 import { saveVibeLook, type VibeLook } from '../../services/looks/LookService';
@@ -251,6 +252,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     },
     [camera],
   );
+  // ---- Auto Light: the scene's light, read natively (dark rooms, night, harsh light).
+  const [light, setLight] = useState<LightStatus | null>(null);
+  useEffect(() => {
+    const sub = camera.on(CameraEvents.light, setLight);
+    return () => sub.remove();
+  }, [camera]);
+  const autoLightOn = settings.autoLight;
+  const lightBadge = glideMode ? null : lightChip(light, autoLightOn);
+
   useEffect(() => {
     const sub = camera.on(CameraEvents.beautyLive, e =>
       setLiveNote(
@@ -394,7 +404,17 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       photoRecipe && backdrop ? { ...photoRecipe, portrait: { ...photoRecipe.portrait, blur: 0 } } : photoRecipe;
     const recipe = captureMode === 'raw' || !shotRecipe || !isActive(shotRecipe) ? null : shotRecipe;
     const presetId = recipe && beauty.on ? effectivePreset(beauty, premiumBeauty)?.id : undefined;
+    const multiShot = can('multiShot').allowed;
+    const lit = lightShot(light, {
+      mode: captureMode,
+      flash,
+      front: lens === 'front',
+      multiShot,
+      enabled: autoLightOn,
+      tier: caps?.tier,
+    });
     const processed =
+      lit.processed ||
       captureMode === 'enhance' ||
       captureMode === 'night' ||
       captureMode === 'superres' ||
@@ -408,7 +428,11 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     }
     const captureId = camera.newCaptureId();
     if (processed) {
-      setProcessing({ captureId, stage: 'capturing', frames: caps?.capturePlans[captureMode]?.frames ?? 1 });
+      setProcessing({
+        captureId,
+        stage: 'capturing',
+        frames: lit.processed ? lit.frames : (caps?.capturePlans[captureMode]?.frames ?? 1),
+      });
     } else {
       setCapturing(true);
     }
@@ -418,6 +442,8 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           mode: captureMode,
           flash,
           mirrorFront: settings.mirrorFrontCamera,
+          autoLight: autoLightOn,
+          autoLightMultiShot: multiShot,
           ...(processed ? tuning : {}),
           ...(captureMode === 'spotlight' ? { points: flattenPoints(spotPoints) } : {}),
           ...(look ? { look: look.look, lookStrength: look.strength } : {}),
@@ -445,7 +471,9 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       const imageId = await saveRecord(shot, shot.look && look ? { look: look.look, strength: look.strength } : null);
       setLastShot({ path: shot.path, imageId });
       setToast({
-        text: shot.rawPath ? 'Saved with RAW' : `${look ? 'Vibe Match · ' : ''}${modeLabel(shot.mode)} photo saved`,
+        text: shot.rawPath
+          ? 'Saved with RAW'
+          : `${look ? 'Vibe Match · ' : ''}${lightToast(shot.light?.label) ?? `${modeLabel(shot.mode)} photo saved`}`,
         tone: 'success',
       });
     } catch (e) {
@@ -473,6 +501,10 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     flash,
     settings.mirrorFrontCamera,
     settings.watermark,
+    light,
+    lens,
+    autoLightOn,
+    can,
     photoRecipe,
     portraitControls.depthBlur,
     beauty,
@@ -741,13 +773,17 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           rotation={rotation}
         />
         <View style={styles.topGroup}>
-          {caps?.flash !== false && !glideMode ? (
+          {flashButtonVisible(caps?.flash, light, lens === 'front') && !glideMode ? (
             <Chip
               icon={flash === 'off' ? 'flashOff' : 'flash'}
               label={flash === 'auto' ? 'A' : undefined}
               active={flash !== 'off'}
               tint={flash === 'on' ? theme.colors.premium : undefined}
-              accessibilityLabel={`Flash ${flash}. Double tap to change`}
+              accessibilityLabel={
+                lens === 'front'
+                  ? `Selfie Light ${flash}: the screen lights your face. Double tap to change`
+                  : `Flash ${flash}. Double tap to change`
+              }
               onPress={() => setFlash(FLASH_CYCLE[(FLASH_CYCLE.indexOf(flash) + 1) % FLASH_CYCLE.length])}
               rotation={rotation}
             />
@@ -843,6 +879,22 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           ) : null}
         </View>
       </View>
+
+      {/* Auto Light: what the camera is doing about the light (tap for a short explanation). */}
+      {lightBadge && !menu ? (
+        <View style={[styles.lightBadge, { top: insets.top + 54 }]} pointerEvents="box-none">
+          <Chip
+            icon={lightBadge.icon}
+            label={lightBadge.label}
+            active
+            tint={theme.colors.premium}
+            accessibilityLabel={lightBadge.accessibilityLabel}
+            onPress={() => setToast({ text: lightBadge.accessibilityLabel.replace(/^Auto Light: /, ''), tone: 'success' })}
+            rotation={rotation}
+            testID="light-chip"
+          />
+        </View>
+      ) : null}
 
       {/* Pop-down menus */}
       {menu === 'aspect' || menu === 'resolution' ? (
@@ -1131,6 +1183,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   topGroup: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  lightBadge: { position: 'absolute', left: 12 },
   menu: {
     position: 'absolute',
     right: 12,

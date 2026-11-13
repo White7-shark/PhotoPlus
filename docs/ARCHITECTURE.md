@@ -1,4 +1,4 @@
-# Photo Plus — Architecture (Phases 1–7)
+# Photo Plus — Architecture (Phases 1–9)
 
 ```
 ┌──────────────────────────── React Native (TypeScript) ────────────────────────────┐
@@ -260,3 +260,30 @@ PortraitProcessor.applyBeauty(recipe?, backdrop?, skinTone?): one set of masks (
 | `scripts/backdrop-demo.py`, `scripts/backdrop-video-demo.py` | Sheets and clips on real photos and video |
 | `scripts/skintone-demo.py`, `scripts/skintone-video-demo.py` | Sheets, per-region measurements (face, body, hair, clothes, background) and clips |
 
+
+## Auto Light: dark rooms, night and harsh light (Phase 9)
+
+Full report, with the research it is based on: [`PHASE9_LIGHTING_REPORT.md`](PHASE9_LIGHTING_REPORT.md).
+
+```
+live view ── every 0.7 s: PreviewView.getBitmap → 160 px ─┐
+camera exposure (ISO, shutter, aperture, focus) ──────────┼─ pp_light_meter → LightReading
+live beauty analysis (face brightness, when on) ──────────┘        │ LightSteadier (3 readings to change plan)
+                                                                   ├─ "PhotoPlusCameraLight" → Auto Light chip (JS)
+                                                                   ├─ Low Light Boost on/off (Android 15+, hysteresis)
+shutter ─ AutoLight.decide(request, reading, LightContext, tier) ──┘
+   ├─ Normal          the shot as asked
+   ├─ Moonlight       NIGHT burst (frames from the meter, ≤ tier cap) → pp_enhance merge → pp_light_tone (night)
+   ├─ Bright Balance  exposure held back 1–2 stops → burst → merge → pp_light_tone (restores it, opens shadows)
+   ├─ Natural Flash   ambient burst (flash off) → one flash frame → merge → pp_flash_fuse → pp_light_tone
+   └─ Selfie Light    FLASH_MODE_SCREEN (overlay tinted by the meter) → one frame → enhance → pp_light_tone
+```
+
+| Where | What |
+|---|---|
+| `native/engine/src/light/light.cpp` | `meter` (lux from the exposure, plan, burst length, screen-light colour), `tone` (local tone mapping, night look, low-light white balance), `flashFuse` (flash/no-flash fusion) |
+| `android/.../camera/AutoLight.kt` | Plain-Kotlin rules: plan steadying, the capture decision (never overrides flash off or a manual exposure), tier caps, Low Light Boost hysteresis |
+| `CameraController` | Metering loop, screen flash set-up (`PreviewView.setScreenFlashWindow`, `ImageCapture.screenFlash`), Low Light Boost, `prepareLight` / `finishLight` (exposure held back for a burst, then restored) |
+| `CaptureProcessor` | The Natural Flash frame after the ambient burst; fusion and tone after the merge, before beauty and looks |
+| `src/services/camera/light.ts` | The chip, the progress prediction, the flash button on the front camera |
+| `scripts/light-bench-prep.py`, `scripts/light-darkroom-sim.py`, `light_demo` | The bench: real raw bursts, a simulated dark room, flash pairs |

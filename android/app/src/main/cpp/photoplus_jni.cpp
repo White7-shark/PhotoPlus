@@ -633,6 +633,110 @@ JNIEXPORT jboolean JNICALL Java_com_photoplus_engine_NativeEngine_nativeSkinTone
   return hasSkin != 0 ? JNI_TRUE : JNI_FALSE;
 }
 
+// Smart lighting: reads the scene from a small preview frame and the
+// camera's exposure. `input` (7) = ISO, exposure seconds, f-number, front
+// (0/1), has flash (0/1), main face luma (-1 = none), focus diopters
+// (-1 = unknown). `out` (15) = EV100, lux, exposure known, key, highlights,
+// shadows, range (stops), backlit, plan, frames, exposure bias, night,
+// screen-flash R, G, B (0..255).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLightMeter(JNIEnv* env, jobject, jobject preview,
+                                                                               jfloatArray input, jfloatArray out) {
+  constexpr jsize kIn = 7, kOut = 15;
+  if (input == nullptr || out == nullptr || env->GetArrayLength(input) < kIn || env->GetArrayLength(out) < kOut) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad light meter arguments");
+    return;
+  }
+  WrappedBitmap img;
+  if (!img.open(env, preview, false)) return;
+  jfloat v[kIn];
+  env->GetFloatArrayRegion(input, 0, kIn, v);
+  pp_light_meter_input in{};
+  in.iso = v[0];
+  in.exposure_s = v[1];
+  in.f_number = v[2];
+  in.front = v[3] > 0.5f ? 1 : 0;
+  in.has_flash = v[4] > 0.5f ? 1 : 0;
+  in.face_luma = v[5];
+  in.focus_diopters = v[6];
+  pp_light_meter_result m{};
+  const pp_status st = pp_light_meter(img.image, &in, &m);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat values[kOut] = {m.ev100, m.lux, static_cast<jfloat>(m.exposure_known), m.key, m.highlights, m.shadows,
+                               m.range_stops, static_cast<jfloat>(m.backlit), static_cast<jfloat>(m.plan),
+                               static_cast<jfloat>(m.frames), m.exposure_bias, m.night,
+                               static_cast<jfloat>(m.screen_flash[0]), static_cast<jfloat>(m.screen_flash[1]),
+                               static_cast<jfloat>(m.screen_flash[2])};
+  env->SetFloatArrayRegion(out, 0, kOut, values);
+}
+
+// Local tone after a burst merge, in place. `params` (8) = night, shadows
+// (-1 auto), highlights (-1 auto), exposure (stops), detail, white balance,
+// capture bias (EV the frames were held back by, <= 0), strength.
+// `reportOut` (6, optional) = key before, key after, range, shadows,
+// highlights, share clipped.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLightTone(JNIEnv* env, jobject, jobject bitmap,
+                                                                              jfloatArray params, jlong token,
+                                                                              jfloatArray reportOut) {
+  constexpr jsize kParams = 8, kReport = 6;
+  if (params == nullptr || env->GetArrayLength(params) < kParams ||
+      (reportOut != nullptr && env->GetArrayLength(reportOut) < kReport)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad light tone arguments");
+    return;
+  }
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  jfloat v[kParams];
+  env->GetFloatArrayRegion(params, 0, kParams, v);
+  pp_light_tone_params p;
+  pp_light_tone_default_params(&p);
+  p.night = v[0];
+  p.shadows = v[1];
+  p.highlights = v[2];
+  p.exposure = v[3];
+  p.detail = v[4];
+  p.white_balance = v[5];
+  p.capture_bias = v[6];
+  p.strength = v[7];
+  jfloat report[kReport] = {};
+  const pp_status st = pp_light_tone(img.image, &p, reinterpret_cast<const pp_cancel_token*>(token), report);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  if (reportOut != nullptr) env->SetFloatArrayRegion(reportOut, 0, kReport, report);
+}
+
+// Natural Flash: `ambient` (no flash, merged) and `flash` fused into `dst`
+// (all the same size; `dst` may be `ambient`). `reportOut` (4, optional) =
+// aligned (0/1), flash gain, flash-shadow share, hot-spot share.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeFlashFuse(JNIEnv* env, jobject, jobject ambient,
+                                                                              jobject flash, jobject dst, jfloat fill,
+                                                                              jfloat strength, jlong token,
+                                                                              jfloatArray reportOut) {
+  constexpr jsize kReport = 4;
+  if (reportOut != nullptr && env->GetArrayLength(reportOut) < kReport) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Flash report needs 4 slots");
+    return;
+  }
+  const bool inPlace = env->IsSameObject(ambient, dst);
+  WrappedBitmap amb, fl, out;
+  if (!amb.open(env, ambient, false) || !fl.open(env, flash, false) || (!inPlace && !out.open(env, dst, false))) return;
+  pp_flash_fuse_params p{};
+  p.fill = fill;
+  p.strength = strength;
+  jfloat report[kReport] = {};
+  const pp_status st = pp_flash_fuse(amb.image, fl.image, inPlace ? amb.image : out.image, &p,
+                                     reinterpret_cast<const pp_cancel_token*>(token), report);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  if (reportOut != nullptr) env->SetFloatArrayRegion(reportOut, 0, kReport, report);
+}
+
 // What the beauty grade measures about a frame (the live preview's scene):
 // `out` (9) = has skin, skin Y, Cb, Cr, spread, subject x, subject width,
 // light angle, skin luma spread.

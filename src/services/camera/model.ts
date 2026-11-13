@@ -537,6 +537,8 @@ export function progressLabel(stage: CaptureStage, frames: number): string {
       return frames > 1 ? 'Hold still…' : 'Capturing…';
     case 'processing':
       return frames > 1 ? 'Blending your shots…' : 'Perfecting your photo…';
+    case 'lighting':
+      return 'Balancing the light…';
     case 'styling':
       return 'Adding the spotlight…';
     case 'saving':

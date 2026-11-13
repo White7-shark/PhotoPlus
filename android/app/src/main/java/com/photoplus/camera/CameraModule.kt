@@ -92,14 +92,36 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
         return@post
       }
       CameraController.setFlash(request.flash)
-      processor.capture(capture, request, CameraController.activeLensFacing == "front", CameraController.deviceTurnDegrees(), object : CaptureProcessor.Listener {
-        override fun onShutter(captureId: String) = emit(EVENT_SHUTTER, mapOf("captureId" to captureId))
-        override fun onProgress(captureId: String, stage: String, progress: Double) =
-          emit(EVENT_PROGRESS, mapOf("captureId" to captureId, "stage" to stage, "progress" to progress))
-        override fun onSuccess(captureId: String, result: Map<String, Any?>) =
-          promise.resolve((result + ("captureId" to captureId)).toWritableMap())
-        override fun onFailure(captureId: String, code: String, message: String) = promise.reject(code, message)
-      })
+      // Auto Light: what the scene needs (a burst, the flash or screen light, a held-back exposure).
+      val light = CameraController.lightContext()?.let { AutoLight.decide(request, CameraController.lightReading, it, tier) }
+      // The user's exposure and Low Light Boost come back once the frames are taken.
+      val restored = java.util.concurrent.atomic.AtomicBoolean(light == null)
+      fun restoreLight() {
+        if (restored.compareAndSet(false, true)) main.post { CameraController.finishLight() }
+      }
+      CameraController.prepareLight(light) {
+        val ready = CameraController.imageCapture
+        if (ready == null || !CameraController.isReady) {
+          restoreLight()
+          promise.reject("NOT_READY", "Camera is not ready")
+          return@prepareLight
+        }
+        processor.capture(ready, request, CameraController.activeLensFacing == "front", CameraController.deviceTurnDegrees(), object : CaptureProcessor.Listener {
+          override fun onShutter(captureId: String) = emit(EVENT_SHUTTER, mapOf("captureId" to captureId))
+          override fun onProgress(captureId: String, stage: String, progress: Double) {
+            if (stage != "capturing") restoreLight()
+            emit(EVENT_PROGRESS, mapOf("captureId" to captureId, "stage" to stage, "progress" to progress))
+          }
+          override fun onSuccess(captureId: String, result: Map<String, Any?>) {
+            restoreLight()
+            promise.resolve((result + ("captureId" to captureId)).toWritableMap())
+          }
+          override fun onFailure(captureId: String, code: String, message: String) {
+            restoreLight()
+            promise.reject(code, message)
+          }
+        }, light)
+      }
     }
   }
 

@@ -120,6 +120,10 @@ data class CaptureOptions(
   val beautyPreset: String? = null,
   /** The backdrop behind the person (Spotlight uses Signature), or null. */
   val backdrop: com.photoplus.studio.BackdropChoice? = null,
+  /** Auto Light: dark rooms, night and harsh light handled for Photo, Clarity and Moonlight shots. */
+  val autoLight: Boolean = true,
+  /** Auto Light may take several frames (the multi-shot plan); otherwise one frame, then tone. */
+  val autoLightMultiShot: Boolean = false,
 ) {
   val beautyRecipeActive: Boolean get() = beautyRecipe?.active == true
   val beautyActive: Boolean get() = beautyRecipeActive || beautyRetouch > 0f || beauty.any || backdrop?.active == true
@@ -166,6 +170,8 @@ data class CaptureOptions(
           com.photoplus.edit.WatermarkSpec.fromMap(map["watermark"] as? Map<String, Any?>)
         }.getOrDefault(com.photoplus.edit.WatermarkSpec()),
         props = CameraProps.parse(map["props"]),
+        autoLight = map["autoLight"] as? Boolean ?: true,
+        autoLightMultiShot = map["autoLightMultiShot"] as? Boolean ?: false,
       )
     }
   }

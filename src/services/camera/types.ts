@@ -109,6 +109,10 @@ export interface CaptureOptions {
   detail?: number;
   vibrance?: number;
   autoTone?: boolean;
+  /** Auto Light: dark rooms, night and harsh light handled automatically (default on). */
+  autoLight?: boolean;
+  /** Auto Light may take several shots (Moonlight's multi-shot); otherwise one shot, then tone. */
+  autoLightMultiShot?: boolean;
   /** Spotlight: what should stand out, as taps on the preview (x0, y0, x1, y1, … in 0..1). */
   points?: number[];
   blur?: number;
@@ -203,6 +207,8 @@ export interface CaptureResult {
     faceLight: number;
   } | null;
   look?: boolean;
+  /** What Auto Light did for this photo (null: nothing special). */
+  light?: CaptureLightReport | null;
   timings?: { captureMs?: number; processMs?: number; totalMs: number };
 }
 
@@ -223,9 +229,38 @@ export const CameraEvents = {
   recording: 'PhotoPlusRecording',
   /** Beauty: whether the live preview runs on this phone (after each camera start). */
   beautyLive: 'PhotoPlusBeautyLive',
+  /** Auto Light: the scene's light, when it changes. */
+  light: 'PhotoPlusCameraLight',
 } as const;
 
-export type CaptureStage = 'capturing' | 'processing' | 'styling' | 'saving';
+/** Auto Light's plan for the scene in view. */
+export type LightPlanId = 'normal' | 'moonlight' | 'flash' | 'brightBalance';
+
+export interface LightStatus {
+  plan: LightPlanId;
+  /** What to show: "Moonlight", "Natural Flash", "Selfie Light", "Bright Balance"; null = nothing special. */
+  label: string | null;
+  /** Scene brightness (lux), when the camera reports its exposure. */
+  lux: number | null;
+  frames: number;
+  backlit: boolean;
+  /** The front camera can light a selfie with the screen. */
+  screenLight: boolean;
+  /** The live view is brightened by the camera (Android 15+). */
+  lowLightBoost: boolean;
+}
+
+export interface CaptureLightReport {
+  plan: LightPlanId;
+  label: string | null;
+  frames: number;
+  flash: 'screen' | 'natural' | null;
+  flashAligned: boolean | null;
+  keyBefore: number | null;
+  keyAfter: number | null;
+}
+
+export type CaptureStage = 'capturing' | 'processing' | 'lighting' | 'styling' | 'saving';
 
 export type CameraStateName = 'pendingOpen' | 'opening' | 'open' | 'closing' | 'closed' | 'recovering';
 
@@ -249,6 +284,7 @@ export interface CameraEventPayloads {
   [CameraEvents.progress]: { captureId: string; stage: CaptureStage; progress: number };
   [CameraEvents.recording]: { recording: boolean; maxMs: number };
   [CameraEvents.beautyLive]: { requested: boolean; live: boolean; reason: string | null };
+  [CameraEvents.light]: LightStatus;
 }
 
 export type CameraEventName = keyof CameraEventPayloads;

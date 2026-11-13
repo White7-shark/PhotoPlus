@@ -35,6 +35,8 @@ export interface AppSettings {
   cameraResolution: 'max' | '12mp' | '8mp' | '5mp' | '2mp';
   /** Save selfies mirrored, as the preview shows them. */
   mirrorFrontCamera: boolean;
+  /** Auto Light: dark rooms, night and harsh light handled automatically. */
+  autoLight: boolean;
   /** Camera beauty (Glow) for photos outside Spotlight. Superseded by cameraBeauty; kept for saved settings. */
   cameraGlow: 'off' | 'natural' | 'smooth' | 'flawless';
   /** Beauty mode: on/off, the preset and its sliders. */
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraAspectRatio: '4:3',
   cameraResolution: 'max',
   mirrorFrontCamera: true,
+  autoLight: true,
   cameraGlow: 'off',
   cameraBeauty: DEFAULT_CAMERA_BEAUTY,
   portraitControls: DEFAULT_PORTRAIT,
@@ -92,6 +95,7 @@ const VALIDATORS: Validators = {
   cameraAspectRatio: oneOf('4:3', '16:9', '1:1'),
   cameraResolution: oneOf('max', '12mp', '8mp', '5mp', '2mp'),
   mirrorFrontCamera: isBool,
+  autoLight: isBool,
   cameraGlow: oneOf('off', 'natural', 'smooth', 'flawless'),
   cameraBeauty: isCameraBeauty,
   portraitControls: isPortraitControls,

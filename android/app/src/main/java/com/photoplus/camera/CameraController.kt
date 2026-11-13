@@ -52,6 +52,9 @@ import com.photoplus.beauty.BeautyAnalyzer
 import com.photoplus.beauty.BeautyEffect
 import com.photoplus.beauty.BeautyProcessor
 import com.photoplus.beauty.LiveBeautyState
+import com.photoplus.engine.NativeEngine
+import androidx.core.graphics.scale
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.camera.view.PreviewView
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
@@ -80,6 +83,10 @@ import java.util.concurrent.TimeUnit
 object CameraController {
   private const val TAG = "PhotoPlusCamera"
   private const val MAX_RETRIES = 3
+  /** How often Auto Light reads the scene. */
+  private const val METER_INTERVAL_MS = 700L
+  /** The longest the shutter waits for a changed exposure to settle. */
+  private const val EXPOSURE_SETTLE_MS = 900L
 
   interface SessionCallbacks {
     fun onReady(lensFacing: String)
@@ -134,6 +141,31 @@ object CameraController {
   var captureSize: Size? = null
     private set
 
+  // Auto Light (see AutoLight.kt): a steady reading of the scene, the screen
+  // light for selfies, and Low Light Boost for the live view in the dark.
+  private val lightExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "pp-light") }
+  private val lightSteadier = LightSteadier()
+  /** The steady reading the shutter uses (null until the first preview frame is read). */
+  @Volatile var lightReading: LightReading? = null
+    private set
+  private var lightReported: LightReading? = null
+  private var lightMetering = false
+  private var screenFlashReady = false
+  private var lowLightBoostOn = false
+  private var lowLightBoostFailed = false
+  /** Turned off for a flash capture, back on after it. */
+  private var lowLightBoostHeld = false
+  /** The user's exposure compensation while a capture uses its own. */
+  private var exposureBeforeCapture: Int? = null
+  /** A capture is changing the light (exposure, screen light): readings would mislead. */
+  private var lightCapturing = false
+  private val meterTick = object : Runnable {
+    override fun run() {
+      meterOnce()
+      main.postDelayed(this, METER_INTERVAL_MS)
+    }
+  }
+
   val isReady: Boolean get() = camera != null && (imageCapture != null || videoCapture != null)
   val isRecording: Boolean get() = recording != null
   val activeLensFacing: String get() = lensFacing
@@ -182,6 +214,7 @@ object CameraController {
     owner = null
     cancelRetry()
     stopOrientationTracking()
+    stopMetering()
     camera = null
     imageCapture = null
     analysis?.clearAnalyzer()
@@ -313,6 +346,21 @@ object CameraController {
           null
         }
         val capture = if (video == null) captureBuilder.build() else null
+        // Selfie Light: the screen as the front camera's flash. CameraX lights
+        // the overlay at full brightness and lets exposure settle on it first.
+        screenFlashReady = false
+        if (capture != null && lensFacing == "front") {
+          val window = (lifecycle as? android.app.Activity)?.window
+          if (window != null) {
+            try {
+              view.setScreenFlashWindow(window)
+              view.screenFlash?.let { capture.screenFlash = it }
+              screenFlashReady = capture.screenFlash != null
+            } catch (e: Exception) {
+              Log.w(TAG, "screen light unavailable", e)
+            }
+          }
+        }
 
         val groupBuilder = UseCaseGroup.Builder().addUseCase(preview)
         if (capture != null) groupBuilder.addUseCase(capture)
@@ -362,6 +410,7 @@ object CameraController {
         captureSize = capture?.resolutionInfo?.resolution ?: video?.resolutionInfo?.resolution
         observeCamera(cam, lifecycle, sessionOwner)
         applyManualControls()
+        startMetering()
         callbacks?.onReady(lensFacing)
       } catch (e: Exception) {
         Log.w(TAG, "Unable to bind camera", e)
@@ -541,8 +590,192 @@ object CameraController {
   }
 
   fun setFlash(setting: FlashSetting) {
+    val changed = flash != setting
     flash = setting
     imageCapture?.flashMode = flashMode(setting)
+    if (changed) lightReading?.let { emitLight(it) } // the label depends on the flash choice
+  }
+
+  // ------------------------------------------------------------ Auto Light
+
+  private fun startMetering() {
+    lightSteadier.reset()
+    lightReading = null
+    lightReported = null
+    lowLightBoostOn = false
+    lowLightBoostFailed = false
+    lowLightBoostHeld = false
+    lightCapturing = false
+    main.removeCallbacks(meterTick)
+    if (!sessionConfig.video) main.postDelayed(meterTick, METER_INTERVAL_MS)
+  }
+
+  private fun stopMetering() {
+    main.removeCallbacks(meterTick)
+    exposureBeforeCapture = null
+    lightCapturing = false
+  }
+
+  /** Main thread: one reading from the live view (a 160 px copy), metered off the main thread. */
+  private fun meterOnce() {
+    val view = previewView ?: return
+    val cam = camera ?: return
+    if (sessionConfig.video || lightMetering || lightCapturing || !NativeEngine.ensureLoaded()) return
+    val small = try {
+      val full = view.bitmap ?: return
+      val w = 160
+      val h = (full.height * w / full.width.coerceAtLeast(1)).coerceIn(16, 480)
+      val scaled = if (full.config == android.graphics.Bitmap.Config.ARGB_8888) full.scale(w, h)
+      else full.copy(android.graphics.Bitmap.Config.ARGB_8888, false).let { c -> c.scale(w, h).also { if (it !== c) c.recycle() } }
+      if (scaled !== full) full.recycle()
+      scaled
+    } catch (e: Exception) {
+      Log.w(TAG, "light reading skipped", e)
+      return
+    }
+    val input = LightReading.meterInput(
+      Live.iso, Live.exposureNs, Live.aperture, lensFacing == "front", cam.cameraInfo.hasFlashUnit(), faceLuma(), Live.focusDiopters,
+    )
+    lightMetering = true
+    lightExecutor.execute {
+      val reading = try {
+        val out = FloatArray(LightReading.METER_OUT)
+        NativeEngine.nativeLightMeter(small, input, out)
+        LightReading.fromMeter(out)
+      } catch (e: Exception) {
+        Log.w(TAG, "light reading failed", e)
+        null
+      } finally {
+        small.recycle()
+      }
+      main.post {
+        lightMetering = false
+        if (reading != null && camera === cam) onReading(reading)
+      }
+    }
+  }
+
+  /** The main face's brightness from the live beauty analysis, when it is recent. */
+  private fun faceLuma(): Float? {
+    val a = LiveBeautyState.analysis ?: return null
+    if (a.face == null || a.scene.size < 2 || a.scene[0] < 0.5f) return null
+    if (SystemClock.elapsedRealtime() - a.timestampMs > 2_000L) return null
+    return a.scene[1].takeIf { it.isFinite() }?.coerceIn(0f, 1f)
+  }
+
+  private fun onReading(reading: LightReading) {
+    lightSteadier.feed(reading)
+    val steady = lightSteadier.current ?: return
+    lightReading = steady
+    updateLowLightBoost(steady)
+    if (AutoLight.worthReporting(lightReported, steady)) emitLight(steady)
+  }
+
+  private fun emitLight(reading: LightReading) {
+    val context = lightContext() ?: return
+    lightReported = reading
+    events?.emit("PhotoPlusCameraLight", mapOf(
+      "plan" to reading.plan.id,
+      "label" to AutoLight.label(reading, context, flash),
+      "lux" to reading.lux?.toDouble(),
+      "frames" to reading.frames,
+      "backlit" to reading.backlit,
+      "screenLight" to context.screenFlashReady,
+      "lowLightBoost" to lowLightBoostOn,
+    ))
+  }
+
+  private fun updateLowLightBoost(reading: LightReading) {
+    val cam = camera ?: return
+    if (lowLightBoostHeld || lowLightBoostFailed || sessionConfig.video) return
+    if (!cam.cameraInfo.isLowLightBoostSupported) return
+    val want = AutoLight.wantLowLightBoost(lowLightBoostOn, reading)
+    if (want != lowLightBoostOn) setLowLightBoost(cam, want)
+  }
+
+  private fun setLowLightBoost(cam: Camera, on: Boolean) {
+    val context = appContext ?: return
+    lowLightBoostOn = on
+    try {
+      val future = cam.cameraControl.enableLowLightBoostAsync(on)
+      future.addListener({
+        try {
+          future.get()
+        } catch (e: Exception) {
+          // Not available with this session (or the camera went away): stay off.
+          Log.w(TAG, "low light boost unavailable", e)
+          lowLightBoostOn = false
+          lowLightBoostFailed = true
+        }
+      }, ContextCompat.getMainExecutor(context))
+    } catch (e: Exception) {
+      Log.w(TAG, "low light boost unavailable", e)
+      lowLightBoostOn = false
+      lowLightBoostFailed = true
+    }
+  }
+
+  /** What the camera can do for Auto Light right now (main thread). */
+  fun lightContext(): LightContext? {
+    val cam = camera ?: return null
+    val ev = cam.cameraInfo.exposureState
+    val supported = ev.isExposureCompensationSupported
+    return LightContext(
+      front = lensFacing == "front",
+      hasFlash = cam.cameraInfo.hasFlashUnit(),
+      exposureStep = if (supported) ev.exposureCompensationStep.toFloat() else 0f,
+      exposureMin = if (supported) ev.exposureCompensationRange.lower else 0,
+      exposureMax = if (supported) ev.exposureCompensationRange.upper else 0,
+      exposureIndex = if (supported) ev.exposureCompensationIndex else 0,
+      screenFlashReady = screenFlashReady,
+    )
+  }
+
+  /**
+   * Readies the camera for an Auto Light capture, then runs [ready] on the
+   * main thread: the screen light's colour, Low Light Boost off for a flash,
+   * and the burst's exposure (waiting, briefly, for it to settle).
+   */
+  fun prepareLight(decision: LightDecision?, ready: () -> Unit) {
+    val cam = camera
+    val context = appContext
+    if (decision == null || cam == null || context == null) {
+      ready()
+      return
+    }
+    lightCapturing = true
+    if (decision.flash != LightFlash.NONE && lowLightBoostOn) {
+      lowLightBoostHeld = true
+      setLowLightBoost(cam, false)
+    }
+    if (decision.flash == LightFlash.SCREEN) {
+      previewView?.setScreenFlashOverlayColor(android.graphics.Color.rgb(
+        (decision.screenColor shr 16) and 0xFF, (decision.screenColor shr 8) and 0xFF, decision.screenColor and 0xFF,
+      ))
+    }
+    val index = decision.exposureIndex
+    if (index == null) {
+      ready()
+      return
+    }
+    exposureBeforeCapture = cam.cameraInfo.exposureState.exposureCompensationIndex
+    val once = AtomicBoolean(false)
+    val go = Runnable { if (once.compareAndSet(false, true)) ready() }
+    val future = cam.cameraControl.setExposureCompensationIndex(index)
+    future.addListener(go, ContextCompat.getMainExecutor(context))
+    main.postDelayed(go, EXPOSURE_SETTLE_MS)
+  }
+
+  /** After an Auto Light capture's frames are taken: the user's exposure and Low Light Boost back. */
+  fun finishLight() {
+    val cam = camera
+    lightCapturing = false
+    exposureBeforeCapture?.let { cam?.cameraControl?.setExposureCompensationIndex(it) }
+    exposureBeforeCapture = null
+    if (lowLightBoostHeld) {
+      lowLightBoostHeld = false
+      lightReading?.let { updateLowLightBoost(it) }
+    }
   }
 
   fun setTorch(enabled: Boolean): Boolean {

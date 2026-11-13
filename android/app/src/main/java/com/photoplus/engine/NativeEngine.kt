@@ -96,6 +96,31 @@ object NativeEngine {
     reportOut: FloatArray,
   )
 
+  /**
+   * Auto Light: reads the scene from a small preview [preview] (ARGB_8888)
+   * and the camera's exposure. [input] (7) = ISO, exposure seconds,
+   * f-number, front (0/1), has flash (0/1), face luma (-1 none), focus
+   * diopters (-1 unknown). [out] (15) = EV100, lux, exposure known, key,
+   * highlights, shadows, range, backlit, plan, frames, exposure bias, night,
+   * screen light R, G, B.
+   */
+  external fun nativeLightMeter(preview: Bitmap, input: FloatArray, out: FloatArray)
+
+  /**
+   * Local tone after a burst merge, in place. [params] (8) = night, shadows
+   * (-1 auto), highlights (-1 auto), exposure, detail, white balance,
+   * capture bias (EV held back, <= 0), strength. [reportOut] (6) = key
+   * before/after, range, shadows, highlights, share clipped.
+   */
+  external fun nativeLightTone(bitmap: Bitmap, params: FloatArray, token: Long, reportOut: FloatArray?)
+
+  /**
+   * Natural Flash: [ambient] (merged, no flash) and [flash] fused into [dst]
+   * (all the same size; [dst] may be [ambient]). [reportOut] (4) = aligned,
+   * flash gain, flash-shadow share, hot-spot share.
+   */
+  external fun nativeFlashFuse(ambient: Bitmap, flash: Bitmap, dst: Bitmap, fill: Float, strength: Float, token: Long, reportOut: FloatArray?)
+
   /** [noise, blur px, sharpness, mean luma, highlights clipped, shadows clipped] */
   external fun nativeAnalyzeQuality(bitmap: Bitmap): FloatArray
 

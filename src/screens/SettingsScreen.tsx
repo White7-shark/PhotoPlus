@@ -101,6 +101,13 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
           value={settings.mirrorFrontCamera}
           onChange={v => save('mirrorFrontCamera', v)}
         />
+        <ToggleRow
+          icon="moon"
+          title="Auto Light"
+          subtitle="Clear photos in dark rooms and balanced ones in harsh light, with the flash or your screen when needed"
+          value={settings.autoLight}
+          onChange={v => save('autoLight', v)}
+        />
         <View style={{ padding: 16, gap: 10 }}>
           <AppText variant="bodyStrong">Capture resolution</AppText>
           <SegmentedControl

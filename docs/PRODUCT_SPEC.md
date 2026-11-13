@@ -87,6 +87,7 @@ Free users can access:
 - Beauty mode with two filters (Natural Glow, Soft Radiance), live in the camera, in Portrait mode, on clips and in the editor
 - Backdrops: Signature (the camera's Spotlight default), Soft Studio and Stage, in the editor
 - Skin Tone: four shades (Ivory, Honey, Caramel, Espresso) for the skin of the face and body, in the editor
+- Auto Light on single shots: dark rooms brightened and cleaned (night still looks like night), harsh light balanced, Natural Flash (the flash's detail with the room's own light) and Selfie Light (the screen lights the face)
 
 **Free users cannot unlock, download for use, or apply photoshoot packs.** They may browse the marketplace to discover what Photo Plus offers; unlocking a pack requires an active Premium entitlement.
 
@@ -108,6 +109,7 @@ Premium users receive:
 - The full beauty collection: 11 premium filters (Velvet Skin to Studio Royal)
 - The full Backdrops collection: 11 premium designs (Noir to Dream)
 - Every Skin Tone shade: 9 more (Porcelain Rose to Ebony Glow)
+- Auto Light with several shots: Moonlight bursts of up to 10 frames in the dark, Bright Balance bursts in harsh light, and Natural Flash on a merged burst
 - New premium tools and capabilities as they are released
 
 ### 2.3 Subscription vs. pack ownership
