@@ -288,6 +288,22 @@ object NativeEngine {
   external fun nativeVideoFitCurves(before: Bitmap, after: Bitmap, out: ByteArray)
   /** [previous] (ALPHA_8) becomes the steadied version of [current] (same size). */
   external fun nativeVideoSteadyMask(previous: Bitmap, current: Bitmap, smoothing: Float)
+
+  /**
+   * The room remembered behind the person, for one clip: [nativeVideoRoomCheck]
+   * gives back pieces of the room the person model swallowed for many frames
+   * (a beam above the head, a shelf beside it), which would otherwise grow
+   * from the person and shrink back like a shadow. Destroy when the clip is done.
+   */
+  external fun nativeVideoRoomCreate(): Long
+  external fun nativeVideoRoomDestroy(room: Long)
+  /**
+   * Corrects [mask] (ALPHA_8) for [frame] (ARGB_8888) in place; call once per
+   * frame, in order, before steadying. [motion] (5) = the frame's motion from
+   * the previous one (a, b, tx, ty, confidence; frame pixels), or null.
+   * Returns the share of the person area given back.
+   */
+  external fun nativeVideoRoomCheck(room: Long, frame: Bitmap, mask: Bitmap, motion: FloatArray?, token: Long): Float
   /** ARGB_8888 frame → encoder YUV 4:2:0 planes (direct buffers, with their strides). */
   external fun nativeRgbaToYuv420(
     bitmap: Bitmap, y: java.nio.ByteBuffer, u: java.nio.ByteBuffer, v: java.nio.ByteBuffer,

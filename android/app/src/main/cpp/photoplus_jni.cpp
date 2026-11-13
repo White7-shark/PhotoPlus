@@ -1255,6 +1255,51 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoSteadyM
   if (st != PP_OK) throwStatus(env, st);
 }
 
+// The room remembered behind the person, for one clip (see pp_video_room).
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoRoomCreate(JNIEnv* env, jobject) {
+  pp_video_room* room = nullptr;
+  const pp_status st = pp_video_room_create(&room);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(room);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoRoomDestroy(JNIEnv*, jobject, jlong room) {
+  pp_video_room_destroy(reinterpret_cast<pp_video_room*>(room));
+}
+
+// Corrects `mask` (ALPHA_8) for `frame` (ARGB_8888) in place: pieces of the
+// room the person model swallowed are given back. `motion` (5, optional) =
+// a, b, tx, ty, confidence of the frame's motion from the previous one, in
+// the frame's pixels. Returns the share of the person area given back.
+JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoRoomCheck(JNIEnv* env, jobject, jlong room,
+                                                                                   jobject frame, jobject mask,
+                                                                                   jfloatArray motion, jlong token) {
+  if (room == 0 || (motion != nullptr && env->GetArrayLength(motion) < 5)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad room arguments");
+    return 0.0f;
+  }
+  WrappedBitmap img, m;
+  if (!img.open(env, frame, false) || !m.open(env, mask, true)) return 0.0f;
+  pp_video_motion mo{1, 0, 0, 0, 1, {0, 0, 0}};
+  if (motion != nullptr) {
+    jfloat v[5];
+    env->GetFloatArrayRegion(motion, 0, 5, v);
+    mo.a = v[0], mo.b = v[1], mo.tx = v[2], mo.ty = v[3], mo.confidence = v[4];
+  }
+  float reclaimed = 0.0f;
+  const pp_status st = pp_video_room_check(reinterpret_cast<pp_video_room*>(room), img.image, m.image,
+                                           motion != nullptr ? &mo : nullptr,
+                                           reinterpret_cast<const pp_cancel_token*>(token), &reclaimed);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0.0f;
+  }
+  return reclaimed;
+}
+
 // RGBA bitmap → the encoder's YUV 4:2:0 planes (BT.601 limited range, as
 // video players expect), written through direct buffers with the plane strides.
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeRgbaToYuv420(

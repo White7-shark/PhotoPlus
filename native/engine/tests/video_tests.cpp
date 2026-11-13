@@ -374,3 +374,193 @@ TEST(video_frame_enhance_cleans_noise_without_ghosting_and_sharpens_soft_clips) 
   EXPECT_TRUE(sharpness(sharp) > 1.3 * sharpness(clean));
   for (pp_image* img : {f0, f1, f2, clean, out, sharp}) pp_image_destroy(img);
 }
+
+// ---- Room memory: a piece of the room the person model swallows for many
+// frames (a beam above the head) is given back; the person, their hair and
+// clothes the colour of the room are kept.
+namespace {
+struct RoomClip {
+  int w = 320, h = 400;
+  // The room: a light wooden beam across the top third, a dark wall below.
+  static void room(int x, int y, int h, float out[3]) {
+    const float grain = 0.03f * std::sin(static_cast<float>(x) * 0.21f) * std::sin(static_cast<float>(y) * 0.13f);
+    if (y > h / 6 && y < h / 3) {
+      out[0] = 0.72f + grain, out[1] = 0.6f + grain, out[2] = 0.45f + grain;
+    } else {
+      out[0] = 0.3f + grain, out[1] = 0.31f + grain, out[2] = 0.33f + grain;
+    }
+  }
+  // The head (a disc of skin under a ring of curly dark hair) at (cx, cy) and
+  // a shirt the colour of the wall.
+  float cy = 210, cx = 160, r = 70;
+  int part(int x, int y) const {  // 0 room, 1 skin, 2 hair, 3 shirt
+    const float dx = static_cast<float>(x) - cx, dy = static_cast<float>(y) - cy;
+    const float d = std::sqrt(dx * dx + dy * dy);
+    if (y > cy + r * 0.8f && std::abs(dx) < r * 1.6f) return 3;
+    if (d < r) return 1;
+    if (d < r + 12.0f && dy < 0) return 2;
+    return 0;
+  }
+  pp_image* frame(int shake, unsigned seed) const {
+    pp_image* img = nullptr;
+    pp_image_create(w, h, PP_FORMAT_RGBA8, &img);
+    auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+    std::mt19937 rng(seed);
+    std::normal_distribution<float> noise(0.0f, 0.01f);
+    for (int y = 0; y < h; ++y)
+      for (int x = 0; x < w; ++x) {
+        float c[3];
+        const int p = part(x, y);
+        if (p == 0) room(x + shake, y, h, c);
+        else if (p == 1) c[0] = 0.45f, c[1] = 0.28f, c[2] = 0.2f;
+        else if (p == 2) {
+          const float curl = 0.05f * std::sin(static_cast<float>(x) * 1.3f) * std::cos(static_cast<float>(y) * 1.1f);
+          c[0] = 0.08f + curl, c[1] = 0.06f + curl, c[2] = 0.05f + curl;
+        } else c[0] = 0.3f, c[1] = 0.31f, c[2] = 0.33f;  // the shirt, the wall's colour
+        uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+        for (int k = 0; k < 3; ++k) q[k] = static_cast<uint8_t>(std::lround(std::clamp(c[k] + noise(rng), 0.0f, 1.0f) * 255.0f));
+        q[3] = 255;
+      }
+    return img;
+  }
+  // The model's mask at half size; `swallow`: a block of the beam above the
+  // head taken for the person, attached to the hair.
+  pp_image* mask(bool swallow) const {
+    pp_image* m = nullptr;
+    const int mw = w / 2, mh = h / 2;
+    pp_image_create(mw, mh, PP_FORMAT_GRAY8, &m);
+    auto* px = static_cast<uint8_t*>(pp_image_pixels(m));
+    for (int y = 0; y < mh; ++y)
+      for (int x = 0; x < mw; ++x) {
+        const int fx = x * 2 + 1, fy = y * 2 + 1;
+        bool on = part(fx, fy) != 0;
+        if (swallow && fx > cx - 35 && fx < cx + 25 && fy > h / 6 + 8 && fy < cy - r) on = true;
+        px[static_cast<size_t>(y) * mw + x] = on ? 255 : 0;
+      }
+    return m;
+  }
+  // Mean mask value (0..255) over frame-space box, read from a half-size mask.
+  static double meanIn(pp_image* m, int x0, int y0, int x1, int y1) {
+    pp_image_info i{};
+    pp_image_get_info(m, &i);
+    const auto* px = static_cast<const uint8_t*>(pp_image_pixels(m));
+    double s = 0;
+    int n = 0;
+    for (int y = y0 / 2; y < y1 / 2; ++y)
+      for (int x = x0 / 2; x < x1 / 2; ++x) s += px[static_cast<size_t>(y) * i.stride + x], ++n;
+    return s / std::max(n, 1);
+  }
+};
+}  // namespace
+
+TEST(video_room_gives_back_a_swallowed_piece_of_the_room_and_keeps_the_person) {
+  RoomClip clip;
+  pp_video_room* room = nullptr;
+  ASSERT_OK(pp_video_room_create(&room));
+  float reclaimed = -1;
+  // Frames 0-7: the model is right; the room is seen (with a little hand shake).
+  for (int k = 0; k < 8; ++k) {
+    pp_image* f = clip.frame((k % 3) - 1, 100 + k);
+    pp_image* m = clip.mask(false);
+    ASSERT_OK(pp_video_room_check(room, f, m, nullptr, nullptr, &reclaimed));
+    EXPECT_TRUE(reclaimed < 0.01f);  // nothing to give back
+    pp_image_destroy(f);
+    pp_image_destroy(m);
+  }
+  // Frames 8-19: it swallows a piece of the beam above the head.
+  const int px0 = static_cast<int>(clip.cx) - 30, px1 = static_cast<int>(clip.cx) + 20;
+  // The swallowed piece clear of the person (the band hugging the hair is a
+  // close call and stays with the person).
+  const int py0 = clip.h / 6 + 14, py1 = static_cast<int>(clip.cy - clip.r) - 30;
+  for (int k = 8; k < 20; ++k) {
+    pp_image* f = clip.frame((k % 3) - 1, 100 + k);
+    pp_image* m = clip.mask(true);
+    const double patchBefore = RoomClip::meanIn(m, px0, py0, px1, py1);
+    const int hy0 = static_cast<int>(clip.cy - clip.r) - 8, hy1 = static_cast<int>(clip.cy - clip.r) - 2;
+    // The hair beside the swallowed piece (left and right of it).
+    const double hairBefore = RoomClip::meanIn(m, 128, hy0, px0 - 4, hy1) + RoomClip::meanIn(m, px1 + 4, hy0, 192, hy1);
+    ASSERT_OK(pp_video_room_check(room, f, m, nullptr, nullptr, &reclaimed));
+    const double patch = RoomClip::meanIn(m, px0, py0, px1, py1);
+    const double skin = RoomClip::meanIn(m, 130, 190, 190, 250);
+    // The hair: a band just above the forehead, on both sides.
+    const double hair = RoomClip::meanIn(m, 128, hy0, px0 - 4, hy1) + RoomClip::meanIn(m, px1 + 4, hy0, 192, hy1);
+    const double shirt = RoomClip::meanIn(m, 100, 310, 220, 380);
+    if (k == 8 || k == 19) {
+      std::printf("    frame %d: swallowed beam %.0f -> %.0f, skin %.0f, hair %.0f -> %.0f, shirt %.0f, given back %.3f\n", k,
+                  patchBefore, patch, skin, hairBefore, hair, shirt, static_cast<double>(reclaimed));
+    }
+    EXPECT_TRUE(patchBefore > 250);
+    EXPECT_TRUE(patch < 20);    // given back to the room
+    EXPECT_TRUE(skin > 250);    // the face stays
+    EXPECT_TRUE(hair > hairBefore - 4);  // the hair stays (it was never seen as room)
+    EXPECT_TRUE(shirt > 250);   // a shirt the colour of the wall stays too
+    EXPECT_TRUE(reclaimed > 0.02f && reclaimed < 0.2f);
+    pp_image_destroy(f);
+    pp_image_destroy(m);
+  }
+  pp_video_room_destroy(room);
+}
+
+TEST(video_room_keeps_a_person_who_moves_over_remembered_room) {
+  RoomClip clip;
+  pp_video_room* room = nullptr;
+  ASSERT_OK(pp_video_room_create(&room));
+  for (int k = 0; k < 6; ++k) {
+    pp_image* f = clip.frame(0, 200 + k);
+    pp_image* m = clip.mask(false);
+    ASSERT_OK(pp_video_room_check(room, f, m, nullptr, nullptr, nullptr));
+    pp_image_destroy(f);
+    pp_image_destroy(m);
+  }
+  // The person stands up: the head now covers wall and beam the room memory has seen.
+  clip.cy -= 50;
+  pp_image* f = clip.frame(0, 300);
+  pp_image* m = clip.mask(false);
+  float reclaimed = -1;
+  const int hy0 = static_cast<int>(clip.cy - clip.r) - 8, hy1 = static_cast<int>(clip.cy - clip.r) - 2;
+  const double hairBefore = RoomClip::meanIn(m, 135, hy0, 185, hy1);
+  ASSERT_OK(pp_video_room_check(room, f, m, nullptr, nullptr, &reclaimed));
+  const double skin = RoomClip::meanIn(m, 130, 130, 190, 200);
+  const double hair = RoomClip::meanIn(m, 135, hy0, 185, hy1);
+  std::printf("    moved: skin %.0f, hair %.0f -> %.0f, given back %.4f\n", skin, hairBefore, hair, static_cast<double>(reclaimed));
+  EXPECT_TRUE(skin > 250);
+  EXPECT_TRUE(hair > hairBefore - 4);
+  EXPECT_TRUE(reclaimed < 0.01f);
+  pp_image_destroy(f);
+  pp_image_destroy(m);
+  pp_video_room_destroy(room);
+}
+
+TEST(video_room_checks_input_and_resets_on_a_new_size) {
+  pp_video_room* room = nullptr;
+  EXPECT_EQ(pp_video_room_create(nullptr), PP_ERROR_INVALID_ARGUMENT);
+  ASSERT_OK(pp_video_room_create(&room));
+  RoomClip clip;
+  pp_image* f = clip.frame(0, 1);
+  pp_image* m = clip.mask(false);
+  EXPECT_EQ(pp_video_room_check(nullptr, f, m, nullptr, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_video_room_check(room, nullptr, m, nullptr, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_video_room_check(room, m, m, nullptr, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);  // a mask is not a frame
+  EXPECT_EQ(pp_video_room_check(room, f, f, nullptr, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);  // nor a frame a mask
+  pp_image* tiny = nullptr;
+  pp_image_create(8, 8, PP_FORMAT_GRAY8, &tiny);
+  EXPECT_EQ(pp_video_room_check(room, f, tiny, nullptr, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  pp_cancel_token* token = pp_cancel_token_create();
+  pp_cancel_token_cancel(token);
+  EXPECT_EQ(pp_video_room_check(room, f, m, nullptr, token, nullptr), PP_ERROR_CANCELLED);
+  pp_cancel_token_destroy(token);
+  // A different mask size starts a new memory (nothing remembered, nothing given back).
+  for (int k = 0; k < 5; ++k) ASSERT_OK(pp_video_room_check(room, f, m, nullptr, nullptr, nullptr));
+  pp_image* other = nullptr;
+  pp_image_create(120, 150, PP_FORMAT_GRAY8, &other);
+  std::fill_n(static_cast<uint8_t*>(pp_image_pixels(other)), 120 * 150, uint8_t{255});
+  float reclaimed = -1;
+  ASSERT_OK(pp_video_room_check(room, f, other, nullptr, nullptr, &reclaimed));
+  EXPECT_EQ(reclaimed, 0.0f);
+  pp_image_destroy(other);
+  pp_image_destroy(tiny);
+  pp_image_destroy(f);
+  pp_image_destroy(m);
+  pp_video_room_destroy(room);
+  pp_video_room_destroy(nullptr);  // allowed
+}

@@ -155,7 +155,38 @@ Cut out and re-lit, those bits of the old wall flickered in and out of the new s
 - The wall chunk and the fleck are gone (see frames 58–63 before and after).
 - Frame-to-frame change in the background halved: 1.84 → 0.93 levels on average, worst frame 10.6 → 7.0.
 
-**Not yet in the app:** Glide clips don't offer Backdrops yet (they use Spotlight's blur). The consensus call is ready for that, and for steadier Spotlight clips.
+### Follow-up: the shadow that lasted many frames
+
+**Still seen after the fix above.** A shape grew from the person and shrank back.
+
+**Cause.** Measured frame by frame on the clip, the person model itself swallowed a piece of the room touching the person:
+- frames 20–30: a growing block of the ceiling beam above the head;
+- frames 92–98: part of the shelf beside it.
+
+The Signature backdrop and Spotlight blur the background but keep the person sharp, so the swallowed piece stood out as a sharp shape attached to the head. It escaped both earlier fixes:
+- it is attached to the head, so it is not an island;
+- it lasts about ten frames, so the three-frame vote cannot outvote it.
+
+**Fix: a room memory** (`video::RoomMemory`, `pp_video_room_*`). The room was in plain view at that spot a moment before. The memory:
+- keeps a coarse picture of the room wherever it is clearly visible;
+- follows the camera's measured motion, and corrects for the phone's exposure and colour drift, which swung the clip's brightness by about 40%;
+- gives back any part of the mask that matches the remembered room and does not look like the person beside it.
+
+Safeguards, each added after a real failure on the clip:
+
+| Safeguard | Failure it fixed |
+|---|---|
+| Parts of the outline the model has called the person for over a second are never judged. The map of where the person has been learnt slowly, forgotten quickly, and stays in frame coordinates (in a selfie the person moves with the phone and the room slides behind). | A shaded cheek against a dark shelf, and hair at the temples, were being cut. |
+| Each cell is also compared with the person's colours right beside it (at the crown: the hair), not only the face. | Black hair against a remembered dark wall was being cut. |
+| Only cells clear of the long-held outline are judged. Dark against dark is a close call and stays with the person unless the contrast is large. | The same cases, on more frames. |
+| Hair edges never enter the memory. | A narrower margin tried along the way cut the crown. |
+
+**Result on the clip (Signature):**
+- The beam block above the head is gone (frames 23–29; a faint trace remains right at the hair, where the room was never seen).
+- The light parts of the shelf patch are given back. Its dark parts stay, by the dark-on-dark rule, and show little against the dark blurred background.
+- No part of the face or hair is removed on any frame (checked on every frame by marking what was given back).
+
+**In the app.** Glide's Spotlight clips now use the three-frame vote (`MaskVote`, which they were missing) and the room memory, before steadying.
 
 ## App wiring
 

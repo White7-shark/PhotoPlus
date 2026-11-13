@@ -159,6 +159,10 @@ class GlideProcessor {
         val work = createBitmap(w, h).apply { isPremultiplied = false }
         val out = createBitmap(w, h).apply { isPremultiplied = false }
         var steady: Bitmap? = null
+        // The room remembered behind the person: pieces of it the model
+        // swallows for many frames are given back (no shadow growing from the
+        // person and shrinking back).
+        val room = if (options.portrait) NativeEngine.nativeVideoRoomCreate() else 0L
         val fromPrev = FloatArray(5)
         val toNext = FloatArray(5)
         val report = FloatArray(NativeEngine.PORTRAIT_REPORT_SIZE)
@@ -179,7 +183,11 @@ class GlideProcessor {
             val landmarks = faces[i].orEmpty()
             val mask = masks[i]
             if (options.portrait && mask != null) {
-              val subject = PortraitProcessor.alphaBitmap(mask, aw, ah)
+              // Three frames' vote first (a one-frame mistake never shows),
+              // then the room memory, then steadying.
+              val voted = MaskVote.median(masks.getOrNull(i - 1), mask, masks.getOrNull(i + 1))
+              val subject = PortraitProcessor.alphaBitmap(voted, aw, ah)
+              if (room != 0L) NativeEngine.nativeVideoRoomCheck(room, cur, subject, if (prev != null) fromPrev else null, token)
               val held = steady
               if (held == null) {
                 steady = subject
@@ -215,6 +223,7 @@ class GlideProcessor {
           work.recycle()
           out.recycle()
           steady?.recycle()
+          if (room != 0L) NativeEngine.nativeVideoRoomDestroy(room)
           source.releaseAll()
         }
         encoder.finish(GlideOptions.frameTimeUs(n, fps))

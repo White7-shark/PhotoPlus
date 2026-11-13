@@ -703,6 +703,36 @@ pp_status pp_video_consensus_mask(const pp_image* previous, const pp_image* curr
   });
 }
 
+struct pp_video_room {
+  photoplus::video::RoomMemory memory;
+};
+
+pp_status pp_video_room_create(pp_video_room** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = new (std::nothrow) pp_video_room();
+    return *out != nullptr ? succeed() : fail(PP_ERROR_OUT_OF_MEMORY, "Unable to allocate the room");
+  });
+}
+
+void pp_video_room_destroy(pp_video_room* room) { delete room; }
+
+pp_status pp_video_room_check(pp_video_room* room, const pp_image* frame, pp_image* mask, const pp_video_motion* from_previous,
+                              const pp_cancel_token* token, float* reclaimed_out) {
+  return guarded([&]() -> pp_status {
+    if (room == nullptr || frame == nullptr || mask == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    photoplus::video::Similarity motion;
+    if (from_previous != nullptr) {
+      motion.a = from_previous->a, motion.b = from_previous->b, motion.tx = from_previous->tx, motion.ty = from_previous->ty;
+    }
+    auto r = room->memory.check(frame->buffer, mask->buffer, from_previous != nullptr ? &motion : nullptr,
+                                token ? &token->token : nullptr);
+    if (!r) return fail(r.error());
+    if (reclaimed_out != nullptr) *reclaimed_out = *r;
+    return succeed();
+  });
+}
+
 void pp_face_default_params(pp_face_params* out) {
   if (out == nullptr) return;
   *out = pp_face_params{};

@@ -257,6 +257,7 @@ PortraitProcessor.applyBeauty(recipe?, backdrop?, skinTone?): one set of masks (
 | `native/engine/src/backdrop/backdrop.cpp` | Matte (hair the mask missed recovered by colour, colour guided filter), clean plates, 14 painted designs, relighting, composite |
 | `native/engine/src/skintone/skintone.cpp` | Skin weight (colour, brightness, texture, feathered region); the shade as gains on the skin's own colour in linear light (the scene's light stays), natural-hue guard, headroom for fair skin, even tone |
 | `pp_video_consensus_mask` | Three-frame median of subject masks: one-frame segmentation mistakes never reach a clip |
+| `pp_video_room_*` (`video::RoomMemory`) | The room remembered behind the person (follows the camera, corrects exposure drift): pieces of room the model swallows for many frames are given back; the person's long-held outline and dark close calls are kept. Used by Glide (with `MaskVote`) before steadying |
 | `scripts/backdrop-demo.py`, `scripts/backdrop-video-demo.py` | Sheets and clips on real photos and video |
 | `scripts/skintone-demo.py`, `scripts/skintone-video-demo.py` | Sheets, per-region measurements (face, body, hair, clothes, background) and clips |
 

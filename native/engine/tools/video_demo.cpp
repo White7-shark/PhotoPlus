@@ -10,6 +10,7 @@
 //   --retouch v --brighten v --blur v --pop v --bg-color v --edge v   (Spotlight / Glow)
 //   --eyes v --under-eye v --shine v --face-light v --teeth v --lips v (face touches)
 //   --backdrop n --backdrop-strength v                                  (Backdrops)
+//   --no-room                     masks as the model gives them (no room memory)
 //   --skin-tone gr gg gb glow --skin-strength v                         (Skin Tone, linear-light gains)
 //
 // Writes OUT_DIR/frame_%04d.ppm and prints a JSON report.
@@ -115,6 +116,7 @@ int main(int argc, char** argv) {
   pp_face_default_params(&fp);
   int backdrop = -1;  // pp_backdrop_design, applied after stabilising so painted backgrounds stay still
   float backdropStrength = 1.0f;
+  bool room = true;  // the room memory corrects the subject masks (--no-room to compare)
   bool skinTone = false;
   pp_skin_tone_params sp{};
   sp.strength = 1.0f;
@@ -140,6 +142,7 @@ int main(int argc, char** argv) {
     else if (k == "--lips") fp.lips = next();
     else if (k == "--backdrop") backdrop = static_cast<int>(next());
     else if (k == "--backdrop-strength") backdropStrength = next();
+    else if (k == "--no-room") room = false;
     else if (k == "--skin-tone") {
       skinTone = true;
       sp.gain_r = next(), sp.gain_g = next(), sp.gain_b = next(), sp.glow = next();
@@ -237,6 +240,9 @@ int main(int argc, char** argv) {
     return img;
   };
   pp_image* steady = nullptr;  // the steadied subject mask, carried frame to frame
+  pp_video_room* roomMemory = nullptr;
+  if (room) pp_video_room_create(&roomMemory);
+  double reclaimedSum = 0;
   double enhanceMs = 0, portraitMs = 0;
   for (int k = 0; k < n; ++k) {
     pp_image* work = nullptr;
@@ -269,6 +275,12 @@ int main(int argc, char** argv) {
         pp_image_create(si.width, si.height, PP_FORMAT_GRAY8, &voted);
         if (pp_video_consensus_mask(prevM, subj, nextM, voted) == PP_OK) std::swap(subj, voted);
         pp_image_destroy(voted);
+        // Pieces of the room the model took for the person, given back.
+        float reclaimed = 0;
+        if (roomMemory != nullptr && pp_video_room_check(roomMemory, frame(k), subj, k > 0 ? &motions[static_cast<size_t>(k)] : nullptr, nullptr,
+                                                        &reclaimed) == PP_OK) {
+          reclaimedSum += reclaimed;
+        }
         if (prevM) pp_image_destroy(prevM);
         if (nextM) pp_image_destroy(nextM);
         if (steady == nullptr) {
@@ -331,6 +343,8 @@ int main(int argc, char** argv) {
   }
   for (auto& [i, img] : cache) pp_image_destroy(img);
   pp_image_destroy(steady);
+  pp_video_room_destroy(roomMemory);
+  std::fprintf(stderr, "room: %.4f of the person area given back per frame on average\n", reclaimedSum / std::max(n, 1));
   const double total = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   std::printf(
       "{\"frames\":%d,\"zoom\":%.3f,\"shakeBefore\":%.2f,\"shakeAfter\":%.2f,\"motionMs\":%.0f,\"enhanceMsPerFrame\":%.0f,"

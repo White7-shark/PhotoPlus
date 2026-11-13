@@ -30,6 +30,10 @@ namespace {
 
 Error ok() { return Error{PP_OK, {}}; }
 Error invalid(const char* m) { return makeError(PP_ERROR_INVALID_ARGUMENT, m); }
+float smoothstep(float e0, float e1, float x) {
+  const float t = std::clamp((x - e0) / (e1 - e0), 0.0f, 1.0f);
+  return t * t * (3.0f - 2.0f * t);
+}
 
 bool colour(const ImageBuffer& img) {
   return img.format() == PixelFormat::RGBA8 || img.format() == PixelFormat::BGRA8;
@@ -621,6 +625,259 @@ Error consensusMask(const ImageBuffer* previous, const ImageBuffer& current, con
     for (int32_t x = 0; x < current.width(); ++x) o[x] = std::max(std::min(p[x], c[x]), std::min(std::max(p[x], c[x]), n[x]));
   }
   return ok();
+}
+
+// ------------------------------------------------------------- room memory
+
+void RoomMemory::reset() {
+  w_ = h_ = 0;
+  colour_.clear();
+  seen_.clear();
+  held_.clear();
+}
+
+Result<float> RoomMemory::check(const ImageBuffer& frame, ImageBuffer& mask, const Similarity* fromPrevious,
+                               const CancellationToken* token) {
+  ScopedTimer timer("video.room");
+  const PixelFormat ff = frame.format();
+  if ((ff != PixelFormat::RGBA8 && ff != PixelFormat::BGRA8) || mask.format() != PixelFormat::Gray8) {
+    return failure(invalid("RoomMemory needs an RGBA frame and a GRAY8 mask"));
+  }
+  if (frame.width() < 16 || frame.height() < 16 || mask.width() < 16 || mask.height() < 16) {
+    return failure(invalid("Frame or mask too small"));
+  }
+  if (isCancelled(token)) return failure(cancelledError());
+  // A coarse grid (longest side 320): each cell a few pixels, so a little
+  // hand shake or noise does not matter, and the work is a few milliseconds.
+  const int32_t MW = mask.width(), MH = mask.height();
+  const float scale = 320.0f / static_cast<float>(std::max(MW, MH));
+  const int32_t gw = std::max<int32_t>(8, static_cast<int32_t>(std::lround(static_cast<float>(MW) * std::min(scale, 1.0f))));
+  const int32_t gh = std::max<int32_t>(8, static_cast<int32_t>(std::lround(static_cast<float>(MH) * std::min(scale, 1.0f))));
+  bool fresh = false;
+  if (gw != w_ || gh != h_) {
+    reset();
+    w_ = gw, h_ = gh;
+    colour_.assign(static_cast<size_t>(gw) * gh * 3, 0.0f);
+    seen_.assign(static_cast<size_t>(gw) * gh, 0);
+    held_.assign(static_cast<size_t>(gw) * gh, 0.0f);
+    fresh = true;
+  }
+  const size_t n = static_cast<size_t>(gw) * gh;
+  // The room memory follows the camera: each cell takes what the previous
+  // frame showed at the point that moved onto it (nearest cell; off-frame:
+  // unseen). Where the person has been stays put: in a selfie the person
+  // moves with the phone while the room slides behind them.
+  if (fromPrevious != nullptr && !fresh) {
+    const Similarity& S = *fromPrevious;
+    const double det = S.a * S.a + S.b * S.b;
+    const bool still = std::abs(S.a - 1.0) < 1e-4 && std::abs(S.b) < 1e-4 && std::abs(S.tx) < 0.05 && std::abs(S.ty) < 0.05;
+    if (det > 1e-6 && std::isfinite(det) && std::isfinite(S.tx) && std::isfinite(S.ty) && !still) {
+      const double cw = static_cast<double>(frame.width()) / gw, ch = static_cast<double>(frame.height()) / gh;
+      const double hw = frame.width() * 0.5, hh = frame.height() * 0.5;
+      std::vector<float> colour(n * 3, 0.0f);
+      std::vector<uint8_t> seen(n, 0);
+      for (int32_t y = 0; y < gh; ++y)
+        for (int32_t x = 0; x < gw; ++x) {
+          const double X = (x + 0.5) * cw - hw - S.tx, Y = (y + 0.5) * ch - hh - S.ty;
+          const double px = (S.a * X + S.b * Y) / det + hw, py = (-S.b * X + S.a * Y) / det + hh;
+          const auto sx = static_cast<int32_t>(std::floor(px / cw)), sy = static_cast<int32_t>(std::floor(py / ch));
+          if (sx < 0 || sy < 0 || sx >= gw || sy >= gh) continue;
+          const size_t i = static_cast<size_t>(y) * gw + x, j = static_cast<size_t>(sy) * gw + sx;
+          for (int k = 0; k < 3; ++k) colour[i * 3 + static_cast<size_t>(k)] = colour_[j * 3 + static_cast<size_t>(k)];
+          seen[i] = seen_[j];
+        }
+      colour_.swap(colour), seen_.swap(seen);
+    }
+  }
+  const int ro = ff == PixelFormat::RGBA8 ? 0 : 2, bo = 2 - ro;
+  // Cell colour (box average of the frame) and cell mask (box average).
+  std::vector<float> col(n * 3), m(n);
+  const int32_t FW = frame.width(), FH = frame.height();
+  for (int32_t gy = 0; gy < gh; ++gy) {
+    const int32_t fy0 = gy * FH / gh, fy1 = std::max(fy0 + 1, (gy + 1) * FH / gh);
+    const int32_t my0 = gy * MH / gh, my1 = std::max(my0 + 1, (gy + 1) * MH / gh);
+    for (int32_t gx = 0; gx < gw; ++gx) {
+      const int32_t fx0 = gx * FW / gw, fx1 = std::max(fx0 + 1, (gx + 1) * FW / gw);
+      const int32_t mx0 = gx * MW / gw, mx1 = std::max(mx0 + 1, (gx + 1) * MW / gw);
+      double r = 0, g = 0, b = 0;
+      int32_t cnt = 0;
+      // Every other pixel is plenty for a cell average.
+      for (int32_t y = fy0; y < fy1; y += 2) {
+        const uint8_t* row = frame.row(y);
+        for (int32_t x = fx0; x < fx1; x += 2, ++cnt) {
+          const uint8_t* q = row + x * 4;
+          r += q[ro], g += q[1], b += q[bo];
+        }
+      }
+      const size_t i = static_cast<size_t>(gy) * gw + gx;
+      const double inv = 1.0 / (255.0 * std::max(cnt, 1));
+      col[i * 3] = static_cast<float>(r * inv), col[i * 3 + 1] = static_cast<float>(g * inv), col[i * 3 + 2] = static_cast<float>(b * inv);
+      double ms = 0;
+      for (int32_t y = my0; y < my1; ++y) {
+        const uint8_t* row = mask.row(y);
+        for (int32_t x = mx0; x < mx1; ++x) ms += row[x];
+      }
+      m[i] = static_cast<float>(ms / (255.0 * (my1 - my0) * (mx1 - mx0)));
+    }
+  }
+  auto blurVec = [&](const std::vector<float>& src, float sigma) -> Result<std::vector<float>> {
+    auto p = Plane::allocate(gw, gh), q = Plane::allocate(gw, gh);
+    if (!p || !q) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the room"));
+    std::copy(src.begin(), src.end(), p->data());
+    if (Error e = gaussianBlur(*p, *q, sigma, token); e.status != PP_OK) return failure(e);
+    return std::vector<float>(q->data(), q->data() + n);
+  };
+  const float shortSide = static_cast<float>(std::min(gw, gh));
+  auto dist = [](const float* a, const float* b) {
+    const float dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+    return std::sqrt(dr * dr + dg * dg + db * db);
+  };
+  constexpr int kReach = 2;
+  constexpr uint8_t kSeen = 3;
+  // 0. The camera's exposure and white balance drift as the person moves
+  //    (a phone keeps re-metering): the remembered room is brought to this
+  //    frame's exposure first, from the cells that are room now and before.
+  {
+    auto nearNow = blurVec(m, 1.5f);
+    if (!nearNow) return failure(nearNow.error());
+    std::vector<float> ratio[3];
+    for (size_t i = 0; i < n; ++i) {
+      if (seen_[i] < kSeen || (*nearNow)[i] > 0.03f) continue;
+      for (int k = 0; k < 3; ++k) {
+        const float mem = colour_[i * 3 + static_cast<size_t>(k)];
+        if (mem > 0.04f) ratio[k].push_back(col[i * 3 + static_cast<size_t>(k)] / mem);
+      }
+    }
+    if (ratio[0].size() > n / 20 && ratio[1].size() > n / 20 && ratio[2].size() > n / 20) {
+      for (int k = 0; k < 3; ++k) {
+        auto& r = ratio[k];
+        std::nth_element(r.begin(), r.begin() + static_cast<std::ptrdiff_t>(r.size() / 2), r.end());
+        const float gain = std::clamp(r[r.size() / 2], 0.5f, 2.0f);
+        for (size_t i = 0; i < n; ++i) {
+          float& c = colour_[i * 3 + static_cast<size_t>(k)];
+          c = std::min(1.0f, c * gain);
+        }
+      }
+    }
+  }
+  // 1. Where the mask matches the remembered room (within ±2 cells).
+  std::vector<float> match(n, 0.0f), dmin(n, 1e9f);
+  std::vector<int32_t> best(n, -1);
+  for (int32_t y = 0; y < gh; ++y)
+    for (int32_t x = 0; x < gw; ++x) {
+      const size_t i = static_cast<size_t>(y) * gw + x;
+      if (m[i] < 0.3f) continue;
+      for (int dy = -kReach; dy <= kReach; ++dy)
+        for (int dx = -kReach; dx <= kReach; ++dx) {
+          const int32_t yy = y + dy, xx = x + dx;
+          if (yy < 0 || xx < 0 || yy >= gh || xx >= gw) continue;
+          const size_t j = static_cast<size_t>(yy) * gw + xx;
+          if (seen_[j] < kSeen) continue;
+          const float d = dist(&col[i * 3], &colour_[j * 3]);
+          if (d < dmin[i]) dmin[i] = d, best[i] = static_cast<int32_t>(j);
+        }
+      if (best[i] >= 0) match[i] = 1.0f - smoothstep(0.035f, 0.08f, dmin[i]);
+    }
+  // 2. The person's colour near each cell, from deep inside the mask and
+  //    not from anything that matched the room.
+  auto inner = blurVec(m, 0.04f * shortSide);
+  if (!inner) return failure(inner.error());
+  std::vector<float> wF(n), wr(n), wg(n), wb(n);
+  for (size_t i = 0; i < n; ++i) {
+    wF[i] = smoothstep(0.85f, 0.98f, (*inner)[i]) * (1.0f - match[i]);
+    wr[i] = col[i * 3] * wF[i], wg[i] = col[i * 3 + 1] * wF[i], wb[i] = col[i * 3 + 2] * wF[i];
+  }
+  const float fs = 0.1f * shortSide;
+  auto sw = blurVec(wF, fs), sr = blurVec(wr, fs), sg = blurVec(wg, fs), sb = blurVec(wb, fs);
+  if (!sw || !sr || !sg || !sb) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the room"));
+  // And the person's colours right beside each cell, from the part of them
+  // that has been there all along (at the crown: their hair). A cell that
+  // looks like that is the person, however much it also looks like the room.
+  std::vector<float> wN(n), nr(n), ng(n), nb(n);
+  for (size_t i = 0; i < n; ++i) {
+    wN[i] = m[i] * smoothstep(0.6f, 0.9f, held_[i]) * (1.0f - match[i] * (1.0f - smoothstep(0.6f, 0.9f, held_[i])));
+    nr[i] = col[i * 3] * wN[i], ng[i] = col[i * 3 + 1] * wN[i], nb[i] = col[i * 3 + 2] * wN[i];
+  }
+  const float ns = 0.03f * shortSide;
+  auto nw = blurVec(wN, ns), nR = blurVec(nr, ns), nG = blurVec(ng, ns), nB = blurVec(nb, ns);
+  if (!nw || !nR || !nG || !nB) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the room"));
+  // 3. Given back: matches the room, and the person nearby is clearly a
+  //    different colour (and further from this cell than the room is). A
+  //    swallowed piece of room reaches well out from where the person has
+  //    been all along; the person's own edge (dark hair against a dark shelf
+  //    is a close call) hugs it. Only cells a few cells clear of it are judged.
+  std::vector<float> heldZone(n);
+  for (size_t i = 0; i < n; ++i) heldZone[i] = held_[i] > 0.5f ? 1.0f : 0.0f;
+  auto nearHeld = blurVec(heldZone, 2.0f);
+  if (!nearHeld) return failure(nearHeld.error());
+  std::vector<float> give(n, 0.0f);
+  for (size_t i = 0; i < n; ++i) {
+    if (match[i] <= 0.0f || (*sw)[i] < 1e-3f) continue;
+    const float inv = 1.0f / (*sw)[i];
+    const float F[3] = {(*sr)[i] * inv, (*sg)[i] * inv, (*sb)[i] * inv};
+    const float* room = &colour_[static_cast<size_t>(best[i]) * 3];
+    const float distinct = smoothstep(0.08f, 0.18f, dist(F, room));
+    float personD = dist(&col[i * 3], F);
+    if ((*nw)[i] > 0.02f) {
+      const float ni = 1.0f / (*nw)[i];
+      const float N[3] = {(*nR)[i] * ni, (*nG)[i] * ni, (*nB)[i] * ni};
+      personD = std::min(personD, dist(&col[i * 3], N));
+    }
+    const float closer = smoothstep(1.3f, 2.2f, personD / std::max(dmin[i], 0.01f)) * smoothstep(0.06f, 0.12f, personD);
+    const float clearOfPerson = 1.0f - smoothstep(0.05f, 0.25f, (*nearHeld)[i]);
+    // Where the person has been all along is the person (a cheek in shadow
+    // against a dark shelf); only a sudden growth into the room is judged.
+    const float lately = smoothstep(0.35f, 0.7f, held_[i]);
+    // Dark against dark (hair or a shaded cheek against a dark shelf) is a
+    // close call: kept, unless the person nearby is a very different colour.
+    const float* cc = &col[i * 3];
+    const float lightness = 0.299f * cc[0] + 0.587f * cc[1] + 0.114f * cc[2];
+    const float notDark = std::max(smoothstep(0.18f, 0.3f, lightness), smoothstep(0.2f, 0.3f, personD));
+    give[i] = match[i] * distinct * closer * (1.0f - lately) * clearOfPerson * notDark;
+  }
+  // 4. Applied to the mask at its own resolution.
+  double before = 0, removed = 0;
+  const float sx = static_cast<float>(gw) / static_cast<float>(MW), sy = static_cast<float>(gh) / static_cast<float>(MH);
+  auto gp = Plane::allocate(gw, gh);
+  if (!gp) return failure(gp.error());
+  std::copy(give.begin(), give.end(), gp->data());
+  for (int32_t y = 0; y < MH; ++y) {
+    uint8_t* row = mask.row(y);
+    const float gyf = (static_cast<float>(y) + 0.5f) * sy - 0.5f;
+    for (int32_t x = 0; x < MW; ++x) {
+      if (row[x] == 0) continue;
+      before += row[x];
+      const float k = gp->sample((static_cast<float>(x) + 0.5f) * sx - 0.5f, gyf);
+      if (k <= 0.01f) continue;
+      const auto v = static_cast<uint8_t>(std::lround(static_cast<float>(row[x]) * (1.0f - std::clamp(k, 0.0f, 1.0f))));
+      removed += row[x] - v;
+      row[x] = v;
+    }
+  }
+  // 5. The room as it is now, where it is clearly visible (a margin away
+  //    from the corrected mask).
+  // Where the person has been lately: an average of the model's own mask
+  // (about a second and a half at 30 fps to learn), the first frame as it is.
+  // It is the model's mask, not the corrected one, so a correction never
+  // feeds on itself: a piece of room swallowed for a few frames stays far
+  // from "held", while what the model has always called the person is.
+  // Learnt slowly, forgotten quickly: once the model sees room there again
+  // (the person moved away), the spot stops counting as theirs.
+  for (size_t i = 0; i < n; ++i) {
+    const float rate = m[i] >= 0.5f ? 0.03f : 0.3f;
+    held_[i] = fresh ? m[i] : held_[i] + rate * (m[i] - held_[i]);
+  }
+  for (size_t i = 0; i < n; ++i) m[i] *= 1.0f - give[i];
+  auto near = blurVec(m, 1.5f);
+  if (!near) return failure(near.error());
+  for (size_t i = 0; i < n; ++i) {
+    if ((*near)[i] > 0.03f) continue;  // a few cells clear of the person (hair edges never enter the memory)
+    float* c = &colour_[i * 3];
+    const float rate = seen_[i] == 0 ? 1.0f : 0.3f;
+    for (int k = 0; k < 3; ++k) c[k] += rate * (col[i * 3 + static_cast<size_t>(k)] - c[k]);
+    if (seen_[i] < 255) ++seen_[i];
+  }
+  return before > 0 ? static_cast<float>(removed / before) : 0.0f;
 }
 
 }  // namespace photoplus::video

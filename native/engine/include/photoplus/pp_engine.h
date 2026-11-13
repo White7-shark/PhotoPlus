@@ -737,6 +737,24 @@ pp_status pp_video_steady_mask(pp_image* previous, const pp_image* current, floa
  * be NULL at the ends of the clip. */
 pp_status pp_video_consensus_mask(const pp_image* previous, const pp_image* current, const pp_image* next, pp_image* out);
 
+/* The room remembered behind the person, to correct a clip's subject masks:
+ * a piece of the room the person model swallows for many frames (a beam
+ * above the head, a shelf beside it), which would otherwise grow from the
+ * person and shrink back like a shadow, is given back to the room because
+ * the room was in plain view there a moment before. Hair and anything that
+ * looks like the person nearby is kept. One per clip; call
+ * pp_video_room_check once per frame, in order, before steadying the mask. */
+typedef struct pp_video_room pp_video_room;
+pp_status pp_video_room_create(pp_video_room** out);
+void pp_video_room_destroy(pp_video_room* room);
+/* `frame` RGBA/BGRA, `mask` GRAY8 with the frame's aspect (any size),
+ * corrected in place. `from_previous` (optional): the frame's motion from the
+ * previous one (as from pp_video_estimate_motion, in this frame's pixels), so
+ * the memory follows the camera. `reclaimed_out` (optional): share of the
+ * mask's person area given back to the room. */
+pp_status pp_video_room_check(pp_video_room* room, const pp_image* frame, pp_image* mask, const pp_video_motion* from_previous,
+                              const pp_cancel_token* token, float* reclaimed_out);
+
 /* ---- Codec (Phase 4) ---------------------------------------------------- */
 /* JPEG and PNG (read and write), BMP and GIF (read). Decoded images are RGBA8
  * with straight alpha, upright (JPEG EXIF orientation applied). Dimensions are

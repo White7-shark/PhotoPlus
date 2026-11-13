@@ -71,6 +71,38 @@ Error applyCurves(ImageBuffer& image, const Curves& curves, const CancellationTo
 // wins at once (no ghosting). `previous` is updated to the result.
 Error steadyMask(ImageBuffer& previous, const ImageBuffer& current, float smoothing);
 
+// The room remembered behind the person, to correct a clip's subject masks.
+// A person model now and then swallows a piece of the room touching the
+// person (a beam above the head, a shelf beside it) for many frames running:
+// kept sharp in front of a blurred or new background, it grows from the
+// person and shrinks back like a shadow pulling at them. It is attached (no
+// island) and lasts too long for a three-frame vote, but the room was in
+// plain view there a moment before. RoomMemory keeps a coarse picture of the
+// room wherever it is clearly visible; a part of the mask that matches the
+// remembered room (allowing for a little hand shake) and does not look like
+// the person nearby is given back to the room. Hair that stays put is never
+// judged: that spot was never seen as room, and a part of the outline that
+// has been the person all along (a cheek in shadow against a dark shelf) is
+// never given back either; only a sudden growth into what was room a moment
+// ago is. The memory follows the camera (`fromPrevious`: the frame's motion,
+// as for stabilising). Call check() once per frame, in order, on same-sized
+// frames and masks.
+class RoomMemory {
+ public:
+  // `frame`: RGBA/BGRA; `mask`: GRAY8 subject mask with the frame's aspect
+  // (any size), corrected in place. Returns the share of the mask's person
+  // area given back to the room.
+  Result<float> check(const ImageBuffer& frame, ImageBuffer& mask, const Similarity* fromPrevious,
+                      const CancellationToken* token);
+  void reset();
+
+ private:
+  int32_t w_ = 0, h_ = 0;
+  std::vector<float> colour_;  // 3 per cell, sRGB 0..1
+  std::vector<uint8_t> seen_;  // frames the cell was seen as room (capped)
+  std::vector<float> held_;    // where the person has been lately (slow average of the corrected mask)
+};
+
 // Consensus of three neighbouring frames' subject masks (GRAY8, same size):
 // the per-pixel median. A segmentation mistake in a single frame (a patch
 // of wall taken for the person, a bite out of the hair) is outvoted by its
