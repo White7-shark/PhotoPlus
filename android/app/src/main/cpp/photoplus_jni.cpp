@@ -605,22 +605,23 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeBackdrop(
   if (st != PP_OK) throwStatus(env, st);
 }
 
-// Skin Tone: moves the skin of the face and visible body toward a shade, in
-// place. `faces` (ALPHA_8 face area) is needed to measure the skin; `subject`
-// and `protect` are optional. Returns false when no face could be measured
-// (nothing changed).
+// Skin Tone: gives the skin of the face and visible body a new shade, in
+// place, as gains on its own colour (linear light). `faces` (ALPHA_8 face
+// area) is needed to measure the skin; `subject` and `protect` are optional.
+// Returns false when no face could be measured (nothing changed).
 JNIEXPORT jboolean JNICALL Java_com_photoplus_engine_NativeEngine_nativeSkinTone(
-    JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject faces, jobject protect, jfloat r, jfloat g, jfloat b,
-    jfloat glow, jfloat strength, jlong token) {
+    JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject faces, jobject protect, jfloat gainR, jfloat gainG,
+    jfloat gainB, jfloat glow, jfloat evenness, jfloat strength, jlong token) {
   WrappedBitmap img, subj, fm, pm;
   if (!img.open(env, bitmap, false) || !subj.open(env, subject, true) || !fm.open(env, faces, true) || !pm.open(env, protect, true)) {
     return JNI_FALSE;
   }
   pp_skin_tone_params p{};
-  p.shade_r = r;
-  p.shade_g = g;
-  p.shade_b = b;
+  p.gain_r = gainR;
+  p.gain_g = gainG;
+  p.gain_b = gainB;
   p.glow = glow;
+  p.evenness = evenness;
   p.strength = strength;
   int32_t hasSkin = 0;
   const pp_status st = pp_skin_tone(img.image, subj.image, fm.image, pm.image, &p, reinterpret_cast<const pp_cancel_token*>(token),

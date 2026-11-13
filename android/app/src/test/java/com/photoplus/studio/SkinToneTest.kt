@@ -29,10 +29,13 @@ class SkinToneTest {
       assertEquals(o.getString("id"), shade.id)
       assertEquals(o.getString("color").removePrefix("#").toInt(16), shade.color, shade.id)
       assertEquals(o.getDouble("glow").toFloat(), shade.glow, 1e-6f, shade.id)
+      val gains = o.getJSONArray("gains")
+      assertEquals(3, gains.length())
+      for (c in 0 until 3) assertEquals(gains.getDouble(c).toFloat(), shade.gains[c], 1e-6f, shade.id)
     }
-    assertEquals(0xF1 / 255f, SkinShade.IVORY.r, 1e-6f)
-    assertEquals(0xDD / 255f, SkinShade.IVORY.g, 1e-6f)
-    assertEquals(0xC6 / 255f, SkinShade.IVORY.b, 1e-6f)
+    // Gentle, natural changes: within about ±0.7 stop per channel.
+    for (s in SkinShade.entries) for (g in s.gains) assertTrue(g in 0.6f..1.7f, s.id)
+    assertTrue(SkinShade.EVENNESS in 0f..1f)
   }
 
   @Test

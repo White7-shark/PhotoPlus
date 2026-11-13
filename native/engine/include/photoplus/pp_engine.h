@@ -574,14 +574,16 @@ pp_status pp_backdrop(pp_image* image, const pp_image* subject, const pp_image* 
 
 /* ---- Skin Tone: the person's skin moved toward a chosen shade ------------- */
 typedef struct pp_skin_tone_params {
-  float shade_r, shade_g, shade_b; /* the shade, sRGB 0..1 (a mid-tone of that skin) */
-  float glow;                      /* 0..1 soft sheen on the skin's highlights */
-  float strength;                  /* 0..1 */
-  float reserved[5];
+  float gain_r, gain_g, gain_b; /* the shade: gains on the skin's own colour, linear light (1 = unchanged) */
+  float glow;                   /* 0..1 soft sheen on the skin's highlights */
+  float strength;               /* 0..1 */
+  float evenness;               /* 0..1 how much blotchy colour is evened */
+  float reserved[4];
 } pp_skin_tone_params;
 
-/* Recolours the skin of the face and the visible body in place (hair, eyes,
- * brows, lips, clothes and background keep their colours). `face_mask`
+/* Recolours the skin of the face and the visible body in place, as a change
+ * of the skin's own colour under the photo's light (hair, eyes, brows, lips,
+ * clothes and background keep their colours). `face_mask`
  * (GRAY8, face area from landmarks) is needed to measure the skin; without
  * a usable face nothing changes and *has_skin_out is 0. `subject` (GRAY8,
  * optional) extends the search to the body; `protect` (GRAY8, optional)
@@ -657,6 +659,11 @@ pp_status pp_video_enhance_frame(const pp_image* frame, const pp_image* previous
 /* Temporal smoothing of a subject mask (GRAY8): `previous` becomes the
  * steadied mask for `current`. smoothing 0..0.9. */
 pp_status pp_video_steady_mask(pp_image* previous, const pp_image* current, float smoothing);
+/* Consensus of three neighbouring frames' subject masks (GRAY8, same size):
+ * the per-pixel median, written to `out` (same size). A mistake in a single
+ * frame is outvoted; real movement passes through. `previous` / `next` may
+ * be NULL at the ends of the clip. */
+pp_status pp_video_consensus_mask(const pp_image* previous, const pp_image* current, const pp_image* next, pp_image* out);
 
 /* ---- Codec (Phase 4) ---------------------------------------------------- */
 /* JPEG and PNG (read and write), BMP and GIF (read). Decoded images are RGBA8

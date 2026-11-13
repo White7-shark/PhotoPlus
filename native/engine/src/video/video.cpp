@@ -606,4 +606,21 @@ Error steadyMask(ImageBuffer& previous, const ImageBuffer& current, float smooth
   return ok();
 }
 
+Error consensusMask(const ImageBuffer* previous, const ImageBuffer& current, const ImageBuffer* next, ImageBuffer& out) {
+  auto same = [&](const ImageBuffer* m) {
+    return m == nullptr || (m->format() == PixelFormat::Gray8 && m->width() == current.width() && m->height() == current.height());
+  };
+  if (current.format() != PixelFormat::Gray8 || !same(previous) || !same(next) || !same(&out)) {
+    return invalid("Masks must be same-sized GRAY8");
+  }
+  for (int32_t y = 0; y < current.height(); ++y) {
+    const uint8_t* c = current.row(y);
+    const uint8_t* p = previous != nullptr ? previous->row(y) : c;
+    const uint8_t* n = next != nullptr ? next->row(y) : c;
+    uint8_t* o = out.row(y);
+    for (int32_t x = 0; x < current.width(); ++x) o[x] = std::max(std::min(p[x], c[x]), std::min(std::max(p[x], c[x]), n[x]));
+  }
+  return ok();
+}
+
 }  // namespace photoplus::video

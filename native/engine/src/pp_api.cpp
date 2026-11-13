@@ -693,6 +693,15 @@ pp_status pp_video_steady_mask(pp_image* previous, const pp_image* current, floa
   });
 }
 
+pp_status pp_video_consensus_mask(const pp_image* previous, const pp_image* current, const pp_image* next, pp_image* out) {
+  return guarded([&]() -> pp_status {
+    if (current == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    const photoplus::Error e = photoplus::video::consensusMask(previous ? &previous->buffer : nullptr, current->buffer,
+                                                                next ? &next->buffer : nullptr, out->buffer);
+    return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
 void pp_face_default_params(pp_face_params* out) {
   if (out == nullptr) return;
   *out = pp_face_params{};
@@ -954,11 +963,12 @@ pp_status pp_skin_tone(pp_image* image, const pp_image* subject, const pp_image*
   return guarded([&]() -> pp_status {
     if (image == nullptr || params == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image and params are required");
     photoplus::skintone::Params p;
-    p.r = params->shade_r;
-    p.g = params->shade_g;
-    p.b = params->shade_b;
+    p.gainR = params->gain_r;
+    p.gainG = params->gain_g;
+    p.gainB = params->gain_b;
     p.glow = params->glow;
     p.strength = params->strength;
+    p.evenness = params->evenness;
     photoplus::skintone::Report r;
     const photoplus::Error e = photoplus::skintone::apply(image->buffer, subject ? &subject->buffer : nullptr,
                                                           face_mask ? &face_mask->buffer : nullptr,

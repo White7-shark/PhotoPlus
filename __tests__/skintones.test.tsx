@@ -35,10 +35,16 @@ describe('skin tones', () => {
       'ebony_glow',
     ]);
     for (const s of SKIN_SHADES) {
+      // A gentle change of the skin's own colour: about ±0.7 stop per channel at most.
+      for (const g of s.gains) expect(g >= 0.6 && g <= 1.7).toBe(true);
       expect(shadeCover(s.id)).toBeTruthy();
       expect(s.note.length).toBeGreaterThan(8);
     }
-    // Ordered from fair to deep (allowing neighbours of similar depth but a different undertone).
+    // Lighter shades lift the skin, deeper ones deepen it.
+    const lift = (s: { gains: number[] }) => 0.2126 * s.gains[0] + 0.7152 * s.gains[1] + 0.0722 * s.gains[2];
+    expect(lift(SKIN_SHADES[1])).toBeGreaterThan(1.3);
+    expect(lift(SKIN_SHADES[SKIN_SHADES.length - 1])).toBeLessThan(0.75);
+    // Swatches ordered from fair to deep (allowing neighbours of similar depth but a different undertone).
     const lum = SKIN_SHADES.map(s => luminance(s.color));
     expect(lum[0]).toBeGreaterThan(lum[lum.length - 1] * 8);
     for (let i = 2; i < lum.length; i++) expect(lum[i]).toBeLessThan(lum[i - 2]);

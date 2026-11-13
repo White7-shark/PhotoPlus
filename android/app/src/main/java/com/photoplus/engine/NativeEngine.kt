@@ -190,8 +190,9 @@ object NativeEngine {
   external fun nativeBackdrop(bitmap: Bitmap, subject: Bitmap, depth: Bitmap?, design: Int, strength: Float, seed: Int, token: Long)
 
   /**
-   * Skin Tone: moves the skin of the face and the visible body toward a
-   * shade (sRGB 0..1), in place. [faces] (ALPHA_8 face area) is needed to
+   * Skin Tone: gives the skin of the face and the visible body a new shade,
+   * in place, as gains on its own colour in linear light (1 = unchanged), so
+   * the photo's light stays on it. [faces] (ALPHA_8 face area) is needed to
    * measure the skin; [subject] and [protect] are optional. Returns false
    * when no face could be measured (nothing changed).
    */
@@ -200,10 +201,11 @@ object NativeEngine {
     subject: Bitmap?,
     faces: Bitmap?,
     protect: Bitmap?,
-    r: Float,
-    g: Float,
-    b: Float,
+    gainR: Float,
+    gainG: Float,
+    gainB: Float,
     glow: Float,
+    evenness: Float,
     strength: Float,
     token: Long,
   ): Boolean

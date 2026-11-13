@@ -10,7 +10,7 @@
 //   --retouch v --brighten v --blur v --pop v --bg-color v --edge v   (Spotlight / Glow)
 //   --eyes v --under-eye v --shine v --face-light v --teeth v --lips v (face touches)
 //   --backdrop n --backdrop-strength v                                  (Backdrops)
-//   --skin-tone r g b glow --skin-strength v                            (Skin Tone, sRGB 0..1)
+//   --skin-tone gr gg gb glow --skin-strength v                         (Skin Tone, linear-light gains)
 //
 // Writes OUT_DIR/frame_%04d.ppm and prints a JSON report.
 #include <algorithm>
@@ -142,7 +142,8 @@ int main(int argc, char** argv) {
     else if (k == "--backdrop-strength") backdropStrength = next();
     else if (k == "--skin-tone") {
       skinTone = true;
-      sp.shade_r = next(), sp.shade_g = next(), sp.shade_b = next(), sp.glow = next();
+      sp.gain_r = next(), sp.gain_g = next(), sp.gain_b = next(), sp.glow = next();
+      sp.evenness = 0.5f;
     } else if (k == "--skin-strength") sp.strength = next();
     else {
       std::fprintf(stderr, "unknown option %s\n", k.c_str());
@@ -258,6 +259,18 @@ int main(int argc, char** argv) {
     if (portrait || backdrop >= 0 || skinTone) {
       pp_image* subj = readPgm(name(in, "subject", k, "pgm"));
       if (subj != nullptr) {
+        // Three frames' consensus first: a one-frame segmentation mistake
+        // never reaches the picture.
+        pp_image* prevM = k > 0 ? readPgm(name(in, "subject", k - 1, "pgm")) : nullptr;
+        pp_image* nextM = k + 1 < n ? readPgm(name(in, "subject", k + 1, "pgm")) : nullptr;
+        pp_image_info si{};
+        pp_image_get_info(subj, &si);
+        pp_image* voted = nullptr;
+        pp_image_create(si.width, si.height, PP_FORMAT_GRAY8, &voted);
+        if (pp_video_consensus_mask(prevM, subj, nextM, voted) == PP_OK) std::swap(subj, voted);
+        pp_image_destroy(voted);
+        if (prevM) pp_image_destroy(prevM);
+        if (nextM) pp_image_destroy(nextM);
         if (steady == nullptr) {
           steady = subj;
           subj = nullptr;

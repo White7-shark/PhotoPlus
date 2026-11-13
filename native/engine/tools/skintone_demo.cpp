@@ -2,7 +2,7 @@
 //
 //   skintone_demo IN.ppm FACE.pgm SUBJECT.pgm|- PROTECT.pgm|- SHADES.txt OUT_PREFIX [strength]
 //
-// SHADES.txt: one shade per line, "r g b glow" (sRGB 0..1). Writes
+// SHADES.txt: one shade per line, "gain_r gain_g gain_b glow" (linear-light gains). Writes
 // OUT_PREFIX<index>.ppm per shade and prints one JSON line each.
 #include <chrono>
 #include <cstdio>
@@ -92,7 +92,8 @@ int main(int argc, char** argv) {
     pp_image_create(info.width, info.height, PP_FORMAT_RGBA8, &img);
     pp_image_copy_pixels(src, img);
     pp_skin_tone_params p{};
-    p.shade_r = r, p.shade_g = g, p.shade_b = b, p.glow = glow, p.strength = strength;
+    p.gain_r = r, p.gain_g = g, p.gain_b = b, p.glow = glow, p.strength = strength;
+    p.evenness = 0.5f;
     int32_t hasSkin = 0;
     float cov = 0;
     const auto t0 = std::chrono::steady_clock::now();

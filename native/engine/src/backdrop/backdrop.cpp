@@ -331,6 +331,63 @@ Error recoverHair(const Rgb3& gam, Plane& mask, const CancellationToken* token) 
   return ok();
 }
 
+// Stray islands. A segmenter now and then marks a patch of the background
+// (a bright wall corner, a lamp) as person, often for a single video frame;
+// cut out and re-lit, it would pop in and out of the new scene. Patches of
+// "person" not connected to anyone (smaller than 8% of the largest) are
+// dropped. People apart from each other are each large, and stay.
+Error dropIslands(Plane& mask, const CancellationToken* token) {
+  const int32_t w = mask.width(), h = mask.height();
+  std::vector<int32_t> label(mask.size(), -1);
+  std::vector<int64_t> area;
+  std::vector<int32_t> stack;
+  for (int32_t y0 = 0; y0 < h; ++y0) {
+    if (isCancelled(token)) return cancelledError();
+    for (int32_t x0 = 0; x0 < w; ++x0) {
+      const size_t i0 = static_cast<size_t>(y0) * static_cast<size_t>(w) + static_cast<size_t>(x0);
+      if (label[i0] >= 0 || mask.data()[i0] <= 0.5f) continue;
+      const auto id = static_cast<int32_t>(area.size());
+      int64_t n = 0;
+      label[i0] = id;
+      stack.assign(1, static_cast<int32_t>(i0));
+      while (!stack.empty()) {
+        const int32_t i = stack.back();
+        stack.pop_back();
+        ++n;
+        const int32_t x = i % w, y = i / w;
+        const int32_t nb[4][2] = {{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}};
+        for (const auto& q : nb) {
+          if (q[0] < 0 || q[1] < 0 || q[0] >= w || q[1] >= h) continue;
+          const int32_t j = q[1] * w + q[0];
+          if (label[static_cast<size_t>(j)] >= 0 || mask.data()[static_cast<size_t>(j)] <= 0.5f) continue;
+          label[static_cast<size_t>(j)] = id;
+          stack.push_back(j);
+        }
+      }
+      area.push_back(n);
+    }
+  }
+  if (area.size() < 2) return ok();
+  const int64_t largest = *std::max_element(area.begin(), area.end());
+  auto drop = Plane::allocate(w, h);
+  if (!drop) return drop.error();
+  bool any = false;
+  for (size_t i = 0; i < mask.size(); ++i) {
+    const bool d = label[i] >= 0 && area[static_cast<size_t>(label[i])] * 100 < largest * 8;
+    drop->data()[i] = d ? 1.0f : 0.0f;
+    any = any || d;
+  }
+  if (!any) return ok();
+  // Feathered, so the soft rim of a dropped patch goes with it.
+  auto soft = blurred(*drop, 1.5f, token);
+  if (!soft) return soft.error();
+  for (size_t i = 0; i < mask.size(); ++i) {
+    const bool kept = label[i] >= 0 && drop->data()[i] == 0.0f;
+    if (!kept) mask.data()[i] *= 1.0f - smoothstep(0.02f, 0.25f, std::max(drop->data()[i], soft->data()[i]));
+  }
+  return ok();
+}
+
 struct Geometry {
   float cx = 0.5f, cy = 0.45f;  // subject centre (0..1)
   float top = 0.1f;             // top of the subject (0..1)
@@ -616,6 +673,7 @@ Error apply(ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* d
   if (!coarse) return coarse.error();
   auto coarseUp = resizeBilinear(*coarse, lw, lh, token);
   if (!coarseUp) return coarseUp.error();
+  if (Error e = dropIslands(*coarseUp, token); e.status != PP_OK) return e;
   // Signature keeps the real background, so the mask's own edge is enough.
   if (design != Design::Signature) {
     if (Error e = recoverHair(gam, *coarseUp, token); e.status != PP_OK) return e;

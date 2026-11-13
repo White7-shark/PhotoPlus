@@ -87,7 +87,7 @@ def main() -> int:
     clips.append(("Glide only", out / "glide.mp4"))
     for sid in chosen:
         s = by_id[sid]
-        r, g, b = (int(s["color"][i:i + 2], 16) / 255 for i in (1, 3, 5))
+        r, g, b = s["gains"]
         dst = out / sid
         dst.mkdir(exist_ok=True)
         report[s["name"]] = json.loads(sh(demo, str(src), str(dst), str(count), "--strength", "1", "--max-zoom", "1.12",

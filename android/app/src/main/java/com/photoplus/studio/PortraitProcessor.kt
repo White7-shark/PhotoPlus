@@ -204,7 +204,10 @@ class PortraitProcessor {
       val out = FloatArray(NativeEngine.BEAUTY_REPORT_SIZE)
       // Skin colour first, so the retouch and grade work on the new shade.
       val toned = shade?.let {
-        NativeEngine.nativeSkinTone(bitmap, masks.subject, masks.faces, masks.protect, it.shade.r, it.shade.g, it.shade.b, it.shade.glow, it.strength, token)
+        val g = it.shade.gains
+        NativeEngine.nativeSkinTone(
+          bitmap, masks.subject, masks.faces, masks.protect, g[0], g[1], g[2], it.shade.glow, SkinShade.EVENNESS, it.strength, token,
+        )
       }
       if (recipe != null && recipe.active) {
         NativeEngine.nativeBeauty(bitmap, masks.subject, masks.faces, masks.protect, masks.depth, pts, detailed, recipe.toArray(), token, out)

@@ -16,21 +16,27 @@
 //   - the person's own skin colour is measured on the face (median, spread);
 //   - skin is found by colour similarity to it, in the face and in the
 //     subject, with features (eyes, brows, lips) protected and hair kept out
-//     by brightness (dark hair) and texture (fair hair: strands, not skin); the weight follows the photo's edges (guided filter);
-//   - the chroma moves by the difference between the shade and the person's
-//     own skin, so their natural variation (flush, shadows, freckles) stays;
-//   - brightness moves part of the way only (a shade, not a different
-//     face): half the way in stops, eased off toward about 0.7 stop either
-//     way, with highlights rolled off so nothing new clips. The undertone
-//     goes all the way; saturation follows the brightness (a pale shade on a
-//     face that stays deep would otherwise look ashen). Texture and shading
-//     are untouched.
+//     by brightness (dark hair) and texture (fair hair: strands, not skin);
+//     the weight follows the photo's edges (guided filter) and the face area
+//     is feathered, so no outline shows;
+//   - a shade is a change of the skin's own colour (albedo) under the same
+//     light: per-channel gains in linear light. The scene's light colour and
+//     the person's shading, pores and flush all stay, so the new shade sits
+//     naturally in the photo; shine keeps the light's colour;
+//   - colour is evened a little around the skin's local colour (blotches,
+//     redness, colour noise); brightness detail is untouched;
+//   - fair skin is lifted only as far as its headroom allows, and highlights
+//     roll off, so nothing new clips and texture is kept.
 namespace photoplus::skintone {
 
 struct Params {
-  float r = 0.8f, g = 0.6f, b = 0.5f;  // the shade, sRGB 0..1 (a mid-tone of that skin)
-  float glow = 0.0f;                   // 0..1 a soft luminous sheen on the skin's highlights
-  float strength = 1.0f;               // 0..1
+  // The shade: gains on the skin's own colour, linear light (1 = unchanged).
+  // E.g. 1.35/1.5/1.05 is a lighter, golden skin; 0.84/0.76/0.70 a deeper,
+  // warmer one.
+  float gainR = 1.0f, gainG = 1.0f, gainB = 1.0f;
+  float glow = 0.0f;      // 0..1 a soft luminous sheen on the skin's highlights
+  float evenness = 0.5f;  // 0..1 how much blotchy colour is evened
+  float strength = 1.0f;  // 0..1
 };
 
 struct Report {

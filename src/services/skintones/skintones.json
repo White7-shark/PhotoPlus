@@ -1,20 +1,30 @@
 {
-  "version": 1,
+  "version": 2,
   "shades": [
     {
       "id": "porcelain_rose",
       "name": "Porcelain Rose",
       "plan": "premium",
       "color": "#EABFC3",
+      "gains": [1.535, 1.321, 1.581],
       "glow": 0.15,
       "note": "Fair with a cool, rosy undertone"
     },
-    { "id": "ivory", "name": "Ivory", "plan": "free", "color": "#F1DDC6", "glow": 0.0, "note": "Fair and neutral" },
+    {
+      "id": "ivory",
+      "name": "Ivory",
+      "plan": "free",
+      "color": "#F1DDC6",
+      "gains": [1.449, 1.434, 1.666],
+      "glow": 0.0,
+      "note": "Fair and neutral"
+    },
     {
       "id": "peach",
       "name": "Peach",
       "plan": "premium",
       "color": "#E9B796",
+      "gains": [1.457, 1.254, 1.192],
       "glow": 0.1,
       "note": "Light with a warm peach undertone"
     },
@@ -23,6 +33,7 @@
       "name": "Golden Beige",
       "plan": "premium",
       "color": "#DCB680",
+      "gains": [1.346, 1.359, 1.102],
       "glow": 0.0,
       "note": "Light-medium, soft golden beige"
     },
@@ -31,6 +42,7 @@
       "name": "Honey",
       "plan": "free",
       "color": "#D6A060",
+      "gains": [1.168, 1.122, 0.708],
       "glow": 0.1,
       "note": "Medium with a golden-yellow undertone"
     },
@@ -39,6 +51,7 @@
       "name": "Olive",
       "plan": "premium",
       "color": "#AC9A6C",
+      "gains": [1.09, 1.123, 0.929],
       "glow": 0.0,
       "note": "Medium with a green-olive undertone"
     },
@@ -47,6 +60,7 @@
       "name": "Sun-Kissed",
       "plan": "premium",
       "color": "#B7794E",
+      "gains": [1.23, 0.997, 0.746],
       "glow": 0.4,
       "note": "A warm, glowing tan"
     },
@@ -55,6 +69,7 @@
       "name": "Caramel",
       "plan": "free",
       "color": "#B8743C",
+      "gains": [1.088, 0.985, 0.701],
       "glow": 0.1,
       "note": "Medium-deep, warm caramel"
     },
@@ -63,6 +78,7 @@
       "name": "Bronze",
       "plan": "premium",
       "color": "#855442",
+      "gains": [0.813, 0.829, 0.64],
       "glow": 0.35,
       "note": "Deep golden bronze with sheen"
     },
@@ -71,6 +87,7 @@
       "name": "Cinnamon",
       "plan": "premium",
       "color": "#8C4E36",
+      "gains": [1.105, 0.843, 0.961],
       "glow": 0.1,
       "note": "Deep with a red-brown undertone"
     },
@@ -79,6 +96,7 @@
       "name": "Mocha",
       "plan": "premium",
       "color": "#6E5040",
+      "gains": [0.803, 0.787, 0.779],
       "glow": 0.1,
       "note": "Deep, neutral cocoa"
     },
@@ -87,6 +105,7 @@
       "name": "Espresso",
       "plan": "free",
       "color": "#562C20",
+      "gains": [0.818, 0.683, 0.618],
       "glow": 0.1,
       "note": "Very deep and rich"
     },
@@ -95,7 +114,8 @@
       "name": "Ebony Glow",
       "plan": "premium",
       "color": "#33241E",
-      "glow": 0.7,
+      "gains": [0.641, 0.622, 0.722],
+      "glow": 0.6,
       "note": "The deepest shade, with a luminous sheen"
     }
   ]

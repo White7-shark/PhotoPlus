@@ -71,6 +71,13 @@ Error applyCurves(ImageBuffer& image, const Curves& curves, const CancellationTo
 // wins at once (no ghosting). `previous` is updated to the result.
 Error steadyMask(ImageBuffer& previous, const ImageBuffer& current, float smoothing);
 
+// Consensus of three neighbouring frames' subject masks (GRAY8, same size):
+// the per-pixel median. A segmentation mistake in a single frame (a patch
+// of wall taken for the person, a bite out of the hair) is outvoted by its
+// neighbours; real movement, which changes smoothly, passes through.
+// `previous` / `next` may be null at the ends of the clip.
+Error consensusMask(const ImageBuffer* previous, const ImageBuffer& current, const ImageBuffer* next, ImageBuffer& out);
+
 // The per-frame "pro video" enhancement, fast enough for every frame of a
 // clip (the slow analysis is done once per clip: noise, blur, tone curves):
 //  - temporal denoise: the previous and next frames, aligned by the camera

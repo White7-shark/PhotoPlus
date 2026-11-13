@@ -1,8 +1,9 @@
 /**
  * Skin Tone: 13 shades for the person's skin (face and the visible body),
  * from Porcelain Rose to Ebony Glow. Unlike the beauty filters (light and
- * retouch), these change the colour of the skin itself; hair, eyes, lips,
- * clothes and the background keep theirs. Definitions are in
+ * retouch), these change the colour of the skin itself, gently and under
+ * the photo's own light; hair, eyes, lips, clothes and the background keep
+ * theirs. Definitions are in
  * skintones.json (SkinTone.kt mirrors them; a unit test checks both).
  */
 import type { ImageSourcePropType } from 'react-native';
@@ -13,8 +14,10 @@ export interface SkinShadeDef {
   id: string;
   name: string;
   plan: 'free' | 'premium';
-  /** A mid-tone of that skin, #RRGGBB. */
+  /** The swatch shown in the app, #RRGGBB. */
   color: string;
+  /** The shade as gains on the skin's own colour (linear red, green, blue; 1 = unchanged). */
+  gains: [number, number, number];
   /** 0..1 a soft sheen on the skin's highlights. */
   glow: number;
   note: string;
@@ -52,6 +55,9 @@ function isDef(v: unknown): v is SkinShadeDef {
     (s.plan === 'free' || s.plan === 'premium') &&
     typeof s.color === 'string' &&
     /^#[0-9A-Fa-f]{6}$/.test(s.color) &&
+    Array.isArray(s.gains) &&
+    s.gains.length === 3 &&
+    s.gains.every(g => typeof g === 'number' && g >= 0.4 && g <= 2.5) &&
     typeof s.glow === 'number' &&
     s.glow >= 0 &&
     s.glow <= 1

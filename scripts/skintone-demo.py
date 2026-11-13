@@ -3,8 +3,8 @@ Runs the 13 Skin Tone shades on real photos (development only, desktop) and
 measures what decides whether each one works:
 
   - reaches the skin: on face skin and body skin (neck, arms, hands), the
-    colour moves toward the shade — the CIELAB distance to the shade's own
-    colour shrinks — while the person's shading and texture stay;
+    skin's colour changes by the shade's gains (measured in linear light)
+    while the person's shading and texture stay;
   - nothing else changes: hair, clothes and the background keep their colour
     (mean CIELAB difference), as do the protected features;
   - distinct: every shade gives a visibly different skin (closest pair);
@@ -98,7 +98,12 @@ def sheet(original: Image.Image, results: list[Image.Image], shades: list[dict],
     out.save(path, quality=90)
 
 
-def measure(before: np.ndarray, after: np.ndarray, cats: np.ndarray, protect: np.ndarray, target_lab: np.ndarray) -> dict:
+def lin(rgb: np.ndarray) -> np.ndarray:
+    c = rgb.astype(np.float64) / 255.0
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def measure(before: np.ndarray, after: np.ndarray, cats: np.ndarray, protect: np.ndarray, gains: list[float]) -> dict:
     lb, la = srgb_to_lab(before), srgb_to_lab(after)
     de = np.linalg.norm(la - lb, axis=-1)
     out = {}
@@ -109,10 +114,11 @@ def measure(before: np.ndarray, after: np.ndarray, cats: np.ndarray, protect: np
         out[name] = {"change": float(de[sel].mean()), "pixels": int(sel.sum())}
         if name in ("face", "body"):
             mb, ma = lb[sel].mean(0), la[sel].mean(0)
-            # Chromatic distance (a*, b*) to the shade, before and after: the hue the shade asks for.
-            out[name]["to_shade_before"] = float(np.linalg.norm(mb[1:] - target_lab[1:]))
-            out[name]["to_shade_after"] = float(np.linalg.norm(ma[1:] - target_lab[1:]))
             out[name]["L_before"], out[name]["L_after"] = float(mb[0]), float(ma[0])
+            # The skin's colour change as gains in linear light, against the shade's own.
+            got = lin(after[sel]).mean(0) / np.maximum(lin(before[sel]).mean(0), 1e-6)
+            out[name]["gains"] = [float(v) for v in got]
+            out[name]["gain_error"] = float(np.abs(np.log(got) - np.log(np.array(gains))).mean())
             gb = before[..., :3].astype(np.float64).mean(-1)
             ga = after[..., :3].astype(np.float64).mean(-1)
             out[name]["texture"] = float(fine(ga)[sel].mean() / max(fine(gb)[sel].mean(), 1e-6))
@@ -136,9 +142,8 @@ def main() -> int:
     shades = json.loads((here.parent / "src/services/skintones/skintones.json").read_text())["shades"]
     with open(out / "shades.txt", "w") as f:
         for s in shades:
-            r, g, b = hexrgb(s["color"])
-            f.write(f"{r / 255:.5f} {g / 255:.5f} {b / 255:.5f} {s['glow']:.3f}\n")
-    target_labs = [srgb_to_lab(np.array(hexrgb(s["color"]), np.float64)) for s in shades]
+            gr, gg, gb = s["gains"]
+            f.write(f"{gr:.4f} {gg:.4f} {gb:.4f} {s['glow']:.3f}\n")
 
     from mediapipe.tasks.python import BaseOptions, vision
     landmarker = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(
@@ -174,9 +179,9 @@ def main() -> int:
         skin_lab = srgb_to_lab(before[sel]).mean(0) if sel.sum() > 200 else None
         rec = {"ita": ita(skin_lab) if skin_lab is not None else None, "shades": {}}
         skins = []
-        for s, r, img, tl in zip(shades, runs, imgs, target_labs):
+        for s, r, img in zip(shades, runs, imgs):
             after = np.asarray(img)
-            m = measure(before, after, cats, protect, tl)
+            m = measure(before, after, cats, protect, s["gains"])
             m["ms"] = r["ms"]
             m["coverage"] = r["coverage"]
             rec["shades"][s["id"]] = m

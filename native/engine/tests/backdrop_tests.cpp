@@ -344,3 +344,37 @@ TEST(backdrop_keeps_hair_the_mask_missed_but_not_a_seam_in_the_wall) {
     pp_image_destroy(mask);
   }
 }
+
+// A patch of the background the segmenter took for the person, not connected
+// to anyone, is not cut out and pasted onto the new scene.
+TEST(backdrop_drops_a_stray_patch_of_background_taken_for_the_person) {
+  const Face f(kTones[2], {});
+  pp_image* mask = subjectMask(f);
+  auto* mk = static_cast<uint8_t*>(pp_image_pixels(mask));
+  pp_image_info mi{};
+  pp_image_get_info(mask, &mi);
+  // A stray patch in the top-left corner of the wall.
+  for (int y = 6; y < 40; ++y)
+    for (int x = 6; x < 50; ++x) mk[static_cast<size_t>(y) * mi.stride + x] = 255;
+  pp_image* img = run(f, mask, PP_BACKDROP_PORCELAIN);
+  const auto* px = static_cast<const uint8_t*>(pp_image_pixels(img));
+  pp_image_info ii{};
+  pp_image_get_info(img, &ii);
+  double patch = 0;
+  int n = 0;
+  for (int y = 10; y < 36; ++y)
+    for (int x = 10; x < 46; ++x, ++n) {
+      const uint8_t* q = px + static_cast<size_t>(y) * ii.stride + x * 4;
+      patch += (q[0] + q[1] + q[2]) / 3.0;
+    }
+  patch /= n;
+  std::printf("    stray patch on the white studio: %.0f (white ~240, the old wall ~100)\n", patch);
+  EXPECT_TRUE(patch > 215);
+  // The person is still there.
+  pp_image* before = f.image();
+  const double cheek = diffOver(before, img, f, 8);
+  EXPECT_TRUE(cheek < 12);
+  pp_image_destroy(before);
+  pp_image_destroy(img);
+  pp_image_destroy(mask);
+}

@@ -4,9 +4,10 @@
 //      brightness and texture (hair out), the face / subject region and the
 //      protected features; then colour guided-filter coefficients so the weight follows
 //      the photo's own edges when evaluated per pixel at full resolution;
-//   3. per pixel: a partial brightness move in linear light (highlights
-//      rolled off), then the chroma moved toward the shade relative to the
-//      person's own skin, kept in gamut by easing chroma; optional sheen.
+//   3. per pixel: colour evened a little around the skin's local colour,
+//      then the shade as a change of the skin's own colour (per-channel
+//      gains in linear light: the scene's light stays on the skin), shine
+//      kept neutral, optional sheen, highlights rolled off.
 #include "photoplus/skintone.hpp"
 
 #include <algorithm>
@@ -25,12 +26,21 @@ using namespace portrait::detail;
 
 namespace {
 
+// The band of natural skin hues: the angle of (Cb, Cr), from rose (lower)
+// to gold (higher). Measured on real faces of every tone: medians 107–135°.
+// Deep skin turns khaki past ~135°; fair skin carries gold to ~145°.
+constexpr float kSkinHueMin = 1.92f;      // ~110°
+constexpr float kSkinHueMaxDeep = 2.36f;  // ~135°
+constexpr float kSkinHueMaxFair = 2.53f;  // ~145°
+
 // Values pushed above max(original, knee) approach 1 smoothly: added light
 // never clips, and what was already bright is not pushed further.
 inline float rollOff(float v, float original, float knee) {
+  constexpr float kCeiling = 254.4f / 255.0f;  // added light stops just short of white
   const float hi = std::max(original, knee);
-  if (v <= hi || hi >= 1.0f) return std::min(v, std::max(original, 1.0f));
-  return hi + (1.0f - hi) * std::tanh((v - hi) / (1.0f - hi));
+  if (v <= hi) return v;
+  if (hi >= kCeiling) return std::min(v, original);
+  return hi + (kCeiling - hi) * std::tanh((v - hi) / (kCeiling - hi));
 }
 
 Result<Plane> resized(const ImageBuffer* m, int32_t w, int32_t h, const CancellationToken* token) {
@@ -46,13 +56,14 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
   ScopedTimer timer("skintone.apply");
   if (!isColour(image)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Skin Tone needs an RGBA image");
   if (image.width() < 16 || image.height() < 16) return makeError(PP_ERROR_INVALID_ARGUMENT, "Image too small");
-  for (float v : {params.r, params.g, params.b, params.glow, params.strength}) {
+  for (float v : {params.gainR, params.gainG, params.gainB, params.glow, params.strength, params.evenness}) {
     if (!std::isfinite(v)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Non-finite skin tone parameter");
   }
   if (report != nullptr) *report = Report{};
   if (isCancelled(token)) return cancelledError();
   const float strength = std::clamp(params.strength, 0.0f, 1.0f);
   const float glow = std::clamp(params.glow, 0.0f, 1.0f);
+  const float evenness = std::clamp(params.evenness, 0.0f, 1.0f);
   if (faces == nullptr || faces->empty()) return ok();
 
   // 1. The person's own skin.
@@ -62,27 +73,28 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
   if (strength <= 0.0f) return ok();
   const float sk = 1.0f / (sc.skinY + 0.05f);
   const float sNcb = sc.skinCb * sk, sNcr = sc.skinCr * sk;
-  float ty, tcb, tcr;
-  rgbToYcc(std::clamp(params.r, 0.0f, 1.0f), std::clamp(params.g, 0.0f, 1.0f), std::clamp(params.b, 0.0f, 1.0f), ty, tcb, tcr);
-  const float tk = 1.0f / (ty + 0.05f);
-  // Brightness: half the way in stops, eased off toward ~0.7 stop either
-  // way (a soft limit, so deeper and fairer shades keep their order).
-  const float wantedLog = 0.5f * std::log(std::max(toLinear(ty), 1e-4f) / std::max(toLinear(sc.skinY), 1e-3f));
-  constexpr float kMaxLog = 0.5f;  // x1.65 / x0.61 in linear light
-  const float logGain = kMaxLog * std::tanh(wantedLog / kMaxLog);
-  const float gain = std::exp(logGain);
-  // The undertone (hue) always goes all the way to the shade's. Its
-  // richness (saturation) goes only as far as the brightness could: a pale
-  // shade's low saturation on a face that stays deep would read as ashen
-  // grey, a deep shade's richness on a face that stays fair as orange.
-  // (At least half way, so shades of a similar hue stay apart.)
-  const float reached = std::fabs(wantedLog) > 1e-3f ? 0.5f + 0.5f * std::clamp(logGain / wantedLog, 0.0f, 1.0f) : 1.0f;
-  const float sMag = std::hypot(sNcb, sNcr), tMag = std::hypot(tcb * tk, tcr * tk);
-  const float mag = sMag + (tMag - sMag) * reached;
-  const float tAng = std::atan2(tcr * tk, tcb * tk);
-  const float dNcb = mag * std::cos(tAng) - sNcb, dNcr = mag * std::sin(tAng) - sNcr;
+  // The shade as a change of the skin's own colour (albedo) under the same
+  // light: per-channel gains in linear light, in log form so strength
+  // scales them evenly. The photo's light stays on the skin, so the new
+  // shade belongs to the scene.
+  float logG[3] = {std::log(std::clamp(params.gainR, 0.4f, 2.5f)), std::log(std::clamp(params.gainG, 0.4f, 2.5f)),
+                         std::log(std::clamp(params.gainB, 0.4f, 2.5f))};
+  // The same change as brightness only, for shine (the light's reflection
+  // has the light's colour, not the skin's).
+  float logLum = 0.2126f * logG[0] + 0.7152f * logG[1] + 0.0722f * logG[2];
   const float skinLin = toLinear(sc.skinY);
-  const float skinYOut = toGamma(std::min(skinLin * gain, 1.0f));  // the skin's brightness after the move
+  // Headroom: fair skin is not lifted toward white (it would lose its
+  // texture to the highlight roll-off). The shade's colour balance stays;
+  // only the lift is limited, so the skin's mean stays below ~84%.
+  {
+    const float room = std::max(0.0f, std::log(toLinear(0.84f) / std::max(skinLin, 1e-3f)));
+    if (logLum > room) {
+      const float cut = logLum - room;
+      for (float& v : logG) v -= cut;
+      logLum = room;
+    }
+  }
+  const float skinGain = std::exp(logLum);
 
   // 2. The skin weight on a working grid.
   const int32_t W = image.width(), H = image.height();
@@ -114,8 +126,16 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
     });
     if (!done) return cancelledError();
   }
-  auto faceP = resized(faces, lw, lh, token);
-  if (!faceP) return faceP.error();
+  auto faceRaw = resized(faces, lw, lh, token);
+  if (!faceRaw) return faceRaw.error();
+  // Feathered, so the face area never shows as an outline on the skin.
+  Plane faceP = std::move(faceRaw).value();
+  {
+    auto soft = Plane::allocate(lw, lh);
+    if (!soft) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for Skin Tone");
+    if (Error e = gaussianBlur(faceP, *soft, std::max(1.5f, 0.01f * static_cast<float>(std::min(lw, lh))), token); e.status != PP_OK) return e;
+    faceP = std::move(soft).value();
+  }
   std::optional<Plane> subjP, protP;
   if (subject != nullptr && !subject->empty()) {
     auto p = resized(subject, lw, lh, token);
@@ -125,7 +145,12 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
   if (protect != nullptr && !protect->empty()) {
     auto p = resized(protect, lw, lh, token);
     if (!p) return p.error();
-    protP = std::move(p).value();
+    auto soft = Plane::allocate(lw, lh);
+    if (!soft) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for Skin Tone");
+    if (Error e = gaussianBlur(*p, *soft, 1.2f, token); e.status != PP_OK) return e;
+    // Features keep their colour; the blur only softens the boundary.
+    for (size_t i = 0; i < soft->size(); ++i) soft->data()[i] = std::max(p->data()[i] * 0.85f, soft->data()[i]);
+    protP = std::move(soft).value();
   }
   auto weight = Plane::allocate(lw, lh);
   if (!weight) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for Skin Tone");
@@ -154,7 +179,7 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
     for (int32_t y = 0; y < lh; ++y)
       for (int32_t x = 0; x < lw; ++x) {
         const size_t i = static_cast<size_t>(y) * static_cast<size_t>(lw) + static_cast<size_t>(x);
-        if (faceP->data()[i] < 0.6f) continue;
+        if (faceP.data()[i] < 0.6f) continue;
         top = std::min(top, y), bottom = std::max(bottom, y);
         if (protP && protP->data()[i] > 0.3f) continue;
         float yv, cb, cr;
@@ -178,7 +203,7 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
           rgbToYcc(gam[0].data()[i], gam[1].data()[i], gam[2].data()[i], yv, cb, cr);
           const float k = 1.0f / (yv + 0.05f);
           const float dc = std::hypot(cb * k - sNcb, cr * k - sNcr) / sigma;
-          const float face = faceP->data()[i];
+          const float face = faceP.data()[i];
           // In the face, skin is the rule (what is not skin is protected or
           // dark); on the body, it must look like the person's skin.
           const float body = dc / 0.85f;  // a little stricter off the face
@@ -194,7 +219,9 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
           const float hairZone = (1.0f - face) * (1.0f - smoothstep(faceMid, faceMid + 0.2f * faceH, static_cast<float>(y)));
           const float busy = tex->data()[i] / texSkin;
           const float smooth = 1.0f - smoothstep(1.9f - 0.6f * hairZone, 3.2f - 1.0f * hairZone, busy);
-          weight->data()[i] = chroma * bright * smooth * region * keep;
+          // Firm: clearly-skin pixels take the whole shade (the soft factors
+          // above multiply down), so the face and the body get the same.
+          weight->data()[i] = smoothstep(0.06f, 0.5f, chroma * bright * smooth * region) * keep;
         }
     });
     if (!done) return cancelledError();
@@ -208,8 +235,23 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
   }
   auto cB = Plane::allocate(lw, lh);
   if (!cB) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for Skin Tone");
-  const int32_t gr = std::max<int32_t>(2, std::min(lw, lh) / 160);
-  if (Error e = guidedCoefficientsColor({&gam[0], &gam[1], &gam[2]}, *weight, gr, 2e-3f, cA, *cB, token); e.status != PP_OK) return e;
+  const int32_t gr = std::max<int32_t>(2, std::min(lw, lh) / 120);
+  if (Error e = guidedCoefficientsColor({&gam[0], &gam[1], &gam[2]}, *weight, gr, 4e-3f, cA, *cB, token); e.status != PP_OK) return e;
+  // Even tone: the skin's local colour (blotches, redness, colour noise sit
+  // around it), for pulling each pixel's colour a little toward it. Only
+  // colour: shading, pores and the face's shape are brightness, kept.
+  std::array<Plane, 2> localC;
+  for (int c = 0; c < 2; ++c) {
+    auto raw = Plane::allocate(lw, lh), local = Plane::allocate(lw, lh);
+    if (!raw || !local) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for Skin Tone");
+    for (size_t i = 0; i < raw->size(); ++i) {
+      float yv, cb, cr;
+      rgbToYcc(gam[0].data()[i], gam[1].data()[i], gam[2].data()[i], yv, cb, cr);
+      raw->data()[i] = (c == 0 ? cb : cr) / (yv + 0.05f);
+    }
+    if (Error e = gaussianBlur(*raw, *local, std::max(2.0f, 0.012f * static_cast<float>(std::min(lw, lh))), token); e.status != PP_OK) return e;
+    localC[static_cast<size_t>(c)] = std::move(local).value();
+  }
 
   // 3. Per pixel.
   const float inv = 1.0f / static_cast<float>(f);
@@ -227,39 +269,50 @@ Error apply(ImageBuffer& image, const ImageBuffer* subject, const ImageBuffer* f
         if (wv > 0.5f) cov += 1.0;
         const float s = wv * strength;
         if (s <= 0.002f) continue;
-        // Brightness first, in linear light (hue kept)…
-        const float m = std::exp(logGain * s);
-        const float R1 = rollOff(toGamma(std::min(toLinear(R) * m, 1.0f)), R, 0.9f);
-        const float G1 = rollOff(toGamma(std::min(toLinear(G) * m, 1.0f)), G, 0.9f);
-        const float B1 = rollOff(toGamma(std::min(toLinear(B) * m, 1.0f)), B, 0.9f);
-        // …then the undertone at the new brightness: the person's own
-        // variation, a little calmer, around the shade's chroma.
         float yv, cb, cr;
-        rgbToYcc(R1, G1, B1, yv, cb, cr);
-        const float k = yv + 0.05f;
-        float ncb = cb / k, ncr = cr / k;
-        // Shine stays nearly white: the undertone eases off on highlights
-        // well above the skin's own brightness (else the skin looks metallic).
-        const float shine = smoothstep(1.3f, 2.4f, yv / std::max(skinYOut, 0.02f));
-        const float u = s * (1.0f - 0.65f * shine);
-        ncb = sNcb + (ncb - sNcb) * (1.0f - 0.2f * u) + dNcb * u;
-        ncr = sNcr + (ncr - sNcr) * (1.0f - 0.2f * u) + dNcr * u;
-        float r2, g2, b2;
-        yccToRgb(yv, ncb * k, ncr * k, r2, g2, b2);
-        // Kept inside what the screen can show by easing the chroma (never
-        // by clipping, which would flatten the skin's texture).
-        float fit = 1.0f;
-        for (float c : {r2, g2, b2}) {
-          if (c > 1.0f) fit = std::min(fit, (1.0f - yv) / std::max(c - yv, 1e-5f));
-          if (c < 0.0f) fit = std::min(fit, yv / std::max(yv - c, 1e-5f));
+        rgbToYcc(R, G, B, yv, cb, cr);
+        // 1. Even tone (colour only), around the skin's local colour.
+        float r1 = R, g1 = G, b1 = B;
+        if (evenness > 0.0f) {
+          const float k = yv + 0.05f;
+          const float t = 0.6f * evenness * s;
+          const float ncb = cb / k + (localC[0].sample(lx, ly) - cb / k) * t;
+          const float ncr = cr / k + (localC[1].sample(lx, ly) - cr / k) * t;
+          yccToRgb(yv, ncb * k, ncr * k, r1, g1, b1);
         }
-        fit = std::clamp(fit, 0.0f, 1.0f);
-        r2 = yv + (r2 - yv) * fit, g2 = yv + (g2 - yv) * fit, b2 = yv + (b2 - yv) * fit;
-        float lr = toLinear(r2), lg = toLinear(g2), lb = toLinear(b2);
+        // 2. The new skin colour: the albedo gains in linear light. Shine
+        // takes only the brightness part.
+        const float shine = smoothstep(1.35f, 2.4f, yv / std::max(sc.skinY, 0.02f));
+        float lc[3] = {toLinear(r1), toLinear(g1), toLinear(b1)};
+        for (int c = 0; c < 3; ++c) lc[c] *= std::exp(s * (logG[c] + (logLum - logG[c]) * 0.75f * shine));
+        float lr = lc[0], lg = lc[1], lb = lc[2];
+        {
+          // Natural skin hue. Skin lives in a narrow band of hues (between
+          // rose and gold); deep skin pushed toward yellow reads as khaki or
+          // olive, toward magenta as bruised. Beyond the band (or the
+          // person's own hue, if that is already outside), the hue eases
+          // back softly; the colour's strength is kept.
+          float y2, cb2, cr2;
+          rgbToYcc(toGamma(lr), toGamma(lg), toGamma(lb), y2, cb2, cr2);
+          const float mag = std::hypot(cb2, cr2);
+          if (mag > 1e-4f) {
+            const float own = std::atan2(cr, cb), now = std::atan2(cr2, cb2);
+            const float band = kSkinHueMaxDeep + (kSkinHueMaxFair - kSkinHueMaxDeep) * smoothstep(0.35f, 0.7f, y2);
+            const float hi = std::max(own, band), lo = std::min(own, kSkinHueMin);
+            float h = now;
+            if (h > hi) h = hi + 0.3f * (h - hi);
+            if (h < lo) h = lo + 0.3f * (h - lo);
+            if (h != now) {
+              float r3, g3, b3;
+              yccToRgb(y2, mag * std::cos(h), mag * std::sin(h), r3, g3, b3);
+              lr = toLinear(r3), lg = toLinear(g3), lb = toLinear(b3);
+            }
+          }
+        }
         if (glow > 0.0f) {
           // A luminous sheen on the skin's own highlights.
           const float ll = 0.2126f * lr + 0.7152f * lg + 0.0722f * lb;
-          const float lift = 0.12f * glow * s * smoothstep(skinLin * gain * 0.9f, skinLin * gain * 2.4f + 0.02f, ll);
+          const float lift = 0.12f * glow * s * smoothstep(skinLin * skinGain * 0.9f, skinLin * skinGain * 2.4f + 0.02f, ll);
           lr += lift * (1.0f - lr), lg += lift * (1.0f - lg), lb += lift * (0.96f - lb);
         }
         q[o.r] = toByte(rollOff(toGamma(lr), R, 0.94f));

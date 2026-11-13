@@ -265,6 +265,38 @@ TEST(video_steady_mask_calms_edge_flicker_but_follows_real_movement) {
   pp_image_destroy(cur);
 }
 
+// A segmentation mistake in one frame (a patch of wall taken for the person)
+// must not reach the picture; a person moving steadily must.
+TEST(video_consensus_mask_outvotes_a_one_frame_mistake_and_keeps_movement) {
+  const int W = 64;
+  pp_image *a = nullptr, *b = nullptr, *c = nullptr, *out = nullptr;
+  for (pp_image** m : {&a, &b, &c, &out}) ASSERT_OK(pp_image_create(W, 1, PP_FORMAT_GRAY8, m));
+  auto px = [](pp_image* m) { return static_cast<uint8_t*>(pp_image_pixels(m)); };
+  // The person's edge moves right by 2 px a frame; frame b also has a
+  // spurious blob at 50..55.
+  for (int x = 0; x < W; ++x) {
+    px(a)[x] = x < 20 ? 255 : 0;
+    px(b)[x] = x < 22 || (x >= 50 && x < 56) ? 255 : 0;
+    px(c)[x] = x < 24 ? 255 : 0;
+  }
+  ASSERT_OK(pp_video_consensus_mask(a, b, c, out));
+  int edge = 0;
+  while (edge < W && px(out)[edge] == 255) ++edge;
+  int blob = 0;
+  for (int x = 50; x < 56; ++x) blob += px(out)[x];
+  std::printf("    edge at %d (the middle frame's 22); blob %d (gone: 0)\n", edge, blob);
+  EXPECT_EQ(edge, 22);
+  EXPECT_EQ(blob, 0);
+  // At the ends of a clip the frame is its own neighbour.
+  ASSERT_OK(pp_video_consensus_mask(nullptr, b, c, out));
+  EXPECT_EQ(px(out)[52], 255);
+  EXPECT_EQ(pp_video_consensus_mask(a, nullptr, c, out), PP_ERROR_INVALID_ARGUMENT);
+  pp_image* small = nullptr;
+  ASSERT_OK(pp_image_create(8, 1, PP_FORMAT_GRAY8, &small));
+  EXPECT_EQ(pp_video_consensus_mask(small, b, c, out), PP_ERROR_INVALID_ARGUMENT);
+  for (pp_image* m : {a, b, c, out, small}) pp_image_destroy(m);
+}
+
 TEST(video_rejects_bad_input) {
   pp_image* a = nullptr;
   pp_image* b = nullptr;
