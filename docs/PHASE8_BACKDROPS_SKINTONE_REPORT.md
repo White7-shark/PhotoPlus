@@ -64,7 +64,7 @@ How a backdrop is made (`native/engine/src/backdrop/backdrop.cpp`):
 
 ## Skin Tone
 
-Skin Tone is separate from the beauty filters, which light and retouch. It changes the colour of the skin itself: on the face, neck, chest, arms and hands. Hair, eyes, brows, lips, teeth, clothes and the background keep their own colours.
+Skin Tone is separate from the beauty filters, which light and retouch. It changes the colour of the skin itself, softly and under the photo's own light: on the face, neck, chest, arms and hands. Hair, eyes, brows, lips, teeth, clothes and the background keep their own colours.
 
 | # | Shade | Plan | Character |
 |---|---|---|---|
@@ -88,47 +88,74 @@ In the editor, the new **Skin Tone** tool (next to Backdrop) shows a tile per sh
 
 ### How it works (`native/engine/src/skintone/skintone.cpp`, `pp_skin_tone`)
 
-1. **Measure the person's own skin** on the face, the median colour and its spread, as the beauty engine does.
-2. **Find their skin everywhere.** A weight per pixel combines:
-   - colour similarity to that skin, with a capped tolerance so mixed light or a group photo doesn't take in clothes;
+A first version moved the skin to an absolute target colour. On review it looked like heavy make-up: deep skin pushed toward a pale or golden target went ashen, khaki or greenish. It was rebuilt against a reference sheet of 13 shades on one face. In that sheet every shade stays in the natural skin family, the face and hand change together, and the room keeps its light.
+
+**Measured from the reference:** fair shades lift the skin by about +0.4 to +0.7 stop, deep ones lower it by about −0.2 to −0.45 stop, and each re-balances red, green and blue a little.
+
+1. **A shade is a change of the skin's own colour under the same light**: per-channel gains in linear light, as if the skin's albedo changed.
+   - The scene's light colour, the person's shading, pores and flush all stay, so the new shade sits in the photo naturally.
+   - A test checks this: under a warm lamp or a cool window, the skin takes the same change and the wall is untouched.
+   - The gains were derived from the reference and then fitted on 18 real faces so neighbouring shades stay apart; each shade stays within ±0.08 of its design values.
+2. **Natural-hue guard.** Skin hue lives in a narrow band, measured on these faces at 107–135° (Cb/Cr angle). Past the band, a colour eases back softly, never further than the person's own starting hue: deep skin never turns khaki or olive-green, and no skin turns bruised-magenta. The upper limit rises from about 135° on deep skin to 145° on fair skin.
+3. **Headroom for fair skin.** Already-fair skin isn't lifted toward white, where it would lose its texture. It takes the shade's colour balance, not its lift. Highlights roll off just short of white, so nothing new clips.
+4. **Shine** keeps the light's colour; only its brightness follows the shade.
+5. **Even tone.** Colour blotches and colour noise are pulled a little toward the skin's local colour. Brightness detail — pores and the face's shape — is untouched.
+6. **Finding the skin.** A weight per pixel combines:
+   - colour similarity to the person's own skin (measured on the face), with a capped tolerance;
    - brightness, which keeps dark hair, brows and beards out;
-   - texture, which keeps fair or blonde hair out: strands are busy at fine scale and skin is smooth, and the test is stricter around and above the face;
-   - the face and person masks, with eyes, brows and lips protected.
+   - texture, which keeps fair hair out: strands are busy, skin is smooth.
 
-   The weight follows the photo's own edges through a colour guided filter.
-3. **Brightness moves part of the way:** half the distance in stops, eased off toward about 0.7 stop either way, in linear light. Highlights are rolled off, so nothing new clips.
-4. **The undertone (hue) moves all the way** to the shade's. Saturation follows only as far as brightness could go, and always at least half way. Without that, a pale shade on a face that stays deep looks ashen grey, and a deep shade on a face that stays fair looks orange. Shine stays nearly white, which avoids a metallic look. Out-of-range colours are eased back by reducing chroma, never by clipping, so texture stays.
-5. The person's own variation — flush, shading, freckles, pores — is kept around the new shade.
-
-**A deliberate choice.** A shade changes the person's colouring, but not who they are. Brightness is limited to about ±0.7 stop. Porcelain Rose on a deep-skinned face gives a lighter, rosier version of that face, not a different person's skin. The same holds the other way. Strength scales everything.
+   The face area is feathered so no oval outline shows, and features (eyes, brows, lips) are protected with soft edges. The weight is firm on clear skin, so the face and the body take the same shade, and it follows the photo's own edges through a colour guided filter.
 
 ### Validation (`scripts/skintone-demo.py`)
 
-**Faces:** your photo, two reference portraits and 15 FairFace faces, from very fair to very deep, including group photos.
+**Faces:** your photo, two reference portraits and 15 FairFace faces from very fair to very deep, including group photos.
 
-**Ground truth:** MediaPipe's multiclass segmenter labels face skin, body skin, hair and clothes, for measuring only. The app uses ML Kit plus the face landmarks. 18 faces × 13 shades = 234 renders.
+**Ground truth:** MediaPipe's multiclass segmenter labels face skin, body skin, hair and clothes, for measuring only; the app uses ML Kit plus the face landmarks. 234 renders.
 
-| Measure (CIELAB ΔE) | Median | 90th percentile |
+| Measure (CIELAB ΔE unless noted) | Median | 90th percentile |
 |---|---|---|
-| Face skin change | 10.2 | 16.2 |
-| Body skin change (neck, arms, hands) | 7.4 | 14.4 |
-| Distance to the shade's colour, after / before (face) | 0.51 | — |
-| Hair change | 1.1 | 6.7 |
-| Clothes change | 0.45 | 3.7 |
+| Face skin change | 5.8 | 8.8 |
+| Body skin change (neck, arms, hands) | 4.3 | 8.2 |
+| Share of the shade's change reaching the face / body | 0.76 / 0.68 | — |
+| Hair change | 0.75 | 4.3 |
+| Clothes change | 0.29 | 2.3 |
 | Background change | 0.01 | 0.08 |
-| Eyes, brows, lips change | 1.0 | 1.9 |
-| Skin texture kept (fine detail, after / before) | 1.09 (face), 1.07 (body) | 0.94–1.20 (10th–90th) |
-| Newly clipped pixels | 0 | max 0.8% (one low-light photo) |
+| Eyes, brows, lips change | 0.9 | 1.5 |
+| Skin texture relative to brightness (face) | 1.04 | 0.95–1.16 (10th–90th) |
+| Newly clipped pixels | 0 in every render | — |
 
-**Distinct shades.** On each face, the two closest shades differ by a median of 3.6 ΔE (2.3 is about what most people can just tell apart). The exceptions are the most underexposed FairFace faces, where the brightness limit squeezes neighbouring light shades together: Golden Beige vs Olive at 1.2 on the darkest. The shade colours were fitted with a model of the engine on these faces, keeping each shade close to its name.
+**Distinct shades.** On each face, the two closest shades differ by a median of 2.3 ΔE (about what most people can just tell apart), and by 2.5 on your photo.
 
-**Speed:** 0.29–0.33 s per shade for your 8 MP photo, 0.05–0.09 s at 0.8 MP (desktop host, 4 cores).
+Gentle shades sit close by nature; neighbours in the reference sheet are close too (Honey, Caramel, Bronze). On the three most underexposed FairFace faces the closest pair falls to 0.8–1.0.
 
-**Your 5-second clip** (164 frames): face found in every frame. The skin is as steady as the clip itself: cheek colour changes 0.74 levels frame to frame with a shade, against 0.57 with Glide alone. About 0.1–0.24 s per frame on the host.
+**Speed:** 0.27–0.34 s per shade for your 8 MP photo, 0.07–0.15 s at 0.8 MP (desktop host, 4 cores).
+
+**Your 5-second clip** (164 frames): face found in every frame. Cheek colour changes 0.52–0.81 levels frame to frame with a shade, against 0.57 with Glide alone. About 0.1 s per frame on the host.
 
 **Known limits.**
-- Hair the same colour as the skin (auburn, ginger, some light browns) can pick up part of the shade, especially at the fringe. The hair change reaches 10–13 ΔE on the worst photos; the Strength slider tones it down.
-- Clothing in a skin-like colour (beige, pink) near the skin can shift slightly (90th percentile 3.7 ΔE).
+- Skin-coloured hair (auburn, ginger, light brown) can pick up a little of the shade at the fringe (90th percentile 4.3 ΔE).
+- On a very underexposed face, neighbouring shades are hard to tell apart.
+
+## The backdrop video glitch
+
+**Seen in your 5-second clip:** a shadowy form pulling in and out around the person.
+
+**Cause.** Single frames where the person-finder made a mistake:
+- In frame 61 a chunk of the wall above your head was marked as "person"; in frame 60, a fleck beside it.
+- The head outline changed shape from one frame to the next.
+
+Cut out and re-lit, those bits of the old wall flickered in and out of the new scene.
+
+**Fixed in two places:**
+- **The matte drops stray islands.** Patches of "person" not connected to anyone (smaller than 8% of the main subject) are removed. People standing apart are each large, and stay. This helps photos too.
+- **Video uses a three-frame consensus.** The new `pp_video_consensus_mask` takes the per-pixel median of the previous, current and next frames' masks. A one-frame mistake is outvoted; real movement, which changes smoothly, passes through.
+
+**Result on your clip (Stage):**
+- The wall chunk and the fleck are gone (see frames 58–63 before and after).
+- Frame-to-frame change in the background halved: 1.84 → 0.93 levels on average, worst frame 10.6 → 7.0.
+
+**Not yet in the app:** Glide clips don't offer Backdrops yet (they use Spotlight's blur). The consensus call is ready for that, and for steadier Spotlight clips.
 
 ## App wiring
 
@@ -145,10 +172,11 @@ In the editor, the new **Skin Tone** tool (next to Backdrop) shows a tile per sh
 
 | Suite | Result |
 |---|---|
-| Engine `backdrop_tests.cpp` | 9 tests (1 new: hair the mask missed and the wall seam), also under AddressSanitizer + UBSan |
-| Engine `skintone_tests.cpp` | 6 new, also under ASan + UBSan. For 6 starting tones × 3 shades: undertone 92–102% of the way on face and neck, brightness within the limit, richness never past the shade. Background < 0.3 levels and eyes, iris and teeth < 2 levels unchanged; texture kept, no new clipping; strength blends; no face = no change; bad input; cancellation |
-| Kotlin | 143 tests, 3 new in `SkinToneTest` (catalogue match, parsing and clamping, editor document and re-render key); lint clean; native library builds with the NDK |
-| Jest | 248 tests, 4 new in `skintones.test.tsx` (order fair to deep, free shades span the range, covers, validation and old edits, panel: apply / lock / strength / remove, no-face note) |
+| Engine `backdrop_tests.cpp` | 10 tests, also under AddressSanitizer + UBSan. New: hair the mask missed and the wall seam; a stray patch of wall taken for the person is dropped |
+| Engine `video_tests.cpp` | New: the three-frame consensus outvotes a one-frame blob and keeps a moving edge |
+| Engine `skintone_tests.cpp` | 7 tests, also under ASan + UBSan:<br>• 6 starting tones × 3 shades: face and neck take the shade's gains (within 5%; the fairest skin takes the shade's colour balance, not more lift)<br>• the scene's light stays on the skin (warm lamp, cool window)<br>• background < 0.3 levels; eyes, iris, teeth and lips unchanged<br>• texture kept, no new clipping; strength blends<br>• no face (or a tiny one) = no change; bad input; cancellation |
+| Kotlin | 3 new in `SkinToneTest` (catalogue match including gains, gentle range, parsing and clamping, editor document and re-render key); lint clean; native library builds with the NDK |
+| Jest | 4 new in `skintones.test.tsx` (gentle gains, fair shades lift and deep ones deepen, free shades span the range, covers, validation and old edits, panel: apply / lock / strength / remove, no-face note) |
 
 ## Not verified on a phone
 
