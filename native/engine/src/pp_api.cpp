@@ -15,6 +15,7 @@
 
 #include "photoplus/backdrop.hpp"
 #include "photoplus/skintone.hpp"
+#include "photoplus/light.hpp"
 #include "photoplus/beauty.hpp"
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
@@ -976,6 +977,95 @@ pp_status pp_skin_tone(pp_image* image, const pp_image* subject, const pp_image*
     if (e.status != PP_OK) return fail(e);
     if (has_skin_out != nullptr) *has_skin_out = r.hasSkin ? 1 : 0;
     if (coverage_out != nullptr) *coverage_out = r.skinCoverage;
+    return succeed();
+  });
+}
+
+pp_status pp_light_meter(const pp_image* preview, const pp_light_meter_input* input, pp_light_meter_result* out) {
+  return guarded([&]() -> pp_status {
+    if (preview == nullptr || input == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "preview, input and out are required");
+    const photoplus::PixelFormat pf = preview->buffer.format();
+    if ((pf != photoplus::PixelFormat::RGBA8 && pf != photoplus::PixelFormat::BGRA8) || preview->buffer.width() < 16 ||
+        preview->buffer.height() < 16) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "The preview must be a colour image of at least 16x16");
+    }
+    photoplus::light::MeterInput in;
+    in.exposure.iso = std::isfinite(input->iso) ? input->iso : 0.0f;
+    in.exposure.exposureS = std::isfinite(input->exposure_s) ? input->exposure_s : 0.0f;
+    in.exposure.fNumber = std::isfinite(input->f_number) ? input->f_number : 0.0f;
+    in.front = input->front != 0;
+    in.hasFlash = input->has_flash != 0;
+    in.faceLuma = std::isfinite(input->face_luma) ? input->face_luma : -1.0f;
+    in.focusDiopters = std::isfinite(input->focus_diopters) ? input->focus_diopters : -1.0f;
+    const photoplus::light::Meter m = photoplus::light::meter(preview->buffer, in);
+    *out = pp_light_meter_result{};
+    out->ev100 = m.ev100;
+    out->lux = m.lux;
+    out->exposure_known = m.exposureKnown ? 1 : 0;
+    out->key = m.key;
+    out->highlights = m.highlights;
+    out->shadows = m.shadows;
+    out->range_stops = m.rangeStops;
+    out->backlit = m.backlit ? 1 : 0;
+    out->plan = static_cast<int32_t>(m.plan);
+    out->frames = m.frames;
+    out->exposure_bias = m.exposureBias;
+    out->night = m.night;
+    for (int k = 0; k < 3; ++k) out->screen_flash[k] = m.screenFlash[k];
+    out->screen_flash[3] = 255;
+    return succeed();
+  });
+}
+
+void pp_light_tone_default_params(pp_light_tone_params* out) {
+  if (out == nullptr) return;
+  *out = pp_light_tone_params{};
+  out->auto_exposure = 1;
+  out->shadows = -1.0f;
+  out->highlights = -1.0f;
+  out->detail = 0.35f;
+  out->strength = 1.0f;
+}
+
+pp_status pp_light_tone(pp_image* image, const pp_light_tone_params* params, const pp_cancel_token* token, float* report_out) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || params == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image and params are required");
+    photoplus::light::ToneParams p;
+    p.autoExposure = params->auto_exposure != 0;
+    p.exposure = params->exposure;
+    p.shadows = params->shadows;
+    p.highlights = params->highlights;
+    p.night = params->night;
+    p.detail = params->detail;
+    p.strength = params->strength;
+    p.whiteBalance = params->white_balance;
+    p.captureBias = params->capture_bias;
+    photoplus::light::ToneReport r;
+    const photoplus::Error e = photoplus::light::tone(image->buffer, p, token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (report_out != nullptr) {
+      report_out[0] = r.keyBefore, report_out[1] = r.keyAfter, report_out[2] = r.rangeBefore;
+      report_out[3] = r.shadows, report_out[4] = r.highlights, report_out[5] = r.clippedAfter;
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_flash_fuse(const pp_image* ambient, const pp_image* flash, pp_image* out, const pp_flash_fuse_params* params,
+                        const pp_cancel_token* token, float* report_out) {
+  return guarded([&]() -> pp_status {
+    if (ambient == nullptr || flash == nullptr || out == nullptr || params == nullptr) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "ambient, flash, out and params are required");
+    }
+    photoplus::light::FuseParams p;
+    p.fill = params->fill;
+    p.strength = params->strength;
+    photoplus::light::FuseReport r;
+    const photoplus::Error e = photoplus::light::flashFuse(ambient->buffer, flash->buffer, out->buffer, p, token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (report_out != nullptr) {
+      report_out[0] = r.aligned ? 1.0f : 0.0f, report_out[1] = r.flashGain, report_out[2] = r.shadowShare, report_out[3] = r.hotShare;
+    }
     return succeed();
   });
 }

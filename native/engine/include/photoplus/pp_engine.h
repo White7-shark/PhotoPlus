@@ -593,6 +593,78 @@ pp_status pp_skin_tone(pp_image* image, const pp_image* subject, const pp_image*
                        const pp_skin_tone_params* params, const pp_cancel_token* token, int32_t* has_skin_out,
                        float* coverage_out);
 
+/* ---- Smart lighting: dark rooms, night, flash and harsh light ------------ */
+typedef enum pp_light_plan {
+  PP_LIGHT_NORMAL = 0,
+  PP_LIGHT_MOONLIGHT = 1,      /* dim: merged burst, night rendering */
+  PP_LIGHT_FLASH = 2,          /* very dark: flash (rear: Natural Flash; front: screen flash) */
+  PP_LIGHT_BRIGHT_BALANCE = 3  /* harsh or backlit: highlight-safe burst, local tone */
+} pp_light_plan;
+
+typedef struct pp_light_meter_input {
+  float iso;             /* the camera's current exposure; 0 = unknown */
+  float exposure_s;
+  float f_number;        /* 0 = unknown */
+  int32_t front;         /* 1: front camera */
+  int32_t has_flash;     /* 1: a flash unit */
+  float face_luma;       /* main face's mean luma 0..1, -1 = no face */
+  float focus_diopters;  /* the lens's focus (1/metres), -1 = unknown */
+  float reserved[3];
+} pp_light_meter_input;
+
+typedef struct pp_light_meter_result {
+  float ev100, lux;
+  int32_t exposure_known;
+  float key, highlights, shadows, range_stops;
+  int32_t backlit;
+  int32_t plan;           /* pp_light_plan */
+  int32_t frames;         /* burst length for the plan */
+  float exposure_bias;    /* EV for the burst */
+  float night;            /* 0..1 night rendering for pp_light_tone */
+  uint8_t screen_flash[4];/* RGB overlay for a front "flash" (4th unused) */
+  float reserved[4];
+} pp_light_meter_result;
+
+/* Reads the scene from a small preview frame and the camera's exposure. */
+pp_status pp_light_meter(const pp_image* preview, const pp_light_meter_input* input, pp_light_meter_result* out);
+
+typedef struct pp_light_tone_params {
+  int32_t auto_exposure; /* 1: bring the scene's key to a pleasing level */
+  float exposure;        /* stops, added */
+  float shadows;         /* 0..1 lift; -1 = automatic */
+  float highlights;      /* 0..1 compression; -1 = automatic */
+  float night;           /* 0..1 night rendering */
+  float detail;          /* 0..1 local contrast */
+  float strength;        /* 0..1 */
+  float white_balance;   /* 0..1 low-light colour correction (kept a touch warm) */
+  float capture_bias;    /* EV the frames were deliberately underexposed by (<= 0, e.g. the
+                            meter's exposure_bias); restored in full, while the scene's own
+                            darkness is lifted only part way */
+  float reserved[2];
+} pp_light_tone_params;
+
+void pp_light_tone_default_params(pp_light_tone_params* out);
+
+/* Local tone mapping in place (after a burst merge): highlights compressed,
+ * shadows lifted where they hold detail, night kept looking like night.
+ * `report_out` (optional, 6 floats): key before, key after, range (stops),
+ * shadows, highlights, share clipped. */
+pp_status pp_light_tone(pp_image* image, const pp_light_tone_params* params, const pp_cancel_token* token, float* report_out);
+
+typedef struct pp_flash_fuse_params {
+  float fill;      /* 0..1 how much of the flash's own light is kept (0: the ambient look only) */
+  float strength;  /* 0..1 */
+  float reserved[4];
+} pp_flash_fuse_params;
+
+/* Natural Flash: `ambient` (no flash, ideally a merged burst) and `flash`
+ * (same size) fused into `out` (same size): the room's light and colour,
+ * the flash frame's clean detail; flash shadows and hot spots from the
+ * ambient. `report_out` (optional, 4 floats): aligned (0/1), flash gain,
+ * shadow share, hot-spot share. */
+pp_status pp_flash_fuse(const pp_image* ambient, const pp_image* flash, pp_image* out, const pp_flash_fuse_params* params,
+                        const pp_cancel_token* token, float* report_out);
+
 /* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
  * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */
 pp_status pp_subject_mask(const pp_image* image, const float* points, size_t count, const pp_cancel_token* token,

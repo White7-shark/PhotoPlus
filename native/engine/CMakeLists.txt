@@ -34,6 +34,7 @@ add_library(photoplus_engine STATIC
   src/beauty/beauty.cpp
   src/backdrop/backdrop.cpp
   src/skintone/skintone.cpp
+  src/light/light.cpp
   src/portrait/matte.cpp
   src/portrait/portrait.cpp
   src/portrait/style.cpp
@@ -93,7 +94,7 @@ endif()
 if(PP_ENGINE_BUILD_TESTS)
   enable_testing()
   find_package(Threads REQUIRED)
-  add_executable(photoplus_engine_tests tests/test_main.cpp tests/engine_tests.cpp tests/enhance_tests.cpp tests/portrait_tests.cpp tests/lens_tests.cpp tests/edit_tests.cpp tests/core_tests.cpp tests/gpu_tests.cpp tests/face_tests.cpp tests/video_tests.cpp tests/beauty_tests.cpp tests/backdrop_tests.cpp tests/skintone_tests.cpp)
+  add_executable(photoplus_engine_tests tests/test_main.cpp tests/engine_tests.cpp tests/enhance_tests.cpp tests/portrait_tests.cpp tests/lens_tests.cpp tests/edit_tests.cpp tests/core_tests.cpp tests/gpu_tests.cpp tests/face_tests.cpp tests/video_tests.cpp tests/beauty_tests.cpp tests/backdrop_tests.cpp tests/skintone_tests.cpp tests/light_tests.cpp)
   target_link_libraries(photoplus_engine_tests PRIVATE photoplus_engine Threads::Threads)
   add_test(NAME photoplus_engine_tests COMMAND photoplus_engine_tests)
 endif()
@@ -111,6 +112,8 @@ if(PP_ENGINE_BUILD_TOOLS)
   target_link_libraries(backdrop_demo PRIVATE photoplus_engine Threads::Threads)
   add_executable(skintone_demo tools/skintone_demo.cpp)
   target_link_libraries(skintone_demo PRIVATE photoplus_engine Threads::Threads)
+  add_executable(light_demo tools/light_demo.cpp)
+  target_link_libraries(light_demo PRIVATE photoplus_engine Threads::Threads)
   target_link_libraries(beauty_demo PRIVATE photoplus_engine Threads::Threads)
   target_link_libraries(video_demo PRIVATE photoplus_engine Threads::Threads)
   target_link_libraries(ops_probe PRIVATE photoplus_engine Threads::Threads)
