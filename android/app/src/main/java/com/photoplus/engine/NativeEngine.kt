@@ -239,6 +239,33 @@ object NativeEngine {
   external fun nativeBackdrop(bitmap: Bitmap, subject: Bitmap, depth: Bitmap?, design: Int, strength: Float, seed: Int, token: Long)
 
   /**
+   * Studio cut-out of an upright photo: [subject] (ALPHA_8 person mask, any
+   * size), [zones] (ALPHA_8 person-parts map) or null, [strokes]
+   * (StudioStroke.encode), [params] (CutoutSettings.toArray). [out] is
+   * ARGB_8888, not premultiplied, the photo's size: the person's colours with
+   * straight alpha. [report] (11): coverage, edge, hair edge, box l t r b,
+   * cut l t r b.
+   */
+  external fun nativeStudioCutout(
+    bitmap: Bitmap,
+    subject: Bitmap,
+    zones: Bitmap?,
+    strokes: FloatArray,
+    params: FloatArray,
+    out: Bitmap,
+    token: Long,
+    report: FloatArray,
+  )
+
+  /**
+   * Studio compose: [background] (the output frame) edited in place with
+   * [cutout] placed in it. [placement] (6) ScenePlacement.toArray, [look]
+   * (10) SceneLook.toArray. [report] (9): box l t r b, exposure, balance
+   * r g b, grounded.
+   */
+  external fun nativeStudioCompose(background: Bitmap, cutout: Bitmap, placement: FloatArray, look: FloatArray, token: Long, report: FloatArray)
+
+  /**
    * Skin Tone: gives the skin of the face and the visible body a new shade,
    * in place, as gains on its own colour in linear light (1 = unchanged), so
    * the photo's light stays on it. [faces] (ALPHA_8 face area) is needed to

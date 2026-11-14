@@ -771,6 +771,73 @@ void pp_pose_tracker_destroy(pp_pose_tracker* tracker);
 pp_status pp_pose_tracker_update(pp_pose_tracker* tracker, const pp_pose* in, int64_t time_ms, pp_pose* out,
                                  float* stillness_out);
 
+/* ------------------------------------------------------------------ studio
+ * The photoshoot studio: a person cut out of their photo (transparent
+ * background) and placed into another scene. */
+
+typedef enum pp_studio_brush {
+  PP_STUDIO_KEEP = 0,   /* this is the person */
+  PP_STUDIO_REMOVE = 1, /* this is not */
+  PP_STUDIO_HAIR = 2    /* fine detail here: let the colours decide */
+} pp_studio_brush;
+
+typedef struct pp_studio_stroke {
+  int32_t brush;        /* pp_studio_brush */
+  float radius;         /* share of the image's short side */
+  int32_t count;        /* points */
+  const float* points;  /* count × (x, y), normalised 0..1 */
+} pp_studio_stroke;
+
+typedef struct pp_studio_cutout_params {
+  float softness;        /* 0..1 */
+  float shift;           /* -1 grow .. +1 shrink the edge */
+  float hair_detail;     /* 0..1 */
+  int32_t clean_colours; /* free edge colours of the old background */
+} pp_studio_cutout_params;
+
+typedef struct pp_studio_cutout_report {
+  float coverage, edge, hair_edge;
+  float left, top, right, bottom; /* the person's box, normalised */
+  int32_t cut_left, cut_top, cut_right, cut_bottom;
+} pp_studio_cutout_report;
+
+/* `subject`: GRAY8 person mask, any size. `zones`: optional GRAY8 person-parts
+ * map (0 background, 1 hair, 2 body skin, 3 face skin, 4 clothes, 5 accessory).
+ * `out`: same size and format as `image`; written with straight alpha. */
+pp_status pp_studio_cutout(const pp_image* image, const pp_image* subject, const pp_image* zones,
+                           const pp_studio_stroke* strokes, int32_t stroke_count,
+                           const pp_studio_cutout_params* params, pp_image* out, const pp_cancel_token* token,
+                           pp_studio_cutout_report* report);
+
+typedef struct pp_studio_placement {
+  float x, y;     /* bottom centre of the person's box in the frame, 0..1 */
+  float height;   /* box height as a share of the frame height */
+  float tilt;     /* -1..1 vertical perspective */
+  float angle;    /* degrees */
+  int32_t flip;
+} pp_studio_placement;
+
+typedef struct pp_studio_look {
+  float color_match, light_wrap, shadow, cast_shadow; /* 0..1 */
+  float light_x;  /* -1 light from the left .. 1 from the right */
+  float horizon;  /* 0..1 from the top */
+  float bg_blur, grain; /* 0..1 */
+  uint32_t seed;
+  float rim;      /* 0..1 rim light on the side facing the scene's light */
+} pp_studio_look;
+
+typedef struct pp_studio_compose_report {
+  float left, top, right, bottom;
+  float exposure;
+  float balance[3];
+  int32_t grounded;
+} pp_studio_compose_report;
+
+/* `background` is the output frame, edited in place; `cutout` is a
+ * pp_studio_cutout result with the same channel order. */
+pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const pp_studio_placement* placement,
+                            const pp_studio_look* look, const pp_cancel_token* token, pp_studio_compose_report* report);
+
 /* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
  * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */
 pp_status pp_subject_mask(const pp_image* image, const float* points, size_t count, const pp_cancel_token* token,

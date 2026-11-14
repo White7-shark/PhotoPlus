@@ -22,6 +22,9 @@ class AppPaths(context: Context) {
   val looks = File(files, "looks")
   /** Reference photos for the pose assistant (Premium). */
   val poses = File(files, "poses")
+  /** Photoshoot studio results and the backgrounds people add (Premium). */
+  val studio = File(files, "studio")
+  val backgrounds = File(files, "backgrounds")
   /** Props people made from their own photos (Premium). */
   val customProps = File(files, "props")
   val packs = File(files, "packs")
@@ -39,6 +42,8 @@ class AppPaths(context: Context) {
     "looks" to looks,
     "poses" to poses,
     "customProps" to customProps,
+    "studio" to studio,
+    "backgrounds" to backgrounds,
     "packs" to packs,
     "models" to models,
     "processingCache" to processingCache,

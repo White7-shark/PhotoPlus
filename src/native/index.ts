@@ -12,6 +12,7 @@ import NativeDatabase from './specs/NativePhotoPlusDatabase';
 import NativeDevice from './specs/NativePhotoPlusDevice';
 import NativeEngine from './specs/NativePhotoPlusEngine';
 import NativeStorage from './specs/NativePhotoPlusStorage';
+import NativeStudio from './specs/NativePhotoPlusStudio';
 
 export type { Spec as AdsSpec } from './specs/NativePhotoPlusAds';
 export type { Spec as CameraSpec } from './specs/NativePhotoPlusCamera';
@@ -19,6 +20,7 @@ export type { Spec as DatabaseSpec } from './specs/NativePhotoPlusDatabase';
 export type { Spec as DeviceSpec } from './specs/NativePhotoPlusDevice';
 export type { Spec as EngineSpec } from './specs/NativePhotoPlusEngine';
 export type { Spec as StorageSpec } from './specs/NativePhotoPlusStorage';
+export type { Spec as StudioSpec } from './specs/NativePhotoPlusStudio';
 
 export class NativeUnavailableError extends Error {
   readonly code = 'NATIVE_UNAVAILABLE';
@@ -42,6 +44,7 @@ export const nativeModules = {
   device: NativeDevice,
   engine: NativeEngine,
   storage: NativeStorage,
+  studio: NativeStudio,
 };
 
 /** Event names emitted by the Kotlin layer through DeviceEventEmitter. */

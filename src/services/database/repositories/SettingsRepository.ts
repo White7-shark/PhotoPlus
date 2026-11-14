@@ -17,6 +17,7 @@ import {
 } from '../../beauty/camera';
 import type { PortraitControls } from '../../beauty/recipe';
 import type { PoseDef } from '../../pose/library';
+import { isPlateDef, MAX_MY_BACKGROUNDS, type PlateDef } from '../../studio/scene';
 import {
   DEFAULT_POSE_ASSISTANT,
   isGridStyle,
@@ -41,6 +42,8 @@ export interface AppSettings {
   poseAssistant: PoseAssistantSettings;
   /** Poses taken from the user's own photos (Premium). */
   myPoses: PoseDef[];
+  /** Photos of empty places the user added as studio backgrounds. */
+  myBackgrounds: PlateDef[];
   defaultExportFormat: ExportFormat;
   defaultExportQuality: number;
   /** Longest edge for editing previews/exports; 0 = choose by device tier. */
@@ -77,6 +80,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraGridStyle: 'thirds',
   poseAssistant: DEFAULT_POSE_ASSISTANT,
   myPoses: [],
+  myBackgrounds: [],
   defaultExportFormat: 'jpeg',
   defaultExportQuality: 92,
   processingMaxDimension: 0,
@@ -110,6 +114,8 @@ const VALIDATORS: Validators = {
   cameraGridStyle: isGridStyle,
   poseAssistant: isPoseAssistantSettings,
   myPoses: isMyPoses,
+  myBackgrounds: (v): v is PlateDef[] =>
+    Array.isArray(v) && v.length <= MAX_MY_BACKGROUNDS && v.every(p => isPlateDef(p) && p.category === 'mine'),
   defaultExportFormat: oneOf('jpeg', 'png', 'webp'),
   defaultExportQuality: (v): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 60 && v <= 100,
   processingMaxDimension: (v): v is number => v === 0 || v === 2048 || v === 4096 || v === 8192,

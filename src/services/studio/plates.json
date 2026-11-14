@@ -1,0 +1,349 @@
+[
+ {
+  "id": "white-studio",
+  "name": "White Studio",
+  "category": "studio",
+  "width": 2560,
+  "height": 1707,
+  "horizon": 0.62,
+  "floor": 0.86,
+  "lightX": -0.5,
+  "castShadow": 0.0,
+  "rim": 0.0,
+  "blur": 0.15,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "photo_studio_broadway_hall",
+   "plate": "DSC_7392",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "3cc9dbe1adbf8248dffbcd65c95351b8"
+  }
+ },
+ {
+  "id": "rose-chair",
+  "name": "Rose Chair",
+  "category": "studio",
+  "width": 2560,
+  "height": 1707,
+  "horizon": 0.58,
+  "floor": 0.9,
+  "lightX": 0.6,
+  "castShadow": 0.0,
+  "rim": 0.2,
+  "blur": 0.3,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "photo_studio_broadway_hall",
+   "plate": "DSC_7402",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "5d487fecf2adddb0a678be28bb5844cf"
+  }
+ },
+ {
+  "id": "boho-corner",
+  "name": "Boho Corner",
+  "category": "studio",
+  "width": 1707,
+  "height": 2560,
+  "horizon": 0.45,
+  "floor": 0.92,
+  "lightX": -0.4,
+  "castShadow": 0.0,
+  "rim": 0.0,
+  "blur": 0.3,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "brown_photostudio_02",
+   "plate": "14",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "48ef44be6b6d4ce5df86f0d5530051eb"
+  }
+ },
+ {
+  "id": "neon-lines",
+  "name": "Neon Lines",
+  "category": "studio",
+  "width": 1707,
+  "height": 2560,
+  "horizon": 0.55,
+  "floor": 0.96,
+  "lightX": 0.0,
+  "castShadow": 0.0,
+  "rim": 0.5,
+  "blur": 0.2,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "neon_photostudio",
+   "plate": "03",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "2e9a21d7a8c97bcd4ce47e028eb106aa"
+  }
+ },
+ {
+  "id": "sunlit-loft",
+  "name": "Sunlit Loft",
+  "category": "studio",
+  "width": 2560,
+  "height": 1707,
+  "horizon": 0.55,
+  "floor": 0.9,
+  "lightX": -0.6,
+  "castShadow": 0.3,
+  "rim": 0.3,
+  "blur": 0.35,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "photo_studio_loft_hall",
+   "plate": "DSC_8544",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "7bda616bc9b63d068c9abdac47ed2ec2"
+  }
+ },
+ {
+  "id": "flower-hall",
+  "name": "Flower Hall",
+  "category": "indoors",
+  "width": 2560,
+  "height": 1707,
+  "horizon": 0.6,
+  "floor": 0.9,
+  "lightX": 0.6,
+  "castShadow": 0.0,
+  "rim": 0.2,
+  "blur": 0.3,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "brown_photostudio_06",
+   "plate": "07",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "21a35b424e8fcca9e6752531775208a5"
+  }
+ },
+ {
+  "id": "cafe-wall",
+  "name": "Café Wall",
+  "category": "indoors",
+  "width": 1707,
+  "height": 2560,
+  "horizon": 0.55,
+  "floor": 0.93,
+  "lightX": 0.0,
+  "castShadow": 0.0,
+  "rim": 0.0,
+  "blur": 0.3,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "comfy_cafe",
+   "plate": "DSC_6795",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "f5ed0d680d20e61b2e033342eb0e5f49"
+  }
+ },
+ {
+  "id": "grand-hall",
+  "name": "Grand Hall",
+  "category": "indoors",
+  "width": 2560,
+  "height": 1707,
+  "horizon": 0.66,
+  "floor": 0.9,
+  "lightX": 0.3,
+  "castShadow": 0.0,
+  "rim": 0.0,
+  "blur": 0.25,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "old_hall",
+   "plate": "DSC_4087",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "fe26df731482c9d2039e5c9a44580dd3"
+  }
+ },
+ {
+  "id": "autumn-park",
+  "name": "Autumn Park",
+  "category": "outdoors",
+  "width": 2560,
+  "height": 1696,
+  "horizon": 0.58,
+  "floor": 0.9,
+  "lightX": -0.3,
+  "castShadow": 0.35,
+  "rim": 0.0,
+  "blur": 0.35,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "autumn_park",
+   "plate": "DSC_0158",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "b8a32be850b66f8408ad97978ce84eeb"
+  }
+ },
+ {
+  "id": "summer-meadow",
+  "name": "Summer Meadow",
+  "category": "outdoors",
+  "width": 2560,
+  "height": 1707,
+  "horizon": 0.6,
+  "floor": 0.92,
+  "lightX": 0.2,
+  "castShadow": 0.3,
+  "rim": 0.0,
+  "blur": 0.3,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "meadow_2",
+   "plate": "14",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "9c0a117dd439197623a1c28c989ee705"
+  }
+ },
+ {
+  "id": "garden-bench",
+  "name": "Garden Bench",
+  "category": "outdoors",
+  "width": 2560,
+  "height": 1707,
+  "horizon": 0.5,
+  "floor": 0.92,
+  "lightX": 0.0,
+  "castShadow": 0.0,
+  "rim": 0.0,
+  "blur": 0.35,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "studio_garden",
+   "plate": "14",
+   "authors": [
+    "Sergej Majboroda"
+   ],
+   "license": "CC0",
+   "md5": "7fe4e6ff79c47b48f10d01ddf43852c6"
+  }
+ },
+ {
+  "id": "desert-sunset",
+  "name": "Desert Sunset",
+  "category": "golden",
+  "width": 2560,
+  "height": 1709,
+  "horizon": 0.25,
+  "floor": 0.95,
+  "lightX": -0.6,
+  "castShadow": 0.3,
+  "rim": 0.5,
+  "blur": 0.3,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "kiara_8_sunset",
+   "plate": "20160825-DSC01825",
+   "authors": [
+    "Greg Zaal"
+   ],
+   "license": "CC0",
+   "md5": "44e5484f3c086cbc7948e36d8f110592"
+  }
+ },
+ {
+  "id": "sunrise-beach",
+  "name": "Sunrise Beach",
+  "category": "golden",
+  "width": 2560,
+  "height": 1709,
+  "horizon": 0.38,
+  "floor": 0.92,
+  "lightX": 0.7,
+  "castShadow": 0.2,
+  "rim": 0.6,
+  "blur": 0.4,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "umhlanga_sunrise",
+   "plate": "DSC08473",
+   "authors": [
+    "Greg Zaal"
+   ],
+   "license": "CC0",
+   "md5": "18a03eb8e2508d6a7f18aefa429b80f6"
+  }
+ },
+ {
+  "id": "coastal-dusk",
+  "name": "Coastal Dusk",
+  "category": "golden",
+  "width": 2560,
+  "height": 1707,
+  "horizon": 0.52,
+  "floor": 0.92,
+  "lightX": -0.2,
+  "castShadow": 0.0,
+  "rim": 0.4,
+  "blur": 0.3,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "the_sky_is_on_fire",
+   "plate": "IMG_0844",
+   "authors": [
+    "Greg Zaal",
+    "Rico Cilliers"
+   ],
+   "license": "CC0",
+   "md5": "f2c27b751013d49bf90350c4f487e2ab"
+  }
+ },
+ {
+  "id": "night-piazza",
+  "name": "Night Piazza",
+  "category": "night",
+  "width": 2560,
+  "height": 1709,
+  "horizon": 0.5,
+  "floor": 0.92,
+  "lightX": 0.0,
+  "castShadow": 0.0,
+  "rim": 0.3,
+  "blur": 0.35,
+  "credit": {
+   "source": "Poly Haven",
+   "asset": "vignaioli_night",
+   "plate": "DSC07544",
+   "authors": [
+    "Greg Zaal",
+    "Rico Cilliers"
+   ],
+   "license": "CC0",
+   "md5": "a1591212dbe58bc5393e49ac7f0c7dec"
+  }
+ }
+]

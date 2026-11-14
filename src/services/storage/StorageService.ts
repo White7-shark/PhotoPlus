@@ -49,7 +49,7 @@ export class StorageService {
   }
 
   /** System photo picker; the chosen photo is copied into app storage. Null if cancelled. */
-  pickImage(area: 'imports' | 'looks' | 'poses' = 'imports'): Promise<string | null> {
+  pickImage(area: 'imports' | 'looks' | 'poses' | 'backgrounds' = 'imports'): Promise<string | null> {
     return this.native.pickImage(area);
   }
 

@@ -17,6 +17,7 @@
 #include "photoplus/skintone.hpp"
 #include "photoplus/light.hpp"
 #include "photoplus/pose.hpp"
+#include "photoplus/studio.hpp"
 #include "photoplus/beauty.hpp"
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
@@ -820,6 +821,77 @@ pp_status pp_pose_tracker_create(pp_pose_tracker** out) {
 }
 
 void pp_pose_tracker_destroy(pp_pose_tracker* tracker) { delete tracker; }
+
+pp_status pp_studio_cutout(const pp_image* image, const pp_image* subject, const pp_image* zones,
+                           const pp_studio_stroke* strokes, int32_t stroke_count,
+                           const pp_studio_cutout_params* params, pp_image* out, const pp_cancel_token* token,
+                           pp_studio_cutout_report* report) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || subject == nullptr || out == nullptr) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "image, subject and out are required");
+    }
+    if (stroke_count < 0 || stroke_count > 4096 || (stroke_count > 0 && strokes == nullptr)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Bad strokes");
+    }
+    std::vector<photoplus::studio::Stroke> list;
+    list.reserve(static_cast<size_t>(stroke_count));
+    for (int32_t i = 0; i < stroke_count; ++i) {
+      const pp_studio_stroke& s = strokes[i];
+      if (s.brush < PP_STUDIO_KEEP || s.brush > PP_STUDIO_HAIR || s.count < 0 || s.count > 100000 ||
+          (s.count > 0 && s.points == nullptr)) {
+        return fail(PP_ERROR_INVALID_ARGUMENT, "Bad stroke");
+      }
+      photoplus::studio::Stroke st;
+      st.brush = static_cast<photoplus::studio::Brush>(s.brush);
+      st.radius = s.radius;
+      st.points.reserve(static_cast<size_t>(s.count));
+      for (int32_t k = 0; k < s.count; ++k) st.points.push_back({s.points[2 * k], s.points[2 * k + 1]});
+      list.push_back(std::move(st));
+    }
+    photoplus::studio::CutoutParams p;
+    if (params != nullptr) {
+      p.softness = params->softness;
+      p.shift = params->shift;
+      p.hairDetail = params->hair_detail;
+      p.cleanColours = params->clean_colours != 0;
+    }
+    photoplus::studio::CutoutReport r;
+    const photoplus::Error e = photoplus::studio::cutout(image->buffer, subject->buffer, zones ? &zones->buffer : nullptr, list, p,
+                                                         out->buffer, token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (report != nullptr) {
+      *report = pp_studio_cutout_report{r.coverage, r.edge, r.hairEdge, r.left, r.top, r.right, r.bottom,
+                                        r.cutLeft ? 1 : 0, r.cutTop ? 1 : 0, r.cutRight ? 1 : 0, r.cutBottom ? 1 : 0};
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const pp_studio_placement* placement,
+                            const pp_studio_look* look, const pp_cancel_token* token, pp_studio_compose_report* report) {
+  return guarded([&]() -> pp_status {
+    if (background == nullptr || cutout == nullptr || placement == nullptr) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "background, cutout and placement are required");
+    }
+    photoplus::studio::Placement pl;
+    pl.x = placement->x, pl.y = placement->y, pl.height = placement->height;
+    pl.tilt = placement->tilt, pl.angle = placement->angle, pl.flip = placement->flip != 0;
+    photoplus::studio::Look lk;
+    if (look != nullptr) {
+      lk.colorMatch = look->color_match, lk.lightWrap = look->light_wrap, lk.shadow = look->shadow;
+      lk.castShadow = look->cast_shadow, lk.lightX = look->light_x, lk.horizon = look->horizon;
+      lk.bgBlur = look->bg_blur, lk.grain = look->grain, lk.seed = look->seed, lk.rim = look->rim;
+    }
+    photoplus::studio::ComposeReport r;
+    const photoplus::Error e = photoplus::studio::compose(background->buffer, cutout->buffer, pl, lk, token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (report != nullptr) {
+      *report = pp_studio_compose_report{r.left, r.top, r.right, r.bottom, r.exposure, {r.balance[0], r.balance[1], r.balance[2]},
+                                         r.grounded ? 1 : 0};
+    }
+    return succeed();
+  });
+}
 
 pp_status pp_pose_tracker_update(pp_pose_tracker* tracker, const pp_pose* in, int64_t time_ms, pp_pose* out,
                                  float* stillness_out) {

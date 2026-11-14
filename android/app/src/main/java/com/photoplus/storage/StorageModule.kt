@@ -111,6 +111,7 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
     val target = when (area) {
       "looks" -> paths.looks
       "poses" -> paths.poses
+      "backgrounds" -> paths.backgrounds
       else -> paths.imports
     }
     val activity = reactApplicationContext.currentActivity as? ComponentActivity

@@ -22,6 +22,10 @@ export type RootStackParamList = {
   CreateProp: undefined;
   /** A finished Glide clip (before/after, share, save). */
   GlidePreview: { clip: GlideClip };
+  /** The photoshoot studio's tools. */
+  PhotoshootStudio: undefined;
+  /** Scene Swap: a person cut out and placed in another scene. */
+  SceneSwap: undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

@@ -297,3 +297,25 @@ if (providers.gradleProperty("photoplus.poseModels").getOrElse("true").toBoolean
         }
     }
 }
+
+// Photoshoot studio: MediaPipe Selfie Multiclass (Apache-2.0), version 1,
+// pinned by SHA-256. It maps a person's hair, skin and clothes, so the
+// cut-out can let colour decide where hair is fine and stay firm elsewhere.
+// Offline builds can pass -Pphotoplus.studioModel=false: the cut-out then
+// works from the person mask alone.
+def studioModelSha = "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0"
+def fetchStudioModel = tasks.register("fetchStudioModel", FetchModel) {
+    label = "studio person-parts model"
+    url = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite"
+    sha256 = studioModelSha
+    assetName = "selfie_multiclass_256x256.tflite" // PersonParts.MODEL
+    cacheFile = new File(gradle.gradleUserHomeDir, "caches/photoplus/multiclass-${studioModelSha.take(16)}.tflite")
+    outputDir = layout.buildDirectory.dir("generated/studioModel")
+}
+if (providers.gradleProperty("photoplus.studioModel").getOrElse("true").toBoolean()) {
+    androidComponents {
+        onVariants(selector().all()) { variant ->
+            variant.sources.assets?.addGeneratedSourceDirectory(fetchStudioModel, { it.outputDir })
+        }
+    }
+}

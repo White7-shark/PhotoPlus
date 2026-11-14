@@ -97,7 +97,7 @@ Free users can access:
 Premium users receive:
 - All free features
 - Advanced camera and editing tools (where supported by the device)
-- Advanced background removal and replacement
+- Advanced background removal and replacement (Scene Swap, in the Photoshoot Studio): a person cut out with clean hair and clothing edges, corrected with Keep, Remove and Fix hair brushes, placed into 15 built-in scenes (real photographs of empty places), plain colours or their own backgrounds, with light, colour, shadows, blur and perspective matched; saved at full quality or as a transparent cut-out. Free users can try it; saving is Premium
 - Pose guidance and pose matching, offline: the full library of 25 poses, a pose taken from any photo the user picks, a live silhouette and alignment arrows, a match score, camera-distance and body-position advice in plain words, guided capture, and optional automatic capture once the pose and framing hold
 - Photoshoot simulation and replication
 - Advanced lighting and shadow effects

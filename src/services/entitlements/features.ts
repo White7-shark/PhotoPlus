@@ -52,7 +52,12 @@ export const FEATURES = {
   vibeMatch: f('camera.vibeMatch', 'Vibe Match: shoot in the style of any photo', 'camera', 'premium'),
   transform: f('camera.transform', 'Transform: the look of a high-end camera lens', 'camera', 'premium'),
   advancedEditing: f('editing.advanced', 'Advanced editing tools', 'editing', 'premium'),
-  backgroundReplace: f('replication.background', 'Advanced background removal & replacement', 'replication', 'premium'),
+  backgroundReplace: f(
+    'replication.background',
+    'Scene Swap: you in a new scene, cut-outs with clean edges, background libraries',
+    'replication',
+    'premium',
+  ),
   poseGuidance: f(
     'assistant.pose',
     'Pose guidance: the full pose library, poses from your photos, live matching & auto capture',

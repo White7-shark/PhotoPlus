@@ -43,6 +43,8 @@
 | LiteRT (on-device inference, 16 KB page aligned) | **2.3.2** | 2.3.2 |
 | LiteRT GPU accelerator (`litert-gpu`, Phase 4; +3.2 MB on arm64) | **2.3.2** | 2.3.2 |
 | MediaPipe Tasks Vision (pose landmarker; `litertlm-android` excluded, only `ImageEmbedder` uses it) | **1.2.3** | 1.2.3 |
+| MediaPipe Selfie Multiclass 256 × 256 (hair, skin, clothes; Apache-2.0; float32 version 1, fetched and SHA-256-verified at build time) | **v1** | — |
+| Studio scenes: 15 Poly Haven backplates (CC0, MD5-verified, rebuilt by `scripts/studio-plates.py`) | 2.56 K | — |
 | MediaPipe Pose Landmarker Lite and Full models (Apache-2.0; float16 version 1, fetched and SHA-256-verified at build time) | **v1** | — |
 | Depth Anything V2 Small, LiteRT 8-bit weights (Apache-2.0; fetched and SHA-256-verified at build time, revision `178427e`) | **2024 release** | — |
 | JUnit (Jupiter, via BOM) | **6.1.3** | 6.1.3 (migrated from JUnit 4, which is maintenance-only) |

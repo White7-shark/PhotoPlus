@@ -130,7 +130,13 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
           <PressableCard
             key={p.id}
             label={`${p.title}. ${p.tagline}. ${p.premium ? 'Premium. ' : ''}${p.availability}.`}
-            onPress={() => (p.id === 'camera' ? navigation.navigate('Camera') : navigation.navigate('Packs'))}
+            onPress={() =>
+              p.id === 'camera'
+                ? navigation.navigate('Camera')
+                : p.id === 'replication'
+                  ? navigation.navigate('PhotoshootStudio')
+                  : navigation.navigate('Packs')
+            }
             style={{ width: cardWidth, minHeight: 170 }}
             radius={theme.radii.lg}
           >

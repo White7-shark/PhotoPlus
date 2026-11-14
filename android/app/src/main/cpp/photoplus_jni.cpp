@@ -1478,4 +1478,100 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeRgbaToYuv420
   }
 }
 
+
+// ---------------------------------------------------------------- studio
+
+// Studio cut-out. `bitmap`: the upright photo (ARGB_8888); `subject`: the
+// person mask (ALPHA_8, any size); `zones`: the person-parts map (ALPHA_8 of
+// class ids, any size) or null; `strokes`: [count, then per stroke: brush,
+// radius, n, x0, y0, …]; `params`: softness, shift, hair detail, clean
+// colours; `out`: ARGB_8888, not premultiplied, the photo's size, written
+// with straight alpha. `reportOut` (11): coverage, edge, hair edge, box
+// (left, top, right, bottom), cut (left, top, right, bottom).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCutout(
+    JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject zones, jfloatArray strokes, jfloatArray params, jobject out,
+    jlong token, jfloatArray reportOut) {
+  constexpr jsize kReport = 11;
+  if (subject == nullptr || out == nullptr || params == nullptr || env->GetArrayLength(params) < 4 ||
+      env->GetArrayLength(reportOut) < kReport) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad cut-out arguments");
+    return;
+  }
+  std::vector<float> s;
+  if (strokes != nullptr) {
+    s.resize(static_cast<size_t>(env->GetArrayLength(strokes)));
+    if (!s.empty()) env->GetFloatArrayRegion(strokes, 0, static_cast<jsize>(s.size()), s.data());
+  }
+  std::vector<pp_studio_stroke> list;
+  size_t at = 0;
+  const int count = s.empty() ? 0 : static_cast<int>(s[at++]);
+  if (count < 0 || count > 4096) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+    return;
+  }
+  for (int i = 0; i < count; ++i) {
+    if (at + 3 > s.size()) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+      return;
+    }
+    pp_studio_stroke st{static_cast<int32_t>(s[at]), s[at + 1], static_cast<int32_t>(s[at + 2]), nullptr};
+    at += 3;
+    if (st.count < 0 || at + static_cast<size_t>(st.count) * 2 > s.size()) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+      return;
+    }
+    st.points = s.data() + at;
+    at += static_cast<size_t>(st.count) * 2;
+    list.push_back(st);
+  }
+  jfloat p[4];
+  env->GetFloatArrayRegion(params, 0, 4, p);
+  WrappedBitmap img, subj, zon, dst;
+  if (!img.open(env, bitmap, false) || !subj.open(env, subject, true) || !zon.open(env, zones, true) || !dst.open(env, out, false)) return;
+  const pp_studio_cutout_params cp{p[0], p[1], p[2], p[3] > 0.5f ? 1 : 0};
+  pp_studio_cutout_report r{};
+  const pp_status st = pp_studio_cutout(img.image, subj.image, zon.image, list.data(), static_cast<int32_t>(list.size()), &cp, dst.image,
+                                        reinterpret_cast<const pp_cancel_token*>(token), &r);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat rep[kReport] = {r.coverage, r.edge, r.hair_edge, r.left, r.top, r.right, r.bottom,
+                               static_cast<float>(r.cut_left), static_cast<float>(r.cut_top), static_cast<float>(r.cut_right),
+                               static_cast<float>(r.cut_bottom)};
+  env->SetFloatArrayRegion(reportOut, 0, kReport, rep);
+}
+
+// Studio compose: `background` (ARGB_8888, the output frame) edited in
+// place; `cutout` a nativeStudioCutout result (not premultiplied).
+// `placement` (6): x, y, height, tilt, angle, flip. `look` (10): colour
+// match, light wrap, shadow, cast shadow, light x, horizon, background blur,
+// grain, rim, seed. `reportOut` (9): box (left, top, right, bottom),
+// exposure, balance (r, g, b), grounded.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCompose(
+    JNIEnv* env, jobject, jobject background, jobject cutout, jfloatArray placement, jfloatArray look, jlong token, jfloatArray reportOut) {
+  constexpr jsize kReport = 9;
+  if (background == nullptr || cutout == nullptr || env->GetArrayLength(placement) < 6 || env->GetArrayLength(look) < 10 ||
+      env->GetArrayLength(reportOut) < kReport) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad compose arguments");
+    return;
+  }
+  jfloat pl[6], lk[10];
+  env->GetFloatArrayRegion(placement, 0, 6, pl);
+  env->GetFloatArrayRegion(look, 0, 10, lk);
+  WrappedBitmap bg, cut;
+  if (!bg.open(env, background, false) || !cut.open(env, cutout, false)) return;
+  const pp_studio_placement p{pl[0], pl[1], pl[2], pl[3], pl[4], pl[5] > 0.5f ? 1 : 0};
+  const pp_studio_look l{lk[0], lk[1], lk[2], lk[3], lk[4], lk[5], lk[6], lk[7], static_cast<uint32_t>(lk[9]), lk[8]};
+  pp_studio_compose_report r{};
+  const pp_status st = pp_studio_compose(bg.image, cut.image, &p, &l, reinterpret_cast<const pp_cancel_token*>(token), &r);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat rep[kReport] = {r.left, r.top, r.right, r.bottom, r.exposure, r.balance[0], r.balance[1], r.balance[2],
+                               static_cast<float>(r.grounded)};
+  env->SetFloatArrayRegion(reportOut, 0, kReport, rep);
+}
+
 }  // extern "C"

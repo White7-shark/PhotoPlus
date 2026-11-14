@@ -323,6 +323,7 @@ export function PressableCard({
   children,
   style,
   radius,
+  testID,
 }: {
   onPress: () => void;
   label: string;
@@ -330,6 +331,7 @@ export function PressableCard({
   children: React.ReactNode;
   style?: ViewStyle;
   radius?: number;
+  testID?: string;
 }) {
   const { scale, onPressIn, onPressOut } = usePressScale();
   return (
@@ -341,6 +343,7 @@ export function PressableCard({
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityHint={hint}
+        testID={testID}
         style={{ flex: 1 }}
       >
         <GlassSurface radius={radius} style={{ flex: 1 }}>
