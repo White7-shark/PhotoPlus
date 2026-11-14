@@ -280,6 +280,7 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                   </AppText>
                   <Button label="Auto size" variant="glass" icon="wand" disabled={s.trueToScene} onPress={s.autoSize} testID="scene-auto-size" />
                 </View>
+                <ValueSlider label="Spotlight" value={s.look.spotlight} onChange={v => s.setLook({ spotlight: v })} format={pct} testID="scene-spotlight" />
                 <ValueSlider label="Match the light" value={s.look.colorMatch} onChange={v => s.setLook({ colorMatch: v })} format={pct} />
                 <ValueSlider label="Blend the edges" value={s.look.lightWrap} onChange={v => s.setLook({ lightWrap: v })} format={pct} />
                 <ValueSlider label="Shadow" value={s.look.shadow} onChange={v => s.setLook({ shadow: v })} format={pct} />

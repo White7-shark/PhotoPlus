@@ -155,7 +155,7 @@ int compose(int argc, char** argv) {
   if (fg == nullptr) return 1;
   auto arg = [&](int i, float d) { return argc > i ? std::strtof(argv[i], nullptr) : d; };
   pp_studio_placement pl{arg(6, 0.5f), arg(7, 0.95f), arg(8, 0.8f), arg(9, 0.0f), arg(10, 0.0f), static_cast<int32_t>(arg(11, 0.0f))};
-  pp_studio_look lk{arg(12, 0.7f), arg(13, 0.35f), arg(14, 0.6f), arg(15, 0.0f), arg(16, 0.0f), arg(17, 0.45f), arg(18, 0.0f), arg(19, 1.0f), 11u, arg(20, 0.0f)};
+  pp_studio_look lk{arg(12, 0.7f), arg(13, 0.35f), arg(14, 0.6f), arg(15, 0.0f), arg(16, 0.0f), arg(17, 0.45f), arg(18, 0.0f), arg(19, 1.0f), 11u, arg(20, 0.0f), arg(21, 0.0f), 0, 1, 1, {1, 1, 1}};
   pp_studio_compose_report r{};
   const auto t0 = std::chrono::steady_clock::now();
   const pp_status st = pp_studio_compose(bg, fg, &pl, &lk, nullptr, &r);
@@ -180,7 +180,7 @@ int main(int argc, char** argv) {
     std::fprintf(stderr,
                  "usage: studio_demo cutout IN.ppm MASK.pgm ZONES.pgm|- OUT_PREFIX [softness shift hair clean] [STROKES.txt]\n"
                  "       studio_demo compose BG.ppm FG.ppm ALPHA.pgm OUT.ppm x y height [tilt angle flip colorMatch wrap "
-                 "shadow cast lightX horizon blur grain rim]\n");
+                 "shadow cast lightX horizon blur grain rim spotlight]\n");
   }
   return rc;
 }

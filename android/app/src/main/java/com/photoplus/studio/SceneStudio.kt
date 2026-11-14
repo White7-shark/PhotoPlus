@@ -84,6 +84,9 @@ data class SceneCrop(val x: Float = 0f, val y: Float = 0f, val w: Float = 1f, va
 data class ScenePlacement(val x: Float, val y: Float, val height: Float, val tilt: Float, val angle: Float, val flip: Boolean) {
   fun toArray() = floatArrayOf(x, y, height, tilt, angle, if (flip) 1f else 0f)
 
+  /** With a fixed box (left, top, right, bottom, normalised to the cut-out): video keeps one size and place. */
+  fun toArray(box: FloatArray) = floatArrayOf(x, y, height, tilt, angle, if (flip) 1f else 0f, 1f, box[0], box[1], box[2], box[3])
+
   companion object {
     fun fromMap(m: Map<String, Any?>?): ScenePlacement {
       val p = m ?: emptyMap()
@@ -107,8 +110,22 @@ data class SceneLook(
   val grain: Float = 1f,
   val rim: Float = 0f,
   val seed: Int = 11,
+  /** Spotlight: light on the person, the scene dimmed and softened around them. */
+  val spotlight: Float = 0f,
+  /** Video: a colour match measured once and kept (gain, contrast, balance r g b), or null to measure each time. */
+  val harmony: FloatArray? = null,
 ) {
-  fun toArray() = floatArrayOf(colorMatch, lightWrap, shadow, castShadow, lightX, horizon, bgBlur, grain, rim, seed.toFloat())
+  fun toArray(): FloatArray {
+    val h = harmony
+    return floatArrayOf(
+      colorMatch, lightWrap, shadow, castShadow, lightX, horizon, bgBlur, grain, rim, seed.toFloat(), spotlight,
+      if (h != null) 1f else 0f, h?.getOrNull(0) ?: 1f, h?.getOrNull(1) ?: 1f, h?.getOrNull(2) ?: 1f, h?.getOrNull(3) ?: 1f, h?.getOrNull(4) ?: 1f,
+    )
+  }
+
+  override fun equals(other: Any?) = other is SceneLook && toArray().contentEquals(other.toArray())
+
+  override fun hashCode() = toArray().contentHashCode()
 
   companion object {
     fun fromMap(m: Map<String, Any?>?): SceneLook {
@@ -116,7 +133,7 @@ data class SceneLook(
       fun f(k: String, d: Float, lo: Float = 0f, hi: Float = 1f) = ((p[k] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: d).coerceIn(lo, hi)
       return SceneLook(
         f("colorMatch", 0.7f), f("lightWrap", 0.35f), f("shadow", 0.6f), f("castShadow", 0f), f("lightX", 0f, -1f, 1f),
-        f("horizon", 0.45f), f("bgBlur", 0f), f("grain", 1f), f("rim", 0f),
+        f("horizon", 0.45f), f("bgBlur", 0f), f("grain", 1f), f("rim", 0f), spotlight = f("spotlight", 0f),
       )
     }
   }

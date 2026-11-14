@@ -877,18 +877,23 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
     photoplus::studio::Placement pl;
     pl.x = placement->x, pl.y = placement->y, pl.height = placement->height;
     pl.tilt = placement->tilt, pl.angle = placement->angle, pl.flip = placement->flip != 0;
+    pl.fixedBox = placement->fixed_box != 0;
+    pl.boxLeft = placement->box_left, pl.boxTop = placement->box_top, pl.boxRight = placement->box_right, pl.boxBottom = placement->box_bottom;
     photoplus::studio::Look lk;
     if (look != nullptr) {
       lk.colorMatch = look->color_match, lk.lightWrap = look->light_wrap, lk.shadow = look->shadow;
       lk.castShadow = look->cast_shadow, lk.lightX = look->light_x, lk.horizon = look->horizon;
       lk.bgBlur = look->bg_blur, lk.grain = look->grain, lk.seed = look->seed, lk.rim = look->rim;
+      lk.spotlight = look->spotlight, lk.fixedHarmony = look->fixed_harmony != 0;
+      lk.gain = look->gain, lk.contrast = look->contrast;
+      lk.balance[0] = look->balance[0], lk.balance[1] = look->balance[1], lk.balance[2] = look->balance[2];
     }
     photoplus::studio::ComposeReport r;
     const photoplus::Error e = photoplus::studio::compose(background->buffer, cutout->buffer, pl, lk, token ? &token->token : nullptr, &r);
     if (e.status != PP_OK) return fail(e);
     if (report != nullptr) {
       *report = pp_studio_compose_report{r.left, r.top, r.right, r.bottom, r.exposure, {r.balance[0], r.balance[1], r.balance[2]},
-                                         r.grounded ? 1 : 0};
+                                         r.grounded ? 1 : 0, r.contrast};
     }
     return succeed();
   });

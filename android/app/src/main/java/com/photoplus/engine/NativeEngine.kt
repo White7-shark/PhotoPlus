@@ -259,9 +259,10 @@ object NativeEngine {
 
   /**
    * Studio compose: [background] (the output frame) edited in place with
-   * [cutout] placed in it. [placement] (6) ScenePlacement.toArray, [look]
-   * (10) SceneLook.toArray. [report] (9): box l t r b, exposure, balance
-   * r g b, grounded.
+   * [cutout] placed in it. [placement] (6, or 11 with a fixed box for video)
+   * ScenePlacement.toArray, [look] (10, or 17 with Spotlight and a fixed
+   * colour match) SceneLook.toArray. [report] (9 or 10): box l t r b,
+   * exposure, balance r g b, grounded, contrast.
    */
   external fun nativeStudioCompose(background: Bitmap, cutout: Bitmap, placement: FloatArray, look: FloatArray, token: Long, report: FloatArray)
 

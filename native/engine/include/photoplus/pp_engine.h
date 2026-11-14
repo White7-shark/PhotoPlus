@@ -817,6 +817,10 @@ typedef struct pp_studio_placement {
   float tilt;     /* -1..1 vertical perspective */
   float angle;    /* degrees */
   int32_t flip;
+  /* Video: a fixed box (normalised to the cut-out) used instead of the
+   * alpha's own, so the person keeps one size and place from frame to frame. */
+  int32_t fixed_box;
+  float box_left, box_top, box_right, box_bottom;
 } pp_studio_placement;
 
 typedef struct pp_studio_look {
@@ -826,6 +830,11 @@ typedef struct pp_studio_look {
   float bg_blur, grain; /* 0..1 */
   uint32_t seed;
   float rim;      /* 0..1 rim light on the side facing the scene's light */
+  float spotlight; /* 0..1 Spotlight: light on the person, the scene dimmed and softened around them */
+  /* Video: keep a measured colour match (from a report) instead of measuring each frame. */
+  int32_t fixed_harmony;
+  float gain, contrast;
+  float balance[3];
 } pp_studio_look;
 
 typedef struct pp_studio_compose_report {
@@ -833,6 +842,7 @@ typedef struct pp_studio_compose_report {
   float exposure;
   float balance[3];
   int32_t grounded;
+  float contrast;
 } pp_studio_compose_report;
 
 /* `background` is the output frame, edited in place; `cutout` is a

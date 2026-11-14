@@ -539,6 +539,83 @@ TEST(studio_compose_background_blur_softens_the_scene_not_the_person) {
   pp_image_destroy(person);
 }
 
+TEST(studio_compose_spotlight_lights_the_person_and_dims_the_scene) {
+  pp_image* person = flatPerson();
+  auto run = [&](float spot, double& corner, double& beside, double& body) {
+    pp_image* bg = scene(120, 120, 120);
+    pp_studio_placement pl{0.5f, 0.9f, 0.6f, 0, 0, 0};
+    pp_studio_look lk = plainLook();
+    lk.spotlight = spot;
+    EXPECT_EQ(pp_studio_compose(bg, person, &pl, &lk, nullptr, nullptr), PP_OK);
+    corner = meanLuma(bg, 0, 0, 30, 30), beside = meanLuma(bg, 150, 140, 165, 160), body = meanLuma(bg, 190, 150, 210, 210);
+    pp_image_destroy(bg);
+  };
+  double c0, b0, p0, c1, b1, p1;
+  run(0.0f, c0, b0, p0);
+  run(1.0f, c1, b1, p1);
+  std::printf("    corner %.0f → %.0f, beside the person %.0f → %.0f, person %.0f → %.0f\n", c0, c1, b0, b1, p0, p1);
+  EXPECT_TRUE(c1 < 0.75 * c0);          // the scene falls off away from the person
+  EXPECT_TRUE(b1 > c1 + 15.0);          // a pool of light around them
+  EXPECT_TRUE(p1 > p0 + 3.0);           // the person lifted
+  pp_image_destroy(person);
+}
+
+TEST(studio_compose_fixed_box_keeps_the_person_steady) {
+  // Frame 2: the same person with an arm raised above the head.
+  pp_image* a = flatPerson();
+  pp_image* b = flatPerson();
+  for (int y = 0; y < 10; ++y)
+    for (int x = 44; x < 50; ++x) at(b, x, y)[3] = 255;
+  auto compose = [&](pp_image* cutImg, bool fixed) {
+    pp_image* bg = scene(90, 120, 160);
+    pp_studio_placement pl{0.5f, 0.9f, 0.6f, 0, 0, 0, fixed ? 1 : 0, 10.0f / 60, 10.0f / 140, 50.0f / 60, 130.0f / 140};
+    pp_studio_look lk = plainLook();
+    EXPECT_EQ(pp_studio_compose(bg, cutImg, &pl, &lk, nullptr, nullptr), PP_OK);
+    return bg;
+  };
+  auto bodyDiff = [&](pp_image* x, pp_image* y) {
+    double d = 0;
+    for (int yy = 120; yy < 300; ++yy)
+      for (int xx = 0; xx < 400; ++xx) d += std::abs(at(x, xx, yy)[0] - at(y, xx, yy)[0]);
+    return d;
+  };
+  pp_image* fa = compose(a, true);
+  pp_image* fb = compose(b, true);
+  pp_image* ma = compose(a, false);
+  pp_image* mb = compose(b, false);
+  std::printf("    body change when an arm goes up: own box %.0f, fixed box %.0f\n", bodyDiff(ma, mb), bodyDiff(fa, fb));
+  EXPECT_TRUE(bodyDiff(fa, fb) < 1.0);
+  EXPECT_TRUE(bodyDiff(ma, mb) > 1000.0);
+  // Someone who left the frame: a fixed box composes just the scene.
+  pp_image* empty = rgba(60, 140);
+  std::memset(pp_image_pixels(empty), 0, static_cast<size_t>(strideOf(empty)) * 140);
+  pp_image* fe = compose(empty, true);
+  pp_image* plain = scene(90, 120, 160);
+  EXPECT_TRUE(std::fabs(meanLuma(fe, 0, 0, 400, 300) - meanLuma(plain, 0, 0, 400, 300)) < 0.5);
+  for (pp_image* i : {a, b, fa, fb, ma, mb, empty, fe, plain}) pp_image_destroy(i);
+}
+
+TEST(studio_compose_fixed_colour_match_repeats_the_measured_one) {
+  pp_image* person = flatPerson();
+  pp_image* bg = scene(200, 120, 60);
+  pp_studio_placement pl{0.5f, 0.9f, 0.6f, 0, 0, 0};
+  pp_studio_look lk = plainLook();
+  lk.color_match = 1.0f;
+  pp_studio_compose_report rep{};
+  EXPECT_EQ(pp_studio_compose(bg, person, &pl, &lk, nullptr, &rep), PP_OK);
+  pp_image* bg2 = scene(200, 120, 60);
+  pp_studio_look fixed = plainLook();
+  fixed.fixed_harmony = 1, fixed.gain = rep.exposure, fixed.contrast = rep.contrast;
+  fixed.balance[0] = rep.balance[0], fixed.balance[1] = rep.balance[1], fixed.balance[2] = rep.balance[2];
+  EXPECT_EQ(pp_studio_compose(bg2, person, &pl, &fixed, nullptr, nullptr), PP_OK);
+  const uint8_t *p = at(bg, 200, 180), *q = at(bg2, 200, 180);
+  std::printf("    measured %d %d %d, repeated %d %d %d\n", p[0], p[1], p[2], q[0], q[1], q[2]);
+  EXPECT_TRUE(std::abs(p[0] - q[0]) <= 2 && std::abs(p[1] - q[1]) <= 2 && std::abs(p[2] - q[2]) <= 2);
+  pp_image_destroy(bg);
+  pp_image_destroy(bg2);
+  pp_image_destroy(person);
+}
+
 TEST(studio_rejects_bad_input) {
   Scene s = makeScene();
   pp_image* mask = coarseMask(s);

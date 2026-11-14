@@ -156,16 +156,24 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
     return makeError(PP_ERROR_INVALID_ARGUMENT, "Image too small");
   }
   const float vals[] = {placement.x, placement.y, placement.height, placement.tilt, placement.angle, look.colorMatch,
-                        look.lightWrap, look.shadow, look.castShadow, look.lightX, look.horizon, look.bgBlur, look.grain, look.rim};
+                        look.lightWrap, look.shadow, look.castShadow, look.lightX, look.horizon, look.bgBlur, look.grain, look.rim,
+                        look.spotlight, look.gain, look.contrast, look.balance[0], look.balance[1], look.balance[2],
+                        placement.boxLeft, placement.boxTop, placement.boxRight, placement.boxBottom};
   for (float v : vals)
     if (!std::isfinite(v)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Bad placement");
   if (placement.height <= 0.01f || placement.height > 20.0f) return makeError(PP_ERROR_INVALID_ARGUMENT, "Bad size");
+  if (placement.fixedBox && (placement.boxRight - placement.boxLeft < 1e-3f || placement.boxBottom - placement.boxTop < 1e-3f)) {
+    return makeError(PP_ERROR_INVALID_ARGUMENT, "Bad box");
+  }
   if (report != nullptr) *report = ComposeReport{};
   const int32_t W = background.width(), H = background.height();
   const Rgb o = offsets(background);
   const float colorMatch = std::clamp(look.colorMatch, 0.0f, 1.0f), wrap = std::clamp(look.lightWrap, 0.0f, 1.0f);
   const float shadow = std::clamp(look.shadow, 0.0f, 1.0f), cast = std::clamp(look.castShadow, 0.0f, 1.0f);
-  const float bgBlur = std::clamp(look.bgBlur, 0.0f, 1.0f), grain = std::clamp(look.grain, 0.0f, 1.0f);
+  const float spot = std::clamp(look.spotlight, 0.0f, 1.0f);
+  // Spotlight softens the scene further (as a wider aperture would).
+  const float bgBlur = std::clamp(look.bgBlur + 0.45f * spot * (1.0f - look.bgBlur), 0.0f, 1.0f);
+  const float grain = std::clamp(look.grain, 0.0f, 1.0f);
   const float lightX = std::clamp(look.lightX, -1.0f, 1.0f), horizon = std::clamp(look.horizon, 0.0f, 1.0f);
   const float tilt = std::clamp(placement.tilt, -1.0f, 1.0f);
   const float rim = std::clamp(look.rim, 0.0f, 1.0f);
@@ -182,8 +190,17 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
         if (y == ch - 1) ++bottomRun;
       }
   }
-  if (br < 0) return makeError(PP_ERROR_INVALID_ARGUMENT, "The cut-out is empty");
-  const bool grounded = static_cast<float>(bottomRun) / static_cast<float>(cw) < 0.03f;
+  bool grounded = static_cast<float>(bottomRun) / static_cast<float>(cw) < 0.03f;
+  if (placement.fixedBox) {
+    // The caller's box (video: the same for every frame; the person may even be out of it).
+    bl = std::clamp(static_cast<int32_t>(std::lround(placement.boxLeft * static_cast<float>(cw))), 0, cw - 1);
+    br = std::clamp(static_cast<int32_t>(std::lround(placement.boxRight * static_cast<float>(cw))) - 1, bl, cw - 1);
+    bt = std::clamp(static_cast<int32_t>(std::lround(placement.boxTop * static_cast<float>(ch))), 0, ch - 1);
+    bb = std::clamp(static_cast<int32_t>(std::lround(placement.boxBottom * static_cast<float>(ch))) - 1, bt, ch - 1);
+    grounded = placement.boxBottom < 0.97f;
+  } else if (br < 0) {
+    return makeError(PP_ERROR_INVALID_ARGUMENT, "The cut-out is empty");
+  }
   const float boxH = static_cast<float>(bb + 1 - bt);
   const float ancCx = 0.5f * static_cast<float>(bl + br + 1), ancCy = static_cast<float>(bb + 1);
 
@@ -334,6 +351,33 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
     }
   }
 
+  if (look.fixedHarmony) {
+    gain = std::clamp(look.gain, 0.5f, 1.5f), contrast = std::clamp(look.contrast, 0.8f, 1.25f);
+    balance = V3{std::clamp(look.balance[0], 0.7f, 1.4f), std::clamp(look.balance[1], 0.7f, 1.4f), std::clamp(look.balance[2], 0.7f, 1.4f)};
+    if (logMeanS == 0.0f) {
+      // The contrast pivot: the person's mean light, measured here.
+      double sl = 0, n = 0;
+      const auto& L = linLut().v;
+      for (int32_t y = bt; y <= bb; y += 4)
+        for (int32_t x = bl; x <= br; x += 4) {
+          const uint8_t* p = cutout.row(y) + x * 4;
+          if (p[3] < 242) continue;
+          sl += std::log(std::max(lumOf(L[p[cut.o.r]], L[p[cut.o.g]], L[p[cut.o.b]]), 1e-4f)), n += 1;
+        }
+      logMeanS = n > 0 ? static_cast<float>(sl / n) : std::log(0.18f);
+    }
+  }
+
+  // Spotlight: a pool of light around the person (an ellipse a little wider
+  // than them), the scene falling off outside it.
+  const float poolX = 0.5f * (fl + fr), poolY = ft + 0.5f * (fb - ft);
+  const float poolRx = std::max(0.75f * (fr - fl), 0.22f * static_cast<float>(W));
+  const float poolRy = std::max(0.62f * (fb - ft), 0.22f * static_cast<float>(H));
+  auto poolAt = [&](float x, float y) {
+    const float dx = (x - poolX) / poolRx, dy = (y - poolY) / poolRy;
+    return std::exp(-0.5f * (dx * dx + dy * dy));
+  };
+
   // Background blur on the grid, sharper on the ground near the feet.
   Rgb3 soft;
   const bool blurBg = bgBlur > 0.0f;
@@ -477,6 +521,12 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
           const float sv = shade.sample(lx, ly);
           if (sv < 0.999f) B = B * sv, touched = true;
         }
+        float pool = 0.0f;
+        if (spot > 0.0f) {
+          pool = poolAt(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f);
+          B = B * (1.0f - spot * 0.55f * (1.0f - pool) + spot * 0.1f * pool);
+          touched = true;
+        }
         float a = 0.0f;
         V3 Fp;
         if (inRows && x >= px0 && x < px1) {
@@ -489,6 +539,10 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
         }
         V3 F = Fp * (1.0f / a);
         F = F * balance * gain;
+        if (spot > 0.0f) {
+          // Lit by the spotlight.
+          F = F * (1.0f + 0.2f * spot * (0.5f + 0.5f * pool));
+        }
         if (contrast != 1.0f) {
           const float lum = std::max(lumOf(F.r, F.g, F.b), 1e-5f);
           const float lg = std::log(lum), target = logMeanS + std::log(gain) + contrast * (lg - logMeanS - std::log(gain));
@@ -526,6 +580,7 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
     report->grounded = grounded;
     report->exposure = gain;
     report->balance = {balance.r, balance.g, balance.b};
+    report->contrast = contrast;
   }
   return ok();
 }

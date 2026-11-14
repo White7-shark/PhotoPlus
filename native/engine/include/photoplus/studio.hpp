@@ -78,6 +78,10 @@ struct Placement {
   bool flip = false;    // mirror
   float tilt = 0.0f;    // -1..1 vertical perspective: + narrows the top (camera looking up at the person)
   float angle = 0.0f;   // degrees, about the anchor
+  // A fixed box (normalised to the cut-out) instead of the alpha's own: for
+  // video, so a person who moves their arms does not change size or jump.
+  bool fixedBox = false;
+  float boxLeft = 0.0f, boxTop = 0.0f, boxRight = 1.0f, boxBottom = 1.0f;
 };
 
 struct Look {
@@ -91,6 +95,14 @@ struct Look {
   float bgBlur = 0.0f;      // 0..1: the background softened like a lens at a wide aperture
   float grain = 1.0f;       // 0..1: the person's grain matched to the scene's
   uint32_t seed = 11;
+  // 0..1: Spotlight. A pool of light on the person, the rest of the scene
+  // dimmed and softened around them, the person lifted.
+  float spotlight = 0.0f;
+  // Video: the colour match measured once (gain, balance, contrast from a
+  // report) and kept, so it does not flicker from frame to frame.
+  bool fixedHarmony = false;
+  float gain = 1.0f, contrast = 1.0f;
+  float balance[3] = {1.0f, 1.0f, 1.0f};
 };
 
 struct ComposeReport {
@@ -99,6 +111,7 @@ struct ComposeReport {
   bool grounded = false;   // feet in the photo: shadows were drawn
   float exposure = 1.0f;   // gain given to the person's light
   std::array<float, 3> balance{1.0f, 1.0f, 1.0f};  // per-channel colour gain
+  float contrast = 1.0f;   // the person's contrast toward the scene's
 };
 
 // `background` (RGBA8/BGRA8) is the output frame, edited in place. `cutout`

@@ -1546,34 +1546,45 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCutout
 
 // Studio compose: `background` (ARGB_8888, the output frame) edited in
 // place; `cutout` a nativeStudioCutout result (not premultiplied).
-// `placement` (6): x, y, height, tilt, angle, flip. `look` (10): colour
-// match, light wrap, shadow, cast shadow, light x, horizon, background blur,
-// grain, rim, seed. `reportOut` (9): box (left, top, right, bottom),
-// exposure, balance (r, g, b), grounded.
+// `placement` (6 or 11): x, y, height, tilt, angle, flip, then optionally a
+// fixed box (on 0/1, left, top, right, bottom; video). `look` (10 or 17):
+// colour match, light wrap, shadow, cast shadow, light x, horizon,
+// background blur, grain, rim, seed, then optionally Spotlight and a fixed
+// colour match (on 0/1, gain, contrast, balance r g b; video).
+// `reportOut` (9 or 10): box (left, top, right, bottom), exposure, balance
+// (r, g, b), grounded, contrast.
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCompose(
     JNIEnv* env, jobject, jobject background, jobject cutout, jfloatArray placement, jfloatArray look, jlong token, jfloatArray reportOut) {
-  constexpr jsize kReport = 9;
-  if (background == nullptr || cutout == nullptr || env->GetArrayLength(placement) < 6 || env->GetArrayLength(look) < 10 ||
-      env->GetArrayLength(reportOut) < kReport) {
+  if (background == nullptr || cutout == nullptr || placement == nullptr || look == nullptr || reportOut == nullptr) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad compose arguments");
     return;
   }
-  jfloat pl[6], lk[10];
-  env->GetFloatArrayRegion(placement, 0, 6, pl);
-  env->GetFloatArrayRegion(look, 0, 10, lk);
+  const jsize np = env->GetArrayLength(placement), nl = env->GetArrayLength(look), nr = env->GetArrayLength(reportOut);
+  if ((np != 6 && np < 11) || (nl != 10 && nl < 17) || nr < 9) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad compose arguments");
+    return;
+  }
+  jfloat pl[11] = {}, lk[17] = {};
+  env->GetFloatArrayRegion(placement, 0, std::min<jsize>(np, 11), pl);
+  env->GetFloatArrayRegion(look, 0, std::min<jsize>(nl, 17), lk);
   WrappedBitmap bg, cut;
   if (!bg.open(env, background, false) || !cut.open(env, cutout, false)) return;
-  const pp_studio_placement p{pl[0], pl[1], pl[2], pl[3], pl[4], pl[5] > 0.5f ? 1 : 0};
-  const pp_studio_look l{lk[0], lk[1], lk[2], lk[3], lk[4], lk[5], lk[6], lk[7], static_cast<uint32_t>(lk[9]), lk[8]};
+  pp_studio_placement p{pl[0], pl[1], pl[2], pl[3], pl[4], pl[5] > 0.5f ? 1 : 0, 0, 0, 0, 1, 1};
+  if (np >= 11) p.fixed_box = pl[6] > 0.5f ? 1 : 0, p.box_left = pl[7], p.box_top = pl[8], p.box_right = pl[9], p.box_bottom = pl[10];
+  pp_studio_look l{lk[0], lk[1], lk[2], lk[3], lk[4], lk[5], lk[6], lk[7], static_cast<uint32_t>(lk[9]), lk[8], 0, 0, 1, 1, {1, 1, 1}};
+  if (nl >= 17) {
+    l.spotlight = lk[10], l.fixed_harmony = lk[11] > 0.5f ? 1 : 0, l.gain = lk[12], l.contrast = lk[13];
+    l.balance[0] = lk[14], l.balance[1] = lk[15], l.balance[2] = lk[16];
+  }
   pp_studio_compose_report r{};
   const pp_status st = pp_studio_compose(bg.image, cut.image, &p, &l, reinterpret_cast<const pp_cancel_token*>(token), &r);
   if (st != PP_OK) {
     throwStatus(env, st);
     return;
   }
-  const jfloat rep[kReport] = {r.left, r.top, r.right, r.bottom, r.exposure, r.balance[0], r.balance[1], r.balance[2],
-                               static_cast<float>(r.grounded)};
-  env->SetFloatArrayRegion(reportOut, 0, kReport, rep);
+  const jfloat rep[10] = {r.left, r.top, r.right, r.bottom, r.exposure, r.balance[0], r.balance[1], r.balance[2],
+                          static_cast<float>(r.grounded), r.contrast};
+  env->SetFloatArrayRegion(reportOut, 0, std::min<jsize>(nr, 10), rep);
 }
 
 }  // extern "C"

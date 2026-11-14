@@ -465,6 +465,8 @@ export interface SceneLook {
   bgBlur: number;
   grain: number;
   rim: number;
+  /** Spotlight 0..1: light on the person, the scene dimmed and softened around them. */
+  spotlight: number;
 }
 
 export function lookFor(background: Background, crop: Crop): SceneLook {
@@ -480,8 +482,9 @@ export function lookFor(background: Background, crop: Crop): SceneLook {
       bgBlur: p.blur,
       grain: 1,
       rim: p.rim,
+      spotlight: 0,
     };
   }
   // Plain colours: a studio sweep — a soft contact shadow, no colour cast to match.
-  return { colorMatch: 0, lightWrap: 0.15, shadow: 0.45, castShadow: 0, lightX: 0, horizon: 0.55, bgBlur: 0, grain: 0.5, rim: 0 };
+  return { colorMatch: 0, lightWrap: 0.15, shadow: 0.45, castShadow: 0, lightX: 0, horizon: 0.55, bgBlur: 0, grain: 0.5, rim: 0, spotlight: 0 };
 }
