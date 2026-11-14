@@ -366,22 +366,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
   }
 
   /** The background, decoded so its crop is at least `edge` on the long side. */
-  private fun decodeBackground(bg: SceneBackground, edge: Int, crop: SceneCrop): Bitmap {
-    val need = (edge / max(crop.w, crop.h)).roundToInt()
-    return when (bg) {
-      is SceneBackground.Plate -> {
-        val bounds = reactApplicationContext.assets.open(plateAsset(bg.assetId)).use { input ->
-          BitmapFactory.Options().apply { inJustDecodeBounds = true }.also { BitmapFactory.decodeStream(input, null, it) }
-        }
-        reactApplicationContext.assets.open(plateAsset(bg.assetId)).use { input ->
-          BitmapFactory.decodeStream(input, null, SceneStudio.decodeOptions(bounds.outWidth, bounds.outHeight, need))
-            ?: throw EngineException(EngineException.IO_ERROR, "The background could not be read")
-        }
-      }
-      is SceneBackground.Photo -> ImageCodec.decode(paths.resolve(bg.path), min(need, MAX_EXPORT_EDGE)).bitmap
-      else -> throw EngineException(EngineException.INVALID_ARGUMENT, "Unknown background")
-    }
-  }
+  private fun decodeBackground(bg: SceneBackground, edge: Int, crop: SceneCrop): Bitmap =
+    SceneBackgrounds.decode(reactApplicationContext, { paths.resolve(it) }, bg, edge, crop, MAX_EXPORT_EDGE)
 
   override fun saveToGallery(path: String, promise: Promise) {
     val file = try {

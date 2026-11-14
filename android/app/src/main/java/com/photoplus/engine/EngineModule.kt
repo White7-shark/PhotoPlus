@@ -513,14 +513,37 @@ class EngineModule(reactContext: ReactApplicationContext) :
     if (!requireEngine(promise)) return
     val map = request.toHashMap()
     val io = resolveIo(map, promise) ?: return
-    val options = com.photoplus.video.GlideOptions.fromMap(map)
-    val mark = if (map["watermark"] != null) ExportPolicy.resolve(watermarkOf(map), Entitlements.plan) else null
+    val options = try {
+      com.photoplus.video.GlideOptions.fromMap(map)
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    // The plan is read here: free clips always carry the mark and stop at
+    // 10 s; Premium goes to 30 s and can move the person into a new scene.
+    val plan = Entitlements.plan
+    if (options.scene != null && plan != Plan.PREMIUM) {
+      promise.reject("PREMIUM_REQUIRED", "A new scene for Glide is part of Premium")
+      return
+    }
+    val mark = if (plan == Plan.FREE || map["watermark"] != null) ExportPolicy.resolve(watermarkOf(map), plan) else null
     jobs.submit(jobId, jobListener(promise)) { token ->
-      val r = glideProcessor.process(io.first, io.second, options, token, { stage, fraction ->
-        reactApplicationContext.emitSafely(
-          EVENT_JOB_PROGRESS, mapOf("jobId" to jobId, "progress" to fraction, "stage" to stage),
-        )
-      }) { frame -> mark?.let { com.photoplus.edit.WatermarkRenderer.apply(frame, it) } }
+      val fps = videoFps(io.first)
+      val r = glideProcessor.process(
+        io.first, io.second, options, token,
+        { stage, fraction ->
+          reactApplicationContext.emitSafely(
+            EVENT_JOB_PROGRESS, mapOf("jobId" to jobId, "progress" to fraction, "stage" to stage),
+          )
+        },
+        { frame -> mark?.let { com.photoplus.edit.WatermarkRenderer.apply(frame, it) } },
+        com.photoplus.video.GlideOptions.maxFrames(fps, plan),
+        options.scene?.let { scene ->
+          { w: Int, h: Int ->
+            com.photoplus.studio.SceneBackgrounds.frame(reactApplicationContext, { paths.resolve(it) }, scene.background, scene.crop, w, h)
+          }
+        },
+      )
       mapOf(
         "outputPath" to io.second.absolutePath,
         "width" to r.width,
@@ -533,7 +556,42 @@ class EngineModule(reactContext: ReactApplicationContext) :
         "shakeAfter" to r.shakeAfter.toDouble(),
         "processMs" to r.processMs.toDouble(),
         "watermarked" to (mark != null),
+        "scene" to (options.scene != null),
       )
+    }
+  }
+
+  /** A clip's frame rate (frames over duration), 30 when unknown. */
+  private fun videoFps(file: java.io.File): Float {
+    val r = android.media.MediaMetadataRetriever()
+    return try {
+      r.setDataSource(file.absolutePath)
+      val frames = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toFloatOrNull() ?: 0f
+      val ms = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toFloatOrNull() ?: 0f
+      if (frames > 0f && ms > 0f) (frames * 1000f / ms).coerceIn(10f, 60f) else 30f
+    } catch (_: Exception) {
+      30f
+    } finally {
+      r.release()
+    }
+  }
+
+  /**
+   * Where the person usually is in a clip (for framing them in a new scene):
+   * the median box over a dozen frames, and the edges that cut them off.
+   */
+  override fun glideSubject(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val input = try {
+      paths.resolve(map["inputPath"] as? String ?: "")
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    jobs.submit(jobId, jobListener(promise)) { _ ->
+      val (summary, aspect) = com.photoplus.video.GlideSubjectFinder.find(input)
+      summary?.toMap(aspect) ?: mapOf("found" to false, "aspect" to aspect.toDouble())
     }
   }
 

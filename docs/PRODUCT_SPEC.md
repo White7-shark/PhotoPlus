@@ -83,7 +83,7 @@ Free users can access:
 - Pack previews and descriptions
 - Premium feature demonstrations
 - Transform (the look of a high-end camera lens): 2 photos a day
-- Glide: 7-second pro video (steadied, cleaned, sharpened), with Spotlight and Glow; free-plan clips carry the watermark
+- Glide: pro video up to 10 seconds (steadied, cleaned, sharpened), with Spotlight and Glow; free-plan clips always carry the Photo Plus watermark
 - Beauty mode with two filters (Natural Glow, Soft Radiance), live in the camera, in Portrait mode, on clips and in the editor
 - Backdrops: Signature (the camera's Spotlight default), Soft Studio and Stage, in the editor
 - Skin Tone: four shades (Ivory, Honey, Caramel, Espresso) for the skin of the face and body, in the editor
@@ -97,7 +97,8 @@ Free users can access:
 Premium users receive:
 - All free features
 - Advanced camera and editing tools (where supported by the device)
-- Advanced background removal and replacement (Scene Swap, in the Photoshoot Studio): a person cut out with clean hair and clothing edges, corrected with Keep, Remove and Fix hair brushes, placed into 15 built-in scenes (real photographs of empty places), plain colours or their own backgrounds, with light, colour, shadows, blur and perspective matched; saved at full quality or as a transparent cut-out. Free users can try it; saving is Premium
+- Advanced background removal and replacement (Scene Swap, in the Photoshoot Studio): a person cut out with clean hair and clothing edges, corrected with Keep, Remove and Fix hair brushes, placed into 15 built-in scenes (real photographs of empty places), plain colours or their own backgrounds, with light, colour, shadows, blur and perspective matched; sized true to the scene automatically (with a Size slider and Auto size), with Spotlight; saved at full quality or as a transparent cut-out. Free users can try it; saving is Premium
+- Glide up to 30 seconds, without a watermark, and Glide in a new scene: the person moved out of their clip into any background, at the scene's true size
 - Pose guidance and pose matching, offline: the full library of 25 poses, a pose taken from any photo the user picks, a live silhouette and alignment arrows, a match score, camera-distance and body-position advice in plain words, guided capture, and optional automatic capture once the pose and framing hold
 - Photoshoot simulation and replication
 - Advanced lighting and shadow effects

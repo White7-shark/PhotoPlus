@@ -106,6 +106,18 @@ export function myPlate(id: string, name: string, path: string, width: number, h
   };
 }
 
+/** How the device is told about a background: a built-in plate by id, a photo by path, a colour. */
+export function backgroundRequest(bg: Background): Record<string, unknown> {
+  switch (bg.kind) {
+    case 'plate':
+      return bg.plate.source === 'builtin' ? { kind: 'plate', id: bg.plate.id } : { kind: 'photo', path: bg.plate.path };
+    case 'plain':
+      return { kind: 'plain', color: bg.plain.color, vignette: bg.plain.vignette };
+    default:
+      return { kind: 'transparent' };
+  }
+}
+
 export function isPlateDef(v: unknown): v is PlateDef {
   if (!v || typeof v !== 'object') return false;
   const p = v as Record<string, unknown>;
@@ -170,9 +182,12 @@ export interface Crop {
   h: number;
 }
 
-export function cropFor(bgWidth: number, bgHeight: number, shape: FrameShape, centreX = 0.5): Crop {
+/** A frame shape, or a width / height of its own (a video's). */
+export type FrameSpec = FrameShape | number;
+
+export function cropFor(bgWidth: number, bgHeight: number, shape: FrameSpec, centreX = 0.5): Crop {
   if (shape === 'scene' || bgWidth <= 0 || bgHeight <= 0) return { x: 0, y: 0, w: 1, h: 1 };
-  const want = SHAPE_ASPECT[shape];
+  const want = typeof shape === 'number' ? Math.min(4, Math.max(0.25, shape)) : SHAPE_ASPECT[shape];
   const have = bgWidth / bgHeight;
   if (have > want) {
     // Wider than wanted: a vertical slice, as centred on the person as fits.
@@ -312,9 +327,9 @@ export interface Framing {
 }
 
 /** The person's share of the frame height the framing aims for. */
-export function targetShare(shape: FrameShape, frameAspect: number): number {
+export function targetShare(shape: FrameSpec, frameAspect: number): number {
   if (shape === 'square') return 0.66;
-  if (shape === 'scene') return frameAspect > 1.2 ? 0.6 : 0.7;
+  if (shape === 'scene' || typeof shape === 'number') return frameAspect > 1.2 ? 0.6 : 0.7;
   return 0.72;
 }
 
@@ -336,7 +351,7 @@ function boxAspectOf(cut: CutoutInfo) {
  * a portrait has its eyes brought near the horizon (where a camera at eye
  * level puts them). Closer people get a softer background, as a lens gives.
  */
-export function autoFrame(cut: CutoutInfo, background: Background, shape: FrameShape, bgWidth: number, bgHeight: number): Framing {
+export function autoFrame(cut: CutoutInfo, background: Background, shape: FrameSpec, bgWidth: number, bgHeight: number): Framing {
   const body = bodyOf(cut);
   const boxAspect = boxAspectOf(cut);
   if (background.kind !== 'plate') {

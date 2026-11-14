@@ -5,8 +5,10 @@ import { GlidePreviewScreen } from '../src/screens/GlidePreviewScreen';
 import { CameraScreen } from '../src/screens/camera/CameraScreen';
 import { CameraService } from '../src/services/camera/CameraService';
 import {
-  GLIDE_MAX_MS,
+  GLIDE_FREE_MAX_MS,
+  GLIDE_PREMIUM_MAX_MS,
   glideBlur,
+  glideMaxMs,
   glideFileName,
   glideRequest,
   glideStageLabel,
@@ -75,9 +77,19 @@ const glideResult = {
 };
 
 const mockEngine = {
-  glide: jest.fn(async (_jobId: string, request: { outputPath: string }) => ({
+  glide: jest.fn(async (_jobId: string, request: { outputPath: string; scene?: object }) => ({
     ...glideResult,
     outputPath: request.outputPath,
+    ...(request.scene ? { scene: true } : {}),
+  })),
+  glideSubject: jest.fn(async () => ({
+    found: true,
+    box: [0.3, 0.12, 0.7, 0.96],
+    cutLeft: false,
+    cutTop: false,
+    cutRight: false,
+    cutBottom: false,
+    aspect: 9 / 16,
   })),
   cancel: jest.fn(),
 };
@@ -178,16 +190,21 @@ describe('Glide logic', () => {
     ).not.toHaveProperty('beautyRecipe');
   });
 
-  it('times the 7-second recording', () => {
-    expect(GLIDE_MAX_MS).toBe(7000);
-    expect(secondsLeft(0)).toBe(7);
-    expect(secondsLeft(100)).toBe(7);
-    expect(secondsLeft(1000)).toBe(6);
-    expect(secondsLeft(6900)).toBe(1);
-    expect(secondsLeft(9000)).toBe(0);
-    expect(secondsLeft(-50)).toBe(7);
-    expect(recordedFraction(3500)).toBe(0.5);
-    expect(recordedFraction(20000)).toBe(1);
+  it('times the recording by plan: 10 s free, 30 s with Premium', () => {
+    expect(GLIDE_FREE_MAX_MS).toBe(10_000);
+    expect(GLIDE_PREMIUM_MAX_MS).toBe(30_000);
+    expect(glideMaxMs('free')).toBe(10_000);
+    expect(glideMaxMs('premium')).toBe(30_000);
+    expect(secondsLeft(0)).toBe(10);
+    expect(secondsLeft(100)).toBe(10);
+    expect(secondsLeft(1000)).toBe(9);
+    expect(secondsLeft(9900)).toBe(1);
+    expect(secondsLeft(12000)).toBe(0);
+    expect(secondsLeft(-50)).toBe(10);
+    expect(secondsLeft(1000, 30_000)).toBe(29);
+    expect(recordedFraction(5000)).toBe(0.5);
+    expect(recordedFraction(15_000, 30_000)).toBe(0.5);
+    expect(recordedFraction(40_000, 30_000)).toBe(1);
   });
 
   it('names clips by date and labels each step in plain words', () => {
@@ -315,9 +332,9 @@ describe('Glide in the camera', () => {
     await fireEvent.press(screen.getByRole('radio', { name: 'Medium' }));
 
     await fireEvent.press(screen.getByTestId('shutter'));
-    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: true, maxMs: 7000 }));
+    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: true, maxMs: 10_000 }));
     expect(screen.getByTestId('glide-recording')).toBeTruthy();
-    expect(screen.getByText('7s left')).toBeTruthy();
+    expect(screen.getByText('10s left')).toBeTruthy();
     expect(screen.getByLabelText('Stop recording')).toBeTruthy();
     expect(screen.queryByTestId('mode-photo')).toBeNull(); // no mode changes mid-clip
 
@@ -357,7 +374,7 @@ describe('Glide in the camera', () => {
     await renderGlideCamera();
     expect(screen.getByText(/Peach Perfection · no sound/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('shutter'));
-    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: false, maxMs: 7000 }));
+    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: false, maxMs: 10_000 }));
     await act(async () => finishRecording?.({ path: '/captures/glide/GLIDE_2_raw.mp4', durationMs: 7000 }));
     await waitFor(() => expect(mockEngine.glide).toHaveBeenCalled());
     expect(mockEngine.glide.mock.calls[0][1]).toMatchObject({
@@ -365,6 +382,17 @@ describe('Glide in the camera', () => {
       beautyRecipe: { portrait: { blur: 0, smooth: 0.55 }, face: { blush: 0.4 }, grade: { skinSheen: 0.5 } },
     });
     mockEnsure.mockImplementation(async () => 'granted');
+  });
+
+  it('records up to 30 s with Premium', async () => {
+    useAppStore.setState(st => ({ entitlements: { ...st.entitlements, plan: 'premium' } }));
+    await renderGlideCamera();
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: true, maxMs: 30_000 }));
+    expect(screen.getByText('30s left')).toBeTruthy();
+    await act(async () => finishRecording?.({ path: '/captures/glide/GLIDE_3_raw.mp4', durationMs: 25_000 }));
+    await waitFor(() => expect(mockEngine.glide).toHaveBeenCalled());
+    useAppStore.setState(st => ({ entitlements: { ...st.entitlements, plan: 'free' } }));
   });
 
   it('discards a clip under a second and explains why', async () => {
@@ -440,6 +468,50 @@ describe('Glide preview', () => {
     await waitFor(() => expect(mockStorage.saveVideoToGallery).toHaveBeenCalledWith(clip.outputPath));
     expect(await screen.findByText('Saved to your gallery')).toBeTruthy();
     expect(screen.getByText('Saved to gallery')).toBeTruthy();
+  });
+
+  it('moves the person into a new scene (Premium), true to its size, and shows the new clip', async () => {
+    useAppStore.setState(st => ({ entitlements: { ...st.entitlements, plan: 'premium' } }));
+    await wrap(
+      <GlidePreviewScreen
+        navigation={{ navigate: jest.fn(), goBack: jest.fn() } as never}
+        route={{ key: 'g', name: 'GlidePreview', params: { clip } } as never}
+      />,
+    );
+    await fireEvent.press(screen.getByTestId('glide-scene'));
+    await fireEvent.press(screen.getByTestId('bg-tab-indoors'));
+    await fireEvent.press(screen.getByTestId('bg-grand-hall'));
+    expect(screen.getByText('Auto size: true to the scene.')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('glide-scene-make'));
+    await waitFor(() => expect(mockEngine.glide).toHaveBeenCalled());
+    expect(mockEngine.glideSubject).toHaveBeenCalledWith(expect.any(String), { inputPath: clip.rawPath });
+    const request = mockEngine.glide.mock.calls[0][1] as unknown as {
+      inputPath: string;
+      outputPath: string;
+      scene: { background: object; box: number[]; placement: { height: number; y: number }; crop: { h: number } };
+    };
+    // From the recording, into the Grand Hall, at the person's usual box in the clip.
+    expect(request.inputPath).toBe(clip.rawPath);
+    expect(request.scene.background).toEqual({ kind: 'plate', id: 'grand-hall' });
+    expect(request.scene.box).toEqual([0.3, 0.12, 0.7, 0.96]);
+    expect(request.scene.placement.height).toBeGreaterThan(0.5);
+    expect(await screen.findByText('You’re in the new scene. Saved to your gallery.')).toBeTruthy();
+    expect(screen.getByText('In a new scene, steadied and cleaned')).toBeTruthy();
+    expect(screen.getByTestId('video-view').props.source).toBe(request.outputPath);
+    useAppStore.setState(st => ({ entitlements: { ...st.entitlements, plan: 'free' } }));
+  });
+
+  it('offers Premium for a new scene on the free plan', async () => {
+    useAppStore.setState(st => ({ entitlements: { ...st.entitlements, plan: 'free' } }));
+    await wrap(
+      <GlidePreviewScreen
+        navigation={{ navigate: jest.fn(), goBack: jest.fn() } as never}
+        route={{ key: 'g', name: 'GlidePreview', params: { clip } } as never}
+      />,
+    );
+    await fireEvent.press(screen.getByTestId('glide-scene'));
+    expect(screen.queryByTestId('glide-scene-make')).toBeNull();
+    expect(mockEngine.glideSubject).not.toHaveBeenCalled();
   });
 
   it('says so when a clip cannot be played', async () => {

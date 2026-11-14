@@ -23,6 +23,7 @@ export interface Spec extends TurboModule {
   transform(jobId: string, request: Object): Promise<Object>;
   /** Glide: makes a recorded clip steady, clean and sharp (+ Spotlight / Glow); progress as job events. */
   glide(jobId: string, request: Object): Promise<Object>;
+  glideSubject(jobId: string, request: Object): Promise<Object>;
   /** Editor: renders a photo with its edit document (preview or saved copy). */
   renderEdit(jobId: string, request: Object): Promise<Object>;
   /** Export for sharing or the gallery: the watermark follows the native plan. */

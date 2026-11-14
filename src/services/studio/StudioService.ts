@@ -5,7 +5,7 @@
  */
 import { errorCode, errorMessage, nativeModules, requireNative, type StudioSpec } from '../../native';
 import { createId } from '../database/ids';
-import type { Background, Crop, Placement, SceneLook } from './scene';
+import { backgroundRequest, type Background, type Crop, type Placement, type SceneLook } from './scene';
 
 export type Brush = 'keep' | 'remove' | 'hair';
 export const BRUSH_ID: Record<Brush, number> = { keep: 0, remove: 1, hair: 2 };
@@ -97,16 +97,8 @@ function isScene(v: unknown): v is SceneResult {
   return typeof r.outputPath === 'string' && num(r.width) && num(r.height) && (r.format === 'jpeg' || r.format === 'png');
 }
 
-export function backgroundRequest(bg: Background): Record<string, unknown> {
-  switch (bg.kind) {
-    case 'plate':
-      return bg.plate.source === 'builtin' ? { kind: 'plate', id: bg.plate.id } : { kind: 'photo', path: bg.plate.path };
-    case 'plain':
-      return { kind: 'plain', color: bg.plain.color, vignette: bg.plain.vignette };
-    default:
-      return { kind: 'transparent' };
-  }
-}
+/** How the device is told about a background (kept with the scene logic, shared with video). */
+export { backgroundRequest };
 
 export function strokeRequest(strokes: readonly Stroke[]) {
   return strokes.map(s => ({ brush: BRUSH_ID[s.brush], radius: s.radius, points: s.points }));

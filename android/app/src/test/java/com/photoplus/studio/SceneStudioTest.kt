@@ -41,7 +41,18 @@ class SceneStudioTest {
     assertEquals(-1f, l.lightX)
     assertEquals(0.5f, l.rim)
     assertEquals(1f, l.bgBlur)
-    assertEquals(10, l.toArray().size)
+    assertEquals(17, l.toArray().size)
+    assertEquals(0f, l.toArray()[10]) // Spotlight off
+    assertEquals(0f, l.toArray()[11]) // the colour match measured each time
+    val spot = SceneLook.fromMap(mapOf("spotlight" to 0.7))
+    assertEquals(0.7f, spot.toArray()[10], 1e-6f)
+    // Video: a kept colour match (gain, contrast, balance).
+    val kept = spot.copy(harmony = floatArrayOf(1.1f, 1.02f, 0.95f, 1f, 1.05f)).toArray()
+    assertArrayEquals(floatArrayOf(1f, 1.1f, 1.02f, 0.95f, 1f, 1.05f), kept.copyOfRange(11, 17))
+    // A fixed box for video.
+    val boxed = p.toArray(floatArrayOf(0.2f, 0.1f, 0.8f, 0.95f))
+    assertEquals(11, boxed.size)
+    assertArrayEquals(floatArrayOf(1f, 0.2f, 0.1f, 0.8f, 0.95f), boxed.copyOfRange(6, 11))
     val crop = SceneCrop.fromMap(mapOf("x" to 0.9, "y" to 0.0, "w" to 0.5, "h" to 1.0))
     assertEquals(0.5f, crop.x) // kept inside the background
   }

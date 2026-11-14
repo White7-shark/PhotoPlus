@@ -26,12 +26,16 @@ export function BackgroundPicker({
   onChoose,
   onAdd,
   onRemoveMine,
+  transparent = true,
 }: {
   value: Background;
   mine: readonly PlateDef[];
   onChoose: (b: Background) => void;
-  onAdd: () => void;
-  onRemoveMine: (p: PlateDef) => void;
+  /** Adds a photo of your own (no add tile without it). */
+  onAdd?: () => void;
+  onRemoveMine?: (p: PlateDef) => void;
+  /** Offer "No background" (photos only; a video needs one). */
+  transparent?: boolean;
 }) {
   const theme = useTheme();
   const groups = platesByCategory(mine);
@@ -78,13 +82,13 @@ export function BackgroundPicker({
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         {tab === 'plain' ? (
           <>
-            {tile('transparent', 'No background', selected('transparent'), () => onChoose({ kind: 'transparent' }), <Checks />)}
+            {transparent ? tile('transparent', 'No background', selected('transparent'), () => onChoose({ kind: 'transparent' }), <Checks />) : null}
             {PLAINS.map(p =>
               tile(p.id, p.name, selected(p.id), () => onChoose({ kind: 'plain', plain: p }), <View style={[StyleSheet.absoluteFill, { backgroundColor: p.color }]} />),
             )}
           </>
         ) : null}
-        {tab === 'mine'
+        {tab === 'mine' && onAdd
           ? tile(
               'add',
               'Add your own',
@@ -102,7 +106,7 @@ export function BackgroundPicker({
             selected(p.id),
             () => onChoose({ kind: 'plate', plate: p }),
             <Image source={{ uri: p.source === 'builtin' ? `asset:/${thumbAsset(p.id)}` : `file://${p.path}` }} style={StyleSheet.absoluteFill} resizeMode="cover" />,
-            p.source === 'mine' ? () => onRemoveMine(p) : undefined,
+            p.source === 'mine' && onRemoveMine ? () => onRemoveMine(p) : undefined,
           ),
         )}
       </ScrollView>

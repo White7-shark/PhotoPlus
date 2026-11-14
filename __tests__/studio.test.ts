@@ -23,6 +23,7 @@ import {
   type Placement,
 } from '../src/services/studio/scene';
 import { StudioError, StudioService, backgroundRequest, strokeRequest } from '../src/services/studio/StudioService';
+import { frameGlideScene, glideCutInfo } from '../src/services/camera/glideScene';
 
 describe('background library', () => {
   it('has clean plates of every kind, all valid and credited', () => {
@@ -265,5 +266,37 @@ describe('studio service', () => {
     await expect(
       svc.render('s1', { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look: lookFor({ kind: 'transparent' }, { x: 0, y: 0, w: 1, h: 1 }) }, 'full'),
     ).rejects.toMatchObject({ code: 'PREMIUM_REQUIRED' });
+  });
+});
+
+describe('Glide in a new scene', () => {
+  const standing = { found: true, box: [0.35, 0.1, 0.65, 0.95] as [number, number, number, number], cutLeft: false, cutTop: false, cutRight: false, cutBottom: false, aspect: 9 / 16 };
+  const selfie = { ...standing, box: [0, 0.26, 1, 1] as [number, number, number, number], cutLeft: true, cutRight: true, cutBottom: true };
+  const hall = { kind: 'plate' as const, plate: PLATES.find(p => p.id === 'grand-hall')! };
+
+  it('frames the clip’s person true to the scene, in the clip’s own shape', () => {
+    const r = frameGlideScene(standing, hall)!;
+    expect(r.scene.background).toEqual({ kind: 'plate', id: 'grand-hall' });
+    expect(r.scene.box).toEqual(standing.box);
+    // The crop has the clip's shape (9:16) in the plate's pixels.
+    expect((r.scene.crop.w * hall.plate.width) / (r.scene.crop.h * hall.plate.height)).toBeCloseTo(9 / 16, 3);
+    // True to the scene where they stand.
+    const g = groundIn(hall.plate, r.scene.crop);
+    expect(trueHeight(r.scene.placement, glideCutInfo(standing), g)).toBeCloseTo(r.scene.placement.height, 5);
+    expect(r.scene.look.bgBlur).toBeCloseTo(r.framing.bgBlur, 5);
+    // A selfie clip: a portrait framing from the bottom edge, a softer background.
+    const s = frameGlideScene(selfie, hall)!;
+    expect(s.scene.placement.y).toBe(1);
+    expect(s.scene.look.bgBlur).toBeGreaterThan(r.scene.look.bgBlur);
+  });
+
+  it('follows the Size slider and refuses an empty clip or no background', () => {
+    const auto = frameGlideScene(standing, hall)!;
+    expect(frameGlideScene(standing, hall, 1.2)!.scene.placement.height).toBeCloseTo(auto.scene.placement.height * 1.2, 5);
+    expect(frameGlideScene(standing, hall, 9)!.scene.placement.height).toBeCloseTo(auto.scene.placement.height * 1.6, 5);
+    expect(frameGlideScene({ ...standing, found: false }, hall)).toBeNull();
+    expect(frameGlideScene(standing, { kind: 'transparent' })).toBeNull();
+    const plain = frameGlideScene(standing, { kind: 'plain', plain: PLAINS[2] })!;
+    expect(plain.scene.background).toEqual({ kind: 'plain', color: PLAINS[2].color, vignette: true });
   });
 });

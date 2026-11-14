@@ -24,18 +24,22 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Glide: turns a short clip into a steady, clean, pro-looking video.
+ * Glide: turns a clip (up to 30 s) into a steady, clean, pro-looking video.
  *
- *   pass 1  every frame: camera motion (on a small copy) and, when Spotlight
- *           or Glow is on, the subject and face landmarks (on-device models)
+ *   pass 1  every frame: camera motion (on a small copy) and, when Glow is
+ *           on, face landmarks (on-device model)
  *   once    the clip's noise and blur (middle frame), its tone (the photo
  *           pipeline's automatic white balance and levels, fitted as curves),
  *           and the steadying plan
- *   pass 2  every frame: temporal denoise + lens deblur + tone, Spotlight and
- *           Glow with a steadied subject mask and smoothed landmarks, the
- *           steadying warp, then H.264 with the original sound
+ *   pass 2  every frame: temporal denoise + lens deblur + tone; the person's
+ *           mask (on-device model, three frames' vote, room memory,
+ *           steadied); Spotlight and Glow; the steadying warp; or, in a new
+ *           scene (Premium), the person cut out, steadied and composed into
+ *           the scene at a fixed size and place; then H.264 with the
+ *           original sound
  *
- * Memory stays bounded: at most three full frames are held at a time.
+ * Memory stays bounded whatever the length: at most three full frames and
+ * three masks are held at a time (masks are made as pass 2 reaches them).
  */
 class GlideProcessor {
   fun interface Progress {
@@ -76,9 +80,12 @@ class GlideProcessor {
     token: Long,
     progress: Progress,
     decorate: ((Bitmap) -> Unit)? = null,
+    maxFrames: Int = GlideOptions.MAX_FRAMES,
+    /** The scene's background as an opaque frame of the clip's size (needed when [GlideOptions.scene] is set). */
+    sceneFrame: ((width: Int, height: Int) -> Bitmap)? = null,
   ): Result {
     val started = SystemClock.elapsedRealtime()
-    val source = FrameSource(input)
+    val source = FrameSource(input, maxFrames)
     try {
       val n = source.count
       if (n < 2) throw EngineException(EngineException.INVALID_ARGUMENT, "The clip is too short")
@@ -88,13 +95,11 @@ class GlideProcessor {
       val aw = (w * analysisScale).roundToInt().coerceAtLeast(16)
       val ah = (h * analysisScale).roundToInt().coerceAtLeast(16)
 
-      // ---- Pass 1: motion, subject, faces ----
+      // ---- Pass 1: motion, faces ----
       val motions = FloatArray(n * 5).also { it[0] = 1f; it[4] = 1f }
-      val masks = arrayOfNulls<ByteArray>(n)
       val faces = arrayOfNulls<List<FaceLandmarks>>(n)
       val smoother = LandmarkSmoother()
       var prevSmall: Bitmap? = null
-      val needSubject = options.portrait
       val needFaces = options.portrait || options.faces
       val motion = FloatArray(5)
       for (i in 0 until n) {
@@ -111,7 +116,6 @@ class GlideProcessor {
           motions[i * 5 + 4] = motion[4]
           it.recycle()
         }
-        if (needSubject) masks[i] = subjectMask(small)
         if (needFaces) {
           val found = facesIn(small)
           // Steady the main face's landmarks over time (the others pass through).
@@ -119,13 +123,13 @@ class GlideProcessor {
           faces[i] = if (main != null) listOf(FaceLandmarks(main, found.first().detailed)) + found.drop(1) else emptyList()
         }
         prevSmall = small
-        progress.onProgress("analysing", 0.25 * (i + 1) / n)
+        progress.onProgress("analysing", 0.2 * (i + 1) / n)
       }
       prevSmall?.recycle()
       source.releaseAll()
 
       // ---- The clip's measurements and tone, once ----
-      progress.onProgress("measuring", 0.27)
+      progress.onProgress("measuring", 0.21)
       val mid = source.frame(n / 2)
       val quality = NativeEngine.nativeAnalyzeQuality(mid)
       val noise = quality[0]
@@ -162,7 +166,23 @@ class GlideProcessor {
         // The room remembered behind the person: pieces of it the model
         // swallows for many frames are given back (no shadow growing from the
         // person and shrinking back).
-        val room = if (options.portrait) NativeEngine.nativeVideoRoomCreate() else 0L
+        val room = if (options.subject) NativeEngine.nativeVideoRoomCreate() else 0L
+        // Person masks, made as pass 2 reaches them (frame i needs i-1, i, i+1).
+        val masks = HashMap<Int, ByteArray?>()
+        fun maskOf(j: Int, frame: Bitmap): ByteArray? {
+          if (!masks.containsKey(j)) {
+            val small = frame.scale(aw, ah)
+            masks[j] = subjectMask(small)
+            small.recycle()
+          }
+          return masks[j]
+        }
+        val scene = options.scene
+        val composer = if (scene != null) {
+          SceneComposer(scene, w, h, sceneFrame?.invoke(w, h) ?: throw EngineException(EngineException.INVALID_ARGUMENT, "The scene is missing"))
+        } else {
+          null
+        }
         val fromPrev = FloatArray(5)
         val toNext = FloatArray(5)
         val report = FloatArray(NativeEngine.PORTRAIT_REPORT_SIZE)
@@ -181,11 +201,15 @@ class GlideProcessor {
               frameParams, curves, work, token,
             )
             val landmarks = faces[i].orEmpty()
-            val mask = masks[i]
-            if (options.portrait && mask != null) {
+            val mask = if (options.subject) maskOf(i, cur) else null
+            if (options.subject) {
+              if (next != null) maskOf(i + 1, next)
+              masks.keys.filter { it < i - 1 }.forEach { masks.remove(it) }
+            }
+            if (options.subject && mask != null) {
               // Three frames' vote first (a one-frame mistake never shows),
               // then the room memory, then steadying.
-              val voted = MaskVote.median(masks.getOrNull(i - 1), mask, masks.getOrNull(i + 1))
+              val voted = MaskVote.median(masks[i - 1], mask, masks[i + 1])
               val subject = PortraitProcessor.alphaBitmap(voted, aw, ah)
               if (room != 0L) NativeEngine.nativeVideoRoomCheck(room, cur, subject, if (prev != null) fromPrev else null, token)
               val held = steady
@@ -195,8 +219,8 @@ class GlideProcessor {
                 NativeEngine.nativeVideoSteadyMask(held, subject, STEADY)
                 subject.recycle()
               }
-              val (faceMask, protect) = if (landmarks.isEmpty()) null to null else FaceMasks.draw(landmarks, aw, ah)
-              try {
+              val (faceMask, protect) = if (!options.portrait || landmarks.isEmpty()) null to null else FaceMasks.draw(landmarks, aw, ah)
+              if (options.portrait) try {
                 val recipe = options.recipe
                 if (recipe != null && options.beautyLook) {
                   // The beauty preset: skin, face, light, background and colour in one pass.
@@ -214,15 +238,22 @@ class GlideProcessor {
               val (pts, detailed) = FaceLandmarks.pack(landmarks.take(4))
               NativeEngine.nativeFaceAdjust(work, pts, detailed, options.beauty.toArray(), token, faceReport)
             }
-            NativeEngine.nativeVideoWarp(work, warps.copyOfRange(i * 6, i * 6 + 6), out, token)
+            val warp = warps.copyOfRange(i * 6, i * 6 + 6)
+            if (composer != null) {
+              // The person, cut out and steadied, in the scene.
+              composer.compose(work, steady, warp, plan[0], out, token, i)
+            } else {
+              NativeEngine.nativeVideoWarp(work, warp, out, token)
+            }
             decorate?.invoke(out)
             encoder.encode(out, GlideOptions.frameTimeUs(i, fps))
-            progress.onProgress("crafting", 0.3 + 0.68 * (i + 1) / n)
+            progress.onProgress("crafting", 0.25 + 0.73 * (i + 1) / n)
           }
         } finally {
           work.recycle()
           out.recycle()
           steady?.recycle()
+          composer?.release()
           if (room != 0L) NativeEngine.nativeVideoRoomDestroy(room)
           source.releaseAll()
         }
@@ -262,7 +293,7 @@ class GlideProcessor {
    * Frames of the clip, upright, decoded a few at a time and kept only while
    * needed (each 1080p frame is ~8 MB).
    */
-  private class FrameSource(file: File) : AutoCloseable {
+  private class FrameSource(file: File, limit: Int) : AutoCloseable {
     private val retriever = MediaMetadataRetriever().apply { setDataSource(file.absolutePath) }
     private val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
     private val codedW = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
@@ -271,7 +302,7 @@ class GlideProcessor {
     private val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
     private val cache = HashMap<Int, Bitmap>()
 
-    val count = total.coerceAtMost(GlideOptions.MAX_FRAMES)
+    val count = total.coerceAtMost(limit.coerceIn(2, GlideOptions.MAX_FRAMES))
     val fps: Float = if (durationMs > 0 && total > 0) (total * 1000f / durationMs).coerceIn(10f, 60f) else 30f
     private val turned = rotation == 90 || rotation == 270
     val width = if (turned) codedH else codedW

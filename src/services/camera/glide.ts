@@ -1,14 +1,22 @@
 /**
- * Glide: a 7-second pro video from the camera, made steady, clean and sharp,
- * with optional Spotlight (background blur) and Glow (beauty). Pure logic —
+ * Glide: a pro video from the camera (up to 10 s free, 30 s with Premium),
+ * made steady, clean and sharp, with optional Spotlight (background blur)
+ * and Glow (beauty), or (Premium) moved into a new scene. Pure logic —
  * request building, timing and labels — so every rule is unit-tested.
  */
 import { isActive, type BeautyRecipe } from '../beauty/recipe';
 import type { WatermarkSpec } from '../edit/watermark';
 import { BLUR_LEVELS, type BeautySettings, type BlurLevel } from './model';
 
-/** The longest Glide clip (the native recorder enforces the same limit). */
-export const GLIDE_MAX_MS = 7_000;
+/** The longest Glide clip on the free plan (always with the Photo Plus mark). */
+export const GLIDE_FREE_MAX_MS = 10_000;
+/** The longest Glide clip with Premium. */
+export const GLIDE_PREMIUM_MAX_MS = 30_000;
+
+/** The longest clip for a plan (the native recorder enforces the same limit from the plan it holds). */
+export function glideMaxMs(plan: 'free' | 'premium'): number {
+  return plan === 'premium' ? GLIDE_PREMIUM_MAX_MS : GLIDE_FREE_MAX_MS;
+}
 /** Shorter clips have too little motion to steady; they are not processed. */
 export const GLIDE_MIN_MS = 1_000;
 
@@ -38,6 +46,29 @@ export interface GlideRequest {
   beautyRecipe?: BeautyRecipe;
   /** Free-plan clips carry the mark in every frame, as photos do. */
   watermark?: WatermarkSpec;
+  /** Premium: the person moved into a new scene (see glideSceneRequest). */
+  scene?: GlideSceneRequest;
+}
+
+/** The person in a new scene: the background, its crop, where and how big the person is, the look, and their usual box in the clip. */
+export interface GlideSceneRequest {
+  background: { kind: 'plate'; id: string } | { kind: 'photo'; path: string } | { kind: 'plain'; color: string; vignette: boolean };
+  crop: { x: number; y: number; w: number; h: number };
+  placement: { x: number; y: number; height: number; flip: boolean; tilt: number; angle: number };
+  look: Record<string, number>;
+  box: [number, number, number, number];
+}
+
+/** Where the person usually is in a clip (native glideSubject). */
+export interface GlideSubject {
+  found: boolean;
+  box: [number, number, number, number];
+  cutLeft: boolean;
+  cutTop: boolean;
+  cutRight: boolean;
+  cutBottom: boolean;
+  /** Width / height of the clip, upright. */
+  aspect: number;
 }
 
 export interface GlideResult {
@@ -52,6 +83,8 @@ export interface GlideResult {
   shakeAfter: number;
   processMs: number;
   watermarked: boolean;
+  /** Made in a new scene. */
+  scene?: boolean;
 }
 
 /** A finished Glide clip: the result, the untouched recording, and its gallery copy. */
@@ -74,6 +107,7 @@ export function glideRequest(args: {
   /** The beauty preset with Spotlight's blur (cameraRecipe), or null. */
   recipe: BeautyRecipe | null;
   watermark?: WatermarkSpec;
+  scene?: GlideSceneRequest;
 }): GlideRequest {
   const recipe = args.recipe && isActive(args.recipe) ? args.recipe : null;
   const blur = recipe ? 0 : glideBlur(args.spotlight);
@@ -89,6 +123,7 @@ export function glideRequest(args: {
     beauty: null,
     ...(recipe ? { beautyRecipe: recipe } : {}),
     ...(args.watermark ? { watermark: args.watermark } : {}),
+    ...(args.scene ? { scene: args.scene } : {}),
   };
 }
 
@@ -101,14 +136,14 @@ export function glideFileName(now: Date): string {
   );
 }
 
-/** Seconds left on the recording badge (counts down 7 → 0). */
-export function secondsLeft(elapsedMs: number): number {
-  return Math.max(0, Math.ceil((GLIDE_MAX_MS - Math.max(0, elapsedMs)) / 1000));
+/** Seconds left on the recording badge (counts down from the plan's limit to 0). */
+export function secondsLeft(elapsedMs: number, maxMs: number = GLIDE_FREE_MAX_MS): number {
+  return Math.max(0, Math.ceil((maxMs - Math.max(0, elapsedMs)) / 1000));
 }
 
-/** 0..1 of the 7 seconds used, for the progress ring. */
-export function recordedFraction(elapsedMs: number): number {
-  return Math.min(1, Math.max(0, elapsedMs / GLIDE_MAX_MS));
+/** 0..1 of the clip's time used, for the progress ring. */
+export function recordedFraction(elapsedMs: number, maxMs: number = GLIDE_FREE_MAX_MS): number {
+  return Math.min(1, Math.max(0, elapsedMs / maxMs));
 }
 
 export function glideStageLabel(stage: GlideStage | null, fraction: number): string {

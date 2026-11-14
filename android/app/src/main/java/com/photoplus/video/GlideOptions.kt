@@ -3,8 +3,9 @@ package com.photoplus.video
 import com.photoplus.studio.FaceTuning
 
 /**
- * Glide: a short (≤ 7 s) clip made steady, clean and sharp, with optional
- * Spotlight and Glow. Pure Kotlin (unit-tested).
+ * Glide: a clip (up to 10 s on the free plan, 30 s on Premium) made steady,
+ * clean and sharp, with optional Spotlight and Glow, or (Premium) the person
+ * moved into a new scene. Pure Kotlin (unit-tested).
  */
 data class GlideOptions(
   /** 0..1: how smooth the camera path becomes (1 ≈ a gimbal-like glide). */
@@ -23,17 +24,36 @@ data class GlideOptions(
   val beauty: FaceTuning = FaceTuning(),
   /** A beauty preset's resolved recipe (with Spotlight's blur when on); it replaces Glow and the blur above. */
   val recipe: com.photoplus.beauty.BeautyRecipe? = null,
+  /** Premium: the person cut out of every frame and placed in this scene. */
+  val scene: GlideScene? = null,
 ) {
   val beautyLook: Boolean get() = recipe?.active == true
   val spotlight: Boolean get() = blur > 0f
   val portrait: Boolean get() = spotlight || retouch > 0f || brighten > 0f || beautyLook
+  /** The person's mask is needed every frame. */
+  val subject: Boolean get() = portrait || scene != null
   val faces: Boolean get() = beauty.any
 
   companion object {
-    /** The longest clip Glide records and processes. */
-    const val MAX_DURATION_MS = 7_000L
-    /** Frames processed at most (7 s at 30 fps, with a little room for 31 fps sensors). */
-    const val MAX_FRAMES = 220
+    /** The longest clip on the free plan (always with the Photo Plus mark). */
+    const val FREE_MAX_DURATION_MS = 10_000L
+    /** The longest clip on Premium. */
+    const val PREMIUM_MAX_DURATION_MS = 30_000L
+    /** The longest clip Glide records and processes on any plan. */
+    const val MAX_DURATION_MS = PREMIUM_MAX_DURATION_MS
+    /** Frames processed at most (30 s at 30 fps, with room for 31 fps sensors). */
+    const val MAX_FRAMES = 960
+
+    fun maxDurationMs(plan: com.photoplus.edit.Plan): Long =
+      if (plan == com.photoplus.edit.Plan.PREMIUM) PREMIUM_MAX_DURATION_MS else FREE_MAX_DURATION_MS
+
+    /** A recording's length, kept within the plan's limit (and at least a second). */
+    fun clampDurationMs(requested: Long?, plan: com.photoplus.edit.Plan): Long =
+      (requested ?: maxDurationMs(plan)).coerceIn(1_000L, maxDurationMs(plan))
+
+    /** Frames of a clip at [fps] the plan lets Glide process (a longer import is cut at the limit). */
+    fun maxFrames(fps: Float, plan: com.photoplus.edit.Plan): Int =
+      minOf(MAX_FRAMES, (fps.coerceIn(10f, 60f) * maxDurationMs(plan) / 1000f).toInt() + 1)
 
     fun fromMap(map: Map<String, Any?>): GlideOptions {
       fun unit(key: String, default: Float) =
@@ -51,6 +71,7 @@ data class GlideOptions(
         brighten = b("brighten"),
         beauty = FaceTuning(eyes = b("eyes"), underEye = b("underEye"), shine = b("shine"), faceLight = b("faceLight")),
         recipe = com.photoplus.beauty.BeautyRecipe.fromMap(map["beautyRecipe"] as? Map<*, *>),
+        scene = GlideScene.fromMap(map["scene"] as? Map<*, *>),
       )
     }
 

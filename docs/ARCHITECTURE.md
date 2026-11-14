@@ -195,18 +195,21 @@ ML Kit subject / selfie segmentation ─ DepthEstimator (optional)
 | `PortraitPanel.tsx` | Basic (presets) and Advanced (Premium) modes, Reset to Glow, Restore original; `SpotlightAdvanced` holds the background controls |
 | Fairness rule | Every face threshold is relative to the person's own measurements. Exposure lifts are judged on the light around the head and the presence of frontal highlights, never on skin brightness |
 
-## Glide: 7-second pro video (Phase 6)
+## Glide: pro video, 10 s free / 30 s Premium (Phase 6, lengthened in Phase 7)
 
 Full report: [`PHASE6_GLIDE_REPORT.md`](PHASE6_GLIDE_REPORT.md).
 
 ```
 Camera (Glide mode) ── configure({ video: true, aspectRatio: '16:9' }) ── CameraX VideoCapture<Recorder>
-   startVideo ≤ 7 s → captures/glide/*_raw.mp4
-EngineModule.glide → GlideProcessor
+   startVideo ≤ 10 s free / 30 s Premium (the plan is read natively) → captures/glide/*_raw.mp4
+EngineModule.glide → GlideProcessor   (frames capped by the plan; free clips always marked)
    motion (pp_video_estimate_motion) → plan (pp_video_stabilize) → per frame:
-   pp_video_enhance_frame → pp_portrait / pp_face_adjust (Spotlight, Glow) → pp_video_warp → watermark
-   → GlideEncoder (MediaCodec H.264 + original sound) → exports → gallery (Movies/Photo Plus)
-GlidePreview: Glide / As recorded, share, save
+   pp_video_enhance_frame → person mask (made as pass 2 reaches it: ≤ 3 masks held) →
+     Spotlight / Glow: pp_portrait / pp_face_adjust → pp_video_warp
+     or a new scene (Premium): pp_studio_cutout → pp_video_warp of the cut-out → pp_studio_compose
+       (fixed box, colour match kept from frame 1)
+   → watermark → GlideEncoder (MediaCodec H.264 + original sound) → exports → gallery (Movies/Photo Plus)
+GlidePreview: Glide / As recorded, share, save, "Put me in a new scene" (glideSubject → autoFrame → glide)
 ```
 
 | Where | What |
@@ -333,5 +336,5 @@ placement (anchor, size, mirror, tilt) + look (match, wrap, rim, shadows, blur, 
 | `native/engine/src/matte/tools.*` | Shared with Backdrops: colour triplets, blurs, clean-plate colours, hair recovery, islands |
 | `android/.../studio/StudioModule.kt` | Sessions, previews, scenes without the person (for dragging), Premium exports, gallery |
 | `android/.../studio/PersonParts.kt`, `SceneStudio.kt` | Parts map; strokes, settings, backgrounds, crops, export size |
-| `src/services/studio/` | Plate library (`plates.json` from `scripts/studio-plates.py`), placement (horizon rule), frames, looks, gestures, service |
+| `src/services/studio/` | Plate library (`plates.json` from `scripts/studio-plates.py`, with each plate's measured horizon, camera height and open floor), auto framing (true-to-scene size), frames, looks, gestures, service |
 | `src/screens/studio/` | Photoshoot Studio hub, Scene Swap screen, brush canvas, placement view, background picker |

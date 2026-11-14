@@ -146,10 +146,64 @@ Plates were rejected when they showed a person (one Venice sunrise), a company's
 | Plans | <ul><li>Premium (`backgroundReplace`, titled "Scene Swap").</li><li>On the free plan the whole workflow can be tried as a demonstration; saving opens the Premium sheet. The native side refuses full-quality saves on the free plan whatever the app asks.</li></ul> |
 | Size | <ul><li>Plates and thumbnails: 9.7 MB of assets.</li><li>Person-parts model: 16.4 MB, fetched at build time; `-Pphotoplus.studioModel=false` leaves it out.</li></ul> |
 
+## Update: true-to-scene size, Spotlight, Glide in a new scene, Glide length
+
+### People the right size for the scene
+
+The first version sized a standing person with a fixed rule (the horizon crosses them at 90% of their height). That assumes the plate was shot from eye level, about 1.5 m. Many backplates are shot from much lower. So in the White Studio and Autumn Park tests the person came out about half the size the scene gives them, which reads as fake at once.
+
+- **Each plate is measured.** We recorded the horizon, the height of the camera, and the open floor: the farthest point feet can go, in front of furniture.
+  - The measurements come from things of known size in each photo: a 45 cm side table, dining chairs, doors, railings, a studio cube, and which top faces are visible.
+  - An object Z metres tall standing at y, with its top at y_t, gives Z / camera = (y − y_t) / (y − horizon).
+  - Camera heights range from 0.8 m (Sunlit Loft, Night Piazza) to 1.65 m (Neon Lines).
+  - Several horizons had been set at the floor line rather than at eye level; those are corrected.
+- **The person's real height is measured.** The engine now reports the box of the face (face skin in the parts map, inside the cut-out). Hairline to chin is about 0.19 m, so the face gives the person's height.
+  - For a whole person, the measurement is weighed with an adult's 1.7 m, because fringes and hats move the hairline.
+  - For a portrait, it gives the size of the box.
+- **The size rule:** height in the frame = (feet − horizon) × real height ÷ camera height. This holds in any crop of the plate.
+- **Auto framing** searches crops of the plate (down to 66% of it, anywhere up and down) and spots on the open floor. It aims for a standing person filling about 72% of a portrait frame, feet near the bottom, head inside.
+  - Near a low camera, the feet may go just out of frame: a three-quarter shot, as a photographer there would take.
+  - A portrait gets its eyes brought near the horizon (where a camera at eye level puts them).
+  - The background blur follows how close the person is.
+- **Size slider:** shows 100% at the true size. It notes when the person is larger or smaller than the scene gives, and Auto size brings them back. Dragging keeps the chosen proportion as they move back or forward.
+- **Result:** in the park and white-room tests the person is now 0.69–0.72 of the frame, against 0.27–0.34 before. In every measured scene the auto size equals the true size (unit-tested).
+
+### Spotlight in the Photoshoot Studio
+
+A Spotlight slider in Adjust:
+- a pool of light on the person, with the scene falling off outside it (corners about 30% darker at full strength);
+- the scene softened further, as a wider aperture would;
+- the person lifted.
+
+It is engine-tested and previewed on three scenes.
+
+### Glide in a new scene (Premium)
+
+In the Glide preview, **Put me in a new scene** works like this:
+1. Pick a scene or colour, and optionally adjust the Size.
+2. The app finds where the person usually is in the clip: the median box over a dozen frames, and the edges that cut them off.
+3. It frames them with the same auto framing as photos, in the clip's own shape.
+4. Every frame is then processed:
+   - the person's mask: a three-frame vote, room memory, steadied;
+   - a studio cut-out at 960 px;
+   - the steadying warp applied to the cut-out, so the person is steady and the scene never moves;
+   - a studio compose at a **fixed box** (one size and place for the whole clip, even when an arm goes up or the person leaves the frame), with the **colour match measured on the first frame and kept** (no flicker). Grain changes every frame, as a camera's does.
+
+The engine tests cover the fixed box (the body is unchanged when an arm goes up, against a large change with the frame's own box), an empty frame, and the kept colour match.
+
+### Glide length by plan
+
+- **Free:** at most 10 s, and always with the Photo Plus watermark. The watermark is now drawn natively on every free clip, whatever the request says.
+- **Premium:** at most 30 s.
+- **Where it is enforced:** the recorder reads the plan natively, and processing also stops at the plan's limit (an imported longer clip is cut). The camera's countdown follows the plan.
+- **Memory:** a 30 s clip no longer holds a mask for every frame (about 200 MB at 900 frames). Masks are made as the second pass reaches them, so at most three frames and three masks are held whatever the length.
+
 ## Limits
 
 - **No reconstruction:** nothing behind the person in their own photo is reconstructed or reused, by design. Only clean plates go behind them.
 - **One person:** one person per scene; a tap picks who.
 - **Directional light:** relighting is global (exposure, colour, contrast, wrap, rim). A person lit hard from the left placed in a scene lit from the right keeps their own shadows. Choose scenes whose light suits the photo, or use "Mirror".
 - **Hardest edges:** very fine flyaway hair against a busy background of a similar colour. Hair detail and the Fix hair brush are there for those spots.
+- **Glide in a new scene** cuts out and composes every frame, so it takes several times longer than a plain Glide. Progress and Stop are shown. The cut-out runs at 960 px: the person is resized into the scene anyway.
+- **Measured plates only:** people's own backgrounds have no measurements, so a hand-held camera height (1.5 m) and a middle horizon are assumed. The Size slider corrects the rest.
 - **Not tested on a phone:** the phone itself could not be exercised here. The engine, models and plates were validated on the desktop with the same model files. The Android build, lint and unit tests pass.

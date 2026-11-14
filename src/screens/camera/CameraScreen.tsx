@@ -78,6 +78,7 @@ import {
   glideBlur,
   glideStageLabel,
   glideSummary,
+  glideMaxMs,
   secondsLeft,
   type GlideSpotlight,
 } from '../../services/camera/glide';
@@ -524,11 +525,13 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     saveRecord,
   ]);
 
-  // ---- Glide: record up to 7 s, then craft the clip
+  // ---- Glide: record up to the plan's limit (10 s, or 30 s with Premium), then craft the clip
   const focusedRef = useRef(focused);
   useEffect(() => {
     focusedRef.current = focused;
   }, [focused]);
+  // The plan held natively (it also limits the recording itself).
+  const plan = useAppStore(st => st.entitlements.plan);
   const glide = useGlide({
     camera,
     enabled: glideMode && active,
@@ -541,6 +544,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         glideSpotlight === 'off' ? null : { ...portraitControls, depthBlur: glideBlur(glideSpotlight) },
       ),
       watermark: settings.watermark,
+      maxMs: glideMaxMs(plan),
     },
     onDone: clip => {
       setLastClip(clip);
@@ -1018,7 +1022,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           >
             <View style={styles.recDot} />
             <AppText variant="mono" style={styles.readoutText}>
-              {`${secondsLeft(glide.elapsedMs)}s left`}
+              {`${secondsLeft(glide.elapsedMs, glideMaxMs(plan))}s left`}
             </AppText>
           </View>
         ) : null}

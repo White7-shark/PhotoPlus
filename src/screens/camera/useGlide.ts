@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { errorCode } from '../../native';
 import type { CameraService } from '../../services/camera/CameraService';
 import {
-  GLIDE_MAX_MS,
   GLIDE_MIN_MS,
   glideFileName,
   glideRequest,
@@ -29,10 +28,12 @@ export interface GlideSettings {
   /** The beauty preset (with Spotlight's blur when on), resolved; null = a plain steady clip. */
   recipe: BeautyRecipe | null;
   watermark: WatermarkSpec;
+  /** The longest clip the plan allows (10 s free, 30 s Premium). */
+  maxMs: number;
 }
 
 /**
- * The Glide flow in the camera: record (up to 7 s), then craft the clip
+ * The Glide flow in the camera: record (up to 10 s, or 30 s with Premium), then craft the clip
  * (steady, clean, sharp, plus Spotlight and Glow), then save it to the
  * gallery. One clip at a time; recording stops when the camera goes away.
  */
@@ -133,7 +134,7 @@ export function useGlide({
     const began = Date.now();
     ticker.current = setInterval(() => setElapsedMs(Date.now() - began), 100);
     try {
-      const clip = await camera.startVideo({ audio, maxMs: GLIDE_MAX_MS });
+      const clip = await camera.startVideo({ audio, maxMs: latest.current.settings.maxMs });
       stopTicker();
       if (clip.durationMs < GLIDE_MIN_MS) {
         getStorageService()

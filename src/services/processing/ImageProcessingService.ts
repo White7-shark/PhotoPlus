@@ -22,7 +22,7 @@ import type { EditDocument } from '../edit/document';
 import type { FaceGeometry } from '../edit/placement';
 import type { WatermarkSpec } from '../edit/watermark';
 import { isLensReport, type LensReport } from './lens';
-import { isGlideStage, type GlideRequest, type GlideResult, type GlideStage } from '../camera/glide';
+import { isGlideStage, type GlideRequest, type GlideResult, type GlideStage, type GlideSubject } from '../camera/glide';
 
 export interface RenderEditRequest {
   inputPath: string;
@@ -243,6 +243,15 @@ export class ImageProcessingService {
     return (
       this.runJob('glide', request, { ...options, jobId }, id => this.engine.glide(id, request)) as Promise<GlideResult>
     ).finally(() => stages?.remove());
+  }
+
+  /** Where the person usually is in a clip (to frame them in a new scene). */
+  async glideSubject(inputPath: string): Promise<GlideSubject> {
+    const r = (await this.engine.glideSubject(createId('gsub'), { inputPath })) as Partial<GlideSubject>;
+    const box = Array.isArray(r.box) && r.box.length === 4 && r.box.every(v => typeof v === 'number' && Number.isFinite(v)) ? r.box : null;
+    const aspect = typeof r.aspect === 'number' && r.aspect > 0 ? r.aspect : 9 / 16;
+    if (!r.found || !box) return { found: false, box: [0, 0, 1, 1], cutLeft: false, cutTop: false, cutRight: false, cutBottom: false, aspect };
+    return { found: true, box, cutLeft: !!r.cutLeft, cutTop: !!r.cutTop, cutRight: !!r.cutRight, cutBottom: !!r.cutBottom, aspect };
   }
 
   /** Editor: renders a photo with its edits (a preview, or a copy for the library). */
