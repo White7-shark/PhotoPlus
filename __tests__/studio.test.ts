@@ -1,11 +1,15 @@
 import { applyGesture, overlayRect, thin, toPhoto } from '../src/services/studio/gesture';
 import {
   CATEGORY_LABELS,
-  EYE_LEVEL,
+  MIN_ZOOM,
+  PERSON_METRES,
   PLAINS,
   PLATES,
+  autoFrame,
+  bodyOf,
   cropFor,
   frameSize,
+  groundIn,
   heightOnGround,
   horizonInFrame,
   isPlateDef,
@@ -13,7 +17,9 @@ import {
   moveOnGround,
   myPlate,
   platesByCategory,
-  suggestPlacement,
+  resized,
+  trueHeight,
+  type CutoutInfo,
   type Placement,
 } from '../src/services/studio/scene';
 import { StudioError, StudioService, backgroundRequest, strokeRequest } from '../src/services/studio/StudioService';
@@ -28,8 +34,13 @@ describe('background library', () => {
       expect(p.source).toBe('builtin');
       expect(p.credit?.license).toBe('CC0');
       expect(p.credit?.md5).toMatch(/^[0-9a-f]{32}$/);
-      // Feet go below the horizon (people stand on the floor).
+      // Feet go below the horizon (people stand on the floor), from the back of the floor to its front.
       expect(p.floor).toBeGreaterThan(p.horizon);
+      expect(p.back).toBeGreaterThan(p.horizon);
+      expect(p.back).toBeLessThanOrEqual(p.floor);
+      // Every built-in plate is measured: a camera height (0 only for a view with no floor).
+      expect(p.cameraHeight).toBeGreaterThanOrEqual(0);
+      expect(p.cameraHeight).toBeLessThan(3);
       expect(CATEGORY_LABELS[p.category]).toBeTruthy();
     }
     expect(new Set(PLATES.map(p => p.id)).size).toBe(PLATES.length);
@@ -68,34 +79,103 @@ describe('the frame', () => {
 });
 
 describe('placing a person', () => {
-  const standing = { box: [0.3, 0.1, 0.7, 0.95] as [number, number, number, number], cutBottom: false, aspect: 0.75 };
-  const portrait = { box: [0.1, 0.05, 0.9, 1] as [number, number, number, number], cutBottom: true, aspect: 0.75 };
+  const standing: CutoutInfo = { box: [0.3, 0.1, 0.7, 0.95], cutBottom: false, aspect: 0.75 };
+  const portrait: CutoutInfo = { box: [0.1, 0.05, 0.9, 1], cutBottom: true, aspect: 0.75 };
+  const plate = (id: string) => PLATES.find(p => p.id === id)!;
+  const frame = (cut: CutoutInfo, id: string, shape: 'portrait' | 'scene' = 'portrait') => {
+    const p = plate(id);
+    return autoFrame(cut, { kind: 'plate', plate: p }, shape, p.width, p.height);
+  };
 
-  it('stands people on the floor at the size the horizon gives', () => {
-    const p = suggestPlacement(standing, 0.55, 0.9, 1.5);
-    expect(p.y).toBe(0.9);
-    expect(p.height).toBeCloseTo((0.9 - 0.55) / EYE_LEVEL, 5);
-    expect(heightOnGround(0.55, 0.55)).toBeCloseTo(0.12, 5); // never vanishes
+  it('knows a person’s real size from their face, or assumes an adult', () => {
+    expect(bodyOf(standing)).toMatchObject({ metres: PERSON_METRES, measured: false });
+    // A face 1/9 of a whole person: an adult of about 1.7 m.
+    const face = { ...standing, face: [0.45, 0.12, 0.55, 0.12 + 0.85 / 9] as [number, number, number, number] };
+    expect(bodyOf(face).metres).toBeCloseTo(0.6 * 1.71 + 0.4 * 1.7, 1);
+    expect(bodyOf(face).eyes).toBeGreaterThan(0.02);
+    expect(bodyOf(face).eyes).toBeLessThan(0.1);
+    // Head and shoulders: the face is a third of the box, so the box is about 0.6 m.
+    const head = { ...portrait, face: [0.4, 0.2, 0.6, 0.2 + 0.95 / 3] as [number, number, number, number] };
+    expect(bodyOf(head).metres).toBeCloseTo(0.57, 2);
+    // A face too small to measure is not used.
+    expect(bodyOf({ ...standing, face: [0.5, 0.1, 0.51, 0.105] }).measured).toBe(false);
   });
 
-  it('brings a portrait in from the bottom edge, never wider than the frame', () => {
-    const p = suggestPlacement(portrait, 0.5, 0.9, 0.5);
-    expect(p.y).toBe(1);
-    const widthShare = (p.height * (0.8 * 0.75)) / 0.95 / 0.5;
+  it('sizes someone standing by where they stand: real height against the camera’s', () => {
+    // Feet 0.3 of the frame below the horizon, a 1.7 m person, a 1 m camera: 0.51 of the frame.
+    expect(heightOnGround(0.8, 0.5, 1.7 / 1.0)).toBeCloseTo(0.51, 5);
+    // Further back (toward the horizon) is smaller; at the horizon they almost vanish.
+    expect(heightOnGround(0.6, 0.5, 1.7)).toBeLessThan(heightOnGround(0.8, 0.5, 1.7));
+    expect(heightOnGround(0.5, 0.5, 1.7)).toBeCloseTo(0.02, 5);
+    // The rule holds in any crop of the scene (zooming changes both sides alike).
+    const p = plate('grand-hall');
+    const crop = { x: 0.2, y: 0.25, w: 0.6, h: 0.7 };
+    const g = groundIn(p, crop);
+    const footPlate = 0.9;
+    const inPlate = heightOnGround(footPlate, p.horizon, PERSON_METRES / p.cameraHeight!);
+    expect(heightOnGround((footPlate - crop.y) / crop.h, g.horizon, PERSON_METRES / g.camera)).toBeCloseTo(inPlate / crop.h, 5);
+  });
+
+  it('frames a standing person true to the scene, filling the frame well, feet on open floor', () => {
+    for (const p of PLATES.filter(q => (q.cameraHeight ?? 0) > 0)) {
+      const f = frame(standing, p.id);
+      const g = groundIn(p, f.crop);
+      // True to the scene where they stand.
+      expect(trueHeight(f.placement, standing, g)).toBeCloseTo(f.placement.height, 5);
+      // A good share of the frame, the head inside it, the feet on the plate's open floor
+      // (or, near a low camera, just below the frame: a three-quarter shot).
+      expect(f.placement.height).toBeGreaterThan(0.5);
+      expect(f.placement.y - f.placement.height).toBeGreaterThan(0.02);
+      const feet = f.crop.y + f.placement.y * f.crop.h;
+      expect(feet).toBeGreaterThanOrEqual(p.back! - 1e-6);
+      expect(f.placement.y).toBeLessThanOrEqual(1.1);
+      // Never zoomed in past what keeps the background sharp, and inside the plate.
+      expect(f.crop.h).toBeGreaterThanOrEqual(MIN_ZOOM * 0.999);
+      expect(f.crop.x).toBeGreaterThanOrEqual(-1e-9);
+      expect(f.crop.y + f.crop.h).toBeLessThanOrEqual(1 + 1e-9);
+    }
+  });
+
+  it('fixes the park and the white room (people were far too small there)', () => {
+    // The old rule gave about a quarter to a third of the frame; true size is much larger.
+    expect(frame(standing, 'white-studio').placement.height).toBeGreaterThan(0.65);
+    expect(frame(standing, 'autumn-park').placement.height).toBeGreaterThan(0.65);
+    // A low camera with a near floor is not overfilled either: the person stands further back.
+    const loft = frame(standing, 'sunlit-loft');
+    expect(loft.placement.height).toBeLessThan(0.8);
+  });
+
+  it('puts a portrait’s eyes near the horizon and softens a close background more', () => {
+    const f = frame(portrait, 'grand-hall');
+    expect(f.placement.y).toBe(1);
+    const eyes = 1 - f.placement.height * (1 - bodyOf(portrait).eyes);
+    const without = Math.abs(horizonInFrame(plate('grand-hall').horizon, cropFor(plate('grand-hall').width, plate('grand-hall').height, 'portrait')) - eyes);
+    expect(Math.abs(groundIn(plate('grand-hall'), f.crop).horizon - eyes)).toBeLessThanOrEqual(without + 1e-9);
+    expect(f.bgBlur).toBeGreaterThan(frame(standing, 'grand-hall').bgBlur);
+    // Not wider than the frame unless their photo already cuts them at the sides.
+    const widthShare = (f.placement.height * (0.8 * 0.75)) / 0.95 / (0.8);
     expect(widthShare).toBeLessThanOrEqual(0.93);
-    // Shoulders already cut by the photo: the portrait keeps its size.
-    expect(suggestPlacement({ ...portrait, cutSides: true }, 0.5, 0.9, 0.5).height).toBe(0.8);
-    // Cut at the top and bottom: the full height of the frame.
-    expect(suggestPlacement({ ...portrait, cutTop: true }, 0.5, 0.9, 0.8)).toMatchObject({ y: 1, height: 1 });
-    // Only the top cut: the head touches the top of the frame.
-    const top = suggestPlacement({ ...standing, cutTop: true }, 0.5, 0.9, 0.8);
-    expect(top.y - top.height).toBeCloseTo(0, 5);
+    // Cut at the top and the bottom: the full height of the frame.
+    expect(frame({ ...portrait, cutTop: true }, 'grand-hall').placement).toMatchObject({ y: 1, height: 1 });
   });
 
-  it('shrinks people as they walk back toward the horizon, keeping their own scale', () => {
-    const start: Placement = { x: 0.5, y: 0.9, height: heightOnGround(0.9, 0.5) * 1.1, flip: false, tilt: 0, angle: 0 };
+  it('frames people in front of a view with no floor, and on plain colours', () => {
+    const vista = frame(standing, 'desert-sunset');
+    expect(vista.placement.height).toBeGreaterThan(0.5);
+    expect(trueHeight(vista.placement, standing, groundIn(plate('desert-sunset'), vista.crop))).toBeNull();
+    const plain = autoFrame(standing, { kind: 'plain', plain: PLAINS[0] }, 'portrait', 800, 1000);
+    expect(plain.crop).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(plain.placement.height).toBeGreaterThan(0.5);
+    expect(plain.bgBlur).toBe(0);
+  });
+
+  it('scales by the Size slider against the true size, and drags keep the proportion', () => {
+    const p: Placement = { x: 0.5, y: 0.9, height: 0.6, flip: false, tilt: 0, angle: 0 };
+    expect(resized(p, 1.2, 0.5).height).toBeCloseTo(0.6, 5);
+    expect(resized(p, 99, 0.5).height).toBeCloseTo(0.8, 5); // capped at 160%
+    const start: Placement = { x: 0.5, y: 0.9, height: heightOnGround(0.9, 0.5, 1.7) * 1.1, flip: false, tilt: 0, angle: 0 };
     const back = moveOnGround(start, 0.4, 0.7, 0.5, true);
-    expect(back.height).toBeCloseTo(heightOnGround(0.7, 0.5) * 1.1, 5);
+    expect(back.height).toBeCloseTo(heightOnGround(0.7, 0.5, 1.7) * 1.1, 5);
     expect(back.height).toBeLessThan(start.height);
     // Not following depth, or a portrait at the bottom edge: size stays.
     expect(moveOnGround(start, 0.4, 0.7, 0.5, false).height).toBe(start.height);

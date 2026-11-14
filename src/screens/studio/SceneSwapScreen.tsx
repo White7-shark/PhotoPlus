@@ -8,7 +8,7 @@ import { useFeatureCheck } from '../../hooks/useFeature';
 import type { RootScreenProps } from '../../navigation/types';
 import { createId } from '../../services/database/ids';
 import { getStorageService } from '../../services/storage/StorageService';
-import { MAX_MY_BACKGROUNDS, myPlate, SHAPE_LABELS, type FrameShape, type PlateDef } from '../../services/studio/scene';
+import { MAX_MY_BACKGROUNDS, myPlate, SHAPE_LABELS, SIZE_MAX, SIZE_MIN, type FrameShape, type PlateDef } from '../../services/studio/scene';
 import { getStudioService, StudioError, type Brush, type SceneResult } from '../../services/studio/StudioService';
 import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
@@ -256,7 +256,30 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
             ) : null}
             {panel === 'adjust' ? (
               <GlassSurface radius={18} style={{ padding: 14, gap: 10 }}>
-                <ValueSlider label="Size" value={s.placement.height} min={0.1} max={1.4} onChange={v => s.setPlacement({ ...s.placement!, height: v })} format={pct} />
+                <ValueSlider
+                  label="Size"
+                  value={s.size}
+                  min={SIZE_MIN}
+                  max={SIZE_MAX}
+                  step={0.02}
+                  onChange={s.setSize}
+                  format={v => `${Math.round(v * 100)}%`}
+                  testID="scene-size"
+                />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <AppText variant="caption" tone={s.trueToScene ? 'accent' : 'secondary'} style={{ flex: 1 }} testID="scene-size-note">
+                    {s.sizeIsTrue
+                      ? s.trueToScene
+                        ? 'True to the scene for where you stand.'
+                        : s.size > 1
+                          ? 'Larger than the scene gives you here.'
+                          : 'Smaller than the scene gives you here.'
+                      : s.trueToScene
+                        ? 'The size that suits this frame.'
+                        : 'Your own size.'}
+                  </AppText>
+                  <Button label="Auto size" variant="glass" icon="wand" disabled={s.trueToScene} onPress={s.autoSize} testID="scene-auto-size" />
+                </View>
                 <ValueSlider label="Match the light" value={s.look.colorMatch} onChange={v => s.setLook({ colorMatch: v })} format={pct} />
                 <ValueSlider label="Blend the edges" value={s.look.lightWrap} onChange={v => s.setLook({ lightWrap: v })} format={pct} />
                 <ValueSlider label="Shadow" value={s.look.shadow} onChange={v => s.setLook({ shadow: v })} format={pct} />
@@ -267,7 +290,7 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                 <ToggleRow title="Mirror" icon="flip" value={s.placement.flip} onChange={v => s.setPlacement({ ...s.placement!, flip: v })} />
                 <ToggleRow
                   title="Follow the scene’s depth"
-                  subtitle="Smaller further back, larger nearer"
+                  subtitle="Drag back and you shrink, drag nearer and you grow, as in the scene"
                   icon="aspect"
                   value={s.follow}
                   onChange={s.setFollow}

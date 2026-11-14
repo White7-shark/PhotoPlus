@@ -861,7 +861,8 @@ pp_status pp_studio_cutout(const pp_image* image, const pp_image* subject, const
     if (e.status != PP_OK) return fail(e);
     if (report != nullptr) {
       *report = pp_studio_cutout_report{r.coverage, r.edge, r.hairEdge, r.left, r.top, r.right, r.bottom,
-                                        r.cutLeft ? 1 : 0, r.cutTop ? 1 : 0, r.cutRight ? 1 : 0, r.cutBottom ? 1 : 0};
+                                        r.cutLeft ? 1 : 0, r.cutTop ? 1 : 0, r.cutRight ? 1 : 0, r.cutBottom ? 1 : 0,
+                                        r.face ? 1 : 0, r.faceLeft, r.faceTop, r.faceRight, r.faceBottom};
     }
     return succeed();
   });

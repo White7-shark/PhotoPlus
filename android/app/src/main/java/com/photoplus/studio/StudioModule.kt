@@ -181,7 +181,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
   /** The cut-out of the preview photo with the session's corrections, saved as a PNG. */
   private fun cutPreview(s: Session, token: Long): Map<String, Any?> {
     val out = createBitmap(s.preview.width, s.preview.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
-    val report = FloatArray(11)
+    val report = FloatArray(16)
     NativeEngine.nativeStudioCutout(s.preview, s.mask, s.zones, StudioStroke.encode(s.strokes), s.settings.toArray(), out, token, report)
     synchronized(s) {
       s.previewCutout?.recycle()
@@ -210,6 +210,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
     "cutRight" to (r[9] > 0.5f),
     "cutBottom" to (r[10] > 0.5f),
     "found" to (r[0] > 0.002f),
+    // The face's box: its size tells how tall the person really is.
+    "face" to if (r[11] > 0.5f) listOf(r[12].toDouble(), r[13].toDouble(), r[14].toDouble(), r[15].toDouble()) else null,
   )
 
   /** The full-resolution cut-out for the session's current corrections (cached). */
@@ -224,7 +226,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       val out = createBitmap(photo.width, photo.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
       val src = if (photo.config == Bitmap.Config.ARGB_8888) photo else photo.copy(Bitmap.Config.ARGB_8888, false)
       try {
-        NativeEngine.nativeStudioCutout(src, s.mask, s.zones, StudioStroke.encode(s.strokes), s.settings.toArray(), out, token, FloatArray(11))
+        NativeEngine.nativeStudioCutout(src, s.mask, s.zones, StudioStroke.encode(s.strokes), s.settings.toArray(), out, token, FloatArray(16))
       } finally {
         if (src !== photo) src.recycle()
       }

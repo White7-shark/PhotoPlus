@@ -799,6 +799,8 @@ typedef struct pp_studio_cutout_report {
   float coverage, edge, hair_edge;
   float left, top, right, bottom; /* the person's box, normalised */
   int32_t cut_left, cut_top, cut_right, cut_bottom;
+  int32_t face; /* 1 when the face was found (needs zones) */
+  float face_left, face_top, face_right, face_bottom; /* the face box, normalised */
 } pp_studio_cutout_report;
 
 /* `subject`: GRAY8 person mask, any size. `zones`: optional GRAY8 person-parts

@@ -4,7 +4,7 @@ import React from 'react';
 import { SceneSwapScreen } from '../src/screens/studio/SceneSwapScreen';
 import { PhotoshootStudioScreen } from '../src/screens/studio/PhotoshootStudioScreen';
 import { DEFAULT_SETTINGS } from '../src/services/database/repositories/SettingsRepository';
-import { PLATES } from '../src/services/studio/scene';
+import { PLATES, autoFrame } from '../src/services/studio/scene';
 import { useAppStore } from '../src/state/store';
 import { ThemeProvider } from '../src/theme';
 
@@ -106,8 +106,30 @@ describe('Scene Swap', () => {
     const scene = mockStudio.renderScene.mock.calls[0][1] as unknown as { background: { kind: string; id: string }; placement: { y: number; height: number }; quality: string };
     expect(scene.background).toEqual({ kind: 'plate', id: PLATES[0].id });
     expect(scene.quality).toBe('preview');
-    // Standing on the plate's floor (a portrait slice of a wide plate keeps the floor).
-    expect(scene.placement.y).toBeCloseTo(PLATES[0].floor, 5);
+    // Framed true to the scene: the size the floor gives where they stand, the crop auto framing chose.
+    const auto = autoFrame(
+      { box: report.box as [number, number, number, number], cutBottom: false, cutTop: false, cutSides: false, aspect: 900 / 1200, face: null },
+      { kind: 'plate', plate: PLATES[0] },
+      'portrait',
+      PLATES[0].width,
+      PLATES[0].height,
+    );
+    expect(scene.placement.y).toBeCloseTo(auto.placement.y, 5);
+    expect(scene.placement.height).toBeCloseTo(auto.placement.height, 5);
+    expect((scene as unknown as { crop: object }).crop).toEqual(auto.crop);
+
+    // The Size slider: true to the scene at first, larger when pushed up, and Auto size brings it back.
+    await step(() => fireEvent.press(screen.getByText('Adjust')));
+    expect(screen.getByTestId('scene-size-note').props.children).toMatch(/True to the scene/);
+    const calls = mockStudio.renderScene.mock.calls.length;
+    for (let i = 0; i < 5; i++) await step(() => fireEvent(screen.getByTestId('scene-size'), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } }));
+    expect(screen.getByTestId('scene-size-note').props.children).toMatch(/Larger than the scene/);
+    const bigger = mockStudio.renderScene.mock.calls[mockStudio.renderScene.mock.calls.length - 1][1] as unknown as { placement: { height: number } };
+    expect(mockStudio.renderScene.mock.calls.length).toBeGreaterThan(calls);
+    expect(bigger.placement.height).toBeGreaterThan(auto.placement.height * 1.05);
+    await step(() => fireEvent.press(screen.getByTestId('scene-auto-size')));
+    expect(screen.getByTestId('scene-size-note').props.children).toMatch(/True to the scene/);
+    await step(() => fireEvent.press(screen.getByText('Backgrounds')));
     const bgOf = (i: number) => (mockStudio.renderScene.mock.calls[i][1] as unknown as { background: { kind: string; id?: string } }).background;
 
     // Another scene, then a plain colour: each re-draws the picture.

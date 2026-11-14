@@ -243,8 +243,8 @@ object NativeEngine {
    * size), [zones] (ALPHA_8 person-parts map) or null, [strokes]
    * (StudioStroke.encode), [params] (CutoutSettings.toArray). [out] is
    * ARGB_8888, not premultiplied, the photo's size: the person's colours with
-   * straight alpha. [report] (11): coverage, edge, hair edge, box l t r b,
-   * cut l t r b.
+   * straight alpha. [report] (16): coverage, edge, hair edge, box l t r b,
+   * cut l t r b, face found, face box l t r b.
    */
   external fun nativeStudioCutout(
     bitmap: Bitmap,

@@ -136,8 +136,9 @@ int cutout(int argc, char** argv) {
   const std::string prefix = argv[5];
   write(prefix + "_fg.ppm", out, -1);
   write(prefix + "_alpha.pgm", out, 3);
-  std::printf("{\"ms\":%.1f,\"coverage\":%.4f,\"edge\":%.4f,\"hairEdge\":%.3f,\"box\":[%.4f,%.4f,%.4f,%.4f],\"cut\":[%d,%d,%d,%d]}\n", t,
-              r.coverage, r.edge, r.hair_edge, r.left, r.top, r.right, r.bottom, r.cut_left, r.cut_top, r.cut_right, r.cut_bottom);
+  std::printf("{\"ms\":%.1f,\"coverage\":%.4f,\"edge\":%.4f,\"hairEdge\":%.3f,\"box\":[%.4f,%.4f,%.4f,%.4f],\"cut\":[%d,%d,%d,%d],\"face\":%d,\"faceBox\":[%.4f,%.4f,%.4f,%.4f]}\n", t,
+              r.coverage, r.edge, r.hair_edge, r.left, r.top, r.right, r.bottom, r.cut_left, r.cut_top, r.cut_right, r.cut_bottom, r.face,
+              r.face_left, r.face_top, r.face_right, r.face_bottom);
   return 0;
 }
 

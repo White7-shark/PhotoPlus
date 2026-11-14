@@ -47,7 +47,7 @@ Photo Plus contains four interconnected systems. The **marketplace** supplies ad
    - Intelligent composition
    - Lighting and image-quality analysis
 
-3. **Photoshoot Replication Studio**
+3. **Photoshoot Studio**
    - Background replacement
    - Reference-based photography
    - Clothing transformation for compatible packs

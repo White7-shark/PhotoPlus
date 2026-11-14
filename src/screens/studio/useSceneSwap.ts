@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
-  cropFor,
-  horizonInFrame,
+  autoFrame,
+  groundIn,
   lookFor,
   PLATES,
-  suggestPlacement,
+  resized,
+  trueHeight,
+  TRUE_SIZE_TOLERANCE,
   type Background,
   type Crop,
+  type CutoutInfo,
+  type Framing,
   type FrameShape,
   type Placement,
   type SceneLook,
@@ -56,6 +60,8 @@ function useLatest<A>(job: (arg: A) => Promise<void>) {
   }, []);
 }
 
+const FULL: Crop = { x: 0, y: 0, w: 1, h: 1 };
+
 const NO_PERSON = 'Nobody was found in this photo. Choose a photo with a person in it, or tap the person.';
 
 export function useSceneSwap(studio: StudioService) {
@@ -69,6 +75,8 @@ export function useSceneSwap(studio: StudioService) {
   const [background, setBackground] = useState<Background>({ kind: 'plate', plate: PLATES[0] });
   const [shape, setShape] = useState<FrameShape>('portrait');
   const [placement, setPlacement] = useState<Placement | null>(null);
+  // What auto framing chose last: the crop of the background, the size and blur.
+  const [framing, setFraming] = useState<Framing | null>(null);
   const [lookOverride, setLookOverride] = useState<Partial<SceneLook>>({});
   const [follow, setFollow] = useState(true);
   const [scene, setScene] = useState<SceneResult | null>(null);
@@ -79,25 +87,21 @@ export function useSceneSwap(studio: StudioService) {
   const report = cut?.report ?? session?.report ?? null;
   const photoAspect = session ? session.width / Math.max(1, session.height) : 1;
 
-  // The frame: the background's own shape or a crop of it, kept on the person.
+  // The frame: the background's own shape, or the crop auto framing chose.
+  const plainAspect = useCallback(
+    (sh: FrameShape) => ({ scene: photoAspect, portrait: 0.8, story: 9 / 16, square: 1 })[sh],
+    [photoAspect],
+  );
   const bgSize = useMemo(() => {
     if (background.kind === 'plate') return { w: background.plate.width, h: background.plate.height };
-    return { w: session?.width ?? 3, h: session?.height ?? 4 };
-  }, [background, session]);
-  const crop: Crop = useMemo(
-    () => (background.kind === 'plate' ? cropFor(bgSize.w, bgSize.h, shape, placement?.x ?? 0.5) : { x: 0, y: 0, w: 1, h: 1 }),
-    // The crop follows the person only when the background or shape changes, not on every drag.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [background, shape, bgSize],
-  );
-  const frameAspect = useMemo(() => {
-    if (background.kind !== 'plate') {
-      const aspects: Record<FrameShape, number> = { scene: photoAspect, portrait: 0.8, story: 9 / 16, square: 1 };
-      return aspects[shape];
-    }
-    return (bgSize.w * crop.w) / Math.max(1, bgSize.h * crop.h);
-  }, [background, shape, bgSize, crop, photoAspect]);
-  const baseLook = useMemo(() => lookFor(background, crop), [background, crop]);
+    return { w: Math.round(plainAspect(shape) * 1000), h: 1000 };
+  }, [background, shape, plainAspect]);
+  const crop: Crop = framing?.crop ?? FULL;
+  const frameAspect = useMemo(() => (bgSize.w * crop.w) / Math.max(1, bgSize.h * crop.h), [bgSize, crop]);
+  const baseLook = useMemo(() => {
+    const l = lookFor(background, crop);
+    return background.kind === 'plate' && framing ? { ...l, bgBlur: framing.bgBlur } : l;
+  }, [background, crop, framing]);
   const look: SceneLook = useMemo(() => ({ ...baseLook, ...lookOverride }), [baseLook, lookOverride]);
   const horizon = look.horizon;
 
@@ -128,6 +132,7 @@ export function useSceneSwap(studio: StudioService) {
         setRedo([]);
         setEdge(DEFAULT_EDGE);
         setPlacement(null);
+        setFraming(null);
         setScene(null);
         setEmpty(null);
         if (!s.report.found) setError(NO_PERSON);
@@ -193,22 +198,41 @@ export function useSceneSwap(studio: StudioService) {
   }, [session, refine]);
 
   // ---- the scene
-  const defaultPlacement = useCallback(
-    (bg: Background, sh: FrameShape): Placement | null => {
-      if (!report) return null;
-      const bs = bg.kind === 'plate' ? { w: bg.plate.width, h: bg.plate.height } : bgSize;
-      const c = bg.kind === 'plate' ? cropFor(bs.w, bs.h, sh, 0.5) : { x: 0, y: 0, w: 1, h: 1 };
-      const aspect = bg.kind === 'plate' ? (bs.w * c.w) / Math.max(1, bs.h * c.h) : frameAspect;
-      const h = bg.kind === 'plate' ? horizonInFrame(bg.plate.horizon, c) : 0.55;
-      const floor = bg.kind === 'plate' ? Math.min(0.97, (bg.plate.floor - c.y) / c.h) : 0.94;
-      return suggestPlacement(
-        { box: report.box, cutBottom: report.cutBottom, cutTop: report.cutTop, cutSides: report.cutLeft || report.cutRight, aspect: photoAspect },
-        h,
-        floor,
-        aspect,
-      );
+  const cutInfo: CutoutInfo | null = useMemo(
+    () =>
+      report
+        ? { box: report.box, cutBottom: report.cutBottom, cutTop: report.cutTop, cutSides: report.cutLeft || report.cutRight, aspect: photoAspect, face: report.face }
+        : null,
+    [report, photoAspect],
+  );
+  const frameFor = useCallback(
+    (bg: Background, sh: FrameShape): Framing | null => {
+      if (!cutInfo) return null;
+      const w = bg.kind === 'plate' ? bg.plate.width : Math.round(plainAspect(sh) * 1000);
+      const h = bg.kind === 'plate' ? bg.plate.height : 1000;
+      return autoFrame(cutInfo, bg, sh, w, h);
     },
-    [report, bgSize, frameAspect, photoAspect],
+    [cutInfo, plainAspect],
+  );
+  const applyFraming = useCallback((f: Framing | null) => {
+    setFraming(f);
+    setPlacement(f?.placement ?? null);
+  }, []);
+
+  // The size: true to the scene where the person stands (or the auto size when the scene gives none).
+  const ground = useMemo(() => (background.kind === 'plate' ? groundIn(background.plate, crop) : null), [background, crop]);
+  const sizeReference = useMemo(() => {
+    if (!placement || !cutInfo) return null;
+    const t = trueHeight(placement, cutInfo, ground);
+    return { height: t ?? framing?.placement.height ?? placement.height, scene: t != null };
+  }, [placement, cutInfo, ground, framing]);
+  const size = placement && sizeReference ? placement.height / Math.max(sizeReference.height, 1e-3) : 1;
+  const setSize = useCallback(
+    (k: number) => {
+      if (!sizeReference) return;
+      setPlacement(p => (p ? resized(p, k, sizeReference.height) : p));
+    },
+    [sizeReference],
   );
 
   const render = useLatest(async ({ id, bg, c, p, l, aspect }: { id: string; bg: Background; c: Crop; p: Placement; l: SceneLook; aspect: number }) => {
@@ -235,25 +259,25 @@ export function useSceneSwap(studio: StudioService) {
 
   const goToScene = useCallback(() => {
     setStep('scene');
-    setPlacement(p => p ?? defaultPlacement(background, shape));
-  }, [background, shape, defaultPlacement]);
+    if (!placement) applyFraming(frameFor(background, shape));
+  }, [placement, background, shape, frameFor, applyFraming]);
 
   const chooseBackground = useCallback(
     (bg: Background) => {
       setBackground(bg);
       setLookOverride({});
-      setPlacement(defaultPlacement(bg, shape));
+      applyFraming(frameFor(bg, shape));
     },
-    [shape, defaultPlacement],
+    [shape, frameFor, applyFraming],
   );
   const chooseShape = useCallback(
     (sh: FrameShape) => {
       setShape(sh);
-      setPlacement(defaultPlacement(background, sh));
+      applyFraming(frameFor(background, sh));
     },
-    [background, defaultPlacement],
+    [background, frameFor, applyFraming],
   );
-  const resetPlacement = useCallback(() => setPlacement(defaultPlacement(background, shape)), [background, shape, defaultPlacement]);
+  const resetPlacement = useCallback(() => applyFraming(frameFor(background, shape)), [background, shape, frameFor, applyFraming]);
 
   // ---- saving
   const save = useCallback(async (): Promise<SceneResult | null> => {
@@ -310,6 +334,13 @@ export function useSceneSwap(studio: StudioService) {
     frameAspect,
     placement,
     setPlacement,
+    /** The person's size against the size the scene gives them (1 = true to the scene). */
+    size,
+    setSize,
+    /** The size is measured against the scene (not just the auto size). */
+    sizeIsTrue: sizeReference?.scene ?? false,
+    trueToScene: Math.abs(size - 1) <= TRUE_SIZE_TOLERANCE,
+    autoSize: () => setSize(1),
     look,
     setLook: (l: Partial<SceneLook>) => setLookOverride(o => ({ ...o, ...l })),
     follow,

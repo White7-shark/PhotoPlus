@@ -115,7 +115,7 @@ describe('screens', () => {
   it('Home shows the four pillars, empty library and readiness', async () => {
     const navigation = nav();
     await wrap(<HomeScreen navigation={navigation} route={{} as never} />);
-    for (const t of ['Camera Studio', 'AI Assistant', 'Replication Studio', 'Editing Studio']) {
+    for (const t of ['Camera Studio', 'AI Assistant', 'Photoshoot Studio', 'Editing Studio']) {
       expect(screen.getByText(t)).toBeTruthy();
     }
     expect(screen.getByText('No projects yet')).toBeTruthy();

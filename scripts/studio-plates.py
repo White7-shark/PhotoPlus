@@ -7,8 +7,9 @@ They are Poly Haven backplates (CC0, https://polyhaven.com/license): each is
 downloaded, checked against Poly Haven's MD5, turned upright, reduced to a
 2560 px long edge, and saved with a 360 px thumbnail into the app's assets.
 The catalogue (src/services/studio/plates.json) carries what the studio needs
-to place someone well: where the horizon is (the camera's eye level, for the
-size of a person standing on the floor), where feet go by default, which side
+to place someone well: where the horizon is and how high the camera stood
+(together they give the true size of a person anywhere on the floor), how far
+back and how near the floor reaches, which side
 the main light comes from, and whether it casts hard shadows.
 
   python3 scripts/studio-plates.py [--cache DIR]
@@ -25,23 +26,32 @@ ASSETS = os.path.join(ROOT, 'android/app/src/main/assets/studio')
 CATALOGUE = os.path.join(ROOT, 'src/services/studio/plates.json')
 UA = [('User-Agent', 'asset-fetch/1.0')]
 
-# id, Poly Haven asset, backplate, name, category, horizon, floor, lightX, cast, rim, blur
+# id, Poly Haven asset, backplate, name, category, horizon, camera height (m),
+# back (farthest feet: open floor, in front of furniture people would
+# otherwise stand inside), floor (nearest feet), lightX, cast, rim, blur.
+#
+# Measured by hand on each plate from things of known size (a 45 cm side
+# table, dining chairs, doors, railings, a studio cube) and which top faces
+# are visible: an object of height Z standing at y, with its top at y_t, says
+# Z / camera = (y - y_t) / (y - horizon). Level cameras put the horizon near
+# the middle. A camera height of 0 means a view with no ground to stand on
+# (a vista from a height): people are framed in front of it.
 PLATES = [
-    ('white-studio', 'photo_studio_broadway_hall', 'DSC_7392', 'White Studio', 'studio', 0.62, 0.86, -0.5, 0.0, 0.0, 0.15),
-    ('rose-chair', 'photo_studio_broadway_hall', 'DSC_7402', 'Rose Chair', 'studio', 0.58, 0.9, 0.6, 0.0, 0.2, 0.3),
-    ('boho-corner', 'brown_photostudio_02', '14', 'Boho Corner', 'studio', 0.45, 0.92, -0.4, 0.0, 0.0, 0.3),
-    ('neon-lines', 'neon_photostudio', '03', 'Neon Lines', 'studio', 0.55, 0.96, 0.0, 0.0, 0.5, 0.2),
-    ('sunlit-loft', 'photo_studio_loft_hall', 'DSC_8544', 'Sunlit Loft', 'studio', 0.55, 0.9, -0.6, 0.3, 0.3, 0.35),
-    ('flower-hall', 'brown_photostudio_06', '07', 'Flower Hall', 'indoors', 0.6, 0.9, 0.6, 0.0, 0.2, 0.3),
-    ('cafe-wall', 'comfy_cafe', 'DSC_6795', 'Café Wall', 'indoors', 0.55, 0.93, 0.0, 0.0, 0.0, 0.3),
-    ('grand-hall', 'old_hall', 'DSC_4087', 'Grand Hall', 'indoors', 0.66, 0.9, 0.3, 0.0, 0.0, 0.25),
-    ('autumn-park', 'autumn_park', 'DSC_0158', 'Autumn Park', 'outdoors', 0.58, 0.9, -0.3, 0.35, 0.0, 0.35),
-    ('summer-meadow', 'meadow_2', '14', 'Summer Meadow', 'outdoors', 0.6, 0.92, 0.2, 0.3, 0.0, 0.3),
-    ('garden-bench', 'studio_garden', '14', 'Garden Bench', 'outdoors', 0.5, 0.92, 0.0, 0.0, 0.0, 0.35),
-    ('desert-sunset', 'kiara_8_sunset', '20160825-DSC01825', 'Desert Sunset', 'golden', 0.25, 0.95, -0.6, 0.3, 0.5, 0.3),
-    ('sunrise-beach', 'umhlanga_sunrise', 'DSC08473', 'Sunrise Beach', 'golden', 0.38, 0.92, 0.7, 0.2, 0.6, 0.4),
-    ('coastal-dusk', 'the_sky_is_on_fire', 'IMG_0844', 'Coastal Dusk', 'golden', 0.52, 0.92, -0.2, 0.0, 0.4, 0.3),
-    ('night-piazza', 'vignaioli_night', 'DSC07544', 'Night Piazza', 'night', 0.5, 0.92, 0.0, 0.0, 0.3, 0.35),
+    ('white-studio', 'photo_studio_broadway_hall', 'DSC_7392', 'White Studio', 'studio', 0.5, 1.15, 0.8, 0.95, -0.5, 0.0, 0.0, 0.15),
+    ('rose-chair', 'photo_studio_broadway_hall', 'DSC_7402', 'Rose Chair', 'studio', 0.5, 0.9, 0.9, 0.96, 0.6, 0.0, 0.2, 0.3),
+    ('boho-corner', 'brown_photostudio_02', '14', 'Boho Corner', 'studio', 0.47, 0.91, 0.92, 0.97, -0.4, 0.0, 0.0, 0.3),
+    ('neon-lines', 'neon_photostudio', '03', 'Neon Lines', 'studio', 0.5, 1.65, 0.96, 0.99, 0.0, 0.0, 0.5, 0.2),
+    ('sunlit-loft', 'photo_studio_loft_hall', 'DSC_8544', 'Sunlit Loft', 'studio', 0.36, 0.8, 0.56, 0.97, -0.6, 0.3, 0.3, 0.35),
+    ('flower-hall', 'brown_photostudio_06', '07', 'Flower Hall', 'indoors', 0.52, 1.0, 0.88, 0.97, 0.6, 0.0, 0.2, 0.3),
+    ('cafe-wall', 'comfy_cafe', 'DSC_6795', 'Café Wall', 'indoors', 0.43, 1.45, 0.9, 0.97, 0.0, 0.0, 0.0, 0.3),
+    ('grand-hall', 'old_hall', 'DSC_4087', 'Grand Hall', 'indoors', 0.43, 1.6, 0.7, 0.97, 0.3, 0.0, 0.0, 0.25),
+    ('autumn-park', 'autumn_park', 'DSC_0158', 'Autumn Park', 'outdoors', 0.58, 1.45, 0.62, 0.97, -0.3, 0.35, 0.0, 0.35),
+    ('summer-meadow', 'meadow_2', '14', 'Summer Meadow', 'outdoors', 0.6, 1.5, 0.66, 0.97, 0.2, 0.3, 0.0, 0.3),
+    ('garden-bench', 'studio_garden', '14', 'Garden Bench', 'outdoors', 0.28, 0.95, 0.6, 0.97, 0.0, 0.0, 0.0, 0.35),
+    ('desert-sunset', 'kiara_8_sunset', '20160825-DSC01825', 'Desert Sunset', 'golden', 0.25, 0.0, 0.95, 0.97, -0.6, 0.3, 0.5, 0.3),
+    ('sunrise-beach', 'umhlanga_sunrise', 'DSC08473', 'Sunrise Beach', 'golden', 0.375, 1.5, 0.72, 0.97, 0.7, 0.2, 0.6, 0.4),
+    ('coastal-dusk', 'the_sky_is_on_fire', 'IMG_0844', 'Coastal Dusk', 'golden', 0.52, 1.2, 0.56, 0.97, -0.2, 0.0, 0.4, 0.3),
+    ('night-piazza', 'vignaioli_night', 'DSC07544', 'Night Piazza', 'night', 0.5, 0.8, 0.56, 0.97, 0.0, 0.0, 0.3, 0.35),
 ]
 
 
@@ -81,7 +91,7 @@ def main():
     os.makedirs(os.path.join(ASSETS, 'plates'), exist_ok=True)
     os.makedirs(os.path.join(ASSETS, 'thumbs'), exist_ok=True)
     out = []
-    for pid, asset, plate, name, cat, horizon, floor, light, cast, rim, blur in PLATES:
+    for pid, asset, plate, name, cat, horizon, camera, back, floor, light, cast, rim, blur in PLATES:
         files = fetch_json(f'https://api.polyhaven.com/files/{asset}')['backplates'][plate]['jpg_plain']
         info = fetch_json(f'https://api.polyhaven.com/info/{asset}')
         raw_path = os.path.join(args.cache, f'{asset}__{plate}.jpg')
@@ -102,7 +112,7 @@ def main():
         out.append({
             'id': pid, 'name': name, 'category': cat,
             'width': im.width, 'height': im.height,
-            'horizon': horizon, 'floor': floor, 'lightX': light, 'castShadow': cast, 'rim': rim, 'blur': blur,
+            'horizon': horizon, 'cameraHeight': camera, 'back': back, 'floor': floor, 'lightX': light, 'castShadow': cast, 'rim': rim, 'blur': blur,
             'credit': {'source': 'Poly Haven', 'asset': asset, 'plate': plate, 'authors': list(info.get('authors', {}).keys()),
                        'license': 'CC0', 'md5': files['md5']},
         })

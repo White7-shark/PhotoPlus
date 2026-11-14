@@ -2,7 +2,7 @@
 
 Scene Swap is the photoshoot studio's first tool. It is Premium. You choose a photo of a person. The person is cut out on the phone, and you correct the cut-out where needed. Then you choose a scene, move and size yourself in it, and save the result. The scene's light, colour and shadows are matched automatically. You can also save the cut-out on its own with a transparent background.
 
-It lives in the **Photoshoot Studio** (Home → Replication Studio → Scene Swap), not in the camera. Everything runs on the device; no photo leaves it.
+It lives in the **Photoshoot Studio** (Home → Photoshoot Studio → Scene Swap), not in the camera. Everything runs on the device; no photo leaves it.
 
 ## The critical decision: clean plates
 
@@ -142,7 +142,7 @@ Plates were rejected when they showed a person (one Venice sunrise), a company's
 | Engine | `include/photoplus/studio.hpp`, `src/studio/{cutout,compose}.cpp`, `src/matte/tools.*` (shared with Backdrops). C ABI: `pp_studio_cutout`, `pp_studio_compose`. Tool: `studio_demo`. |
 | JNI | `nativeStudioCutout`, `nativeStudioCompose` |
 | Kotlin (`com.photoplus.studio`) | <ul><li>`StudioModule`: sessions; cut-out previews; scene previews, including the scene without the person for smooth dragging; full-quality and transparent exports (Premium); the gallery.</li><li>`PersonParts`: MediaPipe Selfie Multiclass.</li><li>`SceneStudio`: strokes, settings, backgrounds, crops, export size, plain colours.</li><li>Storage: `studio` and `backgrounds` folders.</li></ul> |
-| JS | <ul><li>`src/services/studio/`: scene library and decisions, gestures, service.</li><li>`src/screens/studio/`: Photoshoot Studio hub, Scene Swap screen, brush canvas, placement view, background picker, `useSceneSwap`.</li><li>Home: Replication Studio is "Available now". Settings keep your backgrounds.</li></ul> |
+| JS | <ul><li>`src/services/studio/`: scene library and decisions, gestures, service.</li><li>`src/screens/studio/`: Photoshoot Studio hub, Scene Swap screen, brush canvas, placement view, background picker, `useSceneSwap`.</li><li>Home: Photoshoot Studio is "Available now". Settings keep your backgrounds.</li></ul> |
 | Plans | <ul><li>Premium (`backgroundReplace`, titled "Scene Swap").</li><li>On the free plan the whole workflow can be tried as a demonstration; saving opens the Premium sheet. The native side refuses full-quality saves on the free plan whatever the app asks.</li></ul> |
 | Size | <ul><li>Plates and thumbnails: 9.7 MB of assets.</li><li>Person-parts model: 16.4 MB, fetched at build time; `-Pphotoplus.studioModel=false` leaves it out.</li></ul> |
 

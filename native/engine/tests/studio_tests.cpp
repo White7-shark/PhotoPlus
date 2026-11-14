@@ -287,6 +287,40 @@ TEST(studio_hair_zone_keeps_strands) {
   pp_image_destroy(s.image);
 }
 
+TEST(studio_report_finds_the_face_of_the_person_kept) {
+  Scene s = makeScene();
+  pp_image* mask = coarseMask(s);
+  // Parts map: clothes over the person, face skin in a box near the top of
+  // the head, and another face (someone else) outside the person.
+  const int w = 120, h = 100;
+  pp_image* zones = gray(w, h);
+  const float fl = 160, ft = 95, fr = 200, fb = 140;  // the face, in photo pixels
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x) {
+      const float fx = (static_cast<float>(x) + 0.5f) * kW / w, fy = (static_cast<float>(y) + 0.5f) * kH / h;
+      const float d = std::hypot((fx - s.cx) / s.rx, (fy - s.cy) / s.ry);
+      uint8_t v = d < 1.0f ? 4 : 0;
+      if (fx >= fl && fx < fr && fy >= ft && fy < fb) v = 3;
+      if (fx >= 10 && fx < 50 && fy >= 20 && fy < 70) v = 3;  // not in the cut-out
+      *at(zones, x, y, 1) = v;
+    }
+  pp_studio_cutout_report rep{};
+  pp_image* o = cut(s, mask, zones, defaults(), {}, &rep);
+  std::printf("    face %d: %.3f %.3f %.3f %.3f\n", rep.face, rep.face_left, rep.face_top, rep.face_right, rep.face_bottom);
+  EXPECT_EQ(rep.face, 1);
+  EXPECT_TRUE(std::fabs(rep.face_left - fl / kW) < 0.02f && std::fabs(rep.face_right - fr / kW) < 0.02f);
+  EXPECT_TRUE(std::fabs(rep.face_top - ft / kH) < 0.02f && std::fabs(rep.face_bottom - fb / kH) < 0.02f);
+  // Without a parts map there is no face to measure.
+  pp_studio_cutout_report none{};
+  pp_image* o2 = cut(s, mask, nullptr, defaults(), {}, &none);
+  EXPECT_EQ(none.face, 0);
+  pp_image_destroy(o);
+  pp_image_destroy(o2);
+  pp_image_destroy(zones);
+  pp_image_destroy(mask);
+  pp_image_destroy(s.image);
+}
+
 TEST(studio_edge_shift_and_softness) {
   Scene s = makeScene();
   pp_image* mask = coarseMask(s);

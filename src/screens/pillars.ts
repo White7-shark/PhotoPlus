@@ -33,7 +33,7 @@ export const PILLARS: PillarInfo[] = [
   },
   {
     id: 'replication',
-    title: 'Replication Studio',
+    title: 'Photoshoot Studio',
     tagline: 'Scene Swap: you in a new place, clean cut-outs',
     icon: 'layers',
     gradient: 'linear-gradient(140deg, rgba(91,91,247,0.6) 0%, rgba(91,91,247,0.0) 70%)',

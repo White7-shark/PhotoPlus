@@ -1486,12 +1486,13 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeRgbaToYuv420
 // class ids, any size) or null; `strokes`: [count, then per stroke: brush,
 // radius, n, x0, y0, …]; `params`: softness, shift, hair detail, clean
 // colours; `out`: ARGB_8888, not premultiplied, the photo's size, written
-// with straight alpha. `reportOut` (11): coverage, edge, hair edge, box
-// (left, top, right, bottom), cut (left, top, right, bottom).
+// with straight alpha. `reportOut` (16): coverage, edge, hair edge, box
+// (left, top, right, bottom), cut (left, top, right, bottom), face found,
+// face box (left, top, right, bottom).
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCutout(
     JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject zones, jfloatArray strokes, jfloatArray params, jobject out,
     jlong token, jfloatArray reportOut) {
-  constexpr jsize kReport = 11;
+  constexpr jsize kReport = 16;
   if (subject == nullptr || out == nullptr || params == nullptr || env->GetArrayLength(params) < 4 ||
       env->GetArrayLength(reportOut) < kReport) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad cut-out arguments");
@@ -1538,7 +1539,8 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCutout
   }
   const jfloat rep[kReport] = {r.coverage, r.edge, r.hair_edge, r.left, r.top, r.right, r.bottom,
                                static_cast<float>(r.cut_left), static_cast<float>(r.cut_top), static_cast<float>(r.cut_right),
-                               static_cast<float>(r.cut_bottom)};
+                               static_cast<float>(r.cut_bottom), static_cast<float>(r.face), r.face_left, r.face_top,
+                               r.face_right, r.face_bottom};
   env->SetFloatArrayRegion(reportOut, 0, kReport, rep);
 }
 

@@ -56,6 +56,10 @@ struct CutoutReport {
   float left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
   // The person runs off this edge of the photo (e.g. a portrait cut at the chest).
   bool cutLeft = false, cutTop = false, cutRight = false, cutBottom = false;
+  // The person's face (face skin in the parts map, inside the cut-out),
+  // normalised: its height tells the person's real size. Needs `zones`.
+  bool face = false;
+  float faceLeft = 0.0f, faceTop = 0.0f, faceRight = 0.0f, faceBottom = 0.0f;
 };
 
 // `subject`: GRAY8 person mask (any size, required). `zones`: optional GRAY8

@@ -125,6 +125,40 @@ Result<Plane> zonePlane(const ImageBuffer& zones, Zone zone, int32_t w, int32_t 
 
 }  // namespace
 
+// The face of the person kept: face-skin pixels of the parts map that are
+// inside the cut-out (so other people's faces don't count), their box taken
+// between the 2nd and 98th percentiles so stray pixels don't stretch it.
+namespace {
+void faceBox(const ImageBuffer& zones, const ImageBuffer& out, CutoutReport& report) {
+  const int32_t zw = zones.width(), zh = zones.height(), W = out.width(), H = out.height();
+  const int32_t bpp = bytesPerPixel(zones.format());
+  const auto face = static_cast<uint8_t>(Zone::FaceSkin);
+  std::vector<int32_t> xs, ys;
+  for (int32_t y = 0; y < zh; ++y) {
+    const uint8_t* src = zones.row(y);
+    const int32_t oy = std::min(H - 1, static_cast<int32_t>((static_cast<int64_t>(y) * 2 + 1) * H / (2 * zh)));
+    const uint8_t* o = out.row(oy);
+    for (int32_t x = 0; x < zw; ++x) {
+      if (src[x * bpp] != face) continue;
+      const int32_t ox = std::min(W - 1, static_cast<int32_t>((static_cast<int64_t>(x) * 2 + 1) * W / (2 * zw)));
+      if (o[ox * 4 + 3] > 127) xs.push_back(x), ys.push_back(y);
+    }
+  }
+  // A face of a few pixels says little about size.
+  if (xs.size() < 24) return;
+  auto pct = [](std::vector<int32_t>& v, double q) {
+    const auto k = static_cast<size_t>(q * static_cast<double>(v.size() - 1));
+    std::nth_element(v.begin(), v.begin() + static_cast<std::ptrdiff_t>(k), v.end());
+    return v[k];
+  };
+  const float l = static_cast<float>(pct(xs, 0.02)), r = static_cast<float>(pct(xs, 0.98) + 1);
+  const float t = static_cast<float>(pct(ys, 0.02)), b = static_cast<float>(pct(ys, 0.98) + 1);
+  report.face = true;
+  report.faceLeft = l / static_cast<float>(zw), report.faceRight = r / static_cast<float>(zw);
+  report.faceTop = t / static_cast<float>(zh), report.faceBottom = b / static_cast<float>(zh);
+}
+}  // namespace
+
 Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBuffer* zones,
              const std::vector<Stroke>& strokes, const CutoutParams& params, ImageBuffer& out,
              const CancellationToken* token, CutoutReport* report) {
@@ -473,6 +507,7 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
       report->cutLeft = edgeRun(false, 0);
       report->cutRight = edgeRun(false, W - 1);
     }
+    if (zones != nullptr) faceBox(*zones, out, *report);
   }
   return ok();
 }

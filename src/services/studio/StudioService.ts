@@ -36,6 +36,8 @@ export interface CutoutReport {
   cutRight: boolean;
   cutBottom: boolean;
   found: boolean;
+  /** Their face's box (hairline to chin), when found: it tells their real size. */
+  face?: [number, number, number, number] | null;
 }
 
 export interface CutoutResult {
@@ -78,7 +80,9 @@ const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
 function isReport(v: unknown): v is CutoutReport {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
-  return num(r.coverage) && Array.isArray(r.box) && r.box.length === 4 && r.box.every(num) && typeof r.cutBottom === 'boolean';
+  const face = r.face;
+  const faceOk = face == null || (Array.isArray(face) && face.length === 4 && face.every(num));
+  return num(r.coverage) && Array.isArray(r.box) && r.box.length === 4 && r.box.every(num) && typeof r.cutBottom === 'boolean' && faceOk;
 }
 
 function isCutout(v: unknown): v is CutoutResult {
