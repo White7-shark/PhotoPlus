@@ -626,6 +626,88 @@ TEST(studio_compose_fixed_colour_match_repeats_the_measured_one) {
   pp_image_destroy(person);
 }
 
+namespace {
+// A dark-haired person (an ellipse) before a background `bg`; a band `rimPx`
+// wide inside their right edge is lit `rim` (a sunset through the hair).
+// Returns the mean cut-out colour in that band and the photo's there.
+struct RimResult {
+  double cut[3], photo[3];
+};
+// `leftPart`: the colour and parts-map zone of the person's left half
+// (nullptr: all `zone`).
+RimResult rimScene(const uint8_t bg[3], const uint8_t person[3], const uint8_t rim[3], int rimPx, uint8_t zone = 1,
+                   const uint8_t* leftColour = nullptr, uint8_t leftZone = 0) {
+  Scene s;
+  s.image = rgba(kW, kH);
+  s.truth.assign(static_cast<size_t>(kW) * kH, 0.0f);
+  s.strand.assign(static_cast<size_t>(kW) * kH, 0.0f);
+  auto inRim = [&](int x, int y) {
+    const float d = std::hypot((x - s.cx) / s.rx, (y - s.cy) / s.ry);
+    return x > s.cx + 20 && d < 1.0f && (1.0f - d) * std::min(s.rx, s.ry) < static_cast<float>(rimPx);
+  };
+  for (int y = 0; y < kH; ++y)
+    for (int x = 0; x < kW; ++x) {
+      const float a = ellipseAlpha(s, static_cast<float>(x), static_cast<float>(y));
+      s.truth[static_cast<size_t>(y) * kW + x] = a;
+      const uint8_t* f = inRim(x, y) ? rim : (leftColour != nullptr && x < s.cx) ? leftColour : person;
+      uint8_t* p = at(s.image, x, y);
+      for (int c = 0; c < 3; ++c) p[c] = static_cast<uint8_t>(std::lround(a * f[c] + (1 - a) * bg[c]));
+      p[3] = 255;
+    }
+  pp_image* mask = coarseMask(s);
+  pp_image* zones = gray(kW / 2, kH / 2);
+  for (int y = 0; y < kH / 2; ++y)
+    for (int x = 0; x < kW / 2; ++x) {
+      const float fx = static_cast<float>(x * 2 + 1), fy = static_cast<float>(y * 2 + 1);
+      const bool in = std::hypot((fx - s.cx) / s.rx, (fy - s.cy) / s.ry) < 1.0f;
+      *at(zones, x, y, 1) = !in ? 0 : (leftColour != nullptr && fx < s.cx) ? leftZone : zone;
+    }
+  pp_image* out = cut(s, mask, zones, defaults());
+  pp_image_destroy(zones);
+  RimResult r{};
+  int n = 0;
+  for (int y = 0; y < kH; ++y)
+    for (int x = 0; x < kW; ++x) {
+      if (!inRim(x, y) || s.truth[static_cast<size_t>(y) * kW + x] < 0.99f) continue;
+      for (int c = 0; c < 3; ++c) r.cut[c] += at(out, x, y)[c], r.photo[c] += at(s.image, x, y)[c];
+      ++n;
+    }
+  for (int c = 0; c < 3; ++c) r.cut[c] /= std::max(n, 1), r.photo[c] /= std::max(n, 1);
+  pp_image_destroy(out);
+  pp_image_destroy(mask);
+  pp_image_destroy(s.image);
+  return r;
+}
+double lumOf3(const double c[3]) { return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+}  // namespace
+
+TEST(studio_cutout_takes_the_old_backgrounds_light_off_the_edges_only) {
+  // Dark hair lit gold by a sunset behind: the gold does not come along.
+  const uint8_t sunset[3] = {245, 200, 90}, hair[3] = {50, 32, 14}, gold[3] = {205, 160, 45};
+  const RimResult lit = rimScene(sunset, hair, gold, 10);
+  std::printf("    gold rim: photo %.0f %.0f %.0f -> cut-out %.0f %.0f %.0f\n", lit.photo[0], lit.photo[1], lit.photo[2], lit.cut[0],
+              lit.cut[1], lit.cut[2]);
+  EXPECT_TRUE(lumOf3(lit.cut) < 0.6 * lumOf3(lit.photo));
+  // Warm skin beside a warm wall is the skin's own colour: it stays.
+  const uint8_t wall[3] = {225, 175, 85}, skin[3] = {150, 96, 62};
+  const RimResult warm = rimScene(wall, skin, skin, 10, 2);
+  std::printf("    skin by a warm wall: photo %.0f %.0f %.0f -> cut-out %.0f %.0f %.0f\n", warm.photo[0], warm.photo[1], warm.photo[2],
+              warm.cut[0], warm.cut[1], warm.cut[2]);
+  for (int c = 0; c < 3; ++c) EXPECT_TRUE(std::fabs(warm.cut[c] - warm.photo[c]) < 6);
+  // A white background has no colour to take away: a bright edge stays.
+  const uint8_t white[3] = {235, 235, 232}, bright[3] = {190, 185, 180};
+  const RimResult grey = rimScene(white, hair, bright, 10, 4);
+  std::printf("    bright edge by a white wall: photo %.0f -> cut-out %.0f\n", lumOf3(grey.photo), lumOf3(grey.cut));
+  EXPECT_TRUE(std::fabs(lumOf3(grey.cut) - lumOf3(grey.photo)) < 6);
+  // Sunlit skin on an arm beside a green dress is compared with skin, not
+  // with the dress: it stays skin-coloured (it does not turn green).
+  const uint8_t dress[3] = {25, 85, 65}, litSkin[3] = {235, 170, 105};
+  const RimResult arm = rimScene(sunset, skin, litSkin, 10, 2, dress, 4);
+  std::printf("    sunlit arm by a green dress: photo %.0f %.0f %.0f -> cut-out %.0f %.0f %.0f\n", arm.photo[0], arm.photo[1], arm.photo[2],
+              arm.cut[0], arm.cut[1], arm.cut[2]);
+  EXPECT_TRUE(arm.cut[0] > arm.cut[1] + 30 && arm.cut[1] > arm.cut[2]);
+}
+
 TEST(studio_report_sizes_a_couple_by_one_face_and_reads_the_outfit) {
   Scene s = makeScene();
   // The person's clothes: navy above y = 215, white below (inside the person).

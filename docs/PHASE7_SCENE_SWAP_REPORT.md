@@ -259,6 +259,28 @@ From two screenshots of a couple's studio shoot (a seamless mustard paper, soft 
 
 Previews of the studio paper with real people are private and were sent separately.
 
+### Old light on the edges (a golden fringe on hair)
+
+**Report:** in the studio-light previews, the woman's hair had a yellow band on the right side, on every colour.
+
+**Cause:** her photo was taken against a low sun. Its golden light shone through and onto the right side of her hair, and the cut-out kept that light, so it went with her into every scene.
+
+**Fix:** the cut-out takes the old background's light off the edges. In a band along the outline, each pixel is compared with its own kind of surface further inside, using the parts map: hair with hair, skin with skin, clothes with clothes. Where the edge is coloured like the old background beyond that surface's own colour, it moves toward the own colour. Where it is far brighter than the surface's own colour and tinted like a bright old background, most of that added light is taken out.
+- A white or grey background has no colour to take, so nothing changes. Without a parts map, nothing changes either.
+- First attempt, corrected: one "own colour" for every surface turned her sunlit arm green, because it was compared with her green dress. Comparing each surface with its own kind fixed it.
+- Engine tests: a gold rim on dark hair against a sunset goes from 205/160/45 to 60/40/16. Skin beside a warm wall is unchanged. A bright edge beside a white wall is unchanged. A sunlit arm beside a green dress stays skin-coloured (223/159/99).
+- On the private test photos, ordinary backgrounds change in 0.0–0.9% of pixels. The two photos with a strong sun change by 4–6%.
+
+### Glide: a shadow flickering on the shoulder
+
+**Report:** a shadow flickered on the person's shoulder in Glide.
+
+**Cause:** a dark shirt against a dark room. During the camera jolt, the portrait matte took a block of dark room above the shoulder for a few frames, then left a hole in the shoulder in the next few. The fusion let the matte reach up to 7% of the frame beyond the person model everywhere, a reach meant for hair around the head. The head-line guard (against ceiling on the head) also cut the person model's shoulder wherever the matte had a hole.
+
+**Fix:** both now apply to the head only. The head is told apart from the shoulders by how far below the person's highest point each column starts, measured on the matte near the person, so a strip of ceiling is never mistaken for the top. Along the shoulders and arms the matte may only refine the person model's edge (1.5% of the frame), and the person model's shoulder stands.
+- Engine test: dark room just above a shoulder is kept out (23 of 255) and a hole in the other shoulder is filled (255). The earlier head cases (lost face, ceiling, hair, far room) are unchanged.
+- On your clip: average frame-to-frame flicker on the right shoulder 6.3 → 3.8. The head is unchanged (5.95 → 5.97), and the frames that showed the head problems look the same.
+
 ## Limits
 
 - **No reconstruction:** nothing behind the person in their own photo is reconstructed or reused, by design. Only clean plates go behind them.

@@ -963,9 +963,47 @@ Error fuseMasks(const ImageBuffer& matte, const ImageBuffer& segment, ImageBuffe
   squareFilter(core, W, H, e, false);
   squareFilter(core, W, H, e, true);
   // Within reach of the segmenter's person: the matte's hair reaches past it,
-  // a piece of room the matte takes far away does not.
+  // a piece of room the matte takes far away does not. Hair is around the
+  // head, so that reach is for the head; along the shoulders and arms the
+  // matte may only refine the segmenter's edge (a dark shirt against a dark
+  // room is where the matte wavers, taking a block of room one frame and
+  // leaving a hole the next: a shadow flickering on the shoulder).
   std::vector<float> near = seg;
   squareFilter(near, W, H, e, true);
+  std::vector<float> nearBody = seg;
+  squareFilter(nearBody, W, H, std::max<int32_t>(1, static_cast<int32_t>(std::lround(0.015f * static_cast<float>(std::min(W, H))))), true);
+  // How much each column is the head: columns where the person starts near
+  // their highest point (the head), not well below it (the shoulders),
+  // blended over a few columns. Measured on the matte near the segmenter's
+  // person (the segmenter can take a strip of ceiling for the head, and the
+  // matte a piece of room far away; neither is the person's top).
+  std::vector<float> head(static_cast<size_t>(W), 0.0f);
+  {
+    std::vector<float> personTop(static_cast<size_t>(W), static_cast<float>(H));
+    float highest = static_cast<float>(H);
+    for (int32_t x = 0; x < W; ++x) {
+      for (int32_t y = 0; y < H; ++y) {
+        const size_t i = static_cast<size_t>(y) * W + x;
+        if (std::min(mat[i], near[i]) > 0.5f) {
+          personTop[static_cast<size_t>(x)] = static_cast<float>(y);
+          break;
+        }
+      }
+      highest = std::min(highest, personTop[static_cast<size_t>(x)]);
+    }
+    const float hf = static_cast<float>(H);
+    for (int32_t x = 0; x < W; ++x)
+      head[static_cast<size_t>(x)] = 1.0f - smoothstep(0.12f * hf, 0.22f * hf, personTop[static_cast<size_t>(x)] - highest);
+    const int32_t r = std::max<int32_t>(1, static_cast<int32_t>(std::lround(0.03f * static_cast<float>(W))));
+    std::vector<float> sm(head.size());
+    for (int32_t x = 0; x < W; ++x) {
+      float sum = 0;
+      int32_t c = 0;
+      for (int32_t k = std::max(0, x - r); k <= std::min(W - 1, x + r); ++k) sum += head[static_cast<size_t>(k)], ++c;
+      sm[static_cast<size_t>(x)] = sum / static_cast<float>(c);
+    }
+    head.swap(sm);
+  }
   // The top of the person, column by column, as the matte sees it (each
   // column takes the highest point of its close neighbours, so a missing
   // cheek still counts as below the hair).
@@ -985,8 +1023,12 @@ Error fuseMasks(const ImageBuffer& matte, const ImageBuffer& segment, ImageBuffe
     uint8_t* o = out.row(y);
     for (int32_t x = 0; x < W; ++x) {
       const size_t i = static_cast<size_t>(y) * W + x;
-      const float below = std::clamp((static_cast<float>(y) - (top[static_cast<size_t>(x)] - margin)) / ramp, 0.0f, 1.0f);
-      const float v = std::max(std::min(mat[i], near[i]), core[i] * below);
+      // The head line guards the head only (a strip of ceiling on top of
+      // it); on the shoulders the segmenter's body stands.
+      const float hx = head[static_cast<size_t>(x)];
+      const float below = 1.0f - hx + hx * std::clamp((static_cast<float>(y) - (top[static_cast<size_t>(x)] - margin)) / ramp, 0.0f, 1.0f);
+      const float reach = nearBody[i] + (near[i] - nearBody[i]) * hx;
+      const float v = std::max(std::min(mat[i], reach), core[i] * below);
       o[x] = static_cast<uint8_t>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f));
     }
   }

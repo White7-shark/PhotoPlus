@@ -594,6 +594,8 @@ TEST(video_fuse_masks_takes_each_model_where_it_is_reliable) {
       bool on = person(x, y, 46);
       if (x >= 45 && x < 75 && y >= 70 && y < 105) on = false;  // the lost part of the face
       if (x >= 2 && x < 18 && y >= 4 && y < 20) on = true;      // room, far away
+      if (x >= 124 && x < 138 && y >= 99 && y < 110) on = true;  // dark room just above the shoulder
+      if (x >= 24 && x < 36 && y >= 111 && y < 126) on = false;  // a hole in the other shoulder
       px(matte, x, y) = on ? 255 : 0;
     }
   // The segmenter, at half size: the body and face right, the hair missed,
@@ -616,7 +618,11 @@ TEST(video_fuse_masks_takes_each_model_where_it_is_reliable) {
   };
   const double face = mean(48, 74, 72, 100), ceiling = mean(68, 6, 90, 30), hair = mean(72, 36, 88, 39);
   const double stray = mean(4, 6, 16, 18), body = mean(40, 150, 120, 190);
-  std::printf("    lost face %.0f, ceiling %.0f, hair %.0f, far room %.0f, body %.0f\n", face, ceiling, hair, stray, body);
+  const double aboveShoulder = mean(126, 100, 136, 107), shoulderHole = mean(26, 114, 34, 124);
+  std::printf("    lost face %.0f, ceiling %.0f, hair %.0f, far room %.0f, body %.0f, above the shoulder %.0f, shoulder hole %.0f\n", face,
+              ceiling, hair, stray, body, aboveShoulder, shoulderHole);
+  EXPECT_TRUE(aboveShoulder < 40);  // the matte's long reach is for hair, around the head
+  EXPECT_TRUE(shoulderHole > 240);  // the segmenter's shoulder stands where the matte wavers
   EXPECT_TRUE(face > 240);     // filled from the segmenter's solid body
   EXPECT_TRUE(ceiling < 5);    // above the head: the matte's alone
   EXPECT_TRUE(hair > 240);     // the matte's hair, past the segmenter's outline

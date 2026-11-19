@@ -265,7 +265,7 @@ PortraitProcessor.applyBeauty(recipe?, backdrop?, skinTone?): one set of masks (
 | `native/engine/src/skintone/skintone.cpp` | Skin weight (colour, brightness, texture, feathered region); the shade as gains on the skin's own colour in linear light (the scene's light stays), natural-hue guard, headroom for fair skin, even tone |
 | `pp_video_consensus_mask` | Three-frame median of subject masks: one-frame segmentation mistakes never reach a clip |
 | `pp_video_room_*` (`video::RoomMemory`) | The room remembered behind the person (follows the camera, corrects exposure drift): pieces of room the model swallows for many frames are given back; the person's long-held outline and dark close calls are kept. Used by Glide (with `MaskVote`) before steadying |
-| `pp_video_fuse_masks` (`video::fuseMasks`) | Joins the two person models Glide runs on each frame: the portrait matte (MODNet, which draws hair and the head's outline, also against a dark background) and the selfie segmenter (which always finds the face and body, even in a blurred frame). The matte is trusted near the segmenter's person and above each column's own head line; the segmenter's solid core is always kept. Used by Glide before the vote |
+| `pp_video_fuse_masks` (`video::fuseMasks`) | Joins the two person models Glide runs on each frame: the portrait matte (MODNet, which draws hair and the head's outline, also against a dark background) and the selfie segmenter (which always finds the face and body, even in a blurred frame). Around the head the matte may reach past the segmenter (hair) and a head line keeps ceiling off the top; along the shoulders and arms it only refines the segmenter's edge, and the segmenter's solid body is always kept. Used by Glide before the vote |
 | `pp_video_interpolate` (`video::interpolate`) | A frame between two frames, for slow motion: block motion searched both ways (to half a pixel), smoothed, and each block and pixel trusted only as far as the two moved frames agree. Where they don't (an eye opening, a hand appearing), it falls back to a plain blend, so it never tears. A plain blend is used for fast motion |
 | `scripts/backdrop-demo.py`, `scripts/backdrop-video-demo.py` | Sheets and clips on real photos and video |
 | `scripts/skintone-demo.py`, `scripts/skintone-video-demo.py` | Sheets, per-region measurements (face, body, hair, clothes, background) and clips |
@@ -338,7 +338,7 @@ cut-out report → largest face (true size, also for couples), faces, outfit col
 
 | Where | What |
 |---|---|
-| `native/engine/src/studio/` | `cutout.cpp` (snap, two-colour edges and hair, guided matte at full resolution, blur-fusion foreground colour), `compose.cpp` (placement, harmonisation, colour bounce, wrap and rim, contact and cast shadows, lens blur, grain; the studio paper backdrop) |
+| `native/engine/src/studio/` | `cutout.cpp` (snap, two-colour edges and hair, guided matte at full resolution, blur-fusion foreground colour, the old background's light taken off the edges by kind of surface), `compose.cpp` (placement, harmonisation, colour bounce, wrap and rim, contact and cast shadows, lens blur, grain; the studio paper backdrop) |
 | `native/engine/src/matte/tools.*` | Shared with Backdrops: colour triplets, blurs, clean-plate colours, hair recovery, islands |
 | `android/.../studio/StudioModule.kt` | Sessions, previews, scenes without the person (for dragging), Premium exports, gallery |
 | `android/.../studio/PersonParts.kt`, `SceneStudio.kt` | Parts map; strokes, settings, backgrounds, crops, export size |

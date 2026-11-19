@@ -64,6 +64,50 @@ struct StrokePlanes {
   bool any = false;
 };
 
+// Takes the old background's light out of an edge colour c. Where c leans
+// toward the background's tint b further than the person's own colour f
+// (from further inside, at c's brightness) does, it moves to that own
+// colour, and most of the brightness the old light added goes too (a
+// sunset's glow on hair). Skin beside a warm wall leans no further than
+// the skin itself does, so it stays; a grey or white background has no
+// tint, so nothing changes.
+// `band` (0..1) is how much of the edge this pixel is.
+V3 despill(V3 c, V3 f, V3 b, float band) {
+  const float lb = lum(b);
+  const V3 tint = b - grey(lb);
+  const float tn = std::sqrt(tint.r * tint.r + tint.g * tint.g + tint.b * tint.b);
+  const float mxb = std::max({b.r, b.g, b.b}), sat = mxb > 1e-3f ? (mxb - std::min({b.r, b.g, b.b})) / mxb : 0.0f;
+  const float k = band * smoothstep(0.04f, 0.2f, sat);
+  if (k <= 0.0f || tn < 1e-4f) return c;
+  const float lc = lum(c);
+  // The person's own colour at this pixel's brightness.
+  const float lf = std::max(lum(f), 1e-4f);
+  // Never brighter than 1.2 times the person's own: hair lit gold by a
+  // sunset is compared with how dark the hair really is.
+  V3 own = f * std::min(lc / lf, 1.2f);
+  const float mo = std::max({own.r, own.g, own.b});
+  if (mo > 1.0f) own = own * (1.0f / mo);
+  // How far the edge leans toward the old background's tint beyond that:
+  // skin beside a warm wall is still skin, and stays.
+  const V3 d = c - own;
+  const float along = (d.r * tint.r + d.g * tint.g + d.b * tint.b) / tn;
+  // Or it is far brighter than the person's own colour, tinted like the
+  // old background, with a bright background behind it: a sunset's glow
+  // through hair. (Skin in light beside a warm wall is a little brighter
+  // than the skin, not three times.)
+  const V3 ct = c - grey(lc);
+  const float cn = std::sqrt(ct.r * ct.r + ct.g * ct.g + ct.b * ct.b);
+  const float same = cn > 1e-4f ? (ct.r * tint.r + ct.g * tint.g + ct.b * tint.b) / (cn * tn) : 0.0f;
+  const float bright = smoothstep(1.5f, 2.5f, lc / lf) * smoothstep(0.3f, 0.7f, lb) * smoothstep(0.3f, 0.7f, same);
+  const float w = k * std::max(smoothstep(0.03f, 0.12f, along), bright);
+  if (w <= 0.0f) return c;
+  V3 out = mix(c, own, w);
+  // The brightness the old light added, mostly taken out.
+  const float lo = lum(out);
+  if (lo > lf && lo > 1e-4f) out = out * mixf(1.0f, lf / lo, 0.8f * w * smoothstep(0.3f, 0.7f, lb));
+  return V3{std::clamp(out.r, 0.0f, 1.0f), std::clamp(out.g, 0.0f, 1.0f), std::clamp(out.b, 0.0f, 1.0f)};
+}
+
 // Strokes painted in order on the grid (a later stroke wins where they
 // overlap), each with a one-pixel soft edge.
 Result<StrokePlanes> paintStrokes(const std::vector<Stroke>& strokes, int32_t w, int32_t h) {
@@ -499,7 +543,10 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
   }
 
   // 5. Foreground colours (blur fusion), on the grid.
-  Rgb3 Fs, Bs;
+  Rgb3 Fs, Bs, Bw, spillOwn;
+  Plane spillSure;
+  bool spill = false;
+  Plane rim;
   const bool clean = params.cleanColours;
   if (clean) {
     auto wa = clonePlane(A);
@@ -520,7 +567,73 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
     auto F2 = weightedPlate(*F1, *wa, std::max(1.0f, 0.004f * shortSide), grey(0.5f), token);
     auto B2 = weightedPlate(*B1, *wb, std::max(1.0f, 0.004f * shortSide), grey(0.5f), token);
     if (!F2 || !B2) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
-    Fs = std::move(F2).value(), Bs = std::move(B2).value();
+    Fs = std::move(F2).value(), Bs = std::move(B2).value(), Bw = std::move(B1).value();
+    // Old light on the edges (spill): a coloured background (a sunset, a
+    // lamp, a green wall) lights the hair and the outline in its colour,
+    // and that colour would travel with the person into a new scene. Each
+    // edge pixel is compared with its own kind of surface further inside
+    // (hair with hair, skin with skin, clothes with clothes, from the parts
+    // map: sunlit skin compared with a green dress would turn green), in a
+    // band along the outline. Without a parts map nothing is changed.
+    if (zones != nullptr) {
+      auto blurA = blurred(A, 0.03f * shortSide, token);
+      auto wi = Plane::allocate(lw, lh);
+      auto rp = Plane::allocate(lw, lh);
+      auto face = zonePlane(*zones, Zone::FaceSkin, lw, lh, token);
+      auto bodySkin = zonePlane(*zones, Zone::BodySkin, lw, lh, token);
+      auto cloth = zonePlane(*zones, Zone::Clothes, lw, lh, token);
+      auto ownR = allocRgb(lw, lh);
+      auto sureP = Plane::allocate(lw, lh);
+      if (!blurA || !wi || !rp || !face || !bodySkin || !cloth || !ownR || !sureP) {
+        return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+      }
+      for (size_t i = 0; i < A.size(); ++i) {
+        const float ba = blurA->data()[i];
+        wi->data()[i] = smoothstep(0.97f, 1.0f, ba) * A.data()[i];
+        rp->data()[i] = A.data()[i] > 0.0f ? 1.0f - smoothstep(0.72f, 0.99f, ba) : 0.0f;
+        bodySkin->data()[i] = std::min(1.0f, bodySkin->data()[i] + face->data()[i]);
+      }
+      auto rimB = blurred(*rp, std::max(1.0f, 0.004f * shortSide), token);
+      if (!rimB) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+      rim = std::move(rimB).value();
+      // Each kind of surface: its colour away from the outline (wide, so the
+      // side lit by the old light takes the colour of the rest), and how
+      // much of it there is around to measure.
+      const Plane* part[3] = {haveHair ? &hairZone : nullptr, &bodySkin.value(), &cloth.value()};
+      const float sigma[3] = {0.15f * shortSide, 0.1f * shortSide, 0.1f * shortSide};
+      for (size_t i = 0; i < A.size(); ++i) ownR->set(i, V3{}), sureP->data()[i] = 0.0f;
+      std::vector<float> msum(A.size(), 0.0f);
+      for (int k = 0; k < 3; ++k) {
+        if (part[k] == nullptr) continue;
+        auto wk = Plane::allocate(lw, lh);
+        if (!wk) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+        for (size_t i = 0; i < A.size(); ++i) wk->data()[i] = wi->data()[i] * smoothstep(0.5f, 0.9f, part[k]->data()[i]);
+        auto ref = weightedPlate(gam, *wk, sigma[k], grey(0.3f), token);
+        auto dens = blurred(*wk, sigma[k], token);
+        if (!ref || !dens) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+        for (size_t i = 0; i < A.size(); ++i) {
+          const float m = smoothstep(0.2f, 0.7f, part[k]->data()[i]);
+          if (m <= 0.0f) continue;
+          ownR->set(i, ownR->at(i) + ref->at(i) * m);
+          sureP->data()[i] += m * smoothstep(0.04f, 0.15f, dens->data()[i]);
+          msum[i] += m;
+        }
+      }
+      for (size_t i = 0; i < A.size(); ++i) {
+        if (msum[i] > 1e-3f) {
+          ownR->set(i, ownR->at(i) * (1.0f / msum[i]));
+          sureP->data()[i] = sureP->data()[i] / msum[i] * smoothstep(0.2f, 0.6f, msum[i]);
+        }
+      }
+      // Edge pixels the parts map just misses take the nearest part's
+      // colour (the parts map is coarse); the trust spreads out with it.
+      auto sureW = blurred(*sureP, std::max(1.0f, 0.01f * shortSide), token);
+      auto ownW = weightedPlate(*ownR, *sureP, std::max(1.0f, 0.01f * shortSide), grey(0.3f), token);
+      if (!sureW || !ownW) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+      for (size_t i = 0; i < A.size(); ++i) sureW->data()[i] = std::max(sureP->data()[i], std::min(1.0f, 2.0f * sureW->data()[i]));
+      spillOwn = std::move(ownW).value(), spillSure = std::move(sureW).value();
+      spill = true;
+    }
   }
 
   // Full resolution: alpha from the coefficients, colours corrected.
@@ -584,6 +697,10 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
           un = V3{std::clamp(un.r, 0.0f, 1.0f), std::clamp(un.g, 0.0f, 1.0f), std::clamp(un.b, 0.0f, 1.0f)};
           un = mix(hf, un, smoothstep(0.15f, 0.6f, a));
           col = mix(col, mix(un, I, smoothstep(0.93f, 0.995f, a)), twoW);
+        }
+        if (spill && a > 0.0f) {
+          const float band = rim.sample(lx, ly) * std::clamp(spillSure.sample(lx, ly), 0.0f, 1.0f);
+          if (band > 0.01f) col = despill(col, spillOwn.sample(lx, ly), Bw.sample(lx, ly), band);
         }
         d[o.r] = toByte(col.r), d[o.g] = toByte(col.g), d[o.b] = toByte(col.b), d[3] = toByte(a);
         sa += a;
