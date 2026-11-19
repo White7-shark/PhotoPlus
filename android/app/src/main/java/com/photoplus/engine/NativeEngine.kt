@@ -274,9 +274,28 @@ object NativeEngine {
     b: Int,
     strength: Float,
     face: FloatArray,
+    layer: Bitmap?,
+    layerFace: FloatArray?,
     seed: Int,
     token: Long,
   )
+
+  /**
+   * Studio light: [cutout] (not premultiplied) lit in place. [params] (21):
+   * strength, key angle, key height, softness, key, fill, key colour (3),
+   * fill colour (3), rim left, rim right, rim colour (3), face box (4).
+   */
+  external fun nativeStudioRelight(cutout: Bitmap, params: FloatArray, token: Long)
+
+  /**
+   * The frame graded in place. [params] (17): vignette, its size, warmth,
+   * tint, contrast, saturation, fade, shadow tone (3), highlight tone (3),
+   * tone amount, grain, grain size, mono.
+   */
+  external fun nativeStudioFinish(frame: Bitmap, params: FloatArray, seed: Int, token: Long)
+
+  /** A gradient backdrop filling [bitmap]: [from] to [to] (0xRRGGBB), [kind] 0 linear along [angle], 1 radial from ([cx], [cy]). */
+  external fun nativeStudioGradient(bitmap: Bitmap, from: Int, to: Int, kind: Int, angle: Float, cx: Float, cy: Float, radius: Float)
 
   /** A studio paper backdrop in one colour (0..255) filling [bitmap]: [light] 0 flat .. 1 lit, its light at ([cx], [cy]). */
   external fun nativeStudioBackdrop(bitmap: Bitmap, r: Int, g: Int, b: Int, light: Float, cx: Float, cy: Float, seed: Int)

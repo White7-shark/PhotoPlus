@@ -333,6 +333,8 @@ strokes (Keep / Remove / Fix hair) + edge settings ─────────�
 clean plate (assets, my backgrounds, packs) or plain colour ── crop ── pp_studio_compose ─→ scene (JPEG) / PNG
   (a plain colour with Studio light: pp_studio_backdrop, lit seamless paper)
 placement (anchor, size, mirror, tilt) + look (match, wrap, rim, shadows, blur, grain, colour bounce)
+studio light on the cut-out (pp_studio_relight) before compose; a gradient backdrop (pp_studio_gradient);
+the finished frame graded (pp_studio_finish_frame: vignette, warmth, film looks)
 cut-out report → largest face (true size, also for couples), faces, outfit colours → "Suits your outfit"
 ```
 
@@ -342,7 +344,8 @@ cut-out report → largest face (true size, also for couples), faces, outfit col
 | `native/engine/src/matte/tools.*` | Shared with Backdrops: colour triplets, blurs, clean-plate colours, hair recovery, islands |
 | `android/.../studio/StudioModule.kt` | Sessions, previews, scenes without the person (for dragging), Premium exports, gallery |
 | `android/.../studio/PersonParts.kt`, `SceneStudio.kt` | Parts map; strokes, settings, backgrounds, crops, export size |
-| `native/engine/src/studio/hair.cpp`, `src/services/studio/hair.ts` | Hair (Premium): recolouring the person's own hair, and hairstyles drawn strand by strand in place of it (23 women's; dreadlocks, rasta, afro, bald for men) (`pp_studio_hair`); the app's catalogue matches the engine's table |
+| `native/engine/src/studio/hair.cpp`, `src/services/studio/hair.ts`, `android/.../studio/HairLibrary.kt` | Hair (Premium): recolouring the person's own hair; a new style: the old hair taken out (the body and a hidden cheek rebuilt under it, with the garment's own texture), then a photographed hairstyle (cut from an openly licensed photo) fitted to the head (`pp_studio_hair` with a layer); bald is drawn |
+| `native/engine/src/studio/light.cpp`, `src/services/studio/light.ts`, `src/screens/studio/StudioLightPanel.tsx` | Phase 11: studio light on the person (key, fill, rim, gels; shape estimated from the outline and face), gradient backdrops, the finish (vignette, warmth, tint, grades, film looks), composition templates; free and Premium split checked on the device too. Report: [`PHASE11_STUDIO_LIGHT_REPORT.md`](PHASE11_STUDIO_LIGHT_REPORT.md) |
 | `src/services/studio/colors.ts` | Colour picker conversions, the studio paper palette, and paper colours that suit an outfit |
 | `src/services/studio/` | Plate library (`plates.json` from `scripts/studio-plates.py`, with each plate's measured horizon, camera height and open floor), auto framing (true-to-scene size), frames, looks, gestures, service |
 | `src/screens/studio/` | Photoshoot Studio hub, Scene Swap screen, brush canvas, placement view, background picker, colour picker |

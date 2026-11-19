@@ -12,6 +12,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -166,8 +167,21 @@ int hair(int argc, char** argv) {
   const auto c = [&](int i) { return static_cast<uint8_t>(argc > i ? std::atoi(argv[i]) : 0); };
   const float face[4] = {r.face_left, r.face_top, r.face_right, r.face_bottom};
   const auto t0 = std::chrono::steady_clock::now();
-  if (pp_studio_hair(out, zones, style, recolor ? 1 : 0, c(7), c(8), c(9), argc > 10 ? std::strtof(argv[10], nullptr) : 1.0f, face, 5,
-                     nullptr) != PP_OK) {
+  // A photographed style: PP_HAIR_LAYER=prefix (prefix.ppm colour, prefix_a.pgm cover) and
+  // PP_HAIR_LAYER_FACE="left,top,right,bottom" (its face box in its pixels).
+  pp_image* layer = nullptr;
+  float layerFace[4] = {0, 0, 0, 0};
+  if (const char* lp = std::getenv("PP_HAIR_LAYER")) {
+    int aw = 0, ah = 0;
+    std::vector<unsigned char> cover;
+    if (!readNetpbm(std::string(lp) + "_a.pgm", "P5", aw, ah, cover, 1) || (layer = readPpm(std::string(lp) + ".ppm", &cover)) == nullptr) {
+      std::fprintf(stderr, "cannot read the hair layer\n");
+      return 1;
+    }
+    if (const char* lf = std::getenv("PP_HAIR_LAYER_FACE")) std::sscanf(lf, "%f,%f,%f,%f", &layerFace[0], &layerFace[1], &layerFace[2], &layerFace[3]);
+  }
+  if (pp_studio_hair(out, zones, style, recolor ? 1 : 0, c(7), c(8), c(9), argc > 10 ? std::strtof(argv[10], nullptr) : 1.0f, face, layer,
+                     layerFace, 5, nullptr) != PP_OK) {
     std::fprintf(stderr, "hair failed: %s\n", pp_last_error_message());
     return 1;
   }
@@ -227,6 +241,75 @@ int backdrop(int argc, char** argv) {
   return 0;
 }
 
+// studio IN.ppm MASK.pgm ZONES.pgm OUT.ppm [key=value ...]: the whole studio:
+// cut-out, studio light, a gradient backdrop, compose, finish. Keys: light
+// (strength) angle height soft key fill keyc fillc rimL rimR rimc (r,g,b
+// gains); from to (backdrop hex colours) radial (0/1) gangle; vig vigsize
+// warm tint contrast sat fade sh hi tone grain gsize mono; size (person's
+// height in the frame) fw fh (frame size).
+int studio(int argc, char** argv) {
+  if (argc < 6) return 2;
+  std::map<std::string, std::string> kv;
+  for (int i = 6; i < argc; ++i) {
+    const char* eq = std::strchr(argv[i], '=');
+    if (eq != nullptr) kv[std::string(argv[i], static_cast<size_t>(eq - argv[i]))] = eq + 1;
+  }
+  auto num = [&](const char* k, float d) { return kv.count(k) ? std::strtof(kv[k].c_str(), nullptr) : d; };
+  auto tri = [&](const char* k, float d, float out[3]) {
+    out[0] = out[1] = out[2] = d;
+    if (kv.count(k)) std::sscanf(kv[k].c_str(), "%f,%f,%f", &out[0], &out[1], &out[2]);
+  };
+  auto hex = [&](const char* k, const char* d, uint8_t out[3]) {
+    const std::string v = kv.count(k) ? kv[k] : d;
+    unsigned r = 0, g = 0, b = 0;
+    std::sscanf(v.c_str(), "%02x%02x%02x", &r, &g, &b);
+    out[0] = static_cast<uint8_t>(r), out[1] = static_cast<uint8_t>(g), out[2] = static_cast<uint8_t>(b);
+  };
+  pp_image* img = readPpm(argv[2]);
+  pp_image* mask = readPgm(argv[3]);
+  pp_image* zones = readPgm(argv[4]);
+  if (img == nullptr || mask == nullptr || zones == nullptr) return 1;
+  pp_image_info info{};
+  pp_image_get_info(img, &info);
+  pp_image* cut = rgba(info.width, info.height);
+  const pp_studio_cutout_params cp{0.0f, 0.0f, 0.5f, 1};
+  pp_studio_cutout_report r{};
+  if (pp_studio_cutout(img, mask, zones, nullptr, 0, &cp, cut, nullptr, &r) != PP_OK) return 1;
+  const auto t0 = std::chrono::steady_clock::now();
+  pp_studio_light L{};
+  L.strength = num("light", 1.0f), L.key_angle = num("angle", -45.0f), L.key_height = num("height", 35.0f), L.key_softness = num("soft", 0.5f);
+  L.key = num("key", 1.0f), L.fill = num("fill", 0.35f), L.rim_left = num("rimL", 0.0f), L.rim_right = num("rimR", 0.0f);
+  tri("keyc", 1.0f, L.key_colour), tri("fillc", 1.0f, L.fill_colour), tri("rimc", 1.0f, L.rim_colour);
+  L.face[0] = r.face_left, L.face[1] = r.face_top, L.face[2] = r.face_right, L.face[3] = r.face_bottom;
+  if (pp_studio_relight(cut, &L, nullptr) != PP_OK) {
+    std::fprintf(stderr, "light failed: %s\n", pp_last_error_message());
+    return 1;
+  }
+  const double tLight = ms(t0);
+  const auto fw = static_cast<int32_t>(num("fw", static_cast<float>(info.width))), fh = static_cast<int32_t>(num("fh", static_cast<float>(info.height)));
+  pp_image* frame = rgba(fw, fh);
+  uint8_t from[3], to[3];
+  hex("from", "d9d4cc", from), hex("to", "8a8580", to);
+  if (pp_studio_gradient(frame, from, to, static_cast<int32_t>(num("radial", 1.0f)), num("gangle", 90.0f), 0.5f, 0.38f, num("gradius", 0.85f)) != PP_OK) return 1;
+  // The person as in the photo (their box's share of it), standing on its bottom edge.
+  const float size = num("size", r.bottom - r.top);
+  pp_studio_placement pl{0.5f * (r.left + r.right), r.bottom > 0.97f ? 1.0f : r.bottom, size, 0, 0, 0, 0, 0, 0, 1, 1};
+  pp_studio_look lk{0.25f, 0.3f, 0.0f, 0.0f, 0.0f, 0.45f, num("blur", 0.0f), 0.6f, 11, 0.0f, 0.0f, 0, 1, 1, {1, 1, 1}, num("bounce", 0.4f)};
+  if (pp_studio_compose(frame, cut, &pl, &lk, nullptr, nullptr) != PP_OK) {
+    std::fprintf(stderr, "compose failed: %s\n", pp_last_error_message());
+    return 1;
+  }
+  pp_studio_finish F{};
+  F.vignette = num("vig", 0.0f), F.vignette_size = num("vigsize", 0.5f), F.warmth = num("warm", 0.0f), F.tint = num("tint", 0.0f);
+  F.contrast = num("contrast", 0.0f), F.saturation = num("sat", 0.0f), F.fade = num("fade", 0.0f), F.tone_amount = num("tone", 0.0f);
+  F.grain = num("grain", 0.0f), F.grain_size = num("gsize", 0.5f), F.mono = static_cast<int32_t>(num("mono", 0.0f)), F.seed = 3;
+  tri("sh", 0.0f, F.shadow_tone), tri("hi", 0.0f, F.highlight_tone);
+  if (pp_studio_finish_frame(frame, &F, nullptr) != PP_OK) return 1;
+  write(argv[5], frame, -1);
+  std::printf("{\"ms\":%.1f,\"light_ms\":%.1f}\n", ms(t0), tLight);
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -236,11 +319,13 @@ int main(int argc, char** argv) {
   else if (argc > 1 && std::strcmp(argv[1], "backdrop") == 0) rc = backdrop(argc, argv);
   else if (argc > 1 && std::strcmp(argv[1], "hair") == 0) rc = hair(argc, argv);
   else if (argc > 1 && std::strcmp(argv[1], "styles") == 0) rc = styles();
+  else if (argc > 1 && std::strcmp(argv[1], "studio") == 0) rc = studio(argc, argv);
   if (rc == 2) {
     std::fprintf(stderr,
                  "usage: studio_demo backdrop OUT.ppm W H R G B [light cx cy]\n"
                  "       studio_demo hair IN.ppm MASK.pgm ZONES.pgm OUT_PREFIX STYLE|- [R G B [strength]]\n"
                  "       studio_demo styles\n"
+                 "       studio_demo studio IN.ppm MASK.pgm ZONES.pgm OUT.ppm [key=value ...] (light, backdrop, finish)\n"
                  "       studio_demo cutout IN.ppm MASK.pgm ZONES.pgm|- OUT_PREFIX [softness shift hair clean] [STROKES.txt]\n"
                  "       studio_demo compose BG.ppm FG.ppm ALPHA.pgm OUT.ppm x y height [tilt angle flip colorMatch wrap "
                  "shadow cast lightX horizon blur grain rim spotlight [fixedBox l t r b [fixedColour gain contrast balR balG seed balB]]]\n");

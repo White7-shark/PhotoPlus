@@ -28,6 +28,16 @@ import {
 } from '../../services/studio/StudioService';
 import { friendlyMessage } from '../../services/errors';
 import type { HairChoice } from '../../services/studio/hair';
+import {
+  GRADIENTS,
+  isPremiumFinish,
+  isPremiumLight,
+  lightPreset,
+  NO_FINISH,
+  template,
+  type FinishChoice,
+  type LightChoice,
+} from '../../services/studio/light';
 
 export type Step = 'pick' | 'cutout' | 'scene';
 
@@ -77,6 +87,9 @@ export function useSceneSwap(studio: StudioService) {
   const [background, setBackground] = useState<Background>({ kind: 'plate', plate: PLATES[0] });
   // Hair (Premium): the person's own, recoloured, or a new style.
   const [hair, setHair] = useState<HairChoice>({});
+  // Studio light and the finish (Phase 11).
+  const [light, setLight] = useState<LightChoice | null>(null);
+  const [finish, setFinish] = useState<FinishChoice>(NO_FINISH);
   const [shape, setShape] = useState<FrameShape>('portrait');
   const [placement, setPlacement] = useState<Placement | null>(null);
   // What auto framing chose last: the crop of the background, the size and blur.
@@ -239,12 +252,13 @@ export function useSceneSwap(studio: StudioService) {
     [sizeReference],
   );
 
-  const render = useLatest(async ({ id, bg, c, p, l, aspect, h }: { id: string; bg: Background; c: Crop; p: Placement; l: SceneLook; aspect: number; h: HairChoice }) => {
+  const render = useLatest(async ({ id, bg, c, p, l, aspect, h, li, fi }: { id: string; bg: Background; c: Crop; p: Placement; l: SceneLook; aspect: number; h: HairChoice; li: LightChoice | null; fi: FinishChoice }) => {
     setBusy('render');
     try {
       const [withPerson, without] = await Promise.all([
-        studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect, hair: h }, 'preview'),
-        bg.kind === 'transparent' ? Promise.resolve(null) : studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect }, 'preview', true),
+        studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect, hair: h, light: li, finish: fi }, 'preview'),
+        // The scene alone takes the same finish (it is under the person while they are moved).
+        bg.kind === 'transparent' ? Promise.resolve(null) : studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect, light: li, finish: fi }, 'preview', true),
       ]);
       setScene(withPerson);
       setEmpty(without);
@@ -258,8 +272,8 @@ export function useSceneSwap(studio: StudioService) {
 
   useEffect(() => {
     if (step !== 'scene' || !session || !placement) return;
-    render({ id: session.sessionId, bg: background, c: crop, p: placement, l: look, aspect: frameAspect, h: hair });
-  }, [step, session, background, crop, placement, look, frameAspect, render, cut, hair]);
+    render({ id: session.sessionId, bg: background, c: crop, p: placement, l: look, aspect: frameAspect, h: hair, li: light, fi: finish });
+  }, [step, session, background, crop, placement, look, frameAspect, render, cut, hair, light, finish]);
 
   const goToScene = useCallback(() => {
     setStep('scene');
@@ -283,13 +297,40 @@ export function useSceneSwap(studio: StudioService) {
   );
   const resetPlacement = useCallback(() => applyFraming(frameFor(background, shape)), [background, shape, frameFor, applyFraming]);
 
+  /**
+   * A light look: its light on the person, and (on a colour or gradient
+   * backdrop, never over a scene) the backdrop it is shot against.
+   */
+  const chooseLight = useCallback(
+    (id: string) => {
+      const p = lightPreset(id);
+      if (!p?.light) {
+        setLight(null);
+        return;
+      }
+      setLight(l => ({ preset: id, strength: l?.strength ?? 1 }));
+      const g = p.gradient ? GRADIENTS.find(x => x.id === p.gradient) : undefined;
+      if (g && (background.kind === 'plain' || background.kind === 'gradient')) setBackground({ kind: 'gradient', gradient: g });
+    },
+    [background],
+  );
+  /** A composition template: where the person stands and how large (applied to the current frame). */
+  const applyTemplate = useCallback(
+    (id: string) => {
+      const t = template(id);
+      if (!t) return;
+      setPlacement(p => (p ? { ...p, x: t.x, y: t.y, height: t.height } : p));
+    },
+    [],
+  );
+
   // ---- saving
   const save = useCallback(async (): Promise<SceneResult | null> => {
     if (!session || !placement) return null;
     setBusy('save');
     setError(null);
     try {
-      return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect, hair }, 'full');
+      return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect, hair, light, finish }, 'full');
     } catch (err) {
       if (err instanceof StudioError && err.code === 'PREMIUM_REQUIRED') throw err;
       setError('Your photo couldn’t be saved. Please try again.');
@@ -297,7 +338,7 @@ export function useSceneSwap(studio: StudioService) {
     } finally {
       setBusy(null);
     }
-  }, [session, placement, background, crop, look, frameAspect, studio, hair]);
+  }, [session, placement, background, crop, look, frameAspect, studio, hair, light, finish]);
 
   const saveCutout = useCallback(async (): Promise<SceneResult | null> => {
     if (!session) return null;
@@ -306,7 +347,7 @@ export function useSceneSwap(studio: StudioService) {
     try {
       return await studio.render(
         session.sessionId,
-        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: placement ?? { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look, hair },
+        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: placement ?? { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look, hair, light },
         'full',
       );
     } catch (err) {
@@ -316,7 +357,7 @@ export function useSceneSwap(studio: StudioService) {
     } finally {
       setBusy(null);
     }
-  }, [session, placement, look, studio, hair]);
+  }, [session, placement, look, studio, hair, light]);
 
   useEffect(() => () => {
     if (session) studio.end(session.sessionId);
@@ -328,6 +369,14 @@ export function useSceneSwap(studio: StudioService) {
     hair,
     setHair,
     hairChosen: Boolean(hair.style || hair.color),
+    light,
+    setLight,
+    chooseLight,
+    finish,
+    setFinish,
+    applyTemplate,
+    /** Light, finish or a template beyond the free ones is in use (Premium to save). */
+    studioLightPremium: isPremiumLight(light) || isPremiumFinish(finish),
     session,
     cut,
     report,

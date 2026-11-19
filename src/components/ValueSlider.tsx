@@ -48,6 +48,7 @@ export function ValueSlider({
   const t = max > min ? (clamp(value) - min) / (max - min) : 0;
   const shown = format ? format(value) : `${Math.round(value * 100)}`;
   const onAction = (e: AccessibilityActionEvent) => {
+    if (disabled) return;
     const next = clamp(value + (e.nativeEvent.actionName === 'increment' ? step : -step));
     onChange(next);
     onEnd?.();
@@ -59,6 +60,7 @@ export function ValueSlider({
       accessibilityRole="adjustable"
       accessibilityLabel={label}
       accessibilityValue={{ text: shown }}
+      accessibilityState={{ disabled: Boolean(disabled) }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={onAction}
       testID={testID}

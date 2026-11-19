@@ -858,7 +858,7 @@ HairHead hairHead() {
 TEST(studio_hair_colour_keeps_the_strands_and_the_face) {
   HairHead h = hairHead();
   // Copper: the hair takes the colour, still striped; the face is untouched.
-  ASSERT_OK(pp_studio_hair(h.cut, h.zones, nullptr, 1, 184, 92, 40, 1.0f, h.face, 5, nullptr));
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, nullptr, 1, 184, 92, 40, 1.0f, h.face, nullptr, nullptr, 5, nullptr));
   const uint8_t* a = at(h.cut, 99, 70);  // a light strand
   const uint8_t* b = at(h.cut, 102, 70); // a dark one
   const uint8_t* f = at(h.cut, 120, 140);
@@ -882,7 +882,7 @@ TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
   for (int i = 0; i < pp_studio_hair_style_count(); ++i) {
     HairHead h = hairHead();
     const char* id = pp_studio_hair_style_id(i);
-    ASSERT_OK(pp_studio_hair(h.cut, h.zones, id, 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
+    ASSERT_OK(pp_studio_hair(h.cut, h.zones, id, 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr));
     const uint8_t* f = at(h.cut, 120, 150);
     const uint8_t* body = at(h.cut, 120, 260);
     if (!(f[3] == 255 && std::abs(f[0] - 120) < 3) || body[3] != 255) std::printf("    %s: face or body changed\n", id);
@@ -897,14 +897,14 @@ TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
   }
   // A short cut: the old hair's far sides are gone.
   HairHead h = hairHead();
-  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr));
   EXPECT_EQ(at(h.cut, 55, 110)[3], 0);
   EXPECT_EQ(at(h.cut, 185, 110)[3], 0);
   // Bad input.
-  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "no-such-style", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "no-such-style", 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
   const float noFace[4] = {0, 0, 0, 0};
-  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "bob", 0, 0, 0, 0, 1.0f, noFace, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_studio_hair(h.cut, nullptr, "bob", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "bob", 0, 0, 0, 0, 1.0f, noFace, nullptr, nullptr, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_hair(h.cut, nullptr, "bob", 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image_destroy(h.cut);
   pp_image_destroy(h.zones);
 }
@@ -922,7 +922,7 @@ TEST(studio_hair_long_hair_over_the_shoulders) {
       p[0] = v, p[1] = static_cast<uint8_t>(v * 0.7), p[2] = static_cast<uint8_t>(v * 0.5), p[3] = 255;
       *at(h.zones, x, y, 1) = 1;
     }
-  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr));
   // Over the body: the clothes come back under where the hair lay.
   for (const int x : {60, 170}) {
     const uint8_t* p = at(h.cut, x, 250);
@@ -972,4 +972,138 @@ TEST(studio_rejects_bad_input) {
   pp_image_destroy(small);
   pp_image_destroy(mask);
   pp_image_destroy(s.image);
+}
+
+namespace {
+// A round "person" (a disc of mid grey) on a transparent cut-out.
+pp_image* discPerson(int W, int H) {
+  pp_image* img = rgba(W, H);
+  for (int y = 0; y < H; ++y)
+    for (int x = 0; x < W; ++x) {
+      uint8_t* p = at(img, x, y);
+      const bool in = std::hypot(x - W / 2.0, y - H / 2.0) < W * 0.35;
+      p[0] = p[1] = p[2] = 128, p[3] = in ? 255 : 0;
+    }
+  return img;
+}
+double meanOf(pp_image* img, int x0, int y0, int x1, int y1, int ch = -1) {
+  double s = 0, n = 0;
+  for (int y = y0; y < y1; ++y)
+    for (int x = x0; x < x1; ++x) {
+      const uint8_t* p = at(img, x, y);
+      if (p[3] == 0) continue;
+      s += ch < 0 ? (p[0] + p[1] + p[2]) / 3.0 : p[ch], n += 1;
+    }
+  return n > 0 ? s / n : 0;
+}
+pp_studio_light keyLight(float angle) {
+  pp_studio_light L{};
+  L.strength = 1, L.key_angle = angle, L.key_height = 30, L.key_softness = 0.4f, L.key = 1, L.fill = 0.2f;
+  for (int k = 0; k < 3; ++k) L.key_colour[k] = L.fill_colour[k] = L.rim_colour[k] = 1;
+  return L;
+}
+}  // namespace
+
+TEST(studio_light_from_the_left_lights_the_left) {
+  const int W = 160, H = 160;
+  pp_image* img = discPerson(W, H);
+  const double before = meanOf(img, 0, 0, W, H);
+  pp_studio_light L = keyLight(-70.0f);
+  ASSERT_OK(pp_studio_relight(img, &L, nullptr));
+  const double left = meanOf(img, 30, 60, 60, 100), right = meanOf(img, 100, 60, 130, 100), after = meanOf(img, 0, 0, W, H);
+  std::printf("    left %.1f right %.1f, mean %.1f -> %.1f\n", left, right, before, after);
+  EXPECT_TRUE(left > right * 1.15);                // lit side, shadow side
+  EXPECT_TRUE(std::fabs(after - before) < 22.0);   // their average light is kept
+  EXPECT_EQ(at(img, 2, 2)[3], 0);                  // the transparent stays transparent
+  // Strength 0: untouched.
+  pp_image* same = discPerson(W, H);
+  L.strength = 0;
+  ASSERT_OK(pp_studio_relight(same, &L, nullptr));
+  EXPECT_EQ(at(same, 50, 80)[0], 128);
+  // A rim light on the right lights the right edge only (and not the middle).
+  pp_image* rim = discPerson(W, H);
+  pp_studio_light R = keyLight(0.0f);
+  R.strength = 0, R.rim_right = 1, R.rim_colour[0] = 1, R.rim_colour[1] = 0.3f, R.rim_colour[2] = 0.3f;
+  ASSERT_OK(pp_studio_relight(rim, &R, nullptr));
+  const uint8_t* edgeR = at(rim, W / 2 + static_cast<int>(W * 0.35) - 2, H / 2);
+  const uint8_t* edgeL = at(rim, W / 2 - static_cast<int>(W * 0.35) + 2, H / 2);
+  std::printf("    rim right %d %d %d, left %d, middle %d\n", edgeR[0], edgeR[1], edgeR[2], edgeL[0], at(rim, W / 2, H / 2)[0]);
+  EXPECT_TRUE(edgeR[0] > 150 && edgeR[0] > edgeR[1] + 15);
+  EXPECT_TRUE(edgeL[0] < 140 && at(rim, W / 2, H / 2)[0] == 128);
+  // Bad settings.
+  L.key_angle = NAN;
+  EXPECT_EQ(pp_studio_relight(img, &L, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_relight(img, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(img), pp_image_destroy(same), pp_image_destroy(rim);
+}
+
+TEST(studio_finish_grades_the_frame) {
+  const int W = 200, H = 120;
+  auto fill = [&](uint8_t r, uint8_t g, uint8_t b) {
+    pp_image* img = rgba(W, H);
+    for (int y = 0; y < H; ++y)
+      for (int x = 0; x < W; ++x) {
+        uint8_t* p = at(img, x, y);
+        p[0] = r, p[1] = g, p[2] = b, p[3] = 255;
+      }
+    return img;
+  };
+  // Black and white.
+  pp_image* img = fill(200, 90, 40);
+  pp_studio_finish F{};
+  F.vignette_size = 0.5f, F.grain_size = 0.5f, F.mono = 1;
+  ASSERT_OK(pp_studio_finish_frame(img, &F, nullptr));
+  const uint8_t* p = at(img, 100, 60);
+  EXPECT_TRUE(p[0] == p[1] && p[1] == p[2]);
+  // A vignette darkens the corners, not the middle.
+  pp_image* v = fill(150, 150, 150);
+  pp_studio_finish G{};
+  G.vignette = 0.8f, G.vignette_size = 0.3f, G.grain_size = 0.5f;
+  ASSERT_OK(pp_studio_finish_frame(v, &G, nullptr));
+  std::printf("    vignette: corner %d, middle %d\n", at(v, 1, 1)[0], at(v, 100, 60)[0]);
+  EXPECT_TRUE(at(v, 1, 1)[0] + 30 < at(v, 100, 60)[0]);
+  EXPECT_TRUE(std::abs(at(v, 100, 60)[0] - 150) <= 2);
+  // Warmth: redder and less blue, about as bright.
+  pp_image* w = fill(128, 128, 128);
+  pp_studio_finish Wm{};
+  Wm.warmth = 1, Wm.vignette_size = 0.5f, Wm.grain_size = 0.5f;
+  ASSERT_OK(pp_studio_finish_frame(w, &Wm, nullptr));
+  const uint8_t* q = at(w, 50, 50);
+  EXPECT_TRUE(q[0] > q[2] + 20 && std::abs(q[1] - 128) < 20);
+  // Grain changes pixels but not the average.
+  pp_image* g = fill(128, 128, 128);
+  pp_studio_finish Gr{};
+  Gr.grain = 1, Gr.vignette_size = 0.5f, Gr.grain_size = 0.2f;
+  ASSERT_OK(pp_studio_finish_frame(g, &Gr, nullptr));
+  int differ = 0;
+  for (int x = 0; x < W; ++x) differ += at(g, x, 60)[0] != 128;
+  EXPECT_TRUE(differ > W / 2 && std::fabs(meanOf(g, 0, 0, W, H) - 128) < 3);
+  Gr.fade = NAN;
+  EXPECT_EQ(pp_studio_finish_frame(g, &Gr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(img), pp_image_destroy(v), pp_image_destroy(w), pp_image_destroy(g);
+}
+
+TEST(studio_gradient_backdrops_blend_without_bands) {
+  const int W = 120, H = 400;
+  pp_image* img = rgba(W, H);
+  const uint8_t a[3] = {230, 200, 150}, b[3] = {40, 30, 60};
+  ASSERT_OK(pp_studio_gradient(img, a, b, 0, 90.0f, 0.5f, 0.4f, 0.8f));
+  const uint8_t* top = at(img, 60, 0);
+  const uint8_t* bot = at(img, 60, H - 1);
+  EXPECT_TRUE(std::abs(top[0] - 230) <= 3 && std::abs(bot[0] - 40) <= 3 && top[3] == 255);
+  // Every row along the way is between the two, and changes smoothly (no steps).
+  int prev = at(img, 60, 0)[0], worst = 0;
+  for (int y = 1; y < H; ++y) {
+    double s = 0;
+    for (int x = 0; x < W; ++x) s += at(img, x, y)[0];
+    const int m = static_cast<int>(std::lround(s / W));
+    worst = std::max(worst, std::abs(m - prev)), prev = m;
+  }
+  std::printf("    largest step between rows: %d\n", worst);
+  EXPECT_TRUE(worst <= 3);
+  // Radial: the centre is the first colour, the corner toward the second.
+  ASSERT_OK(pp_studio_gradient(img, a, b, 1, 0.0f, 0.5f, 0.5f, 0.5f));
+  EXPECT_TRUE(std::abs(at(img, 60, 200)[0] - 230) <= 3 && at(img, 0, 0)[0] < 120);
+  EXPECT_EQ(pp_studio_gradient(img, a, b, 7, 0.0f, 0.5f, 0.5f, 0.5f), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(img);
 }

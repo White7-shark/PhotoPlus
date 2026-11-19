@@ -56,6 +56,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
   NativePhotoPlusStudioSpec(reactContext), MemoryPressureMonitor.Listener {
 
   private val paths = AppPaths(reactContext)
+  private val hairLibrary = HairLibrary(reactContext)
   private val budget = MemoryBudgetPolicy.forTotalRam(DeviceInfo.totalRamBytes(reactContext), DeviceInfo.isLowRamDevice(reactContext))
   private val engineAvailable = NativeEngine.ensureLoaded()
   private val portraitProcessor by lazy { PortraitProcessor() }
@@ -84,6 +85,9 @@ class StudioModule(reactContext: ReactApplicationContext) :
     /** The last preview cut-out with hair, by what made it. */
     var hairPreview: Bitmap? = null
     var hairKey: Any? = null
+    /** The last preview cut-out with studio light, by what made it. */
+    var lightPreview: Bitmap? = null
+    var lightKey: Any? = null
     var fullCutout: Bitmap? = null
     var fullKey: Any? = null
     var serial = 0
@@ -93,6 +97,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       previewCutout?.recycle()
       fullCutout?.recycle()
       hairPreview?.recycle()
+      lightPreview?.recycle()
       mask.recycle()
       zones?.recycle()
       preview.recycle()
@@ -284,10 +289,24 @@ class StudioModule(reactContext: ReactApplicationContext) :
       promise.reject("PREMIUM_REQUIRED", "Hair colours and hairstyles are part of Premium")
       return
     }
+    @Suppress("UNCHECKED_CAST")
+    val lightAndFinish = try {
+      SceneLight.fromMap(map["light"] as? Map<String, Any?>) to SceneFinish.fromMap(map["finish"] as? Map<String, Any?>)
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    val (light, finish) = lightAndFinish
+    if (Entitlements.plan != Plan.PREMIUM && (light?.premium == true || finish?.premium == true)) {
+      promise.reject("PREMIUM_REQUIRED", "This light or film look is part of Premium")
+      return
+    }
     jobs.submit(jobId, listener(promise)) { token ->
       val s = session(map)
       val base = if (full) fullCutout(s, token) else synchronized(s) { s.previewCutout } ?: throw EngineException(NO_PERSON, "Nobody was found in this photo")
-      val cutout = if (hair != null && !(!full && map["hidePerson"] == true)) withHair(s, base, hair, full, token) else base
+      val hidden = !full && map["hidePerson"] == true
+      val haired = if (hair != null && !hidden) withHair(s, base, hair, full, token) else base
+      val cutout = if (light != null && !hidden) withLight(s, haired, light, full, token) else haired
       if (background is SceneBackground.Transparent) {
         return@submit transparent(s, cutout, full)
       }
@@ -296,7 +315,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
       val (bgW, bgH) = backgroundSize(background, s)
       val cropW = bgW * crop.w
       val cropH = bgH * crop.h
-      val aspect = if (background is SceneBackground.Plain) (aspectHint ?: (cutout.width.toFloat() / cutout.height)) else cropW / cropH
+      val drawn = background is SceneBackground.Plain || background is SceneBackground.Gradient
+      val aspect = if (drawn) (aspectHint ?: (cutout.width.toFloat() / cutout.height)) else cropW / cropH
       val (fw, fh) = if (full) {
         val box = SceneStudio.alphaBox(cutout) ?: throw EngineException(NO_PERSON, "Nobody was found in this photo")
         SceneStudio.exportSize(aspect, box.height(), placement.height, maxEdge)
@@ -306,6 +326,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       }
       val frame = when (background) {
         is SceneBackground.Plain -> SceneStudio.plain(background.color, background.vignette, fw, fh, background.light)
+        is SceneBackground.Gradient -> SceneStudio.gradient(background, fw, fh)
         else -> {
           val src = decodeBackground(background, max(fw, fh), crop)
           try {
@@ -321,6 +342,12 @@ class StudioModule(reactContext: ReactApplicationContext) :
         val hidePerson = !full && map["hidePerson"] == true
         if (!hidePerson) {
           NativeEngine.nativeStudioCompose(frame, cutout, placement.toArray(), look.copy(seed = s.serial + 11).toArray(), token, report)
+        }
+        // The finished photo's grade (over the scene too, as a lens and film would).
+        if (finish != null) {
+          frame.isPremultiplied = false
+          NativeEngine.nativeStudioFinish(frame, finish.toArray(), 3, token)
+          frame.isPremultiplied = true
         }
         val target = if (full) {
           paths.studio.mkdirs()
@@ -365,16 +392,44 @@ class StudioModule(reactContext: ReactApplicationContext) :
     base.copyPixelsToBuffer(raw)
     raw.rewind()
     out.copyPixelsFromBuffer(raw)
-    val c = hair.color
+    // A photographed style: its hair, cut from a photo, fitted to this head. A style
+    // the library has no photo for yet is drawn by the engine (bald always is).
+    val photo = hair.style?.takeIf { it != HairLibrary.BALD }?.let { hairLibrary.load(it) }
+    // Without a chosen colour a style keeps its own natural colour (evened out: no cast from the light it was photographed in).
+    val c = hair.color ?: photo?.natural
+    val strength = if (hair.color != null) hair.strength else 0.8f
     NativeEngine.nativeStudioHair(
-      out, zones, hair.style, c != null, (c ?: 0) shr 16 and 0xFF, (c ?: 0) shr 8 and 0xFF, (c ?: 0) and 0xFF, hair.strength,
-      face ?: FloatArray(4), 5, token,
+      out, zones, hair.style, c != null, (c ?: 0) shr 16 and 0xFF, (c ?: 0) shr 8 and 0xFF, (c ?: 0) and 0xFF, strength,
+      face ?: FloatArray(4), photo?.bitmap, photo?.face, 5, token,
     )
     if (!full) {
       synchronized(s) {
         if (s.hairPreview !== out) s.hairPreview?.recycle()
         s.hairPreview = out
         s.hairKey = key
+      }
+    }
+    return out
+  }
+
+  /**
+   * The cut-out lit with studio light: a copy (with hair already on it, if
+   * any). Previews keep the last one, so moving the person doesn't relight.
+   */
+  private fun withLight(s: Session, base: Bitmap, light: SceneLight, full: Boolean, token: Long): Bitmap {
+    val key = Triple(light, s.serial, base.generationId)
+    if (!full) synchronized(s) { s.lightPreview?.let { if (s.lightKey == key) return it } }
+    val out = createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
+    val raw = java.nio.ByteBuffer.allocateDirect(base.byteCount)
+    base.copyPixelsToBuffer(raw)
+    raw.rewind()
+    out.copyPixelsFromBuffer(raw)
+    NativeEngine.nativeStudioRelight(out, light.toArray(s.face), token)
+    if (!full) {
+      synchronized(s) {
+        if (s.lightPreview !== out) s.lightPreview?.recycle()
+        s.lightPreview = out
+        s.lightKey = key
       }
     }
     return out

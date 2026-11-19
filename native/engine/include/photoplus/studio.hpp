@@ -144,6 +144,12 @@ struct HairParams {
   float strength = 1.0f;  // 0..1, how fully the new colour replaces the old
   float faceLeft = 0.0f, faceTop = 0.0f, faceRight = 0.0f, faceBottom = 0.0f;  // normalised
   uint32_t seed = 5;
+  // A photographed hairstyle (RGBA8, straight alpha: the hair only, cut from
+  // a photo), fitted to this head; with it the style is not drawn. Bald needs
+  // none. `layerFace`: the face box of the person it was cut from, in the
+  // layer's pixels (left, top, right, bottom).
+  const ImageBuffer* layer = nullptr;
+  std::array<float, 4> layerFace{};
 };
 
 struct HairStyleInfo {
@@ -172,6 +178,54 @@ struct BackdropParams {
 
 // `out` (RGBA8/BGRA8) is filled, alpha 255. `color` is sRGB 0..255.
 Error paintBackdrop(ImageBuffer& out, const std::array<uint8_t, 3>& color, const BackdropParams& params,
+                    const CancellationToken* token);
+
+// ---- Studio light and finishing (Phase 11).
+
+// A person (a cut-out, edited in place) lit as if by studio lights. A photo
+// has no depth, so the shape is estimated from the outline (and the face,
+// when its box is given); the light is relative (their average brightness is
+// kept) and `strength` eases it back toward the photo as it was.
+struct LightParams {
+  float strength = 1.0f;     // 0..1: 0 leaves the light as it was
+  float keyAngle = -45.0f;   // degrees around the person: 0 from the camera, -90 from the frame's left, 90 from its right
+  float keyHeight = 35.0f;   // degrees above the eyes
+  float keySoftness = 0.5f;  // 0 a bare bulb (hard shadows) .. 1 a big softbox
+  float key = 1.0f;          // the key light's intensity, 0..2
+  float fill = 0.35f;        // the fill light from the other side, 0..1 of the key
+  std::array<float, 3> keyColour{1.0f, 1.0f, 1.0f};   // linear gains: a gel, or the colour of the light
+  std::array<float, 3> fillColour{1.0f, 1.0f, 1.0f};
+  float rimLeft = 0.0f, rimRight = 0.0f;              // 0..1 rim lights behind, on either side
+  std::array<float, 3> rimColour{1.0f, 1.0f, 1.0f};
+  float faceLeft = 0.0f, faceTop = 0.0f, faceRight = 0.0f, faceBottom = 0.0f;  // the face box (normalised), optional
+};
+Error relight(ImageBuffer& cutout, const LightParams& params, const CancellationToken* token);
+
+// The whole frame graded (edited in place).
+struct FinishParams {
+  float vignette = 0.0f;      // -1 lighter edges .. 1 darker edges
+  float vignetteSize = 0.5f;  // 0 a small clear centre .. 1 a wide one
+  float warmth = 0.0f, tint = 0.0f;  // -1..1: cooler / warmer; greener / more magenta
+  float contrast = 0.0f;      // -1..1
+  float saturation = 0.0f;    // -1..1 (-1: black and white)
+  float fade = 0.0f;          // 0..1: lifted blacks, as on matte film
+  std::array<float, 3> shadowTone{0.0f, 0.0f, 0.0f};     // split toning: a colour pushed into the shadows (-1..1 per channel)
+  std::array<float, 3> highlightTone{0.0f, 0.0f, 0.0f};  // and another into the highlights
+  float toneAmount = 0.0f;    // 0..1
+  float grain = 0.0f, grainSize = 0.5f;  // 0..1
+  bool mono = false;          // black and white
+  uint32_t seed = 3;
+};
+Error finish(ImageBuffer& frame, const FinishParams& params, const CancellationToken* token);
+
+// A backdrop blending from one colour to another (sRGB 0..255), dithered.
+struct GradientParams {
+  int32_t kind = 0;          // 0 linear, 1 radial (a pool of colour `from` at the centre)
+  float angle = 90.0f;       // linear: the direction from `from` to `to`, degrees (90: top to bottom)
+  float centerX = 0.5f, centerY = 0.4f, radius = 0.8f;  // radial (0..1 of the frame; radius in heights)
+  uint32_t seed = 7;
+};
+Error paintGradient(ImageBuffer& out, const std::array<uint8_t, 3>& from, const std::array<uint8_t, 3>& to, const GradientParams& params,
                     const CancellationToken* token);
 
 }  // namespace photoplus::studio

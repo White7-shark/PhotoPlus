@@ -863,9 +863,49 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
  * place with its parts map `zones`. `style`: a style id (see
  * pp_studio_hair_style_id) or NULL/"" to keep the person's own hair, which
  * is recoloured when `recolor` is set. `face` is the cut-out report's face
- * box (left, top, right, bottom, normalised); a style needs it. */
+ * box (left, top, right, bottom, normalised); a style needs it. `layer`: the
+ * style's photographed hair (RGBA8, the hair only) with `layer_face`, the
+ * face box of the person it was cut from in the layer's pixels; it is fitted
+ * to this head. Every style but bald needs one; NULL for bald. */
 pp_status pp_studio_hair(pp_image* cutout, const pp_image* zones, const char* style, int32_t recolor, uint8_t r, uint8_t g, uint8_t b,
-                         float strength, const float face[4], uint32_t seed, const pp_cancel_token* token);
+                         float strength, const float face[4], const pp_image* layer, const float layer_face[4], uint32_t seed,
+                         const pp_cancel_token* token);
+/* Studio light (Photoshoot Studio, Phase 11): `cutout` (a pp_studio_cutout
+ * result) lit as if by studio lights, in place. The person's shape is
+ * estimated from their outline (and the face box, if given: all zero for
+ * none); their average brightness is kept. Angles in degrees: key_angle 0
+ * from the camera, -90 from the frame's left, 90 from its right; key_height
+ * above the eyes. Colours are linear gains (1,1,1 white). */
+typedef struct pp_studio_light {
+  float strength, key_angle, key_height, key_softness, key, fill;
+  float key_colour[3], fill_colour[3];
+  float rim_left, rim_right;
+  float rim_colour[3];
+  float face[4];
+} pp_studio_light;
+pp_status pp_studio_relight(pp_image* cutout, const pp_studio_light* light, const pp_cancel_token* token);
+
+/* The whole frame graded, in place: vignette (-1..1), its size, warmth and
+ * tint (-1..1), contrast (-1..1), saturation (-1..1; -1 black and white),
+ * fade (0..1), split toning (a colour in the shadows and another in the
+ * highlights, -1..1 per channel, by tone_amount 0..1), film grain and its
+ * size (0..1), mono (black and white). */
+typedef struct pp_studio_finish {
+  float vignette, vignette_size, warmth, tint, contrast, saturation, fade;
+  float shadow_tone[3], highlight_tone[3], tone_amount;
+  float grain, grain_size;
+  int32_t mono;
+  uint32_t seed;
+} pp_studio_finish;
+pp_status pp_studio_finish_frame(pp_image* frame, const pp_studio_finish* finish, const pp_cancel_token* token);
+
+/* A gradient backdrop from one colour to another (sRGB), written into `out`
+ * (RGBA8/BGRA8), dithered. kind 0: linear along `angle` degrees (90: top to
+ * bottom); 1: radial, `from` at (center_x, center_y), reaching `to` at
+ * `radius` (in frame heights). */
+pp_status pp_studio_gradient(pp_image* out, const uint8_t from[3], const uint8_t to[3], int32_t kind, float angle, float center_x,
+                             float center_y, float radius);
+
 /* The styles the engine draws: their count, ids, and whether each is in the women's list. */
 int32_t pp_studio_hair_style_count(void);
 const char* pp_studio_hair_style_id(int32_t index);

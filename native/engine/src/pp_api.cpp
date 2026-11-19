@@ -903,17 +903,67 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
 }
 
 pp_status pp_studio_hair(pp_image* cutout, const pp_image* zones, const char* style, int32_t recolor, uint8_t r, uint8_t g, uint8_t b,
-                         float strength, const float face[4], uint32_t seed, const pp_cancel_token* token) {
+                         float strength, const float face[4], const pp_image* layer, const float layer_face[4], uint32_t seed,
+                         const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
     if (cutout == nullptr || zones == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "cutout and zones are required");
     photoplus::studio::HairParams p;
     p.style = style, p.recolor = recolor != 0, p.color = {r, g, b}, p.strength = strength, p.seed = seed;
     if (face != nullptr) p.faceLeft = face[0], p.faceTop = face[1], p.faceRight = face[2], p.faceBottom = face[3];
+    if (layer != nullptr) {
+      if (layer_face == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "A hairstyle photo needs its face box");
+      for (int k = 0; k < 4; ++k) {
+        if (!std::isfinite(layer_face[k])) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad hair settings");
+        p.layerFace[static_cast<size_t>(k)] = layer_face[k];
+      }
+      p.layer = &layer->buffer;
+    }
     if (!std::isfinite(p.strength) || !std::isfinite(p.faceLeft) || !std::isfinite(p.faceTop) || !std::isfinite(p.faceRight) ||
         !std::isfinite(p.faceBottom)) {
       return fail(PP_ERROR_INVALID_ARGUMENT, "Bad hair settings");
     }
     const photoplus::Error e = photoplus::studio::restyleHair(cutout->buffer, zones->buffer, p, token ? &token->token : nullptr);
+    return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
+pp_status pp_studio_relight(pp_image* cutout, const pp_studio_light* light, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (cutout == nullptr || light == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "cutout and light are required");
+    photoplus::studio::LightParams p;
+    p.strength = light->strength, p.keyAngle = light->key_angle, p.keyHeight = light->key_height, p.keySoftness = light->key_softness;
+    p.key = light->key, p.fill = light->fill, p.rimLeft = light->rim_left, p.rimRight = light->rim_right;
+    for (int k = 0; k < 3; ++k) {
+      const auto K = static_cast<size_t>(k);
+      p.keyColour[K] = light->key_colour[k], p.fillColour[K] = light->fill_colour[k], p.rimColour[K] = light->rim_colour[k];
+    }
+    p.faceLeft = light->face[0], p.faceTop = light->face[1], p.faceRight = light->face[2], p.faceBottom = light->face[3];
+    const photoplus::Error e = photoplus::studio::relight(cutout->buffer, p, token ? &token->token : nullptr);
+    return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
+pp_status pp_studio_finish_frame(pp_image* frame, const pp_studio_finish* finish, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (frame == nullptr || finish == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "frame and finish are required");
+    photoplus::studio::FinishParams p;
+    p.vignette = finish->vignette, p.vignetteSize = finish->vignette_size, p.warmth = finish->warmth, p.tint = finish->tint;
+    p.contrast = finish->contrast, p.saturation = finish->saturation, p.fade = finish->fade, p.toneAmount = finish->tone_amount;
+    p.grain = finish->grain, p.grainSize = finish->grain_size, p.mono = finish->mono != 0, p.seed = finish->seed;
+    for (int k = 0; k < 3; ++k) p.shadowTone[static_cast<size_t>(k)] = finish->shadow_tone[k], p.highlightTone[static_cast<size_t>(k)] = finish->highlight_tone[k];
+    const photoplus::Error e = photoplus::studio::finish(frame->buffer, p, token ? &token->token : nullptr);
+    return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
+pp_status pp_studio_gradient(pp_image* out, const uint8_t from[3], const uint8_t to[3], int32_t kind, float angle, float center_x,
+                             float center_y, float radius) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr || from == nullptr || to == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out and colours are required");
+    if (kind != 0 && kind != 1) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown gradient");
+    photoplus::studio::GradientParams p;
+    p.kind = kind, p.angle = angle, p.centerX = center_x, p.centerY = center_y, p.radius = radius;
+    const photoplus::Error e = photoplus::studio::paintGradient(out->buffer, {from[0], from[1], from[2]}, {to[0], to[1], to[2]}, p, nullptr);
     return e.status == PP_OK ? succeed() : fail(e);
   });
 }

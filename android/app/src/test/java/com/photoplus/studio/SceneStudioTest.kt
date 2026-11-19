@@ -122,4 +122,48 @@ class SceneStudioTest {
     assertEquals(2, SceneStudio.sampleSize(2560, 1707, 1280))
     assertEquals(4, SceneStudio.sampleSize(5120, 3000, 1280))
   }
+
+  @Test fun studioLightRequestsAreChecked() {
+    assertEquals(null, SceneLight.fromMap(null))
+    val soft = SceneLight.fromMap(mapOf("preset" to "soft-studio", "angle" to -20, "softness" to 0.85))!!
+    assertFalse(soft.premium) // a free look
+    assertEquals(-20f, soft.angle)
+    val neon = SceneLight.fromMap(mapOf("preset" to "neon-gels", "keyColour" to listOf(1.45, 0.55, 1.25), "rimRight" to 0.6))!!
+    assertTrue(neon.premium)
+    assertEquals(1.45f, neon.keyColour[0])
+    // Out of range is held in range; the face box is appended for the engine.
+    val wild = SceneLight.fromMap(mapOf("preset" to "custom", "angle" to 999, "strength" to 7))!!
+    assertEquals(180f, wild.angle)
+    assertEquals(1f, wild.strength)
+    assertTrue(wild.premium)
+    val a = soft.toArray(floatArrayOf(0.3f, 0.2f, 0.6f, 0.5f))
+    assertEquals(21, a.size)
+    assertEquals(0.6f, a[19])
+    assertThrows<EngineException> { SceneLight.fromMap(mapOf("preset" to "../x")) }
+    assertThrows<EngineException> { SceneLight.fromMap(mapOf("preset" to "loop", "keyColour" to listOf(1, 2))) }
+  }
+
+  @Test fun finishRequestsAreChecked() {
+    assertEquals(null, SceneFinish.fromMap(null))
+    assertEquals(null, SceneFinish.fromMap(emptyMap())) // nothing to do
+    val basic = SceneFinish.fromMap(mapOf("vignette" to 0.4, "warmth" to 0.2))!!
+    assertFalse(basic.premium)
+    assertEquals(17, basic.toArray().size) // what the native side reads
+    val film = SceneFinish.fromMap(mapOf("fade" to 0.15, "grain" to 0.3, "shadowTone" to listOf(-0.05, 0.05, 0.08), "toneAmount" to 0.6))!!
+    assertTrue(film.premium)
+    assertEquals(0.08f, film.toArray()[9])
+    assertTrue(SceneFinish.fromMap(mapOf("mono" to true))!!.premium)
+    assertEquals(1f, SceneFinish.fromMap(mapOf("contrast" to 5))!!.contrast)
+    assertThrows<EngineException> { SceneFinish.fromMap(mapOf("fade" to 0.1, "highlightTone" to listOf(1))) }
+  }
+
+  @Test fun gradientBackgroundsAreChecked() {
+    val g = SceneBackground.fromMap(mapOf("kind" to "gradient", "from" to "#F2C58F", "to" to "#B4664A", "radial" to true))
+    assertTrue(g is SceneBackground.Gradient)
+    g as SceneBackground.Gradient
+    assertEquals(0xF2C58F, g.from)
+    assertTrue(g.radial)
+    assertEquals(90f, g.angle)
+    assertThrows<EngineException> { SceneBackground.fromMap(mapOf("kind" to "gradient", "from" to "peach", "to" to "#000000")) }
+  }
 }

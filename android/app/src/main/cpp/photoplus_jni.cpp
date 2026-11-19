@@ -1663,7 +1663,7 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioBackdr
 // `face` (4): the cut-out report's face box.
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioHair(
     JNIEnv* env, jobject, jobject cutout, jobject zones, jstring style, jboolean recolor, jint r, jint g, jint b, jfloat strength,
-    jfloatArray face, jint seed, jlong token) {
+    jfloatArray face, jobject layer, jfloatArray layerFace, jint seed, jlong token) {
   if (cutout == nullptr || zones == nullptr || face == nullptr || env->GetArrayLength(face) < 4) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad hair arguments");
     return;
@@ -1677,11 +1677,76 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioHair(
     id = chars;
     env->ReleaseStringUTFChars(style, chars);
   }
-  WrappedBitmap img, zon;
+  jfloat lf[4] = {0, 0, 0, 0};
+  if (layer != nullptr) {
+    if (layerFace == nullptr || env->GetArrayLength(layerFace) < 4) {
+      throwEngineException(env, "INVALID_ARGUMENT", "A hairstyle photo needs its face box");
+      return;
+    }
+    env->GetFloatArrayRegion(layerFace, 0, 4, lf);
+  }
+  WrappedBitmap img, zon, lay;
   if (!img.open(env, cutout, false) || !zon.open(env, zones, true)) return;
+  if (layer != nullptr && !lay.open(env, layer, true)) return;
   const auto c = [](jint v) { return static_cast<uint8_t>(std::clamp(v, 0, 255)); };
   const pp_status st = pp_studio_hair(img.image, zon.image, id.empty() ? nullptr : id.c_str(), recolor ? 1 : 0, c(r), c(g), c(b), strength, f,
-                                      static_cast<uint32_t>(seed), reinterpret_cast<const pp_cancel_token*>(token));
+                                      layer != nullptr ? lay.image : nullptr, lf, static_cast<uint32_t>(seed),
+                                      reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+// Studio light (Phase 11): `cutout` (not premultiplied) lit in place.
+// `params` (21): strength, key angle, key height, softness, key, fill, key
+// colour (3), fill colour (3), rim left, rim right, rim colour (3), face box (4).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioRelight(JNIEnv* env, jobject, jobject cutout, jfloatArray params,
+                                                                                   jlong token) {
+  if (cutout == nullptr || params == nullptr || env->GetArrayLength(params) < 21) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad light arguments");
+    return;
+  }
+  jfloat v[21];
+  env->GetFloatArrayRegion(params, 0, 21, v);
+  pp_studio_light L{};
+  L.strength = v[0], L.key_angle = v[1], L.key_height = v[2], L.key_softness = v[3], L.key = v[4], L.fill = v[5];
+  for (int k = 0; k < 3; ++k) L.key_colour[k] = v[6 + k], L.fill_colour[k] = v[9 + k], L.rim_colour[k] = v[14 + k];
+  L.rim_left = v[12], L.rim_right = v[13];
+  for (int k = 0; k < 4; ++k) L.face[k] = v[17 + k];
+  WrappedBitmap img;
+  if (!img.open(env, cutout, false)) return;
+  const pp_status st = pp_studio_relight(img.image, &L, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+// The finished frame graded in place. `params` (17): vignette, its size,
+// warmth, tint, contrast, saturation, fade, shadow tone (3), highlight tone
+// (3), tone amount, grain, grain size, mono (0/1).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioFinish(JNIEnv* env, jobject, jobject frame, jfloatArray params,
+                                                                                  jint seed, jlong token) {
+  if (frame == nullptr || params == nullptr || env->GetArrayLength(params) < 17) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad finish arguments");
+    return;
+  }
+  jfloat v[17];
+  env->GetFloatArrayRegion(params, 0, 17, v);
+  pp_studio_finish F{};
+  F.vignette = v[0], F.vignette_size = v[1], F.warmth = v[2], F.tint = v[3], F.contrast = v[4], F.saturation = v[5], F.fade = v[6];
+  for (int k = 0; k < 3; ++k) F.shadow_tone[k] = v[7 + k], F.highlight_tone[k] = v[10 + k];
+  F.tone_amount = v[13], F.grain = v[14], F.grain_size = v[15], F.mono = v[16] > 0.5f ? 1 : 0, F.seed = static_cast<uint32_t>(seed);
+  WrappedBitmap img;
+  if (!img.open(env, frame, false)) return;
+  const pp_status st = pp_studio_finish_frame(img.image, &F, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+// A gradient backdrop filling `bitmap` (opaque): kind 0 linear along
+// `angle`, 1 radial from (cx, cy) reaching `to` at `radius`.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioGradient(JNIEnv* env, jobject, jobject bitmap, jint from, jint to,
+                                                                                    jint kind, jfloat angle, jfloat cx, jfloat cy, jfloat radius) {
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  const uint8_t a[3] = {static_cast<uint8_t>((from >> 16) & 0xFF), static_cast<uint8_t>((from >> 8) & 0xFF), static_cast<uint8_t>(from & 0xFF)};
+  const uint8_t b[3] = {static_cast<uint8_t>((to >> 16) & 0xFF), static_cast<uint8_t>((to >> 8) & 0xFF), static_cast<uint8_t>(to & 0xFF)};
+  const pp_status st = pp_studio_gradient(img.image, a, b, kind, angle, cx, cy, radius);
   if (st != PP_OK) throwStatus(env, st);
 }
 

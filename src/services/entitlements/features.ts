@@ -43,6 +43,7 @@ export const FEATURES = {
   basicSharpen: f('editing.basicSharpen', 'Basic sharpening', 'editing', 'free'),
   watermarkStyles: f('editing.watermarkStyles', 'Watermark styles & positioning', 'editing', 'free'),
   props: f('editing.props', 'Props: hats, glasses and outfit pieces', 'editing', 'free'),
+  studioBasics: f('replication.studioBasics', 'Studio basics: soft and bright light, gradient backdrops, vignette, warmth and simple grades', 'replication', 'free'),
   frames: f('editing.frames', 'Photo frames', 'editing', 'free'),
   marketplaceBrowse: f('marketplace.browse', 'Browse photoshoot packs', 'marketplace', 'free'),
   packPreview: f('marketplace.preview', 'Pack previews & descriptions', 'marketplace', 'free'),
@@ -54,6 +55,12 @@ export const FEATURES = {
   vibeMatch: f('camera.vibeMatch', 'Vibe Match: shoot in the style of any photo', 'camera', 'premium'),
   transform: f('camera.transform', 'Transform: the look of a high-end camera lens', 'camera', 'premium'),
   advancedEditing: f('editing.advanced', 'Advanced editing tools', 'editing', 'premium'),
+  studioLight: f(
+    'replication.light',
+    'Studio light: Rembrandt, split, rim, neon and golden hour light, light you can turn and soften, film looks and composition templates',
+    'replication',
+    'premium',
+  ),
   studioHair: f('replication.hair', 'Hair in the Photoshoot Studio: 18 colours, 23 women’s styles, and dreadlocks, rasta, afro or bald', 'replication', 'premium'),
   backgroundReplace: f(
     'replication.background',

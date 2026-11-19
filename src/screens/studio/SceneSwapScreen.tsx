@@ -15,6 +15,7 @@ import { useTheme } from '../../theme';
 import { isOutfit } from '../../services/studio/colors';
 import { BackgroundPicker } from './BackgroundPicker';
 import { HairPicker } from './HairPicker';
+import { FinishPanel, LightPanel, TemplateRow } from './StudioLightPanel';
 import { BrushCanvas, type Backing } from './BrushCanvas';
 import { PlacementView } from './PlacementView';
 import { useSceneSwap, type Step } from './useSceneSwap';
@@ -38,9 +39,11 @@ const BACKINGS: { value: Backing; label: string }[] = [
   { value: 'black', label: 'Black' },
 ];
 
-type Panel = 'backgrounds' | 'hair' | 'adjust' | 'frame';
+type Panel = 'backgrounds' | 'light' | 'finish' | 'hair' | 'adjust' | 'frame';
 const PANELS: { value: Panel; label: string }[] = [
   { value: 'backgrounds', label: 'Backgrounds' },
+  { value: 'light', label: 'Light' },
+  { value: 'finish', label: 'Finish' },
   { value: 'hair', label: 'Hair' },
   { value: 'adjust', label: 'Adjust' },
   { value: 'frame', label: 'Frame' },
@@ -70,8 +73,9 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
   const [backing, setBacking] = useState<Backing>('dim');
   const [tapMode, setTapMode] = useState(false);
   const [panel, setPanel] = useState<Panel>('backgrounds');
-  const [premiumOpen, setPremiumOpen] = useState<null | 'backgroundReplace' | 'studioHair'>(null);
+  const [premiumOpen, setPremiumOpen] = useState<null | 'backgroundReplace' | 'studioHair' | 'studioLight'>(null);
   const hairAllowed = can('studioHair').allowed;
+  const lightAllowed = can('studioLight').allowed;
 
   const back = () => {
     if (s.step === 'scene') s.setStep('cutout');
@@ -134,8 +138,8 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
   };
 
   const save = async (cutoutOnly: boolean) => {
-    if (!allowed || (!hairAllowed && s.hairChosen)) {
-      setPremiumOpen(allowed ? 'studioHair' : 'backgroundReplace');
+    if (!allowed || (!hairAllowed && s.hairChosen) || (!lightAllowed && s.studioLightPremium)) {
+      setPremiumOpen(!allowed ? 'backgroundReplace' : !hairAllowed && s.hairChosen ? 'studioHair' : 'studioLight');
       return;
     }
     try {
@@ -265,6 +269,12 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                 outfit={isOutfit(s.report.outfit) ? s.report.outfit : []}
               />
             ) : null}
+            {panel === 'light' ? (
+              <LightPanel value={s.light} onChoose={s.chooseLight} onChange={s.setLight} premium={lightAllowed} onLocked={() => setPremiumOpen('studioLight')} />
+            ) : null}
+            {panel === 'finish' ? (
+              <FinishPanel value={s.finish} onChange={s.setFinish} premium={lightAllowed} onLocked={() => setPremiumOpen('studioLight')} />
+            ) : null}
             {panel === 'hair' ? (
               <HairPicker value={s.hair} onChange={s.setHair} locked={!hairAllowed} onLocked={() => setPremiumOpen('studioHair')} />
             ) : null}
@@ -315,12 +325,15 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
               </GlassSurface>
             ) : null}
             {panel === 'frame' ? (
-              <SegmentedControl
-                label="Frame"
-                options={(Object.keys(SHAPE_LABELS) as FrameShape[]).map(v => ({ value: v, label: SHAPE_LABELS[v] }))}
-                value={s.shape}
-                onChange={s.chooseShape}
-              />
+              <>
+                <SegmentedControl
+                  label="Frame"
+                  options={(Object.keys(SHAPE_LABELS) as FrameShape[]).map(v => ({ value: v, label: SHAPE_LABELS[v] }))}
+                  value={s.shape}
+                  onChange={s.chooseShape}
+                />
+                <TemplateRow onApply={s.applyTemplate} premium={lightAllowed} onLocked={() => setPremiumOpen('studioLight')} />
+              </>
             ) : null}
             {s.background.kind === 'plate' && s.background.plate.credit ? (
               <AppText variant="caption" tone="tertiary">

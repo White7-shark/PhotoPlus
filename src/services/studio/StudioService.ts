@@ -7,6 +7,7 @@ import { errorCode, errorMessage, nativeModules, requireNative, type StudioSpec 
 import { createId } from '../database/ids';
 import type { OutfitColour } from './colors';
 import { hairRequest, type HairChoice } from './hair';
+import { finishRequest, lightPreset, lightRequest, NO_FINISH, type FinishChoice, type LightChoice } from './light';
 import { backgroundRequest, type Background, type Crop, type Placement, type SceneLook } from './scene';
 
 export type Brush = 'keep' | 'remove' | 'hair';
@@ -103,6 +104,22 @@ function isScene(v: unknown): v is SceneResult {
   return typeof r.outputPath === 'string' && num(r.width) && num(r.height) && (r.format === 'jpeg' || r.format === 'png');
 }
 
+/**
+ * The light and finish parts of a render request. A transparent cut-out
+ * takes the light (it is on the person) but no finish (a grade and a
+ * vignette belong to a whole photo).
+ */
+export function studioLightRequest(light: LightChoice | null, finish: FinishChoice | null, transparent: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const l = lightRequest(light);
+  if (l) out.light = l;
+  if (!transparent) {
+    const f = finishRequest(finish ?? NO_FINISH, light ? lightPreset(light.preset)?.finish : undefined);
+    if (f) out.finish = f;
+  }
+  return out;
+}
+
 /** How the device is told about a background (kept with the scene logic, shared with video). */
 export { backgroundRequest };
 
@@ -141,7 +158,18 @@ export class StudioService {
 
   render(
     sessionId: string,
-    scene: { background: Background; crop: Crop; placement: Placement; look: SceneLook; aspect?: number; hair?: HairChoice | null },
+    scene: {
+      background: Background;
+      crop: Crop;
+      placement: Placement;
+      look: SceneLook;
+      aspect?: number;
+      hair?: HairChoice | null;
+      /** Studio light on the person (Phase 11), or null for the photo's own. */
+      light?: LightChoice | null;
+      /** The finished photo's grade: the person's choice over the light look's own. */
+      finish?: FinishChoice | null;
+    },
     quality: 'preview' | 'full',
     hidePerson = false,
   ): Promise<SceneResult> {
@@ -157,6 +185,7 @@ export class StudioService {
           quality,
           hidePerson,
           ...(hairRequest(scene.hair) ? { hair: hairRequest(scene.hair) } : {}),
+          ...studioLightRequest(scene.light ?? null, scene.finish ?? null, scene.background.kind === 'transparent'),
         }),
       isScene,
     );

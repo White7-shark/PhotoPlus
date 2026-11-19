@@ -10,6 +10,7 @@
  */
 import { STUDIO_COLOURS, normalizeHex } from './colors';
 import rawPlates from './plates.json';
+import type { GradientDef } from './light';
 
 export type SceneCategory = 'studio' | 'indoors' | 'outdoors' | 'golden' | 'night' | 'mine' | 'pack' | 'plain';
 
@@ -110,6 +111,7 @@ export function withLight(p: PlainDef, on: boolean): PlainDef {
 export type Background =
   | { kind: 'plate'; plate: PlateDef }
   | { kind: 'plain'; plain: PlainDef }
+  | { kind: 'gradient'; gradient: GradientDef }
   | { kind: 'transparent' };
 
 /** A photo the person added as their own background. */
@@ -138,6 +140,8 @@ export function backgroundRequest(bg: Background): Record<string, unknown> {
   switch (bg.kind) {
     case 'plate':
       return bg.plate.source === 'builtin' ? { kind: 'plate', id: bg.plate.id } : { kind: 'photo', path: bg.plate.path };
+    case 'gradient':
+      return { kind: 'gradient', from: bg.gradient.from, to: bg.gradient.to, radial: bg.gradient.radial };
     case 'plain':
       return bg.plain.light
         ? { kind: 'plain', color: bg.plain.color, vignette: bg.plain.vignette, light: bg.plain.light }
@@ -535,7 +539,8 @@ export function lookFor(background: Background, crop: Crop): SceneLook {
   // (a red paper is not a red light). With studio light, the paper's colour
   // bounces gently onto the person (their tint, never their brightness;
   // grey paper tints nothing), and wraps their edges a little more.
-  const lit = background.kind === 'plain' && (background.plain.light ?? 0) > 0;
+  // A gradient is lit paper too.
+  const lit = (background.kind === 'plain' && (background.plain.light ?? 0) > 0) || background.kind === 'gradient';
   return {
     colorMatch: 0,
     lightWrap: lit ? 0.22 : 0.15,

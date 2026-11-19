@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText, Icon } from '../../components';
-import { suggestForOutfit, type OutfitColour } from '../../services/studio/colors';
+import { hexToRgb, rgbToHex, suggestForOutfit, type OutfitColour } from '../../services/studio/colors';
+import { GRADIENTS } from '../../services/studio/light';
 import {
   CATEGORY_LABELS,
   PLAINS,
@@ -48,9 +49,12 @@ export function BackgroundPicker({
   const theme = useTheme();
   const groups = platesByCategory(mine);
   const tabs: Tab[] = ['plain', ...groups.map(g => g.category).filter(c => c !== 'mine'), 'mine'];
-  const [tab, setTab] = useState<Tab>(value.kind === 'plate' ? value.plate.category : value.kind === 'plain' ? 'plain' : 'studio');
+  const [tab, setTab] = useState<Tab>(value.kind === 'plate' ? value.plate.category : value.kind === 'plain' || value.kind === 'gradient' ? 'plain' : 'studio');
   const selected = (id: string) =>
-    (value.kind === 'plate' && value.plate.id === id) || (value.kind === 'plain' && value.plain.id === id) || (value.kind === 'transparent' && id === 'transparent');
+    (value.kind === 'plate' && value.plate.id === id) ||
+    (value.kind === 'plain' && value.plain.id === id) ||
+    (value.kind === 'gradient' && value.gradient.id === id) ||
+    (value.kind === 'transparent' && id === 'transparent');
   const tile = (key: string, label: string, chosen: boolean, onPress: () => void, content: React.ReactNode, onLongPress?: () => void) => (
     <Pressable
       key={key}
@@ -110,6 +114,18 @@ export function BackgroundPicker({
           <>
             {pickTile}
             {transparent ? tile('transparent', 'No background', selected('transparent'), () => onChoose({ kind: 'transparent' }), <Checks />) : null}
+            {GRADIENTS.map(g =>
+              tile(
+                g.id,
+                g.name,
+                selected(g.id),
+                () => {
+                  setPicking(false);
+                  onChoose({ kind: 'gradient', gradient: g });
+                },
+                <GradientSwatch from={g.from} to={g.to} />,
+              ),
+            )}
             {PLAINS.map(p =>
               tile(
                 p.id,
@@ -213,6 +229,23 @@ function Rainbow() {
     <View style={[StyleSheet.absoluteFill, { flexDirection: 'row' }]}>
       {hues.map(h => (
         <View key={h} style={{ flex: 1, backgroundColor: h }} />
+      ))}
+    </View>
+  );
+}
+
+/** A gradient's swatch: bands blended from one colour to the other. */
+function GradientSwatch({ from, to }: { from: string; to: string }) {
+  const a = hexToRgb(from),
+    b = hexToRgb(to);
+  const bands = Array.from({ length: 12 }, (_, i) => {
+    const t = i / 11;
+    return rgbToHex({ r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t });
+  });
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      {bands.map((c, i) => (
+        <View key={`${c}${i}`} style={{ flex: 1, backgroundColor: c }} />
       ))}
     </View>
   );

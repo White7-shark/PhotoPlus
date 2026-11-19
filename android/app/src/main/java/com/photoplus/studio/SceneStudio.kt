@@ -168,12 +168,121 @@ data class HairSpec(val style: String?, val color: Int?, val strength: Float = 1
   }
 }
 
+/**
+ * Studio light on the person (Phase 11): a key light from [angle] degrees
+ * around them (0 from the camera, -90 the frame's left, 90 its right) at
+ * [height] degrees, [softness] 0 hard .. 1 soft, a [fill] from the other
+ * side, rim lights, and colours as linear gains (gels). [strength] eases it
+ * back toward the photo's own light. [preset] names the look it came from.
+ */
+data class SceneLight(
+  val preset: String,
+  val strength: Float = 1f,
+  val angle: Float = -45f,
+  val height: Float = 35f,
+  val softness: Float = 0.5f,
+  val key: Float = 1f,
+  val fill: Float = 0.35f,
+  val keyColour: FloatArray = floatArrayOf(1f, 1f, 1f),
+  val fillColour: FloatArray = floatArrayOf(1f, 1f, 1f),
+  val rimLeft: Float = 0f,
+  val rimRight: Float = 0f,
+  val rimColour: FloatArray = floatArrayOf(1f, 1f, 1f),
+) {
+  /** The looks on the free plan; the rest (and any hand-made light) are Premium. */
+  val premium get() = preset !in FREE_LIGHT
+
+  fun toArray(face: FloatArray?): FloatArray =
+    floatArrayOf(strength, angle, height, softness, key, fill) + keyColour + fillColour + floatArrayOf(rimLeft, rimRight) + rimColour +
+      (face ?: FloatArray(4))
+
+  override fun equals(other: Any?) = other is SceneLight && preset == other.preset && toArray(null).contentEquals(other.toArray(null))
+
+  override fun hashCode() = 31 * preset.hashCode() + toArray(null).contentHashCode()
+
+  companion object {
+    val FREE_LIGHT = setOf("soft-studio", "high-key")
+    private val ID = Regex("^[a-z0-9-]{1,40}$")
+
+    /** Null when no light is asked (the photo's own). */
+    fun fromMap(m: Map<String, Any?>?): SceneLight? {
+      if (m == null) return null
+      val preset = m["preset"] as? String ?: "custom"
+      if (!ID.matches(preset)) throw EngineException(EngineException.INVALID_ARGUMENT, "Unknown light")
+      fun f(k: String, d: Float, lo: Float, hi: Float) = ((m[k] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: d).coerceIn(lo, hi)
+      fun c(k: String): FloatArray {
+        val l = m[k] as? List<*> ?: return floatArrayOf(1f, 1f, 1f)
+        if (l.size != 3) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad light colour")
+        return FloatArray(3) { ((l[it] as? Number)?.toFloat()?.takeIf { v -> v.isFinite() } ?: 1f).coerceIn(0f, 4f) }
+      }
+      return SceneLight(
+        preset, f("strength", 1f, 0f, 1f), f("angle", -45f, -180f, 180f), f("height", 35f, -60f, 90f), f("softness", 0.5f, 0f, 1f),
+        f("key", 1f, 0f, 2f), f("fill", 0.35f, 0f, 1f), c("keyColour"), c("fillColour"), f("rimLeft", 0f, 0f, 1f), f("rimRight", 0f, 0f, 1f),
+        c("rimColour"),
+      )
+    }
+  }
+}
+
+/**
+ * The finished photo's grade: vignette, warmth and tint, contrast and
+ * saturation (free); film looks: faded blacks, split toning, grain, black
+ * and white (Premium).
+ */
+data class SceneFinish(
+  val vignette: Float = 0f,
+  val vignetteSize: Float = 0.5f,
+  val warmth: Float = 0f,
+  val tint: Float = 0f,
+  val contrast: Float = 0f,
+  val saturation: Float = 0f,
+  val fade: Float = 0f,
+  val shadowTone: FloatArray = FloatArray(3),
+  val highlightTone: FloatArray = FloatArray(3),
+  val toneAmount: Float = 0f,
+  val grain: Float = 0f,
+  val grainSize: Float = 0.5f,
+  val mono: Boolean = false,
+) {
+  /** Film looks (fade, split toning, grain, black and white) are Premium. */
+  val premium get() = fade > 0f || toneAmount > 0f || grain > 0f || mono
+
+  val none get() = vignette == 0f && warmth == 0f && tint == 0f && contrast == 0f && saturation == 0f && !premium
+
+  fun toArray(): FloatArray =
+    floatArrayOf(vignette, vignetteSize, warmth, tint, contrast, saturation, fade) + shadowTone + highlightTone +
+      floatArrayOf(toneAmount, grain, grainSize, if (mono) 1f else 0f)
+
+  override fun equals(other: Any?) = other is SceneFinish && toArray().contentEquals(other.toArray())
+
+  override fun hashCode() = toArray().contentHashCode()
+
+  companion object {
+    fun fromMap(m: Map<String, Any?>?): SceneFinish? {
+      if (m == null) return null
+      fun f(k: String, d: Float, lo: Float, hi: Float) = ((m[k] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: d).coerceIn(lo, hi)
+      fun t(k: String): FloatArray {
+        val l = m[k] as? List<*> ?: return FloatArray(3)
+        if (l.size != 3) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad tone")
+        return FloatArray(3) { ((l[it] as? Number)?.toFloat()?.takeIf { v -> v.isFinite() } ?: 0f).coerceIn(-1f, 1f) }
+      }
+      return SceneFinish(
+        f("vignette", 0f, -1f, 1f), f("vignetteSize", 0.5f, 0f, 1f), f("warmth", 0f, -1f, 1f), f("tint", 0f, -1f, 1f),
+        f("contrast", 0f, -1f, 1f), f("saturation", 0f, -1f, 1f), f("fade", 0f, 0f, 1f), t("shadowTone"), t("highlightTone"),
+        f("toneAmount", 0f, 0f, 1f), f("grain", 0f, 0f, 1f), f("grainSize", 0.5f, 0f, 1f), m["mono"] == true,
+      ).takeIf { !it.none }
+    }
+  }
+}
+
 /** What goes behind the person. */
 sealed class SceneBackground {
   data class Plate(val assetId: String) : SceneBackground()
   data class Photo(val path: String) : SceneBackground()
   /** A colour: flat, darker toward the edges ([vignette]), or lit like studio paper ([light] 0..1). */
   data class Plain(val color: Int, val vignette: Boolean, val light: Float = 0f) : SceneBackground()
+  /** A blend from one colour to another: down the frame along [angle] degrees, or [radial] from a pool behind the person. */
+  data class Gradient(val from: Int, val to: Int, val radial: Boolean, val angle: Float = 90f) : SceneBackground()
   data object Transparent : SceneBackground()
 
   companion object {
@@ -192,6 +301,13 @@ sealed class SceneBackground {
         if (!HEX.matches(c)) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad colour")
         val light = (m["light"] as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
         Plain(0xFF000000.toInt() or c.substring(1).toInt(16), m["vignette"] as? Boolean ?: false, light)
+      }
+      "gradient" -> {
+        val a = m["from"] as? String ?: ""
+        val b = m["to"] as? String ?: ""
+        if (!HEX.matches(a) || !HEX.matches(b)) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad colour")
+        val angle = (m["angle"] as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(-360f, 360f) ?: 90f
+        Gradient(a.substring(1).toInt(16), b.substring(1).toInt(16), m["radial"] == true, angle)
       }
       "transparent" -> Transparent
       else -> throw EngineException(EngineException.INVALID_ARGUMENT, "Choose a background")
@@ -242,6 +358,16 @@ object SceneStudio {
     val out = createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val c = Canvas(out)
     c.drawBitmap(source, cropRect(crop, source.width, source.height), RectF(0f, 0f, width.toFloat(), height.toFloat()), Paint(Paint.FILTER_BITMAP_FLAG))
+    out.setHasAlpha(false)
+    return out
+  }
+
+  /** A gradient backdrop (the engine blends it in linear light, dithered: no bands). */
+  fun gradient(g: SceneBackground.Gradient, width: Int, height: Int): Bitmap {
+    val out = createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    out.isPremultiplied = false
+    NativeEngine.nativeStudioGradient(out, g.from, g.to, if (g.radial) 1 else 0, g.angle, 0.5f, 0.38f, 0.85f)
+    out.isPremultiplied = true
     out.setHasAlpha(false)
     return out
   }
