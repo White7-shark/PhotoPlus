@@ -1663,7 +1663,7 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioBackdr
 // `face` (4): the cut-out report's face box.
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioHair(
     JNIEnv* env, jobject, jobject cutout, jobject zones, jstring style, jboolean recolor, jint r, jint g, jint b, jfloat strength,
-    jfloatArray face, jobject layer, jfloatArray layerFace, jint seed, jlong token) {
+    jfloatArray face, jint seed, jlong token) {
   if (cutout == nullptr || zones == nullptr || face == nullptr || env->GetArrayLength(face) < 4) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad hair arguments");
     return;
@@ -1677,21 +1677,11 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioHair(
     id = chars;
     env->ReleaseStringUTFChars(style, chars);
   }
-  jfloat lf[4] = {0, 0, 0, 0};
-  if (layer != nullptr) {
-    if (layerFace == nullptr || env->GetArrayLength(layerFace) < 4) {
-      throwEngineException(env, "INVALID_ARGUMENT", "A hairstyle photo needs its face box");
-      return;
-    }
-    env->GetFloatArrayRegion(layerFace, 0, 4, lf);
-  }
-  WrappedBitmap img, zon, lay;
+  WrappedBitmap img, zon;
   if (!img.open(env, cutout, false) || !zon.open(env, zones, true)) return;
-  if (layer != nullptr && !lay.open(env, layer, true)) return;
   const auto c = [](jint v) { return static_cast<uint8_t>(std::clamp(v, 0, 255)); };
   const pp_status st = pp_studio_hair(img.image, zon.image, id.empty() ? nullptr : id.c_str(), recolor ? 1 : 0, c(r), c(g), c(b), strength, f,
-                                      layer != nullptr ? lay.image : nullptr, lf, static_cast<uint32_t>(seed),
-                                      reinterpret_cast<const pp_cancel_token*>(token));
+                                      static_cast<uint32_t>(seed), reinterpret_cast<const pp_cancel_token*>(token));
   if (st != PP_OK) throwStatus(env, st);
 }
 

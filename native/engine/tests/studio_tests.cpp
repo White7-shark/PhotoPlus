@@ -858,7 +858,7 @@ HairHead hairHead() {
 TEST(studio_hair_colour_keeps_the_strands_and_the_face) {
   HairHead h = hairHead();
   // Copper: the hair takes the colour, still striped; the face is untouched.
-  ASSERT_OK(pp_studio_hair(h.cut, h.zones, nullptr, 1, 184, 92, 40, 1.0f, h.face, nullptr, nullptr, 5, nullptr));
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, nullptr, 1, 184, 92, 40, 1.0f, h.face, 5, nullptr));
   const uint8_t* a = at(h.cut, 99, 70);  // a light strand
   const uint8_t* b = at(h.cut, 102, 70); // a dark one
   const uint8_t* f = at(h.cut, 120, 140);
@@ -868,6 +868,22 @@ TEST(studio_hair_colour_keeps_the_strands_and_the_face) {
   EXPECT_TRUE(f[0] == 120 && f[1] == 80 && f[2] == 60);
   pp_image_destroy(h.cut);
   pp_image_destroy(h.zones);
+}
+
+TEST(studio_hair_colour_lightens_dark_hair_softly) {
+  // Dark hair (stripes of 20 and 40) to platinum: the strands still show, but
+  // the darker ones are soft grey, not near black (no zebra stripes).
+  HairHead h = hairHead();
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, nullptr, 1, 230, 222, 200, 1.0f, h.face, 5, nullptr));
+  const uint8_t* light = at(h.cut, 99, 70);
+  const uint8_t* dark = at(h.cut, 102, 70);
+  std::printf("    platinum strands: %d / %d\n", light[0], dark[0]);
+  EXPECT_TRUE(dark[0] > 110 && light[0] > dark[0] + 8);
+  // Black keeps a sheen: the lighter strands are not crushed to the darker ones' level.
+  HairHead b = hairHead();
+  ASSERT_OK(pp_studio_hair(b.cut, b.zones, nullptr, 1, 18, 16, 18, 1.0f, b.face, 5, nullptr));
+  EXPECT_TRUE(at(b.cut, 99, 70)[0] > at(b.cut, 102, 70)[0]);
+  pp_image_destroy(h.cut), pp_image_destroy(h.zones), pp_image_destroy(b.cut), pp_image_destroy(b.zones);
 }
 
 TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
@@ -882,7 +898,7 @@ TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
   for (int i = 0; i < pp_studio_hair_style_count(); ++i) {
     HairHead h = hairHead();
     const char* id = pp_studio_hair_style_id(i);
-    ASSERT_OK(pp_studio_hair(h.cut, h.zones, id, 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr));
+    ASSERT_OK(pp_studio_hair(h.cut, h.zones, id, 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
     const uint8_t* f = at(h.cut, 120, 150);
     const uint8_t* body = at(h.cut, 120, 260);
     if (!(f[3] == 255 && std::abs(f[0] - 120) < 3) || body[3] != 255) std::printf("    %s: face or body changed\n", id);
@@ -897,14 +913,14 @@ TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
   }
   // A short cut: the old hair's far sides are gone.
   HairHead h = hairHead();
-  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr));
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
   EXPECT_EQ(at(h.cut, 55, 110)[3], 0);
   EXPECT_EQ(at(h.cut, 185, 110)[3], 0);
   // Bad input.
-  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "no-such-style", 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "no-such-style", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
   const float noFace[4] = {0, 0, 0, 0};
-  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "bob", 0, 0, 0, 0, 1.0f, noFace, nullptr, nullptr, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_studio_hair(h.cut, nullptr, "bob", 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "bob", 0, 0, 0, 0, 1.0f, noFace, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_hair(h.cut, nullptr, "bob", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image_destroy(h.cut);
   pp_image_destroy(h.zones);
 }
@@ -922,7 +938,7 @@ TEST(studio_hair_long_hair_over_the_shoulders) {
       p[0] = v, p[1] = static_cast<uint8_t>(v * 0.7), p[2] = static_cast<uint8_t>(v * 0.5), p[3] = 255;
       *at(h.zones, x, y, 1) = 1;
     }
-  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, nullptr, nullptr, 5, nullptr));
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
   // Over the body: the clothes come back under where the hair lay.
   for (const int x : {60, 170}) {
     const uint8_t* p = at(h.cut, x, 250);

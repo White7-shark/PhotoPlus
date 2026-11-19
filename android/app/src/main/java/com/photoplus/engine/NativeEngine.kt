@@ -274,8 +274,6 @@ object NativeEngine {
     b: Int,
     strength: Float,
     face: FloatArray,
-    layer: Bitmap?,
-    layerFace: FloatArray?,
     seed: Int,
     token: Long,
   )

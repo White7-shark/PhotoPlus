@@ -3,7 +3,7 @@ import React from 'react';
 
 import { HairPicker } from '../src/screens/studio/HairPicker';
 import { FEATURES } from '../src/services/entitlements/features';
-import { HAIR_COLOURS, HAIR_STYLES, hairCredit, hairRequest, hairSummary, stylesFor, type HairChoice } from '../src/services/studio/hair';
+import { HAIR_COLOURS, HAIR_STYLES, hairRequest, hairSummary, stylesFor, type HairChoice } from '../src/services/studio/hair';
 import { StudioService } from '../src/services/studio/StudioService';
 import { PLATES } from '../src/services/studio/scene';
 import { ThemeProvider } from '../src/theme';
@@ -85,23 +85,3 @@ describe('hair picker', () => {
   });
 });
 
-describe('studio hair photos', () => {
-  it('credits each photographed style, and every photo has its credit and face box', () => {
-    const lib = path.join(__dirname, '../android/app/src/main/assets/hair');
-    const credits = JSON.parse(fs.readFileSync(path.join(__dirname, '../src/services/studio/hairPhotos.json'), 'utf8')) as Record<string, { author: string; license: string }>;
-    const ids = Object.keys(credits);
-    expect(ids.length).toBeGreaterThan(0);
-    for (const id of ids) {
-      // A known style, an open licence, and the photo with its face box on the device.
-      expect(HAIR_STYLES.some(s => s.id === id)).toBe(true);
-      expect(credits[id].license).toMatch(/^(CC0|Public domain|CC BY(-SA)? [0-9.]+)$/);
-      const meta = JSON.parse(fs.readFileSync(path.join(lib, `${id}.json`), 'utf8')) as { face: number[]; natural: string };
-      expect(meta.face).toHaveLength(4);
-      expect(meta.face[2] - meta.face[0]).toBeGreaterThan(4);
-      expect(meta.natural).toMatch(/^#[0-9A-F]{6}$/i);
-      expect(fs.readFileSync(path.join(lib, `${id}.webp`), 'utf8').length).toBeGreaterThan(1000);
-    }
-    expect(hairCredit('afro')?.author).toBe('Amuzujoe');
-    expect(hairCredit('bald')).toBeUndefined();
-  });
-});

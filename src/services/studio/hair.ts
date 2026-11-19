@@ -1,14 +1,10 @@
 /**
  * Hair in the Photoshoot Studio (Premium): a new colour for the person's
  * own hair, or a new hairstyle in its place: 23 for women, and dreadlocks,
- * rasta, an afro or bald for men. The person's own hair is taken out first
- * (native/engine/src/studio/hair.cpp: the ids here are its ids); a new style
- * is real hair, cut from an openly licensed photo (scripts/make-hair-library.py,
- * credited in hairPhotos.json), fitted to their head. Bald, and any style not
- * yet photographed, is drawn by the engine.
+ * rasta, an afro or bald for men. The styles are drawn on the device by the
+ * engine strand by strand (native/engine/src/studio/hair.cpp: the ids here
+ * are its ids), fitted to the person's head; their own hair is taken out first.
  */
-
-import hairPhotos from './hairPhotos.json';
 
 export type HairGroup = 'women' | 'men';
 
@@ -98,21 +94,6 @@ export function hairRequest(choice: HairChoice | null | undefined): { style?: st
 }
 
 /** A short line for what is chosen. */
-/** Who took the photo a style's hair was cut from, and its licence (shown with the style, as the licence asks). */
-export interface HairCredit {
-  author: string;
-  license: string;
-  licenseUrl: string;
-  page: string;
-}
-
-const CREDITS = hairPhotos as Record<string, HairCredit>;
-
-/** A style's photo credit, or undefined when it is drawn (bald, or not yet photographed). */
-export function hairCredit(id: string | null | undefined): HairCredit | undefined {
-  return id ? CREDITS[id] : undefined;
-}
-
 export function hairSummary(choice: HairChoice | null | undefined): string {
   const style = hairStyle(choice?.style)?.name;
   const colour = HAIR_COLOURS.find(c => c.color.toUpperCase() === choice?.color?.toUpperCase())?.name ?? (choice?.color ? 'Your colour' : null);

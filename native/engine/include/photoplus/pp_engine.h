@@ -863,13 +863,9 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
  * place with its parts map `zones`. `style`: a style id (see
  * pp_studio_hair_style_id) or NULL/"" to keep the person's own hair, which
  * is recoloured when `recolor` is set. `face` is the cut-out report's face
- * box (left, top, right, bottom, normalised); a style needs it. `layer`: the
- * style's photographed hair (RGBA8, the hair only) with `layer_face`, the
- * face box of the person it was cut from in the layer's pixels; it is fitted
- * to this head. Every style but bald needs one; NULL for bald. */
+ * box (left, top, right, bottom, normalised); a style needs it. */
 pp_status pp_studio_hair(pp_image* cutout, const pp_image* zones, const char* style, int32_t recolor, uint8_t r, uint8_t g, uint8_t b,
-                         float strength, const float face[4], const pp_image* layer, const float layer_face[4], uint32_t seed,
-                         const pp_cancel_token* token);
+                         float strength, const float face[4], uint32_t seed, const pp_cancel_token* token);
 /* Studio light (Photoshoot Studio, Phase 11): `cutout` (a pp_studio_cutout
  * result) lit as if by studio lights, in place. The person's shape is
  * estimated from their outline (and the face box, if given: all zero for

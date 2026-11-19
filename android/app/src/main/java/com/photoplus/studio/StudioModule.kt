@@ -56,7 +56,6 @@ class StudioModule(reactContext: ReactApplicationContext) :
   NativePhotoPlusStudioSpec(reactContext), MemoryPressureMonitor.Listener {
 
   private val paths = AppPaths(reactContext)
-  private val hairLibrary = HairLibrary(reactContext)
   private val budget = MemoryBudgetPolicy.forTotalRam(DeviceInfo.totalRamBytes(reactContext), DeviceInfo.isLowRamDevice(reactContext))
   private val engineAvailable = NativeEngine.ensureLoaded()
   private val portraitProcessor by lazy { PortraitProcessor() }
@@ -392,15 +391,10 @@ class StudioModule(reactContext: ReactApplicationContext) :
     base.copyPixelsToBuffer(raw)
     raw.rewind()
     out.copyPixelsFromBuffer(raw)
-    // A photographed style: its hair, cut from a photo, fitted to this head. A style
-    // the library has no photo for yet is drawn by the engine (bald always is).
-    val photo = hair.style?.takeIf { it != HairLibrary.BALD }?.let { hairLibrary.load(it) }
-    // Without a chosen colour a style keeps its own natural colour (evened out: no cast from the light it was photographed in).
-    val c = hair.color ?: photo?.natural
-    val strength = if (hair.color != null) hair.strength else 0.8f
+    val c = hair.color
     NativeEngine.nativeStudioHair(
-      out, zones, hair.style, c != null, (c ?: 0) shr 16 and 0xFF, (c ?: 0) shr 8 and 0xFF, (c ?: 0) and 0xFF, strength,
-      face ?: FloatArray(4), photo?.bitmap, photo?.face, 5, token,
+      out, zones, hair.style, c != null, (c ?: 0) shr 16 and 0xFF, (c ?: 0) shr 8 and 0xFF, (c ?: 0) and 0xFF, hair.strength,
+      face ?: FloatArray(4), 5, token,
     )
     if (!full) {
       synchronized(s) {

@@ -167,21 +167,8 @@ int hair(int argc, char** argv) {
   const auto c = [&](int i) { return static_cast<uint8_t>(argc > i ? std::atoi(argv[i]) : 0); };
   const float face[4] = {r.face_left, r.face_top, r.face_right, r.face_bottom};
   const auto t0 = std::chrono::steady_clock::now();
-  // A photographed style: PP_HAIR_LAYER=prefix (prefix.ppm colour, prefix_a.pgm cover) and
-  // PP_HAIR_LAYER_FACE="left,top,right,bottom" (its face box in its pixels).
-  pp_image* layer = nullptr;
-  float layerFace[4] = {0, 0, 0, 0};
-  if (const char* lp = std::getenv("PP_HAIR_LAYER")) {
-    int aw = 0, ah = 0;
-    std::vector<unsigned char> cover;
-    if (!readNetpbm(std::string(lp) + "_a.pgm", "P5", aw, ah, cover, 1) || (layer = readPpm(std::string(lp) + ".ppm", &cover)) == nullptr) {
-      std::fprintf(stderr, "cannot read the hair layer\n");
-      return 1;
-    }
-    if (const char* lf = std::getenv("PP_HAIR_LAYER_FACE")) std::sscanf(lf, "%f,%f,%f,%f", &layerFace[0], &layerFace[1], &layerFace[2], &layerFace[3]);
-  }
-  if (pp_studio_hair(out, zones, style, recolor ? 1 : 0, c(7), c(8), c(9), argc > 10 ? std::strtof(argv[10], nullptr) : 1.0f, face, layer,
-                     layerFace, 5, nullptr) != PP_OK) {
+  if (pp_studio_hair(out, zones, style, recolor ? 1 : 0, c(7), c(8), c(9), argc > 10 ? std::strtof(argv[10], nullptr) : 1.0f, face, 5,
+                     nullptr) != PP_OK) {
     std::fprintf(stderr, "hair failed: %s\n", pp_last_error_message());
     return 1;
   }

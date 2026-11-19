@@ -298,6 +298,13 @@ struct ShapeAt {
   float dExtra = 1e9f;
 };
 
+// Where long hair ends at X (u: -1..1 across the hair): its length, less a
+// little toward the outer edges, with an uneven hem.
+float longHairEnd(const Style& st, float u) {
+  const float uc = std::clamp(std::fabs(u), 0.0f, 1.0f);
+  return 0.95f + st.len - 0.11f * uc * uc + 0.09f * (fbm(u * 7.0f, 0.5f, 91) - 0.5f);
+}
+
 ShapeAt shapeAt(const Style& st, const Geometry& g, float X, float Y) {
   ShapeAt out;
   const float a = g.halfFace;
@@ -321,8 +328,10 @@ ShapeAt shapeAt(const Style& st, const Geometry& g, float X, float Y) {
     }
     d = cap;
     if (longHair) {
-      const float bottom = 0.95f + st.len;
-      const float flare = (0.1f + 0.12f * smooth(0.6f, bottom, Y)) * smooth(0.1f, 0.9f, Y) + st.side;
+      const float flare = (0.1f + 0.12f * smooth(0.6f, 0.95f + st.len, Y)) * smooth(0.1f, 0.9f, Y) + st.side;
+      // The ends: not a cut line but an uneven hem, a little longer in the
+      // middle of each side than at its outer edge, as hair falls.
+      const float bottom = longHairEnd(st, X / std::max(skullRx + flare, 0.05f));
       d = std::min(d, boxSd(X, Y, -(skullRx + flare), 0.1f, skullRx + flare, bottom, 0.14f));
     }
   }
@@ -427,7 +436,11 @@ static V3 recolourHair(V3 c, float meanLogL, V3 colour, float mix01) {
   const float lt = std::max(lum(colour), 1e-4f);
   const V3 chroma = colour * (1.0f / lt);
   const float rel = std::exp(std::clamp(std::log(std::max(lum(c), 1e-4f)) - meanLogL, -2.5f, 2.5f));
-  float shown = std::pow(rel, lt > 0.15f ? 1.45f : 1.15f);
+  // Much lighter than the hair was (dark hair to platinum): its shadows soften
+  // to grey, as bleached hair's do, instead of staying near black.
+  const float lighter = lt / std::max(std::exp(meanLogL), 1e-4f);
+  const float contrast = (lt > 0.15f ? 1.45f : 1.15f) + ((lt > 0.15f ? 0.85f : 0.9f) - (lt > 0.15f ? 1.45f : 1.15f)) * smooth(2.0f, 8.0f, lighter);
+  float shown = std::pow(rel, contrast);
   if (shown > 1.0f) shown = 1.0f + (shown - 1.0f) / (1.0f + 1.2f * (shown - 1.0f));
   const float L = 0.62f * lt * shown;
   const float shadow = 1.0f - smooth(0.25f, 0.9f, rel), high = smooth(1.2f, 2.5f, rel);
@@ -435,7 +448,11 @@ static V3 recolourHair(V3 c, float meanLogL, V3 colour, float mix01) {
   hue = hue * (1.0f / std::max(lum(hue), 1e-4f));
   hue = mix(hue, mix(hue, grey(1.0f), 0.15f), high);
   V3 outc = hue * L;
-  outc = mix(outc, c * (L / std::max(lum(c), 1e-4f)), 0.25f * shadow);
+  outc = mix(outc, c * (L / std::max(lum(c), 1e-4f)), 0.25f * shadow * (1.0f - smooth(2.0f, 8.0f, lighter)));
+  // Black and near-black still shine: a soft, nearly white sheen where the
+  // hair caught the light.
+  const float sheen = high * 0.05f * (1.0f - smooth(0.04f, 0.2f, lt));
+  outc = outc + mix(grey(1.0f), chroma * lt, 0.3f) * sheen;
   const float mx = std::max({outc.r, outc.g, outc.b});
   if (mx > 1.0f) outc = outc * (1.0f / mx);
   return mix(c, outc, mix01);
@@ -448,9 +465,6 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
   const Style* st = findStyle(params.style);
   if (params.style != nullptr && params.style[0] != '\0' && st == nullptr) return makeError(PP_ERROR_INVALID_ARGUMENT, "Unknown hairstyle");
   if (st == nullptr && !params.recolor) return ok();
-  if (params.layer != nullptr && (!isColour(*params.layer) || !(params.layerFace[2] - params.layerFace[0] > 4.0f && params.layerFace[3] - params.layerFace[1] > 4.0f))) {
-    return makeError(PP_ERROR_INVALID_ARGUMENT, "A hairstyle photo needs RGBA pixels and its face box");
-  }
   if (st != nullptr && !(params.faceRight - params.faceLeft > 0.01f && params.faceBottom - params.faceTop > 0.01f)) {
     return makeError(PP_ERROR_INVALID_ARGUMENT, "A hairstyle needs a face in the photo");
   }
@@ -715,8 +729,6 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
   };
 
   float fitAng = 0.0f;           // the head's tilt (from the face's fitted outline)
-  std::vector<V3> skinOut;       // the person's skin, filled smoothly (for a forehead under a new hairline)
-  const bool useLayer = params.layer != nullptr && params.layer->width() > 1 && params.layer->height() > 1;
   // ---- 1. Take the person's own hair out (on the working grid: a factor
   // for the alpha, and a colour filled in where hair lay over the body).
   Grid keepA, fillMix;
@@ -880,7 +892,8 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
         // a ledge sticking out under the chin).
         for (size_t y = Y0; y < H2; ++y) {
           if (r[y] && e[y] >= 0) continue;
-          const float most = neckHalf + 1.6f * static_cast<float>(y - Y0);
+          // The neck runs down a little before the shoulders slope out.
+          const float most = neckHalf + 1.6f * std::max(0.0f, static_cast<float>(y - Y0) - 0.05f * g.unit);
           est[side][y] = side == 0 ? std::max(est[side][y], g.cx - most) : std::min(est[side][y], g.cx + most);
         }
         // Inside the person's outline; holding the body seen.
@@ -983,7 +996,6 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
         }
       blurGrid(clothW, std::max(1.0f, 0.02f * g.unit));
       pushPull(skinFill, ks, w, h);
-      skinOut = skinFill;
       pushPull(clothFill, kc, w, h);
     }
     auto under = [&](int32_t x, int32_t y, bool face) {
@@ -1159,108 +1171,25 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
   }
 
   // ---- 2. Draw the style on its own grid.
-  // ---- A photographed hairstyle: where it goes on this head. A similarity
-  // (its face's width to this face's, chin to chin, tilted with the head),
-  // then a radial fit around the face: the hair's inner edge is drawn in (or
-  // out) to meet this face's own outline at the forehead and the sides, so no
-  // gap and no hair over the cheeks; the farther hair moves with it, smoothly.
-  const ImageBuffer* lay = useLayer ? params.layer : nullptr;
-  const Rgb lo = useLayer ? offsets(*lay) : Rgb{};
-  const float lfw = params.layerFace[2] - params.layerFace[0];
-  const float simS = static_cast<float>(params.faceRight - params.faceLeft) * static_cast<float>(w) / std::max(lfw, 1.0f);  // grid px per layer px
-  const V2 chinT{0.5f * (params.faceLeft + params.faceRight) * static_cast<float>(w), params.faceBottom * static_cast<float>(h)};
-  const V2 chinD{0.5f * (params.layerFace[0] + params.layerFace[2]), params.layerFace[3]};
-  const float rca = std::cos(fitAng), rsa = std::sin(fitAng);
-  auto toLayer = [&](float gx, float gy) {  // grid point -> layer pixel (inverse similarity)
-    const float dx = (gx - chinT.x) / simS, dy = (gy - chinT.y) / simS;
-    return V2{chinD.x + dx * rca + dy * rsa, chinD.y - dx * rsa + dy * rca};
+  // The style follows the head: drawn upright in the head's own frame (face
+  // units), then turned with it about the middle of the face (the tilt of
+  // the face's fitted outline).
+  const float tiltC = std::cos(fitAng), tiltS = std::sin(fitAng);
+  const V2 pivot{g.cx, g.top + 0.5f * g.unit};
+  auto headToGrid = [&](float X, float Y) {
+    const float dx = X * g.unit, dy = (Y - 0.5f) * g.unit;
+    return V2{pivot.x + dx * tiltC - dy * tiltS, pivot.y + dx * tiltS + dy * tiltC};
   };
-  auto toGrid = [&](float lx, float ly) {
-    const float dx = (lx - chinD.x) * simS, dy = (ly - chinD.y) * simS;
-    return V2{chinT.x + dx * rca - dy * rsa, chinT.y + dx * rsa + dy * rca};
+  auto gridToHead = [&](float gx, float gy) {
+    const float dx = gx - pivot.x, dy = gy - pivot.y;
+    return V2{(dx * tiltC + dy * tiltS) / g.unit, (-dx * tiltS + dy * tiltC) / g.unit + 0.5f};
   };
-  // The layer's colour and cover at a layer point (bilinear, premultiplied).
-  auto layerAt = [&](float lx, float ly, V3* colour) {
-    const float fx = lx - 0.5f, fy = ly - 0.5f;
-    const auto x0 = static_cast<int32_t>(std::floor(fx)), y0 = static_cast<int32_t>(std::floor(fy));
-    const float tx = fx - static_cast<float>(x0), ty = fy - static_cast<float>(y0);
-    V3 c{};
-    float cover = 0.0f;
-    for (int k = 0; k < 4; ++k) {
-      const int32_t xx = x0 + (k & 1), yy = y0 + (k >> 1);
-      if (xx < 0 || yy < 0 || xx >= lay->width() || yy >= lay->height()) continue;
-      const float wk = ((k & 1) ? tx : 1.0f - tx) * ((k >> 1) ? ty : 1.0f - ty);
-      const uint8_t* q = lay->row(yy) + xx * 4;
-      const float qa = static_cast<float>(q[3]) / 255.0f * wk;
-      c = c + V3{Lut[q[lo.r]], Lut[q[lo.g]], Lut[q[lo.b]]} * qa, cover += qa;
-    }
-    if (colour != nullptr) *colour = cover > 1e-5f ? c * (1.0f / cover) : V3{};
-    return cover;
-  };
-  // The radial fit, as a table of how far the inner edge moves per direction.
-  constexpr int kDirs = 360;
-  std::array<float, kDirs> radD{}, radEdge{};
-  const V2 radC{chinT.x, g.top + 0.55f * g.unit};
-  const float radU = g.unit, radReach = 1.5f * g.unit;
-  if (useLayer) {
-    std::array<float, kDirs> rawD{};
-    for (int i = 0; i < kDirs; ++i) {
-      const float th = -3.14159265f + (static_cast<float>(i) + 0.5f) * (6.2831853f / kDirs);  // 0 = up
-      const float dx = std::sin(th), dy = -std::cos(th);
-      float rt = -1.0f, rd = -1.0f;
-      for (float r = 0.0f; r < 1.6f * radU; r += 1.0f) {
-        const auto px = static_cast<int32_t>(radC.x + dx * r), py = static_cast<int32_t>(radC.y + dy * r);
-        if (px < 0 || py < 0 || px >= w || py >= h) break;
-        if (faceKeep.at(px, py) > 0.5f) rt = r;
-        if (rd < 0.0f) {
-          const V2 q = toLayer(static_cast<float>(px) + 0.5f, static_cast<float>(py) + 0.5f);
-          if (layerAt(q.x, q.y, nullptr) > 0.5f) rd = r;
-        }
-      }
-      // Around the top and the sides of the face only (not below the chin).
-      const float on = std::clamp((std::cos(th) + 0.35f) / 0.5f, 0.0f, 1.0f);
-      rawD[static_cast<size_t>(i)] = (rt > 0.0f && rd > 0.0f) ? std::clamp(rd - rt, -0.04f * radU, 0.75f * radU) * on : 0.0f;
-      radEdge[static_cast<size_t>(i)] = rd > 0.0f ? rd : (rt > 0.0f ? rt : 0.6f * radU);
-    }
-    for (int i = 0; i < kDirs; ++i) {  // smooth around the circle
-      float sum = 0.0f, wsum = 0.0f;
-      for (int k = -8; k <= 8; ++k) {
-        const float wk = std::exp(-0.5f * static_cast<float>(k * k) / 9.0f);  // about 3 degrees: follows a hairline's dip
-        sum += wk * rawD[static_cast<size_t>((i + k + kDirs) % kDirs)], wsum += wk;
-      }
-      radD[static_cast<size_t>(i)] = sum / wsum;
-    }
-  }
-  // Output grid point -> the grid point the similarity-placed layer is read at.
-  auto unRadial = [&](float gx, float gy) {
-    const float X = gx - radC.x, Y = gy - radC.y, R = std::sqrt(X * X + Y * Y);
-    if (R < 1e-3f) return V2{gx, gy};
-    const float th = std::atan2(X, -Y);
-    const auto i = static_cast<size_t>(std::clamp(static_cast<int>((th + 3.14159265f) / 6.2831853f * kDirs), 0, kDirs - 1));
-    float Rs = R;
-    for (int it = 0; it < 4; ++it) Rs = R + radD[i] * std::clamp(1.0f - (Rs - radEdge[i]) / radReach, 0.0f, 1.0f);
-    return V2{radC.x + X * Rs / R, radC.y + Y * Rs / R};
-  };
-
   Layer L;
   {
     const float rs = std::min(1.0f, 560.0f / g.unit) * g.unit;  // pixels per face height on the layer
-    float xl, xr2, yt, yb;
-    if (useLayer) {
-      // Wherever the placed photo reaches (and a margin for the radial fit).
-      xl = 1e9f, xr2 = -1e9f, yt = 1e9f, yb = -1e9f;
-      for (const auto& c : {V2{0, 0}, V2{static_cast<float>(lay->width()), 0}, V2{0, static_cast<float>(lay->height())}, V2{static_cast<float>(lay->width()), static_cast<float>(lay->height())}}) {
-        const V2 p = toGrid(c.x, c.y);
-        const float X = (p.x - g.cx) / g.unit, Y = (p.y - g.top) / g.unit;
-        xl = std::min(xl, X), xr2 = std::max(xr2, X), yt = std::min(yt, Y), yb = std::max(yb, Y);
-      }
-      xl -= 0.1f, xr2 += 0.1f, yt -= 0.1f, yb += 0.1f;
-    } else {
-      const float xr = g.skullHalf + st->side + 0.5f;
-      xl = -xr, xr2 = xr, yt = g.skullTop - st->top - 0.5f, yb = std::max(0.6f, 0.95f + st->len + 0.2f);
-    }
-    L.scale = rs, L.x0 = xl, L.y0 = yt;
-    L.w = std::max(8, static_cast<int32_t>(std::ceil((xr2 - xl) * rs))), L.h = std::max(8, static_cast<int32_t>(std::ceil((yb - yt) * rs)));
+    const float xr = g.skullHalf + st->side + 0.5f, yt = g.skullTop - st->top - 0.5f, yb = std::max(0.6f, 0.95f + st->len + 0.2f);
+    L.scale = rs, L.x0 = -xr, L.y0 = yt;
+    L.w = std::max(8, static_cast<int32_t>(std::ceil(2.0f * xr * rs))), L.h = std::max(8, static_cast<int32_t>(std::ceil((yb - yt) * rs)));
     L.c.assign(static_cast<size_t>(L.w) * L.h, V3{});
     L.a.assign(static_cast<size_t>(L.w) * L.h, 0.0f);
   }
@@ -1275,7 +1204,8 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
       const ShapeAt s = shapeAt(*st, g, X, Y);
       sd.at(x, y) = s.d;
       inExtra[static_cast<size_t>(y) * L.w + x] = s.extra ? 1 : 0;
-      const float fx = g.cx + X * g.unit, fy = g.top + Y * g.unit;
+      const V2 gp = headToGrid(X, Y);
+      const float fx = gp.x, fy = gp.y;
       const float face = faceKeep.sample(fx, fy);
       const float fringeEdge = fringeLine + 0.02f * fbm(X * 30.0f, 0.0f, params.seed + 9);
       float ok = 1.0f;
@@ -1297,11 +1227,19 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
   std::normal_distribution<float> N01(0.0f, 1.0f);
   const float px1 = 1.0f / L.scale;  // one layer pixel in face units
   // Interior: a dark under-layer, so strands never show the background.
+  // Long hair: the solid under-layer gives way above the ends, so the last
+  // stretch is strands alone (wispy ends, not a hard edge).
+  const bool longStyle = st->len > -0.5f && !st->afro;
   auto underlayer = [&](V3 colour, float inset) {
     for (int32_t y = 0; y < L.h; ++y)
       for (int32_t x = 0; x < L.w; ++x) {
         const float d = sd.at(x, y);
-        const float k = smooth(-inset, -inset - 0.03f, d) * allow.at(x, y);
+        float k = smooth(-inset, -inset - 0.03f, d) * allow.at(x, y);
+        if (longStyle) {
+          const float X = L.toX(static_cast<float>(x) + 0.5f), Y = L.toY(static_cast<float>(y) + 0.5f);
+          const float end = longHairEnd(*st, X / std::max(g.skullHalf + st->side + 0.2f, 0.05f));
+          k *= 1.0f - smooth(end - 0.2f, end - 0.04f, Y);
+        }
         if (k <= 0.0f) continue;
         const V3 nrm = normalAt(static_cast<float>(x), static_cast<float>(y));
         const size_t i = static_cast<size_t>(y) * L.w + x;
@@ -1595,27 +1533,7 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
       }
   };
 
-  if (useLayer) {
-    // The photographed hair, read through the fit. Its own colour stays
-    // unless a colour is chosen (then each strand keeps its light).
-    double ll = 0, ln = 0;
-    for (int32_t y = 0; y < L.h; ++y)
-      for (int32_t x = 0; x < L.w; ++x) {
-        const float X = L.toX(static_cast<float>(x) + 0.5f), Y = L.toY(static_cast<float>(y) + 0.5f);
-        const V2 p = unRadial(g.cx + X * g.unit, g.top + Y * g.unit);
-        const V2 q = toLayer(p.x, p.y);
-        V3 c;
-        const float a2 = layerAt(q.x, q.y, &c);
-        const size_t i = static_cast<size_t>(y) * L.w + x;
-        L.c[i] = c, L.a[i] = a2;
-        if (a2 > 0.8f) ll += std::log(std::max(lum(c), 1e-4f)), ln += 1;
-      }
-    if (params.recolor && ln > 30) {
-      const float meanLog = static_cast<float>(ll / ln);
-      for (size_t i = 0; i < L.a.size(); ++i)
-        if (L.a[i] > 0.0f) L.c[i] = recolourHair(L.c[i], meanLog, newColour, newColourMix);
-    }
-  } else if (st->kind == Kind::Strands) {
+  if (st->kind == Kind::Strands) {
     drawStrands(st->slick);
     if (st->extra == Extra::Puff || st->extra == Extra::CoilBun) drawCoils(true, 1.0f);
   } else if (st->kind == Kind::Coils) {
@@ -1734,15 +1652,18 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
       std::sort(roots.begin(), roots.end(), [](const R& x, const R& y) { return x.depth < y.depth; });
       uint32_t id = 0;
       for (const R& r : roots) {
-        drawRope(ropePath(r.p, false, 2.2f), wU * (0.85f + 0.3f * U(rng)), st->rope, id++, 0.6f + 0.4f * r.depth);
+        // Each braid or loc its own length: the ends are staggered, not cut level.
+        std::vector<V2> path = ropePath(r.p, false, 2.2f);
+        const auto trim = static_cast<size_t>(U(rng) * 0.16f * L.scale / 0.7f);
+        if (path.size() > trim + 8) path.resize(path.size() - trim);
+        drawRope(path, wU * (0.85f + 0.3f * U(rng)), st->rope, id++, 0.6f + 0.4f * r.depth);
       }
     }
   } else {
     drawScalp(0.12f);
   }
-  // Like the photo: a touch soft, a touch of grain (a photographed style
-  // already is).
-  if (!useLayer) {
+  // Like the photo: a touch soft, a touch of grain.
+  {
     Grid ch[4];
     for (auto& gch : ch) gch.init(L.w, L.h);
     for (size_t i = 0; i < L.a.size(); ++i) ch[0].v[i] = L.c[i].r, ch[1].v[i] = L.c[i].g, ch[2].v[i] = L.c[i].b, ch[3].v[i] = L.a[i];
@@ -1760,49 +1681,6 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
     for (int32_t y = 0; y < L.h; ++y)
       for (int32_t x = 0; x < L.w; ++x) shadow.at(x, y) = y - off >= 0 ? L.a[static_cast<size_t>(y - off) * L.w + x] : 0.0f;
     blurGrid(shadow, 0.025f * L.scale);
-  }
-
-  // ---- A photographed style's hairline need not sit where the old one did:
-  // the forehead and temples left between the face and the new hair are the
-  // person's skin, carried up from the face.
-  if (useLayer) {
-    std::vector<float> la(n, 0.0f);
-    for (int32_t y = 0; y < h; ++y)
-      for (int32_t x = 0; x < w; ++x) {
-        const float X = (static_cast<float>(x) + 0.5f - g.cx) / g.unit, Y = (static_cast<float>(y) + 0.5f - g.top) / g.unit;
-        const float lx = (X - L.x0) * L.scale, ly = (Y - L.y0) * L.scale;
-        if (lx < 0.0f || ly < 0.0f || lx >= static_cast<float>(L.w) || ly >= static_cast<float>(L.h)) continue;
-        la[static_cast<size_t>(y) * w + x] = L.a[static_cast<size_t>(ly) * L.w + static_cast<size_t>(lx)];
-      }
-    // Inside the ring the new hair and the face make: between them along the
-    // row and along the column, above the chin.
-    std::vector<uint8_t> rowIn(n, 0), colIn(n, 0);
-    auto solidAt = [&](size_t i) { return la[i] > 0.5f || faceKeep.v[i] > 0.5f; };
-    const auto chinRow = static_cast<int32_t>(std::clamp(chinY, 0.0f, static_cast<float>(h)));
-    for (int32_t y = 0; y < chinRow; ++y) {
-      int32_t l = -1, r = -1;
-      for (int32_t x = 0; x < w; ++x)
-        if (solidAt(static_cast<size_t>(y) * w + x)) (l < 0 ? l : r) = x, r = x;
-      for (int32_t x = std::max(l, 0); l >= 0 && x <= r; ++x) rowIn[static_cast<size_t>(y) * w + x] = 1;
-    }
-    for (int32_t x = 0; x < w; ++x) {
-      int32_t t = -1, b = -1;
-      for (int32_t y = 0; y < chinRow; ++y)
-        if (solidAt(static_cast<size_t>(y) * w + x)) (t < 0 ? t : b) = y, b = y;
-      for (int32_t y = std::max(t, 0); t >= 0 && y <= b; ++y) colIn[static_cast<size_t>(y) * w + x] = 1;
-    }
-    Grid gap;
-    gap.init(w, h);
-    for (size_t i = 0; i < n; ++i) gap.v[i] = (rowIn[i] && colIn[i] && la[i] < 0.5f && faceKeep.v[i] < 0.5f) ? 1.0f : 0.0f;
-    blurGrid(gap, std::max(0.7f, 0.004f * g.unit));
-    for (size_t i = 0; i < n; ++i) {
-      if (gap.v[i] <= 0.02f || skinOut.empty()) continue;
-      const float k = std::min(1.0f, gap.v[i] * 1.6f);
-      if (k <= fillMix.v[i] && fillFace[i]) continue;
-      fill[i] = mix(fill[i], skinOut[i], fillMix.v[i] > 0.0f ? k : 1.0f);
-      fillMix.v[i] = std::max(fillMix.v[i], k), keepA.v[i] = std::max(keepA.v[i], k);
-      fillFace[i] = 1, hasOff[i] = 0;
-    }
   }
 
   // ---- 3. Composite at the cut-out's own size.
@@ -1863,7 +1741,8 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
         }
         aP = std::clamp(aP * km, 0.0f, 1.0f);
         // The hair layer here.
-        const float X = (gx - g.cx) / g.unit, Y = (gy - g.top) / g.unit;
+        const V2 hp = gridToHead(gx, gy);
+        const float X = hp.x, Y = hp.y;
         const float lx = (X - L.x0) * L.scale, ly = (Y - L.y0) * L.scale;
         V3 hc{};
         float ha = 0.0f, sh = 0.0f;
@@ -1879,8 +1758,7 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
           sh = shadow.sample(lx, ly);
         }
         // Behind the neck and chest (softly: no corner where it changes).
-        // (A photographed style already shows only the hair in front.)
-        const float behind = useLayer ? 0.0f : smooth(0.86f, 0.98f, Y) * (1.0f - smooth(a * 0.8f, a * 1.05f, std::fabs(X)));
+        const float behind = smooth(0.86f, 0.98f, Y) * (1.0f - smooth(a * 0.8f, a * 1.05f, std::fabs(X)));
         // Shadow on the person where the hair doesn't cover them.
         if (sh > 0.0f) c = c * (1.0f - 0.35f * sh * (1.0f - ha) * (1.0f - behind));
         V3 outc;

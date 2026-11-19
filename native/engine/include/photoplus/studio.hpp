@@ -144,12 +144,6 @@ struct HairParams {
   float strength = 1.0f;  // 0..1, how fully the new colour replaces the old
   float faceLeft = 0.0f, faceTop = 0.0f, faceRight = 0.0f, faceBottom = 0.0f;  // normalised
   uint32_t seed = 5;
-  // A photographed hairstyle (RGBA8, straight alpha: the hair only, cut from
-  // a photo), fitted to this head; with it the style is not drawn. Bald needs
-  // none. `layerFace`: the face box of the person it was cut from, in the
-  // layer's pixels (left, top, right, bottom).
-  const ImageBuffer* layer = nullptr;
-  std::array<float, 4> layerFace{};
 };
 
 struct HairStyleInfo {
