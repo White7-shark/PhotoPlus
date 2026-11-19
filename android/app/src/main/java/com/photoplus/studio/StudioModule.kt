@@ -181,7 +181,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
   /** The cut-out of the preview photo with the session's corrections, saved as a PNG. */
   private fun cutPreview(s: Session, token: Long): Map<String, Any?> {
     val out = createBitmap(s.preview.width, s.preview.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
-    val report = FloatArray(16)
+    val report = FloatArray(26)
     NativeEngine.nativeStudioCutout(s.preview, s.mask, s.zones, StudioStroke.encode(s.strokes), s.settings.toArray(), out, token, report)
     synchronized(s) {
       s.previewCutout?.recycle()
@@ -212,6 +212,9 @@ class StudioModule(reactContext: ReactApplicationContext) :
     "found" to (r[0] > 0.002f),
     // The face's box: its size tells how tall the person really is.
     "face" to if (r[11] > 0.5f) listOf(r[12].toDouble(), r[13].toDouble(), r[14].toDouble(), r[15].toDouble()) else null,
+    "faces" to r[16].toInt(),
+    // The outfit's main colours (for backdrop colours that suit it).
+    "outfit" to SceneStudio.outfit(r),
   )
 
   /** The full-resolution cut-out for the session's current corrections (cached). */
@@ -283,7 +286,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
         (k * aspect).roundToInt() to k.roundToInt()
       }
       val frame = when (background) {
-        is SceneBackground.Plain -> SceneStudio.plain(background.color, background.vignette, fw, fh)
+        is SceneBackground.Plain -> SceneStudio.plain(background.color, background.vignette, fw, fh, background.light)
         else -> {
           val src = decodeBackground(background, max(fw, fh), crop)
           try {

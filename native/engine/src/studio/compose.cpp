@@ -157,7 +157,7 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
   }
   const float vals[] = {placement.x, placement.y, placement.height, placement.tilt, placement.angle, look.colorMatch,
                         look.lightWrap, look.shadow, look.castShadow, look.lightX, look.horizon, look.bgBlur, look.grain, look.rim,
-                        look.spotlight, look.gain, look.contrast, look.balance[0], look.balance[1], look.balance[2],
+                        look.spotlight, look.gain, look.contrast, look.balance[0], look.balance[1], look.balance[2], look.bounce,
                         placement.boxLeft, placement.boxTop, placement.boxRight, placement.boxBottom};
   for (float v : vals)
     if (!std::isfinite(v)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Bad placement");
@@ -391,6 +391,36 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
     }
   }
 
+  // Colour bounce: the tint of the scene around the person (weighted toward
+  // where they stand), as a gain per channel with the luminance of one, so
+  // it changes their colour and not their brightness. A grey scene gives no
+  // tint at all. Bounded: a saturated backdrop tints, it does not repaint.
+  V3 bounceGain{1, 1, 1};
+  const float bounce = std::clamp(look.bounce, 0.0f, 1.0f);
+  if (bounce > 0.0f) {
+    const float gx0 = fl * invF, gx1 = fr * invF, gy0 = ft * invF, gy1 = fb * invF;
+    const float mx = 0.5f * (gx1 - gx0) + 0.15f * shortG, my = 0.35f * (gy1 - gy0) + 0.15f * shortG;
+    double sr = 0, sg = 0, sb = 0, sw = 0;
+    for (int32_t ly = 0; ly < lh; ++ly)
+      for (int32_t lx = 0; lx < lw; ++lx) {
+        const float x = static_cast<float>(lx) + 0.5f, y = static_cast<float>(ly) + 0.5f;
+        const float ddx = std::max({gx0 - x, x - gx1, 0.0f}) / mx, ddy = std::max({gy0 - y, y - gy1, 0.0f}) / my;
+        const float wgt = std::exp(-(ddx * ddx + ddy * ddy)) * 0.9f + 0.1f;
+        sr += wgt * low.r.row(ly)[lx], sg += wgt * low.g.row(ly)[lx], sb += wgt * low.b.row(ly)[lx], sw += wgt;
+      }
+    if (sw > 0) {
+      const V3 m{static_cast<float>(sr / sw), static_cast<float>(sg / sw), static_cast<float>(sb / sw)};
+      const float lm = lumOf(m.r, m.g, m.b);
+      if (lm > 1e-3f) {
+        const float kb = 0.25f * bounce;
+        float g3[3] = {m.r / lm, m.g / lm, m.b / lm};
+        for (float& v : g3) v = 1.0f + kb * (std::clamp(v, 0.55f, 1.6f) - 1.0f);
+        const float norm = lumOf(g3[0], g3[1], g3[2]);
+        bounceGain = V3{g3[0] / norm, g3[1] / norm, g3[2] / norm};
+      }
+    }
+  }
+
   // Spotlight: a pool of light around the person (an ellipse a little wider
   // than them), the scene falling off outside it.
   const float poolX = 0.5f * (fl + fr), poolY = ft + 0.5f * (fb - ft);
@@ -561,7 +591,7 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
           continue;
         }
         V3 F = Fp * (1.0f / a);
-        F = F * balance * gain;
+        F = F * balance * gain * bounceGain;
         if (spot > 0.0f) {
           // Lit by the spotlight.
           F = F * (1.0f + 0.2f * spot * (0.5f + 0.5f * pool));
@@ -606,6 +636,78 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
     report->contrast = contrast;
   }
   return ok();
+}
+
+namespace {
+// Smooth value noise in -1..1: a hashed lattice every `cell` pixels,
+// interpolated with a smoothstep (no visible grid).
+float valueNoise(float x, float y, float cell, uint32_t seed) {
+  const float fx = x / cell, fy = y / cell;
+  const auto x0 = static_cast<int32_t>(std::floor(fx)), y0 = static_cast<int32_t>(std::floor(fy));
+  float tx = fx - static_cast<float>(x0), ty = fy - static_cast<float>(y0);
+  tx = tx * tx * (3.0f - 2.0f * tx), ty = ty * ty * (3.0f - 2.0f * ty);
+  auto h = [seed](int32_t a, int32_t b) {
+    auto v = static_cast<uint32_t>(a) * 0x9E3779B1u ^ static_cast<uint32_t>(b) * 0x85EBCA77u ^ seed * 0xC2B2AE3Du;
+    v ^= v >> 15, v *= 0x2C1B3C6Du, v ^= v >> 12, v *= 0x297A2D39u, v ^= v >> 15;
+    return static_cast<float>(v & 0xFFFFu) / 32767.5f - 1.0f;
+  };
+  const float a = h(x0, y0) + (h(x0 + 1, y0) - h(x0, y0)) * tx;
+  const float b = h(x0, y0 + 1) + (h(x0 + 1, y0 + 1) - h(x0, y0 + 1)) * tx;
+  return a + (b - a) * ty;
+}
+}  // namespace
+
+Error paintBackdrop(ImageBuffer& out, const std::array<uint8_t, 3>& color, const BackdropParams& params,
+                    const CancellationToken* token) {
+  ScopedTimer timer("studio.backdrop");
+  if (!isColour(out) || out.width() < 1 || out.height() < 1) return makeError(PP_ERROR_INVALID_ARGUMENT, "Backdrop needs an RGBA image");
+  if (!std::isfinite(params.light) || !std::isfinite(params.centerX) || !std::isfinite(params.centerY)) {
+    return makeError(PP_ERROR_INVALID_ARGUMENT, "Bad backdrop");
+  }
+  const int32_t W = out.width(), H = out.height();
+  const Rgb o = offsets(out);
+  const float light = std::clamp(params.light, 0.0f, 1.0f);
+  const float cx = std::clamp(params.centerX, 0.0f, 1.0f), cy = std::clamp(params.centerY, 0.0f, 1.0f);
+  const auto& L = linLut().v;
+  const V3 base{L[color[0]], L[color[1]], L[color[2]]};
+  const float S = static_cast<float>(std::min(W, H));
+  const bool done = parallelFor(H, token, [&](int32_t begin, int32_t end) {
+    for (int32_t y = begin; y < end; ++y) {
+      uint8_t* q = out.row(y);
+      const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(H);
+      // The wall is a touch darker toward the top, the floor (the bottom of
+      // the sweep) a touch darker than the wall where the light reaches it.
+      const float top = 1.0f - 0.10f * light * (1.0f - smoothstep(0.0f, 0.35f, v));
+      const float floor = 1.0f - 0.08f * light * smoothstep(0.72f, 1.0f, v);
+      for (int32_t x = 0; x < W; ++x) {
+        q[x * 4 + 3] = 255;
+        if (light <= 0.0f) {
+          q[o.r + x * 4] = color[0], q[o.g + x * 4] = color[1], q[o.b + x * 4] = color[2];
+          continue;
+        }
+        const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(W);
+        // An ellipse a little taller than wide: light from a background
+        // light low behind the people.
+        const float dx = (u - cx) / 0.5f, dy = (v - cy) / 0.62f;
+        const float r = std::sqrt(dx * dx + dy * dy);
+        const float glow = 1.0f + 0.45f * light * std::exp(-1.6f * r * r);
+        const float fall = 1.0f - 0.42f * light * smoothstep(0.5f, 1.6f, r);
+        // Paper: a faint mottling at two scales.
+        const float px = static_cast<float>(x), py = static_cast<float>(y);
+        const float paper = 1.0f + light * (0.010f * valueNoise(px, py, S / 90.0f + 1.0f, params.seed) +
+                                            0.008f * valueNoise(px, py, S / 22.0f + 1.0f, params.seed + 1));
+        const float k = glow * fall * top * floor * paper;
+        V3 c = base * k;
+        // Over white: brighter toward white, the hue kept.
+        const float mx = std::max({c.r, c.g, c.b});
+        if (mx > 1.0f) c = c * (1.0f / mx);
+        // Dither (about half a level), so smooth light never bands.
+        const float d = 0.5f / 255.0f * hashNoise(x, y, params.seed + 7);
+        q[o.r + x * 4] = toByte(toGamma(c.r) + d), q[o.g + x * 4] = toByte(toGamma(c.g) + d), q[o.b + x * 4] = toByte(toGamma(c.b) + d);
+      }
+    }
+  });
+  return done ? ok() : cancelledError();
 }
 
 }  // namespace photoplus::studio

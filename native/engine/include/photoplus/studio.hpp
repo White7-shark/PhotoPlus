@@ -58,8 +58,16 @@ struct CutoutReport {
   bool cutLeft = false, cutTop = false, cutRight = false, cutBottom = false;
   // The person's face (face skin in the parts map, inside the cut-out),
   // normalised: its height tells the person's real size. Needs `zones`.
+  // With two or more people (a couple), this is the largest face: one box
+  // around every face would be as tall as the faces' height difference.
   bool face = false;
   float faceLeft = 0.0f, faceTop = 0.0f, faceRight = 0.0f, faceBottom = 0.0f;
+  int32_t faces = 0;  // faces in the cut-out
+  // The outfit's main colours (clothes in the parts map, inside the
+  // cut-out), sRGB 0..255, largest first, with their share of the clothes.
+  int32_t outfitCount = 0;
+  std::array<std::array<float, 3>, 2> outfit{};
+  std::array<float, 2> outfitShare{};
 };
 
 // `subject`: GRAY8 person mask (any size, required). `zones`: optional GRAY8
@@ -98,6 +106,10 @@ struct Look {
   // 0..1: Spotlight. A pool of light on the person, the rest of the scene
   // dimmed and softened around them, the person lifted.
   float spotlight = 0.0f;
+  // 0..1: the scene's colour bouncing back onto the person, as a coloured
+  // paper backdrop warms (or cools) the people in front of it. Their
+  // brightness is kept; only the tint follows the scene around them.
+  float bounce = 0.0f;
   // Video: the colour match measured once (gain, balance, contrast from a
   // report) and kept, so it does not flicker from frame to frame.
   bool fixedHarmony = false;
@@ -118,5 +130,21 @@ struct ComposeReport {
 // is a cutout() result (straight alpha, same channel order).
 Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placement& placement, const Look& look,
               const CancellationToken* token, ComposeReport* report);
+
+// A seamless paper backdrop in one colour, lit as in a studio: a soft pool
+// of light behind the people, falling off toward the edges and corners, a
+// floor a touch darker than the wall, and a faint paper texture. Worked in
+// linear light (the colour's hue is kept everywhere) and dithered, so
+// gradients on dark or saturated colours do not band.
+struct BackdropParams {
+  float light = 1.0f;    // 0 a flat colour .. 1 the full studio light
+  float centerX = 0.5f;  // where the pool of light is (0..1)
+  float centerY = 0.42f;
+  uint32_t seed = 7;
+};
+
+// `out` (RGBA8/BGRA8) is filled, alpha 255. `color` is sRGB 0..255.
+Error paintBackdrop(ImageBuffer& out, const std::array<uint8_t, 3>& color, const BackdropParams& params,
+                    const CancellationToken* token);
 
 }  // namespace photoplus::studio

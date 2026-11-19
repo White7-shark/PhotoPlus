@@ -8,6 +8,7 @@
  * CC0 photographs (Poly Haven); packs can add their own in the same format;
  * people can add their own photos of empty places.
  */
+import { STUDIO_COLOURS, normalizeHex } from './colors';
 import rawPlates from './plates.json';
 
 export type SceneCategory = 'studio' | 'indoors' | 'outdoors' | 'golden' | 'night' | 'mine' | 'pack' | 'plain';
@@ -59,26 +60,52 @@ export const PLATES: readonly PlateDef[] = (rawPlates as Omit<PlateDef, 'source'
 export const plateAsset = (id: string) => `studio/plates/${id}.jpg`;
 export const thumbAsset = (id: string) => `studio/thumbs/${id}.jpg`;
 
-/** Plain backgrounds: a colour, optionally a soft studio fall-off. */
+/** Plain backgrounds: a colour, flat or lit like studio paper. */
 export interface PlainDef {
   id: string;
   name: string;
   /** #rrggbb */
   color: string;
-  /** Darker toward the edges, like a lit paper backdrop. */
+  /** Darker toward the edges (used when there is no studio light). */
   vignette: boolean;
+  /**
+   * Studio light, 0..1: lit like seamless paper (a pool of light behind the
+   * person, falling off toward the edges, a faint paper texture), with the
+   * paper's colour bouncing gently onto the person. 0 is a flat colour.
+   */
+  light?: number;
 }
 
+/** Studio light at full: what "Studio light" on means. */
+export const STUDIO_LIGHT = 1;
+
 export const PLAINS: readonly PlainDef[] = [
-  { id: 'plain-white', name: 'White', color: '#F4F4F2', vignette: false },
-  { id: 'plain-paper', name: 'Paper grey', color: '#B9BBBE', vignette: true },
-  { id: 'plain-charcoal', name: 'Charcoal', color: '#2B2D31', vignette: true },
-  { id: 'plain-black', name: 'Black', color: '#0B0B0C', vignette: false },
-  { id: 'plain-cream', name: 'Cream', color: '#EFE3CF', vignette: true },
-  { id: 'plain-blush', name: 'Blush', color: '#E9C3C6', vignette: true },
-  { id: 'plain-sky', name: 'Sky blue', color: '#9FC3E7', vignette: true },
-  { id: 'plain-emerald', name: 'Emerald', color: '#1F5B47', vignette: true },
+  { id: 'plain-white', name: 'White', color: '#F4F4F2', vignette: false, light: 0 },
+  { id: 'plain-paper', name: 'Paper grey', color: '#B9BBBE', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-charcoal', name: 'Charcoal', color: '#2B2D31', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-black', name: 'Black', color: '#0B0B0C', vignette: false, light: 0 },
+  { id: 'plain-cream', name: 'Cream', color: '#EFE3CF', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-blush', name: 'Blush', color: '#E9C3C6', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-sky', name: 'Sky blue', color: '#9FC3E7', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-emerald', name: 'Emerald', color: '#1F5B47', vignette: true, light: STUDIO_LIGHT },
+  ...STUDIO_COLOURS.filter(c => c.id !== 'charcoal').map(c => ({
+    id: `plain-${c.id}`,
+    name: c.name,
+    color: c.color,
+    vignette: true,
+    light: STUDIO_LIGHT,
+  })),
 ];
+
+/** A colour the person picked, lit like studio paper unless they turn that off. */
+export function customPlain(color: string, light = STUDIO_LIGHT): PlainDef {
+  return { id: 'plain-custom', name: 'Your colour', color: normalizeHex(color) ?? '#C4962F', vignette: light === 0, light };
+}
+
+/** The same plain colour with the studio light on or off. */
+export function withLight(p: PlainDef, on: boolean): PlainDef {
+  return { ...p, light: on ? STUDIO_LIGHT : 0, vignette: on ? p.vignette : false };
+}
 
 export type Background =
   | { kind: 'plate'; plate: PlateDef }
@@ -112,7 +139,9 @@ export function backgroundRequest(bg: Background): Record<string, unknown> {
     case 'plate':
       return bg.plate.source === 'builtin' ? { kind: 'plate', id: bg.plate.id } : { kind: 'photo', path: bg.plate.path };
     case 'plain':
-      return { kind: 'plain', color: bg.plain.color, vignette: bg.plain.vignette };
+      return bg.plain.light
+        ? { kind: 'plain', color: bg.plain.color, vignette: bg.plain.vignette, light: bg.plain.light }
+        : { kind: 'plain', color: bg.plain.color, vignette: bg.plain.vignette };
     default:
       return { kind: 'transparent' };
   }
@@ -482,6 +511,8 @@ export interface SceneLook {
   rim: number;
   /** Spotlight 0..1: light on the person, the scene dimmed and softened around them. */
   spotlight: number;
+  /** 0..1: a coloured paper backdrop's light bouncing back onto the person (plain colours with studio light). */
+  bounce?: number;
 }
 
 export function lookFor(background: Background, crop: Crop): SceneLook {
@@ -500,6 +531,22 @@ export function lookFor(background: Background, crop: Crop): SceneLook {
       spotlight: 0,
     };
   }
-  // Plain colours: a studio sweep — a soft contact shadow, no colour cast to match.
-  return { colorMatch: 0, lightWrap: 0.15, shadow: 0.45, castShadow: 0, lightX: 0, horizon: 0.55, bgBlur: 0, grain: 0.5, rim: 0, spotlight: 0 };
+  // Plain colours: a studio sweep — a soft contact shadow, no colour match
+  // (a red paper is not a red light). With studio light, the paper's colour
+  // bounces gently onto the person (their tint, never their brightness;
+  // grey paper tints nothing), and wraps their edges a little more.
+  const lit = background.kind === 'plain' && (background.plain.light ?? 0) > 0;
+  return {
+    colorMatch: 0,
+    lightWrap: lit ? 0.22 : 0.15,
+    shadow: 0.45,
+    castShadow: 0,
+    lightX: 0,
+    horizon: 0.55,
+    bgBlur: 0,
+    grain: 0.5,
+    rim: 0,
+    spotlight: 0,
+    ...(lit ? { bounce: 0.7 } : {}),
+  };
 }

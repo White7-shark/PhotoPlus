@@ -125,15 +125,19 @@ Result<Plane> zonePlane(const ImageBuffer& zones, Zone zone, int32_t w, int32_t 
 
 }  // namespace
 
-// The face of the person kept: face-skin pixels of the parts map that are
-// inside the cut-out (so other people's faces don't count), their box taken
-// between the 2nd and 98th percentiles so stray pixels don't stretch it.
+// The faces of the people kept: face-skin pixels of the parts map that are
+// inside the cut-out (so faces of people left out don't count), split into
+// separate faces (connected pieces). The largest face gives the size; its
+// box is taken between the 2nd and 98th percentiles so stray pixels don't
+// stretch it. One box around a couple's two faces would be as tall as the
+// difference in their heights, and would make them look far too small.
 namespace {
 void faceBox(const ImageBuffer& zones, const ImageBuffer& out, CutoutReport& report) {
   const int32_t zw = zones.width(), zh = zones.height(), W = out.width(), H = out.height();
   const int32_t bpp = bytesPerPixel(zones.format());
   const auto face = static_cast<uint8_t>(Zone::FaceSkin);
-  std::vector<int32_t> xs, ys;
+  std::vector<uint8_t> on(static_cast<size_t>(zw) * static_cast<size_t>(zh), 0);
+  size_t total = 0;
   for (int32_t y = 0; y < zh; ++y) {
     const uint8_t* src = zones.row(y);
     const int32_t oy = std::min(H - 1, static_cast<int32_t>((static_cast<int64_t>(y) * 2 + 1) * H / (2 * zh)));
@@ -141,11 +145,48 @@ void faceBox(const ImageBuffer& zones, const ImageBuffer& out, CutoutReport& rep
     for (int32_t x = 0; x < zw; ++x) {
       if (src[x * bpp] != face) continue;
       const int32_t ox = std::min(W - 1, static_cast<int32_t>((static_cast<int64_t>(x) * 2 + 1) * W / (2 * zw)));
-      if (o[ox * 4 + 3] > 127) xs.push_back(x), ys.push_back(y);
+      if (o[ox * 4 + 3] > 127) on[static_cast<size_t>(y) * zw + x] = 1, ++total;
     }
   }
   // A face of a few pixels says little about size.
-  if (xs.size() < 24) return;
+  if (total < 24) return;
+  // Connected pieces (8-neighbour), each a list of pixels.
+  std::vector<int32_t> label(on.size(), -1);
+  std::vector<std::vector<int32_t>> pieces;
+  std::vector<int32_t> stack;
+  for (size_t i = 0; i < on.size(); ++i) {
+    if (!on[i] || label[i] >= 0) continue;
+    const auto id = static_cast<int32_t>(pieces.size());
+    pieces.emplace_back();
+    stack.assign(1, static_cast<int32_t>(i));
+    label[i] = id;
+    while (!stack.empty()) {
+      const int32_t k = stack.back();
+      stack.pop_back();
+      pieces.back().push_back(k);
+      const int32_t x = k % zw, y = k / zw;
+      for (int dy = -1; dy <= 1; ++dy)
+        for (int dx = -1; dx <= 1; ++dx) {
+          const int32_t nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= zw || ny >= zh) continue;
+          const auto n = static_cast<size_t>(ny) * zw + nx;
+          if (on[n] && label[n] < 0) label[n] = id, stack.push_back(static_cast<int32_t>(n));
+        }
+    }
+  }
+  size_t largest = 0;
+  for (size_t i = 1; i < pieces.size(); ++i)
+    if (pieces[i].size() > pieces[largest].size()) largest = i;
+  const auto& big = pieces[largest];
+  if (big.size() < 24) return;
+  // Faces: pieces at least a fifth the size of the largest (an ear or a hand
+  // that reads as face skin is smaller).
+  int32_t faces = 0;
+  for (const auto& p : pieces)
+    if (p.size() >= std::max<size_t>(24, big.size() / 5)) ++faces;
+  std::vector<int32_t> xs, ys;
+  xs.reserve(big.size()), ys.reserve(big.size());
+  for (int32_t k : big) xs.push_back(k % zw), ys.push_back(k / zw);
   auto pct = [](std::vector<int32_t>& v, double q) {
     const auto k = static_cast<size_t>(q * static_cast<double>(v.size() - 1));
     std::nth_element(v.begin(), v.begin() + static_cast<std::ptrdiff_t>(k), v.end());
@@ -154,8 +195,72 @@ void faceBox(const ImageBuffer& zones, const ImageBuffer& out, CutoutReport& rep
   const float l = static_cast<float>(pct(xs, 0.02)), r = static_cast<float>(pct(xs, 0.98) + 1);
   const float t = static_cast<float>(pct(ys, 0.02)), b = static_cast<float>(pct(ys, 0.98) + 1);
   report.face = true;
+  report.faces = faces;
   report.faceLeft = l / static_cast<float>(zw), report.faceRight = r / static_cast<float>(zw);
   report.faceTop = t / static_cast<float>(zh), report.faceBottom = b / static_cast<float>(zh);
+}
+
+// The outfit's main colours: the cut-out's own colours where the parts map
+// says clothes, grouped in a coarse colour histogram (16 levels a channel).
+// The fullest group with its neighbours is the first colour (its mean); its
+// pixels are then set aside and the second is found the same way, if it
+// covers at least a sixth of the clothes.
+void outfitColours(const ImageBuffer& zones, const ImageBuffer& out, CutoutReport& report) {
+  const int32_t zw = zones.width(), zh = zones.height(), W = out.width(), H = out.height();
+  const int32_t bpp = bytesPerPixel(zones.format());
+  const Rgb o = offsets(out);
+  const auto clothes = static_cast<uint8_t>(Zone::Clothes);
+  std::vector<std::array<uint8_t, 3>> px;
+  for (int32_t y = 0; y < zh; ++y) {
+    const uint8_t* src = zones.row(y);
+    const int32_t oy = std::min(H - 1, static_cast<int32_t>((static_cast<int64_t>(y) * 2 + 1) * H / (2 * zh)));
+    const uint8_t* row = out.row(oy);
+    for (int32_t x = 0; x < zw; ++x) {
+      if (src[x * bpp] != clothes) continue;
+      const int32_t ox = std::min(W - 1, static_cast<int32_t>((static_cast<int64_t>(x) * 2 + 1) * W / (2 * zw)));
+      const uint8_t* p = row + ox * 4;
+      if (p[3] > 200) px.push_back({p[o.r], p[o.g], p[o.b]});
+    }
+  }
+  if (px.size() < 50) return;
+  std::vector<uint8_t> used(px.size(), 0);
+  auto bin = [](const std::array<uint8_t, 3>& c) { return (c[0] >> 4) * 256 + (c[1] >> 4) * 16 + (c[2] >> 4); };
+  for (int pass = 0; pass < 2; ++pass) {
+    std::vector<int32_t> hist(4096, 0);
+    size_t left = 0;
+    for (size_t i = 0; i < px.size(); ++i)
+      if (!used[i]) ++hist[static_cast<size_t>(bin(px[i]))], ++left;
+    if (left == 0) break;
+    int32_t best = -1, bestCount = 0;
+    for (int32_t r = 0; r < 16; ++r)
+      for (int32_t g = 0; g < 16; ++g)
+        for (int32_t b = 0; b < 16; ++b) {
+          int32_t c = 0;
+          for (int32_t dr = -1; dr <= 1; ++dr)
+            for (int32_t dg = -1; dg <= 1; ++dg)
+              for (int32_t db = -1; db <= 1; ++db) {
+                const int32_t rr = r + dr, gg = g + dg, bb = b + db;
+                if (rr < 0 || gg < 0 || bb < 0 || rr > 15 || gg > 15 || bb > 15) continue;
+                c += hist[static_cast<size_t>(rr * 256 + gg * 16 + bb)];
+              }
+          if (c > bestCount) bestCount = c, best = r * 256 + g * 16 + b;
+        }
+    if (best < 0) break;
+    const int32_t br = best / 256, bg = (best / 16) % 16, bb = best % 16;
+    double sr = 0, sg = 0, sb = 0, n = 0;
+    for (size_t i = 0; i < px.size(); ++i) {
+      if (used[i]) continue;
+      const auto& c = px[i];
+      if (std::abs((c[0] >> 4) - br) <= 1 && std::abs((c[1] >> 4) - bg) <= 1 && std::abs((c[2] >> 4) - bb) <= 1) {
+        sr += c[0], sg += c[1], sb += c[2], n += 1, used[i] = 1;
+      }
+    }
+    const float share = static_cast<float>(n / static_cast<double>(px.size()));
+    if (n < 1 || (pass == 1 && share < 1.0f / 6.0f)) break;
+    report.outfit[static_cast<size_t>(pass)] = {static_cast<float>(sr / n), static_cast<float>(sg / n), static_cast<float>(sb / n)};
+    report.outfitShare[static_cast<size_t>(pass)] = share;
+    report.outfitCount = pass + 1;
+  }
 }
 }  // namespace
 
@@ -528,7 +633,7 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
       report->cutLeft = edgeRun(false, 0);
       report->cutRight = edgeRun(false, W - 1);
     }
-    if (zones != nullptr) faceBox(*zones, out, *report);
+    if (zones != nullptr) faceBox(*zones, out, *report), outfitColours(*zones, out, *report);
   }
   return ok();
 }

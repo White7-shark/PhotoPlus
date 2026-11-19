@@ -12,6 +12,7 @@ import { MAX_MY_BACKGROUNDS, myPlate, SHAPE_LABELS, SIZE_MAX, SIZE_MIN, type Fra
 import { getStudioService, StudioError, type Brush, type SceneResult } from '../../services/studio/StudioService';
 import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
+import { isOutfit } from '../../services/studio/colors';
 import { BackgroundPicker } from './BackgroundPicker';
 import { BrushCanvas, type Backing } from './BrushCanvas';
 import { PlacementView } from './PlacementView';
@@ -252,7 +253,14 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
             />
             <SegmentedControl label="Scene options" options={PANELS} value={panel} onChange={setPanel} />
             {panel === 'backgrounds' ? (
-              <BackgroundPicker value={s.background} mine={settings.myBackgrounds} onChoose={s.chooseBackground} onAdd={() => void addBackground()} onRemoveMine={removeMine} />
+              <BackgroundPicker
+                value={s.background}
+                mine={settings.myBackgrounds}
+                onChoose={s.chooseBackground}
+                onAdd={() => void addBackground()}
+                onRemoveMine={removeMine}
+                outfit={isOutfit(s.report.outfit) ? s.report.outfit : []}
+              />
             ) : null}
             {panel === 'adjust' ? (
               <GlassSurface radius={18} style={{ padding: 14, gap: 10 }}>

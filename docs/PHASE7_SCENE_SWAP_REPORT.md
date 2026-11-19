@@ -245,10 +245,24 @@ Glide now has a **Speed** choice: Normal, Fast 2× and Slow motion.
 - **Where it is enforced:** the recorder reads the plan natively, and processing also stops at the plan's limit (an imported longer clip is cut). The camera's countdown follows the plan.
 - **Memory:** a long clip no longer holds a mask for every frame (about 140 MB at 600 frames). Masks are made as the second pass reaches them, so at most three frames and three masks are held whatever the length.
 
+## Update: studio paper, colour picker, outfit colours, couples
+
+From two screenshots of a couple's studio shoot (a seamless mustard paper, soft even light, coordinated outfits, close poses), these were the differences from what the studio made:
+
+| In the reference | In the studio before | Now |
+|---|---|---|
+| Paper lit by a background light: brighter behind the people, falling off to the edges and corners | A flat colour, or a dark ring at the edges | **Studio light** on plain colours (`pp_studio_backdrop`): a pool of light behind the person, a fall-off to the corners, the top of the wall and the floor a touch darker, a faint paper texture. Worked in linear light, so the hue is the same everywhere, and dithered, so dark colours never band (largest step 0.41 of a level in the test). |
+| The paper's colour warms the people (whites take a mustard tint) | No colour reached the person from a plain colour (colour match is off for plains, rightly: a red paper is not a red light) | **Colour bounce** in compose: the scene's tint around the person, as a per-channel gain with a luminance of one, so their colour follows the paper and their brightness does not. A grey paper tints nothing. Test: a grey person on mustard goes from 150/150/150 to 159/148/142, brightness within 4%. |
+| Any colour the photographer chose | 8 fixed colours | A **colour picker** (colour, richness, brightness on tracks that show what they do, or a colour code), and 11 studio paper colours added (mustard, terracotta, sage, dusty blue, peach, lilac, olive, burgundy, teal, navy, sand). |
+| Outfits chosen to work with the paper | No help choosing | **Suits your outfit:** the cut-out reports the outfit's two main colours (clothes in the parts map, grouped in a colour histogram). Papers are scored the way photographers choose them: stand apart from the outfit in lightness; opposite on the colour wheel, or a quieter shade of the same family; a bold warm paper for plain outfits (white, black, denim); never the outfit's own colour. White and denim → mustard first, as in the reference. |
+| A couple, faces at different heights | The size came from one box around all face skin, as tall as the faces' height difference, so a couple came out too small | The **largest single face** sets the size (faces are separated into connected pieces), and the number of faces is reported. Test: faces of 45 and 38 px, 30 px apart in height → measured 45 px, not 68. |
+
+Previews of the studio paper with real people are private and were sent separately.
+
 ## Limits
 
 - **No reconstruction:** nothing behind the person in their own photo is reconstructed or reused, by design. Only clean plates go behind them.
-- **One person:** one person per scene; a tap picks who.
+- **People:** everyone found is kept (a couple stays together); a tap picks one person. Each person is cut out from their own photo, so two people from two different photos can't yet be placed together.
 - **Directional light:** relighting is global (exposure, colour, contrast, wrap, rim). A person lit hard from the left placed in a scene lit from the right keeps their own shadows. Choose scenes whose light suits the photo, or use "Mirror".
 - **Hardest edges:** very fine flyaway hair against a busy background of a similar colour. Hair detail and the Fix hair brush are there for those spots.
 - **Glide in a new scene** cuts out and composes every frame, so it takes several times longer than a plain Glide. Progress and Stop are shown. The cut-out runs at 960 px: the person is resized into the scene anyway.

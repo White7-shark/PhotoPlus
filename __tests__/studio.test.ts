@@ -251,7 +251,9 @@ describe('studio service', () => {
     expect(backgroundRequest({ kind: 'plate', plate: PLATES[0] })).toEqual({ kind: 'plate', id: PLATES[0].id });
     const mine = myPlate('bg-1', 'Mine', '/data/backgrounds/a.jpg', 10, 10);
     expect(backgroundRequest({ kind: 'plate', plate: mine })).toEqual({ kind: 'photo', path: '/data/backgrounds/a.jpg' });
-    expect(backgroundRequest({ kind: 'plain', plain: PLAINS[1] })).toEqual({ kind: 'plain', color: PLAINS[1].color, vignette: true });
+    expect(backgroundRequest({ kind: 'plain', plain: PLAINS[1] })).toEqual({ kind: 'plain', color: PLAINS[1].color, vignette: true, light: 1 });
+    // A flat colour sends no studio light.
+    expect(backgroundRequest({ kind: 'plain', plain: PLAINS[0] })).toEqual({ kind: 'plain', color: PLAINS[0].color, vignette: false });
     expect(backgroundRequest({ kind: 'transparent' })).toEqual({ kind: 'transparent' });
     expect(strokeRequest([{ brush: 'hair', radius: 0.02, points: [0.1, 0.2] }])).toEqual([{ brush: 2, radius: 0.02, points: [0.1, 0.2] }]);
   });
@@ -297,6 +299,7 @@ describe('Glide in a new scene', () => {
     expect(frameGlideScene({ ...standing, found: false }, hall)).toBeNull();
     expect(frameGlideScene(standing, { kind: 'transparent' })).toBeNull();
     const plain = frameGlideScene(standing, { kind: 'plain', plain: PLAINS[2] })!;
-    expect(plain.scene.background).toEqual({ kind: 'plain', color: PLAINS[2].color, vignette: true });
+    expect(plain.scene.background).toEqual({ kind: 'plain', color: PLAINS[2].color, vignette: true, light: 1 });
+    expect(plain.scene.look.bounce).toBe(0.7); // the paper's colour glows on the person in the clip too
   });
 });

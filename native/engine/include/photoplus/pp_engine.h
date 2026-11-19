@@ -800,7 +800,11 @@ typedef struct pp_studio_cutout_report {
   float left, top, right, bottom; /* the person's box, normalised */
   int32_t cut_left, cut_top, cut_right, cut_bottom;
   int32_t face; /* 1 when the face was found (needs zones) */
-  float face_left, face_top, face_right, face_bottom; /* the face box, normalised */
+  float face_left, face_top, face_right, face_bottom; /* the (largest) face's box, normalised */
+  int32_t faces; /* faces in the cut-out */
+  int32_t outfit_count; /* 0..2 outfit colours found */
+  float outfit[6]; /* sRGB 0..255: first colour r g b, second r g b */
+  float outfit_share[2]; /* each colour's share of the clothes */
 } pp_studio_cutout_report;
 
 /* `subject`: GRAY8 person mask, any size. `zones`: optional GRAY8 person-parts
@@ -835,6 +839,7 @@ typedef struct pp_studio_look {
   int32_t fixed_harmony;
   float gain, contrast;
   float balance[3];
+  float bounce; /* 0..1 the scene's colour bouncing back onto the person */
 } pp_studio_look;
 
 typedef struct pp_studio_compose_report {
@@ -849,6 +854,13 @@ typedef struct pp_studio_compose_report {
  * pp_studio_cutout result with the same channel order. */
 pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const pp_studio_placement* placement,
                             const pp_studio_look* look, const pp_cancel_token* token, pp_studio_compose_report* report);
+
+/* A studio paper backdrop in one colour (sRGB 0..255), written into `out`
+ * (RGBA8/BGRA8). `light` 0 is a flat colour, 1 the full studio light (a
+ * pool of light at center_x, center_y, falling off toward the edges, a
+ * faint paper texture). */
+pp_status pp_studio_backdrop(pp_image* out, uint8_t r, uint8_t g, uint8_t b, float light, float center_x, float center_y,
+                             uint32_t seed, const pp_cancel_token* token);
 
 /* Subject cut-out grown from `count` tap points (x0,y0,x1,y1,... normalised
  * 0..1; count 0 = frame centre). Returns a new GRAY8 mask (~320 px). */

@@ -34,7 +34,7 @@ object SceneBackgrounds {
 
   /** The background as an opaque frame of width × height (a video's frame). */
   fun frame(context: Context, resolve: (String) -> File, bg: SceneBackground, crop: SceneCrop, width: Int, height: Int): Bitmap = when (bg) {
-    is SceneBackground.Plain -> SceneStudio.plain(bg.color, bg.vignette, width, height)
+    is SceneBackground.Plain -> SceneStudio.plain(bg.color, bg.vignette, width, height, bg.light)
     is SceneBackground.Transparent -> throw EngineException(EngineException.INVALID_ARGUMENT, "A video needs a background")
     else -> {
       val src = decode(context, resolve, bg, max(width, height), crop, 4096)

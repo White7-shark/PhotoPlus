@@ -243,8 +243,9 @@ object NativeEngine {
    * size), [zones] (ALPHA_8 person-parts map) or null, [strokes]
    * (StudioStroke.encode), [params] (CutoutSettings.toArray). [out] is
    * ARGB_8888, not premultiplied, the photo's size: the person's colours with
-   * straight alpha. [report] (16): coverage, edge, hair edge, box l t r b,
-   * cut l t r b, face found, face box l t r b.
+   * straight alpha. [report] (16 or 26): coverage, edge, hair edge, box
+   * l t r b, cut l t r b, face found, (largest) face box l t r b; with 26,
+   * faces, outfit colours found (0..2), their sRGB r g b r g b, shares.
    */
   external fun nativeStudioCutout(
     bitmap: Bitmap,
@@ -257,11 +258,14 @@ object NativeEngine {
     report: FloatArray,
   )
 
+  /** A studio paper backdrop in one colour (0..255) filling [bitmap]: [light] 0 flat .. 1 lit, its light at ([cx], [cy]). */
+  external fun nativeStudioBackdrop(bitmap: Bitmap, r: Int, g: Int, b: Int, light: Float, cx: Float, cy: Float, seed: Int)
+
   /**
    * Studio compose: [background] (the output frame) edited in place with
    * [cutout] placed in it. [placement] (6, or 11 with a fixed box for video)
-   * ScenePlacement.toArray, [look] (10, or 17 with Spotlight and a fixed
-   * colour match) SceneLook.toArray. [report] (9 or 10): box l t r b,
+   * ScenePlacement.toArray, [look] (10, 17 with Spotlight and a fixed
+   * colour match, or 18 with the colour bounce) SceneLook.toArray. [report] (9 or 10): box l t r b,
    * exposure, balance r g b, grounded, contrast.
    */
   external fun nativeStudioCompose(background: Bitmap, cutout: Bitmap, placement: FloatArray, look: FloatArray, token: Long, report: FloatArray)

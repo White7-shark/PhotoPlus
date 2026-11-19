@@ -157,7 +157,7 @@ int compose(int argc, char** argv) {
   pp_studio_placement pl{arg(6, 0.5f), arg(7, 0.95f), arg(8, 0.8f), arg(9, 0.0f), arg(10, 0.0f), static_cast<int32_t>(arg(11, 0.0f)),
                          static_cast<int32_t>(arg(22, 0.0f)), arg(23, 0.0f), arg(24, 0.0f), arg(25, 1.0f), arg(26, 1.0f)};
   pp_studio_look lk{arg(12, 0.7f), arg(13, 0.35f), arg(14, 0.6f), arg(15, 0.0f), arg(16, 0.0f), arg(17, 0.45f), arg(18, 0.0f), arg(19, 1.0f), static_cast<uint32_t>(arg(32, 11.0f)), arg(20, 0.0f), arg(21, 0.0f),
-                   static_cast<int32_t>(arg(27, 0.0f)), arg(28, 1.0f), arg(29, 1.0f), {arg(30, 1.0f), arg(31, 1.0f), arg(33, 1.0f)}};
+                   static_cast<int32_t>(arg(27, 0.0f)), arg(28, 1.0f), arg(29, 1.0f), {arg(30, 1.0f), arg(31, 1.0f), arg(33, 1.0f)}, arg(34, 0.0f)};
   pp_studio_compose_report r{};
   const auto t0 = std::chrono::steady_clock::now();
   const pp_status st = pp_studio_compose(bg, fg, &pl, &lk, nullptr, &r);
@@ -172,15 +172,31 @@ int compose(int argc, char** argv) {
   return 0;
 }
 
+// backdrop OUT.ppm W H R G B [LIGHT=1] [CX=0.5] [CY=0.42]: a studio paper backdrop.
+int backdrop(int argc, char** argv) {
+  if (argc < 8) return 2;
+  pp_image* img = nullptr;
+  if (pp_image_create(std::atoi(argv[3]), std::atoi(argv[4]), PP_FORMAT_RGBA8, &img) != PP_OK) return 1;
+  auto arg = [&](int i, float d) { return argc > i ? std::strtof(argv[i], nullptr) : d; };
+  const pp_status st = pp_studio_backdrop(img, static_cast<uint8_t>(std::atoi(argv[5])), static_cast<uint8_t>(std::atoi(argv[6])),
+                                          static_cast<uint8_t>(std::atoi(argv[7])), arg(8, 1.0f), arg(9, 0.5f), arg(10, 0.42f), 7, nullptr);
+  if (st != PP_OK) return 1;
+  write(argv[2], img, -1);
+  pp_image_destroy(img);
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   int rc = 2;
   if (argc > 1 && std::strcmp(argv[1], "cutout") == 0) rc = cutout(argc, argv);
   else if (argc > 1 && std::strcmp(argv[1], "compose") == 0) rc = compose(argc, argv);
+  else if (argc > 1 && std::strcmp(argv[1], "backdrop") == 0) rc = backdrop(argc, argv);
   if (rc == 2) {
     std::fprintf(stderr,
-                 "usage: studio_demo cutout IN.ppm MASK.pgm ZONES.pgm|- OUT_PREFIX [softness shift hair clean] [STROKES.txt]\n"
+                 "usage: studio_demo backdrop OUT.ppm W H R G B [light cx cy]\n"
+                 "       studio_demo cutout IN.ppm MASK.pgm ZONES.pgm|- OUT_PREFIX [softness shift hair clean] [STROKES.txt]\n"
                  "       studio_demo compose BG.ppm FG.ppm ALPHA.pgm OUT.ppm x y height [tilt angle flip colorMatch wrap "
                  "shadow cast lightX horizon blur grain rim spotlight [fixedBox l t r b [fixedColour gain contrast balR balG seed balB]]]\n");
   }

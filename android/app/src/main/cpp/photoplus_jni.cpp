@@ -1540,7 +1540,8 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeRgbaToYuv420
 // colours; `out`: ARGB_8888, not premultiplied, the photo's size, written
 // with straight alpha. `reportOut` (16): coverage, edge, hair edge, box
 // (left, top, right, bottom), cut (left, top, right, bottom), face found,
-// face box (left, top, right, bottom).
+// face box (left, top, right, bottom); with 26, also the number of faces,
+// the outfit colours found (0..2), their sRGB (r g b, r g b) and shares.
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCutout(
     JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject zones, jfloatArray strokes, jfloatArray params, jobject out,
     jlong token, jfloatArray reportOut) {
@@ -1589,11 +1590,14 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCutout
     throwStatus(env, st);
     return;
   }
-  const jfloat rep[kReport] = {r.coverage, r.edge, r.hair_edge, r.left, r.top, r.right, r.bottom,
-                               static_cast<float>(r.cut_left), static_cast<float>(r.cut_top), static_cast<float>(r.cut_right),
-                               static_cast<float>(r.cut_bottom), static_cast<float>(r.face), r.face_left, r.face_top,
-                               r.face_right, r.face_bottom};
-  env->SetFloatArrayRegion(reportOut, 0, kReport, rep);
+  constexpr jsize kFull = 26;
+  const jfloat rep[kFull] = {r.coverage, r.edge, r.hair_edge, r.left, r.top, r.right, r.bottom,
+                             static_cast<float>(r.cut_left), static_cast<float>(r.cut_top), static_cast<float>(r.cut_right),
+                             static_cast<float>(r.cut_bottom), static_cast<float>(r.face), r.face_left, r.face_top,
+                             r.face_right, r.face_bottom, static_cast<float>(r.faces), static_cast<float>(r.outfit_count),
+                             r.outfit[0], r.outfit[1], r.outfit[2], r.outfit[3], r.outfit[4], r.outfit[5],
+                             r.outfit_share[0], r.outfit_share[1]};
+  env->SetFloatArrayRegion(reportOut, 0, std::min(env->GetArrayLength(reportOut), kFull), rep);
 }
 
 // Studio compose: `background` (ARGB_8888, the output frame) edited in
@@ -1602,7 +1606,8 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCutout
 // fixed box (on 0/1, left, top, right, bottom; video). `look` (10 or 17):
 // colour match, light wrap, shadow, cast shadow, light x, horizon,
 // background blur, grain, rim, seed, then optionally Spotlight and a fixed
-// colour match (on 0/1, gain, contrast, balance r g b; video).
+// colour match (on 0/1, gain, contrast, balance r g b; video), then
+// optionally (18) the backdrop's colour bounce.
 // `reportOut` (9 or 10): box (left, top, right, bottom), exposure, balance
 // (r, g, b), grounded, contrast.
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCompose(
@@ -1616,9 +1621,9 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCompos
     throwEngineException(env, "INVALID_ARGUMENT", "Bad compose arguments");
     return;
   }
-  jfloat pl[11] = {}, lk[17] = {};
+  jfloat pl[11] = {}, lk[18] = {};
   env->GetFloatArrayRegion(placement, 0, std::min<jsize>(np, 11), pl);
-  env->GetFloatArrayRegion(look, 0, std::min<jsize>(nl, 17), lk);
+  env->GetFloatArrayRegion(look, 0, std::min<jsize>(nl, 18), lk);
   WrappedBitmap bg, cut;
   if (!bg.open(env, background, false) || !cut.open(env, cutout, false)) return;
   pp_studio_placement p{pl[0], pl[1], pl[2], pl[3], pl[4], pl[5] > 0.5f ? 1 : 0, 0, 0, 0, 1, 1};
@@ -1628,6 +1633,7 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCompos
     l.spotlight = lk[10], l.fixed_harmony = lk[11] > 0.5f ? 1 : 0, l.gain = lk[12], l.contrast = lk[13];
     l.balance[0] = lk[14], l.balance[1] = lk[15], l.balance[2] = lk[16];
   }
+  if (nl >= 18) l.bounce = lk[17];
   pp_studio_compose_report r{};
   const pp_status st = pp_studio_compose(bg.image, cut.image, &p, &l, reinterpret_cast<const pp_cancel_token*>(token), &r);
   if (st != PP_OK) {
@@ -1637,6 +1643,18 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCompos
   const jfloat rep[10] = {r.left, r.top, r.right, r.bottom, r.exposure, r.balance[0], r.balance[1], r.balance[2],
                           static_cast<float>(r.grounded), r.contrast};
   env->SetFloatArrayRegion(reportOut, 0, std::min<jsize>(nr, 10), rep);
+}
+
+// A studio paper backdrop in one colour (sRGB 0..255) filling `bitmap`
+// (ARGB_8888): `light` 0 flat .. 1 the full studio light, its pool of light
+// at (cx, cy).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioBackdrop(
+    JNIEnv* env, jobject, jobject bitmap, jint r, jint g, jint b, jfloat light, jfloat cx, jfloat cy, jint seed) {
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  const auto c = [](jint v) { return static_cast<uint8_t>(std::clamp(v, 0, 255)); };
+  const pp_status st = pp_studio_backdrop(img.image, c(r), c(g), c(b), light, cx, cy, static_cast<uint32_t>(seed), nullptr);
+  if (st != PP_OK) throwStatus(env, st);
 }
 
 }  // extern "C"

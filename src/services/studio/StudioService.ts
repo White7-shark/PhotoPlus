@@ -5,6 +5,7 @@
  */
 import { errorCode, errorMessage, nativeModules, requireNative, type StudioSpec } from '../../native';
 import { createId } from '../database/ids';
+import type { OutfitColour } from './colors';
 import { backgroundRequest, type Background, type Crop, type Placement, type SceneLook } from './scene';
 
 export type Brush = 'keep' | 'remove' | 'hair';
@@ -36,8 +37,12 @@ export interface CutoutReport {
   cutRight: boolean;
   cutBottom: boolean;
   found: boolean;
-  /** Their face's box (hairline to chin), when found: it tells their real size. */
+  /** Their face's box (hairline to chin), when found: it tells their real size. The largest face when there are several. */
   face?: [number, number, number, number] | null;
+  /** Faces in the cut-out (2 for a couple). */
+  faces?: number;
+  /** The outfit's main colours (largest first), for paper colours that suit it. */
+  outfit?: OutfitColour[];
 }
 
 export interface CutoutResult {

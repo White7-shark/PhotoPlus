@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, type AccessibilityActionEvent, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
@@ -20,6 +21,8 @@ export function ValueSlider({
   format,
   testID,
   disabled,
+  track,
+  thumbColor,
 }: {
   label: string;
   value: number;
@@ -32,6 +35,10 @@ export function ValueSlider({
   format?: (v: number) => string;
   testID?: string;
   disabled?: boolean;
+  /** Colours along the track (e.g. a colour picker's hues), instead of the accent fill. */
+  track?: readonly string[];
+  /** The thumb's fill (e.g. the colour chosen). */
+  thumbColor?: string;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -73,18 +80,35 @@ export function ValueSlider({
         onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
         style={{ height: 28, justifyContent: 'center' }}
       >
-        <View pointerEvents="none" style={{ height: 4, borderRadius: 2, backgroundColor: theme.colors.glassStroke }} />
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            width: Math.max(0, t * width),
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: theme.colors.accent,
-          }}
-        />
+        {track && track.length > 1 ? (
+          <View pointerEvents="none" style={{ height: 14, borderRadius: 7, overflow: 'hidden' }} testID={testID ? `${testID}-track` : undefined}>
+            <Svg width="100%" height={14}>
+              <Defs>
+                <LinearGradient id="track" x1="0" y1="0" x2="1" y2="0">
+                  {track.map((c, i) => (
+                    <Stop key={`${c}${i}`} offset={i / (track.length - 1)} stopColor={c} />
+                  ))}
+                </LinearGradient>
+              </Defs>
+              <Rect width="100%" height={14} fill="url(#track)" />
+            </Svg>
+          </View>
+        ) : (
+          <>
+            <View pointerEvents="none" style={{ height: 4, borderRadius: 2, backgroundColor: theme.colors.glassStroke }} />
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                width: Math.max(0, t * width),
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: theme.colors.accent,
+              }}
+            />
+          </>
+        )}
         <View
           pointerEvents="none"
           style={{
@@ -93,9 +117,9 @@ export function ValueSlider({
             width: 22,
             height: 22,
             borderRadius: 11,
-            backgroundColor: '#fff',
-            borderWidth: 2,
-            borderColor: theme.colors.accent,
+            backgroundColor: thumbColor ?? '#fff',
+            borderWidth: track ? 3 : 2,
+            borderColor: track ? '#fff' : theme.colors.accent,
           }}
         />
       </View>

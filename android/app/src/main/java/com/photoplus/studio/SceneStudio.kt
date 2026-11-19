@@ -11,6 +11,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import androidx.core.graphics.createBitmap
 import com.photoplus.engine.EngineException
+import com.photoplus.engine.NativeEngine
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -114,12 +115,15 @@ data class SceneLook(
   val spotlight: Float = 0f,
   /** Video: a colour match measured once and kept (gain, contrast, balance r g b), or null to measure each time. */
   val harmony: FloatArray? = null,
+  /** A coloured backdrop's light bouncing back onto the person (their tint, not their brightness). */
+  val bounce: Float = 0f,
 ) {
   fun toArray(): FloatArray {
     val h = harmony
     return floatArrayOf(
       colorMatch, lightWrap, shadow, castShadow, lightX, horizon, bgBlur, grain, rim, seed.toFloat(), spotlight,
       if (h != null) 1f else 0f, h?.getOrNull(0) ?: 1f, h?.getOrNull(1) ?: 1f, h?.getOrNull(2) ?: 1f, h?.getOrNull(3) ?: 1f, h?.getOrNull(4) ?: 1f,
+      bounce,
     )
   }
 
@@ -134,6 +138,7 @@ data class SceneLook(
       return SceneLook(
         f("colorMatch", 0.7f), f("lightWrap", 0.35f), f("shadow", 0.6f), f("castShadow", 0f), f("lightX", 0f, -1f, 1f),
         f("horizon", 0.45f), f("bgBlur", 0f), f("grain", 1f), f("rim", 0f), spotlight = f("spotlight", 0f),
+        bounce = f("bounce", 0f),
       )
     }
   }
@@ -143,7 +148,8 @@ data class SceneLook(
 sealed class SceneBackground {
   data class Plate(val assetId: String) : SceneBackground()
   data class Photo(val path: String) : SceneBackground()
-  data class Plain(val color: Int, val vignette: Boolean) : SceneBackground()
+  /** A colour: flat, darker toward the edges ([vignette]), or lit like studio paper ([light] 0..1). */
+  data class Plain(val color: Int, val vignette: Boolean, val light: Float = 0f) : SceneBackground()
   data object Transparent : SceneBackground()
 
   companion object {
@@ -160,7 +166,8 @@ sealed class SceneBackground {
       "plain" -> {
         val c = m["color"] as? String ?: "#F4F4F2"
         if (!HEX.matches(c)) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad colour")
-        Plain(0xFF000000.toInt() or c.substring(1).toInt(16), m["vignette"] as? Boolean ?: false)
+        val light = (m["light"] as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+        Plain(0xFF000000.toInt() or c.substring(1).toInt(16), m["vignette"] as? Boolean ?: false, light)
       }
       "transparent" -> Transparent
       else -> throw EngineException(EngineException.INVALID_ARGUMENT, "Choose a background")
@@ -216,8 +223,16 @@ object SceneStudio {
   }
 
   /** A plain colour, optionally darker toward the edges like a lit paper sweep. */
-  fun plain(color: Int, vignette: Boolean, width: Int, height: Int): Bitmap {
+  fun plain(color: Int, vignette: Boolean, width: Int, height: Int, light: Float = 0f): Bitmap {
     val out = createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    if (light > 0f) {
+      // Studio paper: the engine lights it (a pool of light behind the person, falling off, a faint texture).
+      out.isPremultiplied = false
+      NativeEngine.nativeStudioBackdrop(out, Color.red(color), Color.green(color), Color.blue(color), light, 0.5f, 0.42f, 7)
+      out.isPremultiplied = true
+      out.setHasAlpha(false)
+      return out
+    }
     val c = Canvas(out)
     c.drawColor(color or 0xFF000000.toInt())
     if (vignette) {
@@ -230,6 +245,16 @@ object SceneStudio {
     }
     out.setHasAlpha(false)
     return out
+  }
+
+  /** The outfit colours in a 26-value cut-out report: up to two, as "#rrggbb" with their share of the clothes. Pure. */
+  fun outfit(r: FloatArray): List<Map<String, Any>> {
+    if (r.size < 26) return emptyList()
+    val n = r[17].toInt().coerceIn(0, 2)
+    return (0 until n).map { i ->
+      fun c(k: Int) = r[18 + i * 3 + k].roundToInt().coerceIn(0, 255)
+      mapOf("color" to "#%02x%02x%02x".format(c(0), c(1), c(2)), "share" to r[24 + i].toDouble())
+    }
   }
 
   /** A sample size that decodes a w × h image to at least `edge` on its long side. */

@@ -41,7 +41,10 @@ class SceneStudioTest {
     assertEquals(-1f, l.lightX)
     assertEquals(0.5f, l.rim)
     assertEquals(1f, l.bgBlur)
-    assertEquals(17, l.toArray().size)
+    assertEquals(18, l.toArray().size)
+    assertEquals(0f, l.toArray()[17]) // no colour bounce
+    assertEquals(0.6f, SceneLook.fromMap(mapOf("bounce" to 0.6)).toArray()[17], 1e-6f)
+    assertEquals(1f, SceneLook.fromMap(mapOf("bounce" to 7.0)).bounce)
     assertEquals(0f, l.toArray()[10]) // Spotlight off
     assertEquals(0f, l.toArray()[11]) // the colour match measured each time
     val spot = SceneLook.fromMap(mapOf("spotlight" to 0.7))
@@ -62,11 +65,29 @@ class SceneStudioTest {
     val plain = SceneBackground.fromMap(mapOf("kind" to "plain", "color" to "#2B2D31", "vignette" to true)) as SceneBackground.Plain
     assertEquals(0xFF2B2D31.toInt(), plain.color)
     assertTrue(plain.vignette)
+    assertEquals(0f, plain.light) // flat unless asked
+    val lit = SceneBackground.fromMap(mapOf("kind" to "plain", "color" to "#C4962F", "light" to 3.0)) as SceneBackground.Plain
+    assertEquals(1f, lit.light)
+    assertEquals(0f, (SceneBackground.fromMap(mapOf("kind" to "plain", "color" to "#C4962F", "light" to Double.NaN)) as SceneBackground.Plain).light)
     assertEquals(SceneBackground.Transparent, SceneBackground.fromMap(mapOf("kind" to "transparent")))
     assertThrows<EngineException> { SceneBackground.fromMap(mapOf("kind" to "plate", "id" to "../../etc/passwd")) }
     assertThrows<EngineException> { SceneBackground.fromMap(mapOf("kind" to "plain", "color" to "red")) }
     assertThrows<EngineException> { SceneBackground.fromMap(mapOf("kind" to "moon")) }
     assertThrows<EngineException> { SceneBackground.fromMap(null) }
+  }
+
+  @Test fun outfitColoursAreReadFromTheCutOutReport() {
+    val r = FloatArray(26)
+    r[17] = 2f
+    floatArrayOf(30.2f, 40f, 90f, 235f, 235f, 232f).copyInto(r, 18)
+    r[24] = 0.7f
+    r[25] = 0.3f
+    val outfit = SceneStudio.outfit(r)
+    assertEquals(listOf("#1e285a", "#ebebe8"), outfit.map { it["color"] })
+    assertEquals(0.7, outfit[0]["share"] as Double, 1e-6)
+    r[17] = 9f // never more than two
+    assertEquals(2, SceneStudio.outfit(r).size)
+    assertTrue(SceneStudio.outfit(FloatArray(16)).isEmpty()) // an older, shorter report
   }
 
   @Test fun exportsKeepThePersonsOwnDetail() {

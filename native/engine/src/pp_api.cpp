@@ -862,7 +862,9 @@ pp_status pp_studio_cutout(const pp_image* image, const pp_image* subject, const
     if (report != nullptr) {
       *report = pp_studio_cutout_report{r.coverage, r.edge, r.hairEdge, r.left, r.top, r.right, r.bottom,
                                         r.cutLeft ? 1 : 0, r.cutTop ? 1 : 0, r.cutRight ? 1 : 0, r.cutBottom ? 1 : 0,
-                                        r.face ? 1 : 0, r.faceLeft, r.faceTop, r.faceRight, r.faceBottom};
+                                        r.face ? 1 : 0, r.faceLeft, r.faceTop, r.faceRight, r.faceBottom, r.faces, r.outfitCount,
+                                        {r.outfit[0][0], r.outfit[0][1], r.outfit[0][2], r.outfit[1][0], r.outfit[1][1], r.outfit[1][2]},
+                                        {r.outfitShare[0], r.outfitShare[1]}};
     }
     return succeed();
   });
@@ -887,6 +889,7 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
       lk.spotlight = look->spotlight, lk.fixedHarmony = look->fixed_harmony != 0;
       lk.gain = look->gain, lk.contrast = look->contrast;
       lk.balance[0] = look->balance[0], lk.balance[1] = look->balance[1], lk.balance[2] = look->balance[2];
+      lk.bounce = look->bounce;
     }
     photoplus::studio::ComposeReport r;
     const photoplus::Error e = photoplus::studio::compose(background->buffer, cutout->buffer, pl, lk, token ? &token->token : nullptr, &r);
@@ -896,6 +899,17 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
                                          r.grounded ? 1 : 0, r.contrast};
     }
     return succeed();
+  });
+}
+
+pp_status pp_studio_backdrop(pp_image* out, uint8_t r, uint8_t g, uint8_t b, float light, float center_x, float center_y,
+                             uint32_t seed, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is required");
+    photoplus::studio::BackdropParams p;
+    p.light = light, p.centerX = center_x, p.centerY = center_y, p.seed = seed;
+    const photoplus::Error e = photoplus::studio::paintBackdrop(out->buffer, {r, g, b}, p, token ? &token->token : nullptr);
+    return e.status == PP_OK ? succeed() : fail(e);
   });
 }
 

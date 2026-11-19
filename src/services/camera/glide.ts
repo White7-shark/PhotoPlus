@@ -68,7 +68,7 @@ export interface GlideRequest {
 
 /** The person in a new scene: the background, its crop, where and how big the person is, the look, and their usual box in the clip. */
 export interface GlideSceneRequest {
-  background: { kind: 'plate'; id: string } | { kind: 'photo'; path: string } | { kind: 'plain'; color: string; vignette: boolean };
+  background: { kind: 'plate'; id: string } | { kind: 'photo'; path: string } | { kind: 'plain'; color: string; vignette: boolean; light?: number };
   crop: { x: number; y: number; w: number; h: number };
   placement: { x: number; y: number; height: number; flip: boolean; tilt: number; angle: number };
   look: Record<string, number>;

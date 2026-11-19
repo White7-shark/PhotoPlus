@@ -14,6 +14,7 @@
 //  - the background blur softens the scene but not the person;
 //  - bad input is refused.
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -623,6 +624,122 @@ TEST(studio_compose_fixed_colour_match_repeats_the_measured_one) {
   pp_image_destroy(bg);
   pp_image_destroy(bg2);
   pp_image_destroy(person);
+}
+
+TEST(studio_report_sizes_a_couple_by_one_face_and_reads_the_outfit) {
+  Scene s = makeScene();
+  // The person's clothes: navy above y = 215, white below (inside the person).
+  for (int y = 0; y < kH; ++y)
+    for (int x = 0; x < kW; ++x) {
+      if (s.truth[static_cast<size_t>(y) * kW + x] < 0.999f) continue;
+      uint8_t* p = at(s.image, x, y);
+      if (y < 215) p[0] = 30, p[1] = 40, p[2] = 90;
+      else p[0] = 235, p[1] = 235, p[2] = 232;
+    }
+  pp_image* mask = coarseMask(s);
+  // Two faces at different heights, as in a couple's embrace.
+  const int w = 180, h = 150;
+  pp_image* zones = gray(w, h);
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x) {
+      const float fx = (static_cast<float>(x) + 0.5f) * kW / w, fy = (static_cast<float>(y) + 0.5f) * kH / h;
+      const float d = std::hypot((fx - s.cx) / s.rx, (fy - s.cy) / s.ry);
+      uint8_t v = d < 0.97f ? 4 : 0;
+      if (fx >= 130 && fx < 170 && fy >= 95 && fy < 140) v = 3;   // the taller one's face, 45 px
+      if (fx >= 192 && fx < 226 && fy >= 125 && fy < 163) v = 3;  // the other, 38 px, lower
+      *at(zones, x, y, 1) = v;
+    }
+  pp_studio_cutout_report rep{};
+  pp_image* o = cut(s, mask, zones, defaults(), {}, &rep);
+  std::printf("    faces %d, face %.3f..%.3f; outfit %d: (%.0f %.0f %.0f) %.2f, (%.0f %.0f %.0f) %.2f\n", rep.faces, rep.face_top,
+              rep.face_bottom, rep.outfit_count, rep.outfit[0], rep.outfit[1], rep.outfit[2], rep.outfit_share[0], rep.outfit[3],
+              rep.outfit[4], rep.outfit[5], rep.outfit_share[1]);
+  EXPECT_EQ(rep.face, 1);
+  EXPECT_EQ(rep.faces, 2);
+  // One face's height (45 px), not both faces' span (68 px).
+  EXPECT_TRUE(std::fabs(rep.face_top - 95.0f / kH) < 0.015f && std::fabs(rep.face_bottom - 140.0f / kH) < 0.015f);
+  EXPECT_TRUE(std::fabs(rep.face_left - 130.0f / kW) < 0.015f);
+  // Navy first (more of it), white second.
+  EXPECT_EQ(rep.outfit_count, 2);
+  EXPECT_TRUE(std::fabs(rep.outfit[0] - 30) < 12 && std::fabs(rep.outfit[1] - 40) < 12 && std::fabs(rep.outfit[2] - 90) < 12);
+  EXPECT_TRUE(std::fabs(rep.outfit[3] - 235) < 12 && std::fabs(rep.outfit[5] - 232) < 12);
+  EXPECT_TRUE(rep.outfit_share[0] > rep.outfit_share[1] && rep.outfit_share[0] + rep.outfit_share[1] > 0.9f);
+  pp_image_destroy(o);
+  pp_image_destroy(zones);
+  pp_image_destroy(mask);
+  pp_image_destroy(s.image);
+}
+
+TEST(studio_compose_bounce_tints_the_person_with_the_backdrop_not_their_brightness) {
+  pp_image* person = flatPerson(false, 150, 150, 150);
+  auto run = [&](uint8_t r, uint8_t g, uint8_t b, float bounce) {
+    pp_image* bg = scene(r, g, b);
+    pp_studio_placement pl{0.5f, 0.9f, 0.6f, 0, 0, 0};
+    pp_studio_look lk = plainLook();
+    lk.bounce = bounce;
+    EXPECT_EQ(pp_studio_compose(bg, person, &pl, &lk, nullptr, nullptr), PP_OK);
+    const uint8_t* p = at(bg, 200, 180);
+    const std::array<int, 3> c{p[0], p[1], p[2]};
+    pp_image_destroy(bg);
+    return c;
+  };
+  const auto off = run(200, 155, 45, 0.0f), on = run(200, 155, 45, 1.0f), grey = run(128, 128, 128, 1.0f);
+  const auto luma = [](const std::array<int, 3>& c) { return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  std::printf("    on mustard: off (%d %d %d), bounce (%d %d %d); on grey (%d %d %d)\n", off[0], off[1], off[2], on[0], on[1], on[2],
+              grey[0], grey[1], grey[2]);
+  EXPECT_TRUE(off[0] == 150 && off[2] == 150);
+  EXPECT_TRUE(on[0] - on[2] > 14);                            // warmer
+  EXPECT_TRUE(std::fabs(luma(on) - luma(off)) < 0.04 * luma(off));  // as bright
+  EXPECT_TRUE(std::abs(grey[0] - 150) <= 1 && std::abs(grey[2] - 150) <= 1);  // a grey scene tints nothing
+  pp_image_destroy(person);
+}
+
+TEST(studio_backdrop_is_lit_like_paper_keeps_its_hue_and_never_bands) {
+  const int W = 300, H = 400;
+  auto paint = [&](uint8_t r, uint8_t g, uint8_t b, float light, uint32_t seed) {
+    pp_image* img = rgba(W, H);
+    EXPECT_EQ(pp_studio_backdrop(img, r, g, b, light, 0.5f, 0.42f, seed, nullptr), PP_OK);
+    return img;
+  };
+  // Flat: exactly the colour.
+  pp_image* flat = paint(200, 155, 45, 0.0f, 7);
+  bool exact = true;
+  for (int y = 0; y < H; y += 7)
+    for (int x = 0; x < W; x += 5) {
+      const uint8_t* p = at(flat, x, y);
+      exact = exact && p[0] == 200 && p[1] == 155 && p[2] == 45 && p[3] == 255;
+    }
+  EXPECT_TRUE(exact);
+  // Lit: brighter where the light falls, darker in the corners, same hue.
+  pp_image* lit = paint(200, 155, 45, 1.0f, 7);
+  const double centre = meanLuma(lit, 140, 158, 160, 178), corner = meanLuma(lit, 0, 0, 20, 20), base = meanLuma(flat, 0, 0, 20, 20);
+  std::printf("    centre %.0f, flat %.0f, corner %.0f\n", centre, base, corner);
+  EXPECT_TRUE(centre > base + 12 && corner < base - 20);
+  for (const auto& xy : {std::pair<int, int>{150, 168}, {5, 5}, {150, 395}}) {
+    const uint8_t* p = at(lit, xy.first, xy.second);
+    // Linear-light ratios of the channels stay those of the colour.
+    const double rg = std::pow(p[0] / 255.0, 2.2) / std::pow(p[1] / 255.0, 2.2), want = std::pow(200 / 155.0, 2.2);
+    EXPECT_TRUE(p[0] > p[1] && p[1] > p[2] && std::fabs(rg / want - 1) < 0.12);
+  }
+  // No banding on a dark colour: the profile across the frame is smooth.
+  pp_image* navy = paint(25, 35, 70, 1.0f, 3);
+  double prev = -1, worst = 0;
+  for (int x = 0; x < W; ++x) {
+    double sum = 0;
+    for (int y = 120; y < 220; ++y) sum += at(navy, x, y)[2];
+    const double m = sum / 100.0;
+    if (prev >= 0) worst = std::max(worst, std::fabs(m - prev));
+    prev = m;
+  }
+  std::printf("    largest step across a dark backdrop: %.2f levels\n", worst);
+  EXPECT_TRUE(worst < 0.6);
+  // The same seed gives the same backdrop; another gives another texture.
+  pp_image* again = paint(25, 35, 70, 1.0f, 3);
+  pp_image* other = paint(25, 35, 70, 1.0f, 4);
+  EXPECT_TRUE(std::memcmp(pp_image_pixels(navy), pp_image_pixels(again), static_cast<size_t>(strideOf(navy)) * H) == 0);
+  EXPECT_TRUE(std::memcmp(pp_image_pixels(navy), pp_image_pixels(other), static_cast<size_t>(strideOf(navy)) * H) != 0);
+  EXPECT_EQ(pp_studio_backdrop(nullptr, 1, 2, 3, 1, 0.5f, 0.5f, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  for (pp_image* i : {flat, lit, navy, again, other}) pp_image_destroy(i);
 }
 
 TEST(studio_rejects_bad_input) {

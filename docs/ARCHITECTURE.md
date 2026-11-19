@@ -331,14 +331,17 @@ photo ─ ML Kit subject mask (→ person model → tap cut-out) ─┐
 strokes (Keep / Remove / Fix hair) + edge settings ─────────┘        │ previews at 1280 px, export at full size
                                                                       ▼
 clean plate (assets, my backgrounds, packs) or plain colour ── crop ── pp_studio_compose ─→ scene (JPEG) / PNG
-placement (anchor, size, mirror, tilt) + look (match, wrap, rim, shadows, blur, grain)
+  (a plain colour with Studio light: pp_studio_backdrop, lit seamless paper)
+placement (anchor, size, mirror, tilt) + look (match, wrap, rim, shadows, blur, grain, colour bounce)
+cut-out report → largest face (true size, also for couples), faces, outfit colours → "Suits your outfit"
 ```
 
 | Where | What |
 |---|---|
-| `native/engine/src/studio/` | `cutout.cpp` (snap, two-colour edges and hair, guided matte at full resolution, blur-fusion foreground colour), `compose.cpp` (placement, harmonisation, wrap and rim, contact and cast shadows, lens blur, grain) |
+| `native/engine/src/studio/` | `cutout.cpp` (snap, two-colour edges and hair, guided matte at full resolution, blur-fusion foreground colour), `compose.cpp` (placement, harmonisation, colour bounce, wrap and rim, contact and cast shadows, lens blur, grain; the studio paper backdrop) |
 | `native/engine/src/matte/tools.*` | Shared with Backdrops: colour triplets, blurs, clean-plate colours, hair recovery, islands |
 | `android/.../studio/StudioModule.kt` | Sessions, previews, scenes without the person (for dragging), Premium exports, gallery |
 | `android/.../studio/PersonParts.kt`, `SceneStudio.kt` | Parts map; strokes, settings, backgrounds, crops, export size |
+| `src/services/studio/colors.ts` | Colour picker conversions, the studio paper palette, and paper colours that suit an outfit |
 | `src/services/studio/` | Plate library (`plates.json` from `scripts/studio-plates.py`, with each plate's measured horizon, camera height and open floor), auto framing (true-to-scene size), frames, looks, gestures, service |
-| `src/screens/studio/` | Photoshoot Studio hub, Scene Swap screen, brush canvas, placement view, background picker |
+| `src/screens/studio/` | Photoshoot Studio hub, Scene Swap screen, brush canvas, placement view, background picker, colour picker |
