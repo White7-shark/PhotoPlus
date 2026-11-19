@@ -8,7 +8,7 @@ import org.json.JSONObject
 import java.io.FileNotFoundException
 
 /**
- * The photographed hairstyles: for each style id, `hair/<id>.png` (the hair
+ * The photographed hairstyles: for each style id, `hair/<id>.webp` (the hair
  * only, cut from an openly licensed photo: colour and cover, straight alpha)
  * and `hair/<id>.json` (`face`: the face box of the person it was cut from,
  * in the image's pixels; `natural`: the colour it is shown in until another
@@ -38,7 +38,7 @@ class HairLibrary(private val context: Context) {
       inPremultiplied = false
       inPreferredConfig = Bitmap.Config.ARGB_8888
     }
-    val bmp = context.assets.open("hair/$id.png").use { BitmapFactory.decodeStream(it, null, opts) }
+    val bmp = context.assets.open("hair/$id.webp").use { BitmapFactory.decodeStream(it, null, opts) }
       ?: throw EngineException(EngineException.IO_ERROR, "The hairstyle could not be read")
     // The previous one is left to the garbage collector: a job may still be drawing with it.
     return Photo(id, bmp, face, natural).also { last = it }

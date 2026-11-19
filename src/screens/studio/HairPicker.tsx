@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Icon } from '../../components';
-import { HAIR_COLOURS, hairSummary, stylesFor, type HairChoice, type HairGroup } from '../../services/studio/hair';
+import { HAIR_COLOURS, hairCredit, hairSummary, stylesFor, type HairChoice, type HairGroup } from '../../services/studio/hair';
 import { useTheme } from '../../theme';
 
 type Tab = 'colour' | HairGroup;
@@ -30,6 +30,7 @@ export function HairPicker({
 }) {
   const theme = useTheme();
   const [tab, setTab] = useState<Tab>('colour');
+  const credit = hairCredit(value.style);
   const choose = (c: HairChoice) => (locked ? onLocked() : onChange(c));
   const chip = (key: string, label: string, selected: boolean, onPress: () => void, swatch?: string) => (
     <Pressable
@@ -94,8 +95,13 @@ export function HairPicker({
       <AppText variant="caption" tone="tertiary">
         {tab === 'colour'
           ? 'Colours your own hair, or a new style. The strands and shine stay.'
-          : 'Your own hair is taken away and the new style drawn in, fitted to your face.'}
+          : 'Your own hair is taken away and the new style, real hair from a photo, fitted to your head.'}
       </AppText>
+      {credit ? (
+        <AppText variant="caption" tone="tertiary" testID="hair-credit">
+          Hair photo: {credit.author}, {credit.license}
+        </AppText>
+      ) : null}
     </View>
   );
 }

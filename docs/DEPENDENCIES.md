@@ -93,6 +93,14 @@ A clean `npm ci` reports **0 deprecated packages** and **0 warnings**. `@parcel/
 
 The licence texts ship in `android/app/src/main/assets/fonts/LICENSES.txt`. Prop artwork and the brand mark's camera are original: `scripts/make-props.mjs` and `scripts/make-brand-mark.mjs` draw them as SVG and renders it with the Playwright/Chromium already used for the design previews. It is a build-time tool only, not an app dependency. The editor preview script uses Pillow and MediaPipe (desktop only), as the Spotlight preview does.
 
+## Photographed hairstyles (Photoshoot Studio)
+
+The hair the studio puts on a person is real hair, cut from openly licensed photos (Wikimedia Commons, Openverse). `scripts/make-hair-library.py` builds them from `scripts/hair-library.json`: one source photo per style, with its author and licence. Only CC0, public domain, CC BY and CC BY-SA photos are used. The result is `android/app/src/main/assets/hair/<id>.webp` (the hair only, about 150 KB) and `<id>.json` (its face box, natural colour and credit). Credits are in `src/services/studio/hairPhotos.json`, and the hair picker shows the credit with the style, as CC BY and BY-SA ask. A hair layer cut from a CC BY-SA photo is shared under the same licence.
+
+| Style | Photo | Author | Licence |
+|---|---|---|---|
+| afro | [Afro Hair 1](https://commons.wikimedia.org/wiki/File:Afro_Hair_1.jpg) | Amuzujoe | CC BY-SA 4.0 |
+
 ## Native engine libraries (Phase 4)
 
 | Library | Version | Licence | Notes |

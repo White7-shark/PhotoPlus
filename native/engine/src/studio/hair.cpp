@@ -1198,7 +1198,7 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
     return cover;
   };
   // The radial fit, as a table of how far the inner edge moves per direction.
-  constexpr int kDirs = 180;
+  constexpr int kDirs = 360;
   std::array<float, kDirs> radD{}, radEdge{};
   const V2 radC{chinT.x, g.top + 0.55f * g.unit};
   const float radU = g.unit, radReach = 1.5f * g.unit;
@@ -1219,13 +1219,13 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
       }
       // Around the top and the sides of the face only (not below the chin).
       const float on = std::clamp((std::cos(th) + 0.35f) / 0.5f, 0.0f, 1.0f);
-      rawD[static_cast<size_t>(i)] = (rt > 0.0f && rd > 0.0f) ? std::clamp(rd - rt, -0.04f * radU, 0.4f * radU) * on : 0.0f;
+      rawD[static_cast<size_t>(i)] = (rt > 0.0f && rd > 0.0f) ? std::clamp(rd - rt, -0.04f * radU, 0.75f * radU) * on : 0.0f;
       radEdge[static_cast<size_t>(i)] = rd > 0.0f ? rd : (rt > 0.0f ? rt : 0.6f * radU);
     }
     for (int i = 0; i < kDirs; ++i) {  // smooth around the circle
       float sum = 0.0f, wsum = 0.0f;
-      for (int k = -10; k <= 10; ++k) {
-        const float wk = std::exp(-0.5f * static_cast<float>(k * k) / 12.0f);
+      for (int k = -8; k <= 8; ++k) {
+        const float wk = std::exp(-0.5f * static_cast<float>(k * k) / 9.0f);  // about 3 degrees: follows a hairline's dip
         sum += wk * rawD[static_cast<size_t>((i + k + kDirs) % kDirs)], wsum += wk;
       }
       radD[static_cast<size_t>(i)] = sum / wsum;
