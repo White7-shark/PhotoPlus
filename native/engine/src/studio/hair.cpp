@@ -67,6 +67,7 @@ struct Style {
   RopeKind rope;
   float ropeW;          // rope width
   bool freeform;        // ropes: uneven, thick (rasta)
+  bool highTop = false; // ropes: short locs on top, the sides faded to the skin
 };
 
 // clang-format off
@@ -97,7 +98,7 @@ const std::vector<Style>& styles() {
     {"long-locs",      true,  Kind::Ropes,   0.06f, 0.08f, 0.9f,  0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.3f,  RopeKind::Locs, 0.06f, false},
     {"finger-waves",   true,  Kind::Strands, 0.0f,  0.0f,  -1.0f, 0.0f,  0.6f,  Extra::None,     false, true,  0.035f, 0.12f, 0.0f,   0.95f, RopeKind::Locs, 0, false},
     // Men
-    {"dreadlocks",     false, Kind::Ropes,   0.08f, 0.06f, 0.45f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.3f,  RopeKind::Locs, 0.07f, false},
+    {"dreadlocks",     false, Kind::Ropes,   0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.35f, RopeKind::Locs, 0.055f, false, true},
     {"rasta",          false, Kind::Ropes,   0.12f, 0.12f, 1.15f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.25f, RopeKind::Locs, 0.095f, true},
     {"afro-men",       false, Kind::Coils,   0.12f, 0.16f, -0.3f, 0.0f,  0.0f,  Extra::None,     true,  false, 0.0f,   0.0f,  0.0f,   0.3f,  RopeKind::Locs, 0, false},
     {"bald",           false, Kind::Dome,    0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.0f,  RopeKind::Locs, 0, false},
@@ -271,6 +272,15 @@ struct Geometry {
   float skullHalf;      // skull half width at the temples
 };
 
+// A head without hair: round over the top, its sides coming straight down
+// past the temples to the ears (where the face's own sides take over).
+float scalpSd(const Geometry& g, float X, float Y) {
+  const float cy = 0.2f;
+  const float top = ellipseSd(X, Y, 0.0f, cy, g.skullHalf, cy - g.skullTop);
+  const float sides = std::max(std::fabs(X) - g.skullHalf * (1.0f - 0.06f * smooth(cy, 0.5f, Y)), std::max(cy - Y, Y - 0.5f));
+  return Y < cy ? top : std::min(top, sides);
+}
+
 // ---------------------------------------------------------------------------
 // The style's shape: signed distance (< 0 inside), whether in an extra (a
 // bun, a puff), drawn as coils.
@@ -290,11 +300,8 @@ ShapeAt shapeAt(const Style& st, const Geometry& g, float X, float Y) {
     d = ellipseSd(X, Y, 0.0f, 0.12f - 0.3f * st.top, skullRx + 0.14f + 0.7f * st.side, 0.58f + st.top);
     d += 0.03f * fbm(X * 7.0f, Y * 7.0f, 77);  // a lumpy, natural outline
     d = std::max(d, (Y - (0.8f + std::max(0.0f, st.len))) * 1.5f);
-  } else if (st.kind == Kind::Dome) {
-    // The scalp continues the forehead: as wide as it at the temples, then
-    // round over the top; its lower sides lie under the face's own.
-    d = ellipseSd(X, Y, 0.0f, 0.15f, skullRx, 0.15f - g.skullTop);
-    d = std::max(d, Y - 0.5f);
+  } else if (st.kind == Kind::Dome || st.highTop) {
+    d = scalpSd(g, X, Y);
     (void)a;
   } else {
     const float capRx = skullRx + st.side + 0.012f, capRy = skullRy + 0.5f * st.top + 0.012f, capCy = skullCy - 0.5f * st.top;
@@ -669,24 +676,20 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
         }
     }
     // A shaved head sits inside the hair's outline.
-    g.skullTop = std::clamp((topY - g.top) / g.unit + (st->kind == Kind::Dome ? 0.1f : 0.03f), -0.36f, -0.12f);
+    const bool shaved = st->kind == Kind::Dome || st->highTop;
+    // A shaved head sits just inside the outline of short hair.
+    g.skullTop = std::clamp((topY - g.top) / g.unit + (shaved ? 0.045f : 0.03f), -0.38f, -0.12f);
     const auto row = static_cast<int32_t>(std::clamp(g.top + 0.1f * g.unit, 0.0f, static_cast<float>(h - 1)));
     int32_t l = w, r = -1;
     for (int32_t x = 0; x < w; ++x)
       if (alpha[static_cast<size_t>(row) * w + x] > 0.5f) l = std::min(l, x), r = std::max(r, x);
     const float ownHalf = r > l ? 0.5f * static_cast<float>(r - l) / g.unit : g.halfFace * 1.12f;
     g.skullHalf = std::clamp(ownHalf, g.halfFace * 1.0f, g.halfFace * 1.12f);
-    if (st->kind == Kind::Dome) {
-      // As wide as the forehead (the skin found at its top), a touch over.
-      const auto yT = static_cast<int32_t>(std::clamp(g.top + 0.08f * g.unit, 0.0f, static_cast<float>(h - 1)));
-      const auto c0 = std::clamp(static_cast<int32_t>(g.cx), 0, w - 1);
-      int32_t fl = c0, fr = c0;
-      if (faceKeep.at(c0, yT) > 0.5f) {
-        while (fl > 0 && faceKeep.at(fl - 1, yT) > 0.5f) --fl;
-        while (fr < w - 1 && faceKeep.at(fr + 1, yT) > 0.5f) ++fr;
-      }
-      const float half = 0.5f * static_cast<float>(fr + 1 - fl) / g.unit;
-      g.skullHalf = fr > fl ? std::clamp(half * 1.06f, g.halfFace * 0.8f, g.halfFace * 1.05f) : std::min(g.skullHalf, g.halfFace * 0.98f);
+    if (shaved) {
+      // As wide as the head itself (the outline at the temples, less the
+      // hair's thickness): the temples and the sides above the ears were
+      // under the hair, and are head too.
+      g.skullHalf = std::clamp(ownHalf - 0.035f, g.halfFace * 0.95f, g.halfFace * 1.18f);
     }
   }
   auto unitsX = [&](float px) { return (px - g.cx) / g.unit; };
@@ -1033,6 +1036,56 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
     return path;
   };
 
+  // A head without hair (bald, or the faded sides of a high top): the
+  // person's own skin carried up from the forehead and temples (a smooth
+  // fill, so it matches where it meets them), rounded by the light relative
+  // to the forehead, with a soft sheen and skin grain. `fade`: how much
+  // close-cut hair shows, most at the top, none toward the ears.
+  auto drawScalp = [&](float fade) {
+    // A shaved head: the person's own skin carried up from the forehead and
+    // temples (a smooth fill, so it matches where it meets them), rounded by
+    // the light relative to the forehead, with a soft sheen and skin grain.
+    Grid faceWide = faceKeep;
+    blurGrid(faceWide, std::max(1.0f, 0.03f * g.unit));
+    std::vector<V3> skinFill = col;
+    {
+      std::vector<float> known(n);
+      for (size_t i = 0; i < n; ++i) known[i] = (faceKeep.v[i] > 0.9f && alpha[i] > 0.9f && skinLike(col[i]) > 0.5f) ? 1.0f : 0.0f;
+      pushPull(skinFill, known, w, h);
+    }
+    auto fillAt = [&](float X, float Y) {
+      const auto x = std::clamp(static_cast<int32_t>(g.cx + X * g.unit), 0, w - 1), y = std::clamp(static_cast<int32_t>(g.top + Y * g.unit), 0, h - 1);
+      return skinFill[static_cast<size_t>(y) * w + x];
+    };
+    const V3 nHair = norm3(V3{0.0f, 0.25f, 1.0f});  // the forehead's normal, near the hairline
+    const float foreLight = 0.55f + 0.45f * std::max(0.0f, dot3(nHair, kLight));
+    for (int32_t y = 0; y < L.h; ++y)
+      for (int32_t x = 0; x < L.w; ++x) {
+        const float X = L.toX(static_cast<float>(x) + 0.5f), Y = L.toY(static_cast<float>(y) + 0.5f);
+        float cov = smooth(0.006f, -0.006f, sd.at(x, y));
+        // Over the face, fading into it across a band (no seam).
+        const float fk = faceWide.sample(g.cx + X * g.unit, g.top + Y * g.unit);
+        cov *= 1.0f - smooth(0.45f, 0.97f, fk);
+        if (cov <= 0.0f) continue;
+        const float ex = X / (g.skullHalf + 0.005f), ey = Y < 0.2f ? (Y - 0.2f) / (0.2f - g.skullTop + 0.005f) : 0.0f;
+        const float rr = std::min(1.0f, std::sqrt(ex * ex + ey * ey));
+        const V3 nrm = norm3(V3{ex, ey, std::sqrt(std::max(0.02f, 1.0f - rr * rr))});
+        const float light = std::clamp((0.55f + 0.45f * std::max(0.0f, dot3(nrm, kLight))) / foreLight, 0.7f, 1.1f) * (1.0f - 0.18f * smooth(0.75f, 1.0f, rr));
+        const float spec = std::pow(std::max(0.0f, dot3(nrm, kHalf)), 24.0f);
+        const float tex = 1.0f + 0.03f * fbm(X * 160.0f, Y * 160.0f, params.seed + 41) + 0.018f * vnoise(X * 520.0f, Y * 520.0f, params.seed + 42);
+        const float stub = 1.0f - 0.05f * smooth(0.6f, 1.0f, vnoise(X * 700.0f, Y * 700.0f, params.seed + 40)) * smooth(0.3f, 0.9f, rr);
+        const V3 sk = fillAt(X, Y);
+        V3 c = sk * (light * tex * stub) + sk * (0.3f * spec);
+        if (fade > 0.0f) {
+          const float dens = fade * (1.0f - smooth(-0.02f, 0.34f, Y));
+          const float dots = smooth(0.2f, 0.9f, vnoise(X * 650.0f, Y * 650.0f, params.seed + 43) * 0.5f + 0.5f);
+          c = mix(c, base * (0.9f * light), std::clamp(dens * (0.4f + 0.6f * dots), 0.0f, 1.0f));
+        }
+        const size_t i = static_cast<size_t>(y) * L.w + x;
+        L.c[i] = c * cov + L.c[i] * (1.0f - cov), L.a[i] = cov + L.a[i] * (1.0f - cov);
+      }
+  };
+
   if (st->kind == Kind::Strands) {
     drawStrands(st->slick);
     if (st->extra == Extra::Puff || st->extra == Extra::CoilBun) drawCoils(true, 1.0f);
@@ -1087,6 +1140,51 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
         }
         drawRope(path, wU, RopeKind::Knots, static_cast<uint32_t>(k), 1.0f);
       }
+    } else if (st->highTop) {
+      // High-top locs: the sides faded close to the skin; short, even locs
+      // rising from the top of the head and falling forward and out.
+      drawScalp(0.75f);
+      for (int32_t y = 0; y < L.h; ++y)
+        for (int32_t x = 0; x < L.w; ++x) {
+          const float X = L.toX(static_cast<float>(x) + 0.5f), Y = L.toY(static_cast<float>(y) + 0.5f);
+          const float k = smooth(-0.01f, -0.04f, scalpSd(g, X, Y)) * smooth(0.06f, -0.02f, Y) * (1.0f - smooth(g.skullHalf * 0.6f, g.skullHalf * 0.85f, std::fabs(X))) * allow.at(x, y);
+          if (k <= 0.0f) continue;
+          const size_t i = static_cast<size_t>(y) * L.w + x;
+          L.c[i] = base * 0.22f * k + L.c[i] * (1.0f - k), L.a[i] = k + L.a[i] * (1.0f - k);
+        }
+      struct R {
+        V2 p;
+        float x, y;
+      };
+      std::vector<R> roots;
+      const float spacing = wU * 0.95f;
+      for (float Y = g.skullTop + 0.03f; Y < 0.03f; Y += spacing)
+        for (float X = -g.skullHalf * 0.72f; X <= g.skullHalf * 0.72f; X += spacing) {
+          const float jx = X + (U(rng) - 0.5f) * spacing * 0.4f, jy = Y + (U(rng) - 0.5f) * spacing * 0.4f;
+          if (scalpSd(g, jx, jy) > -0.025f) continue;
+          roots.push_back({V2{(jx - L.x0) * L.scale, (jy - L.y0) * L.scale}, jx, jy});
+        }
+      // From the back of the top to the front: the front ones lie over.
+      std::sort(roots.begin(), roots.end(), [](const R& r1, const R& r2) { return r1.y < r2.y; });
+      uint32_t id = 0;
+      for (const R& r : roots) {
+        std::vector<V2> path;
+        V2 p = r.p;
+        // The middle ones fall to one side or the other too.
+        const float lean = std::fabs(r.x) < 0.08f ? (U(rng) < 0.5f ? -0.35f : 0.35f) : 0.0f;
+        V2 dir = norm2(V2{r.x * 2.2f + lean + 0.2f * (U(rng) - 0.5f), -0.7f});
+        const float lenU = 0.28f + 0.1f * U(rng);
+        const float stepPx = 0.7f;
+        const auto steps = static_cast<int>(lenU * L.scale / stepPx);
+        for (int k = 0; k < steps; ++k) {
+          if (p.x < 1 || p.y < 1 || p.x >= static_cast<float>(L.w - 1) || p.y >= static_cast<float>(L.h - 1)) break;
+          path.push_back(p);
+          // Gravity bends them over.
+          dir = norm2(V2{dir.x * (1.0f + 0.6f * stepPx / L.scale), dir.y + 9.0f * stepPx / L.scale});
+          p = V2{p.x + dir.x * stepPx, p.y + dir.y * stepPx};
+        }
+        drawRope(path, wU * (0.92f + 0.16f * U(rng)), RopeKind::Locs, id++, 0.65f + 0.35f * smooth(g.skullTop, 0.03f, r.y));
+      }
     } else {
       // Locs, braids, twists: roots over the scalp; those nearer the face on top.
       underlayer(base * 0.25f, 0.01f);
@@ -1111,44 +1209,7 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
       }
     }
   } else {
-    // A shaved head: the person's own skin carried up from the forehead and
-    // temples (a smooth fill, so it matches where it meets them), rounded by
-    // the light relative to the forehead, with a soft sheen and skin grain.
-    Grid faceWide = faceKeep;
-    blurGrid(faceWide, std::max(1.0f, 0.03f * g.unit));
-    std::vector<V3> skinFill = col;
-    {
-      std::vector<float> known(n);
-      for (size_t i = 0; i < n; ++i) known[i] = (faceKeep.v[i] > 0.9f && alpha[i] > 0.9f && skinLike(col[i]) > 0.5f) ? 1.0f : 0.0f;
-      pushPull(skinFill, known, w, h);
-    }
-    auto fillAt = [&](float X, float Y) {
-      const auto x = std::clamp(static_cast<int32_t>(g.cx + X * g.unit), 0, w - 1), y = std::clamp(static_cast<int32_t>(g.top + Y * g.unit), 0, h - 1);
-      return skinFill[static_cast<size_t>(y) * w + x];
-    };
-    const V3 nHair = norm3(V3{0.0f, 0.25f, 1.0f});  // the forehead's normal, near the hairline
-    const float foreLight = 0.55f + 0.45f * std::max(0.0f, dot3(nHair, kLight));
-    for (int32_t y = 0; y < L.h; ++y)
-      for (int32_t x = 0; x < L.w; ++x) {
-        const float X = L.toX(static_cast<float>(x) + 0.5f), Y = L.toY(static_cast<float>(y) + 0.5f);
-        float cov = smooth(0.006f, -0.006f, sd.at(x, y));
-        // Over the face, fading into it across a band (no seam).
-        const float fk = faceWide.sample(g.cx + X * g.unit, g.top + Y * g.unit);
-        cov *= 1.0f - smooth(0.45f, 0.97f, fk);
-        if (cov <= 0.0f) continue;
-        const float ex = X / (g.skullHalf + 0.005f), ey = (Y - 0.2f) / (0.2f - g.skullTop + 0.005f);
-        const float rr = std::min(1.0f, std::sqrt(ex * ex + ey * ey));
-        const V3 nrm = norm3(V3{ex, ey, std::sqrt(std::max(0.02f, 1.0f - rr * rr))});
-        const float light = std::clamp((0.55f + 0.45f * std::max(0.0f, dot3(nrm, kLight))) / foreLight, 0.7f, 1.1f) * (1.0f - 0.18f * smooth(0.75f, 1.0f, rr));
-        const float spec = std::pow(std::max(0.0f, dot3(nrm, kHalf)), 24.0f);
-        const float tex = 1.0f + 0.03f * fbm(X * 160.0f, Y * 160.0f, params.seed + 41) + 0.018f * vnoise(X * 520.0f, Y * 520.0f, params.seed + 42);
-        const float stub = 1.0f - 0.05f * smooth(0.6f, 1.0f, vnoise(X * 700.0f, Y * 700.0f, params.seed + 40)) * smooth(0.3f, 0.9f, rr);
-        const V3 sk = fillAt(X, Y);
-        const V3 c = sk * (light * tex * stub) + sk * (0.3f * spec);
-        const size_t i = static_cast<size_t>(y) * L.w + x;
-        L.c[i] = c * cov + L.c[i] * (1.0f - cov), L.a[i] = cov + L.a[i] * (1.0f - cov);
-      }
-    (void)skin;
+    drawScalp(0.12f);
   }
   // Like the photo: a touch soft, a touch of grain.
   {
