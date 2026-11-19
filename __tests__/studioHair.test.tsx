@@ -19,7 +19,7 @@ const wrap = (ui: React.ReactElement) => render(<ThemeProvider preference="dark"
 describe('studio hair catalogue', () => {
   it('lists at least 20 styles each for women and men, exactly the engine’s styles', () => {
     expect(stylesFor('women').length).toBeGreaterThanOrEqual(20);
-    expect(stylesFor('men').length).toBeGreaterThanOrEqual(20);
+    expect(stylesFor('men').map(s => s.id)).toEqual(['dreadlocks', 'rasta', 'afro-men', 'bald']);
     expect(new Set(HAIR_STYLES.map(s => s.id)).size).toBe(HAIR_STYLES.length);
     // The engine's table (native/engine/src/studio/hair.cpp): same ids, same lists.
     const src = fs.readFileSync(path.join(__dirname, '../native/engine/src/studio/hair.cpp'), 'utf8');
@@ -67,7 +67,7 @@ describe('hair picker', () => {
     await rerender(<ThemeProvider preference="dark">{ui(false)}</ThemeProvider>);
     expect(screen.getByTestId('hair-summary').props.children).toBe('Copper');
     await fireEvent.press(screen.getByTestId('hair-tab-men'));
-    expect(screen.getByTestId('hair-waves-360')).toBeTruthy();
+    expect(screen.getByTestId('hair-rasta')).toBeTruthy();
     expect(screen.queryByTestId('hair-box-braids')).toBeNull();
     await fireEvent.press(screen.getByTestId('hair-tab-women'));
     await fireEvent.press(screen.getByTestId('hair-box-braids'));

@@ -1,8 +1,9 @@
 /**
  * Hair in the Photoshoot Studio (Premium): a new colour for the person's
- * own hair, or a new hairstyle in its place. The styles are drawn on the
- * device by the engine (native/engine/src/studio/hair.cpp: the ids here are
- * its ids); the person's own hair is taken out first.
+ * own hair, or a new hairstyle in its place: 23 for women, and dreadlocks,
+ * rasta, an afro or bald for men. The styles are drawn on the device by the
+ * engine strand by strand (native/engine/src/studio/hair.cpp: the ids here
+ * are its ids); the person's own hair is taken out first.
  */
 
 export type HairGroup = 'women' | 'men';
@@ -40,29 +41,10 @@ export const HAIR_STYLES: readonly HairStyle[] = [
   w('cornrow-braids', 'Cornrow braids'),
   w('long-locs', 'Long locs'),
   w('finger-waves', 'Finger waves'),
-  m('buzz-cut', 'Buzz cut'),
-  m('crew-cut', 'Crew cut'),
-  m('skin-fade', 'Skin fade'),
-  m('high-top-fade', 'High-top fade'),
+  m('dreadlocks', 'Dreadlocks'),
+  m('rasta', 'Rasta'),
   m('afro-men', 'Afro'),
-  m('caesar', 'Caesar'),
-  m('waves-360', '360 waves'),
-  m('short-locs', 'Short locs'),
-  m('shoulder-locs', 'Shoulder locs'),
-  m('twists', 'Twists'),
-  m('sponge-twists', 'Sponge twists'),
-  m('cornrows', 'Cornrows'),
-  m('undercut-slick', 'Slicked undercut'),
-  m('pompadour', 'Pompadour'),
-  m('quiff', 'Quiff'),
-  m('side-part', 'Side part'),
-  m('french-crop', 'French crop'),
-  m('curly-top-fade', 'Curly top fade'),
-  m('mohawk', 'Mohawk'),
-  m('faux-hawk', 'Faux hawk'),
-  m('man-bun', 'Man bun'),
-  m('long-men', 'Long'),
-  m('clean-shave', 'Clean shave'),
+  m('bald', 'Bald'),
 ];
 
 export interface HairColour {

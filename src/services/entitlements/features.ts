@@ -54,7 +54,7 @@ export const FEATURES = {
   vibeMatch: f('camera.vibeMatch', 'Vibe Match: shoot in the style of any photo', 'camera', 'premium'),
   transform: f('camera.transform', 'Transform: the look of a high-end camera lens', 'camera', 'premium'),
   advancedEditing: f('editing.advanced', 'Advanced editing tools', 'editing', 'premium'),
-  studioHair: f('replication.hair', 'Hair in the Photoshoot Studio: 18 colours and 46 styles for women and men', 'replication', 'premium'),
+  studioHair: f('replication.hair', 'Hair in the Photoshoot Studio: 18 colours, 23 women’s styles, and dreadlocks, rasta, afro or bald', 'replication', 'premium'),
   backgroundReplace: f(
     'replication.background',
     'Scene Swap: you in a new scene, cut-outs with clean edges, background libraries',

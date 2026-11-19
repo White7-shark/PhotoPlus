@@ -342,7 +342,7 @@ cut-out report → largest face (true size, also for couples), faces, outfit col
 | `native/engine/src/matte/tools.*` | Shared with Backdrops: colour triplets, blurs, clean-plate colours, hair recovery, islands |
 | `android/.../studio/StudioModule.kt` | Sessions, previews, scenes without the person (for dragging), Premium exports, gallery |
 | `android/.../studio/PersonParts.kt`, `SceneStudio.kt` | Parts map; strokes, settings, backgrounds, crops, export size |
-| `native/engine/src/studio/hair.cpp`, `src/services/studio/hair.ts` | Hair (Premium): recolouring the person's own hair, and 46 drawn hairstyles in place of it (`pp_studio_hair`); the app's catalogue matches the engine's table |
+| `native/engine/src/studio/hair.cpp`, `src/services/studio/hair.ts` | Hair (Premium): recolouring the person's own hair, and hairstyles drawn strand by strand in place of it (23 women's; dreadlocks, rasta, afro, bald for men) (`pp_studio_hair`); the app's catalogue matches the engine's table |
 | `src/services/studio/colors.ts` | Colour picker conversions, the studio paper palette, and paper colours that suit an outfit |
 | `src/services/studio/` | Plate library (`plates.json` from `scripts/studio-plates.py`, with each plate's measured horizon, camera height and open floor), auto framing (true-to-scene size), frames, looks, gestures, service |
 | `src/screens/studio/` | Photoshoot Studio hub, Scene Swap screen, brush canvas, placement view, background picker, colour picker |

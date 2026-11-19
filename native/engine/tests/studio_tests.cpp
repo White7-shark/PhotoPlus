@@ -874,7 +874,8 @@ TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
   int women = 0, men = 0;
   for (int i = 0; i < pp_studio_hair_style_count(); ++i) (pp_studio_hair_style_women(i) ? women : men)++;
   std::printf("    %d women's styles, %d men's\n", women, men);
-  EXPECT_TRUE(women >= 20 && men >= 20);
+  EXPECT_TRUE(women >= 20);
+  EXPECT_EQ(men, 4);  // dreadlocks, rasta, afro, bald
   EXPECT_TRUE(pp_studio_hair_style_id(-1) == nullptr && pp_studio_hair_style_id(pp_studio_hair_style_count()) == nullptr);
   // Every style draws, keeps the face and the body, and takes out the old
   // hair far from the head (the big round shape's sides).
@@ -896,7 +897,7 @@ TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
   }
   // A short cut: the old hair's far sides are gone.
   HairHead h = hairHead();
-  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "buzz-cut", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
   EXPECT_EQ(at(h.cut, 55, 110)[3], 0);
   EXPECT_EQ(at(h.cut, 185, 110)[3], 0);
   // Bad input.

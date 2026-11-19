@@ -1,25 +1,38 @@
-// Hair for the Photoshoot Studio: see studio.hpp. Two things it does:
+// Hair for the Photoshoot Studio: see studio.hpp.
 //
-//  - A new colour for the person's own hair: each hair pixel keeps its
-//    light relative to the hair's average (so strands, shine and shadow
-//    stay), at the new colour's lightness and hue.
+//  - A new colour for the person's own hair: each hair pixel keeps its light
+//    relative to the hair's average (strands, shine and shadow stay); the
+//    shadows keep some of the natural colour (dye shows least there), the
+//    highlights stay soft and a little less saturated, as dyed hair does.
 //  - A new hairstyle: the person's own hair is taken out of the cut-out
 //    (where it lay in front of the body, the body is filled in from around
-//    it), and a style is drawn in its place, placed and sized from the face.
-//    A style is a shape (built from the skull, the length, the volume and
-//    extras such as a bun or an afro) and a texture (straight, wavy, curly,
-//    coily, locs, braids, cornrows, waves, stubble...). Strands follow a
-//    flow from the parting, shaded darker toward the roots and the face,
-//    with a glossy band across the crown; tips are soft or fuzzy by
-//    texture. Long hair falls behind the neck and in front of the shoulders.
+//    it), and a style is drawn in its place, fitted to the head and face:
+//      strands  - thousands of fine strands traced along the style's flow,
+//                 lit as hair fibres are (Kajiya-Kay: a white highlight along
+//                 the strands and a coloured one below it), deeper strands
+//                 darker, coherent waves or per-strand curls;
+//      coils    - tight coils for afros and puffs, fuzzy at the edge;
+//      ropes    - locs, braids, twists, cornrows and knots as rounded ropes
+//                 with a fibrous surface (and stray fibres on locs);
+//      dome     - a shaved head: the person's own skin texture (from their
+//                 forehead) on a rounded, lit scalp, blended into it.
+//    The new hair casts a soft shadow on the face and neck, and is softened
+//    and grained like the photo around it.
 //
-// Everything is worked in linear light. Units for shapes: the face height
-// (hairline to chin) is 1, x is measured from the face's centre and y from
-// the hairline (down).
+// Skin is told from hair by its colour (measured on the face itself), not
+// only by the parts map, which can call a cheek in shadow hair: the face is
+// never cut, and the head is centred on the skin found.
+//
+// The analysis runs on a working grid (long edge <= 1280) and the hair is
+// drawn at most 560 px per face height; both are applied smoothly at the
+// cut-out's own size, so a full-resolution save stays light on memory.
+// Units for shapes: the face height (hairline to chin) is 1; x from the
+// face's centre, y from the hairline (down).
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <random>
 #include <vector>
 
 #include "../matte/tools.hpp"
@@ -32,77 +45,62 @@ using namespace matte;
 
 namespace {
 
-enum class Tex { Straight, Wavy, Curly, Coily, Locs, Braids, Cornrows, Waves, Stubble, Sleek, Twists, Bald };
-enum class Extra { None, TopKnot, Puff, Bantu, ManBun, Ponytail };
+enum class Kind { Strands, Coils, Ropes, Dome };
+enum class RopeKind { Locs, Braids, Twists, Cornrows, Knots };
+enum class Extra { None, TopKnot, Puff, Bantu, Ponytail, CoilBun };
 
 struct Style {
   const char* id;
   bool women;
-  Tex tex;
+  Kind kind;
   float top;     // volume above the skull
   float side;    // width beyond the skull at the temples
   float len;     // below the chin (negative: short, above the ears)
-  float fringe;  // how far bangs come down the forehead (0..0.45)
-  float part;    // the parting, -1 (left) .. 1 (right), 0 middle
-  float fade;    // 0..1: sides cut close
+  float fringe;  // how far bangs come down the forehead
+  float part;    // the parting, -1 (left) .. 1 (right)
   Extra extra;
   bool afro;     // a round shape
-  float strip;   // mohawk / faux-hawk: half-width of the top strip (0: none)
-  bool flat;     // flat top
   bool slick;    // combed back
+  float wave, waveLen;  // strands: coherent waves (amplitude, wavelength)
+  float curl;           // strands: per-strand curl amplitude
+  float gloss;          // 0..1
+  RopeKind rope;
+  float ropeW;          // rope width
+  bool freeform;        // ropes: uneven, thick (rasta)
 };
 
 // clang-format off
 const std::vector<Style>& styles() {
   static const std::vector<Style> s = {
     // Women
-    {"long-straight",    true,  Tex::Straight, 0.03f, 0.04f, 0.95f, 0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"silk-press",       true,  Tex::Sleek,    0.0f,  0.02f, 1.05f, 0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"long-waves",       true,  Tex::Wavy,     0.05f, 0.09f, 0.9f,  0.0f,  0.25f, 0, Extra::None,     false, 0, false, false},
-    {"beach-waves",      true,  Tex::Wavy,     0.06f, 0.11f, 0.6f,  0.0f,  0.4f,  0, Extra::None,     false, 0, false, false},
-    {"long-curls",       true,  Tex::Curly,    0.1f,  0.16f, 0.8f,  0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"bob",              true,  Tex::Straight, 0.03f, 0.06f, 0.02f, 0.0f,  0.3f,  0, Extra::None,     false, 0, false, false},
-    {"bob-bangs",        true,  Tex::Straight, 0.03f, 0.06f, 0.0f,  0.3f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"lob",              true,  Tex::Straight, 0.03f, 0.05f, 0.3f,  0.0f,  0.45f, 0, Extra::None,     false, 0, false, false},
-    {"pixie",            true,  Tex::Straight, 0.06f, 0.02f, -1.0f, 0.16f, 0.5f,  0, Extra::None,     false, 0, false, false},
-    {"curtain-bangs",    true,  Tex::Straight, 0.04f, 0.06f, 0.7f,  0.2f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"shag",             true,  Tex::Wavy,     0.07f, 0.13f, 0.35f, 0.16f, 0.0f,  0, Extra::None,     false, 0, false, false},
-    {"side-swept",       true,  Tex::Straight, 0.04f, 0.05f, 0.6f,  0.22f, 0.8f,  0, Extra::None,     false, 0, false, false},
-    {"top-knot",         true,  Tex::Sleek,    0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::TopKnot,  false, 0, false, true},
-    {"sleek-ponytail",   true,  Tex::Sleek,    0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::Ponytail, false, 0, false, true},
-    {"curly-updo",       true,  Tex::Curly,    0.02f, 0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::TopKnot,  false, 0, false, true},
-    {"afro",             true,  Tex::Coily,    0.2f,  0.3f,  0.0f,  0.0f,  0.0f,  0, Extra::None,     true,  0, false, false},
-    {"afro-puff",        true,  Tex::Coily,    0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::Puff,     false, 0, false, true},
-    {"twist-out",        true,  Tex::Curly,    0.14f, 0.22f, 0.2f,  0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"bantu-knots",      true,  Tex::Twists,   0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::Bantu,    false, 0, false, false},
-    {"box-braids",       true,  Tex::Braids,   0.03f, 0.06f, 1.0f,  0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"cornrow-braids",   true,  Tex::Cornrows, 0.0f,  0.0f,  0.8f,  0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"long-locs",        true,  Tex::Locs,     0.06f, 0.08f, 0.9f,  0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"finger-waves",     true,  Tex::Waves,    0.0f,  0.0f,  -1.0f, 0.0f,  0.6f,  0, Extra::None,     false, 0, false, false},
+    {"long-straight",  true,  Kind::Strands, 0.03f, 0.04f, 0.95f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.7f,  RopeKind::Locs, 0, false},
+    {"silk-press",     true,  Kind::Strands, 0.0f,  0.02f, 1.05f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   1.0f,  RopeKind::Locs, 0, false},
+    {"long-waves",     true,  Kind::Strands, 0.05f, 0.09f, 0.9f,  0.0f,  0.25f, Extra::None,     false, false, 0.024f, 0.26f, 0.0f,   0.65f, RopeKind::Locs, 0, false},
+    {"beach-waves",    true,  Kind::Strands, 0.06f, 0.11f, 0.6f,  0.0f,  0.4f,  Extra::None,     false, false, 0.03f,  0.2f,  0.004f, 0.45f, RopeKind::Locs, 0, false},
+    {"long-curls",     true,  Kind::Strands, 0.1f,  0.16f, 0.8f,  0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.02f,  0.45f, RopeKind::Locs, 0, false},
+    {"bob",            true,  Kind::Strands, 0.03f, 0.06f, 0.02f, 0.0f,  0.3f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.75f, RopeKind::Locs, 0, false},
+    {"bob-bangs",      true,  Kind::Strands, 0.03f, 0.06f, 0.0f,  0.3f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.75f, RopeKind::Locs, 0, false},
+    {"lob",            true,  Kind::Strands, 0.03f, 0.05f, 0.3f,  0.0f,  0.45f, Extra::None,     false, false, 0.012f, 0.3f,  0.0f,   0.7f,  RopeKind::Locs, 0, false},
+    {"pixie",          true,  Kind::Strands, 0.06f, 0.02f, -1.0f, 0.16f, 0.5f,  Extra::None,     false, false, 0.0f,   0.0f,  0.003f, 0.55f, RopeKind::Locs, 0, false},
+    {"curtain-bangs",  true,  Kind::Strands, 0.04f, 0.06f, 0.7f,  0.2f,  0.0f,  Extra::None,     false, false, 0.01f,  0.3f,  0.0f,   0.65f, RopeKind::Locs, 0, false},
+    {"shag",           true,  Kind::Strands, 0.07f, 0.13f, 0.35f, 0.16f, 0.0f,  Extra::None,     false, false, 0.02f,  0.16f, 0.006f, 0.45f, RopeKind::Locs, 0, false},
+    {"side-swept",     true,  Kind::Strands, 0.04f, 0.05f, 0.6f,  0.22f, 0.8f,  Extra::None,     false, false, 0.008f, 0.3f,  0.0f,   0.7f,  RopeKind::Locs, 0, false},
+    {"top-knot",       true,  Kind::Strands, 0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  Extra::TopKnot,  false, true,  0.0f,   0.0f,  0.0f,   0.85f, RopeKind::Locs, 0, false},
+    {"sleek-ponytail", true,  Kind::Strands, 0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  Extra::Ponytail, false, true,  0.0f,   0.0f,  0.0f,   0.9f,  RopeKind::Locs, 0, false},
+    {"curly-updo",     true,  Kind::Strands, 0.02f, 0.0f,  -1.0f, 0.0f,  0.0f,  Extra::CoilBun,  false, true,  0.0f,   0.0f,  0.0f,   0.6f,  RopeKind::Locs, 0, false},
+    {"afro",           true,  Kind::Coils,   0.2f,  0.3f,  0.0f,  0.0f,  0.0f,  Extra::None,     true,  false, 0.0f,   0.0f,  0.0f,   0.3f,  RopeKind::Locs, 0, false},
+    {"afro-puff",      true,  Kind::Strands, 0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  Extra::Puff,     false, true,  0.0f,   0.0f,  0.0f,   0.7f,  RopeKind::Locs, 0, false},
+    {"twist-out",      true,  Kind::Coils,   0.14f, 0.22f, 0.2f,  0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.35f, RopeKind::Locs, 0, false},
+    {"bantu-knots",    true,  Kind::Ropes,   0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  Extra::Bantu,    false, true,  0.0f,   0.0f,  0.0f,   0.6f,  RopeKind::Knots, 0.035f, false},
+    {"box-braids",     true,  Kind::Ropes,   0.03f, 0.06f, 1.0f,  0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.5f,  RopeKind::Braids, 0.045f, false},
+    {"cornrow-braids", true,  Kind::Ropes,   0.0f,  0.02f, 0.8f,  0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.5f,  RopeKind::Cornrows, 0.04f, false},
+    {"long-locs",      true,  Kind::Ropes,   0.06f, 0.08f, 0.9f,  0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.3f,  RopeKind::Locs, 0.06f, false},
+    {"finger-waves",   true,  Kind::Strands, 0.0f,  0.0f,  -1.0f, 0.0f,  0.6f,  Extra::None,     false, true,  0.035f, 0.12f, 0.0f,   0.95f, RopeKind::Locs, 0, false},
     // Men
-    {"buzz-cut",         false, Tex::Stubble,  0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"crew-cut",         false, Tex::Straight, 0.04f, 0.0f,  -1.0f, 0.05f, 0.0f,  0.4f, Extra::None,  false, 0, false, false},
-    {"skin-fade",        false, Tex::Straight, 0.05f, 0.0f,  -1.0f, 0.04f, 0.0f,  1, Extra::None,     false, 0, false, false},
-    {"high-top-fade",    false, Tex::Coily,    0.36f, 0.0f,  -1.0f, 0.0f,  0.0f,  1, Extra::None,     false, 0, true,  false},
-    {"afro-men",         false, Tex::Coily,    0.12f, 0.16f, -0.3f, 0.0f,  0.0f,  0, Extra::None,     true,  0, false, false},
-    {"caesar",           false, Tex::Stubble,  0.01f, 0.0f,  -1.0f, 0.08f, 0.0f,  0.3f, Extra::None,  false, 0, false, false},
-    {"waves-360",        false, Tex::Waves,    0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0.3f, Extra::None,  false, 0, false, false},
-    {"short-locs",       false, Tex::Locs,     0.1f,  0.05f, 0.1f,  0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"shoulder-locs",    false, Tex::Locs,     0.08f, 0.07f, 0.45f, 0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"twists",           false, Tex::Twists,   0.13f, 0.03f, -1.0f, 0.0f,  0.0f,  0.5f, Extra::None,  false, 0, false, false},
-    {"sponge-twists",    false, Tex::Coily,    0.08f, 0.0f,  -1.0f, 0.0f,  0.0f,  0.7f, Extra::None,  false, 0, false, false},
-    {"cornrows",         false, Tex::Cornrows, 0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"undercut-slick",   false, Tex::Sleek,    0.08f, 0.0f,  -1.0f, 0.0f,  0.0f,  1, Extra::None,     false, 0, false, true},
-    {"pompadour",        false, Tex::Sleek,    0.2f,  0.0f,  -1.0f, 0.0f,  0.0f,  0.6f, Extra::None,  false, 0, false, true},
-    {"quiff",            false, Tex::Straight, 0.16f, 0.0f,  -1.0f, 0.04f, 0.0f,  0.5f, Extra::None,  false, 0, false, false},
-    {"side-part",        false, Tex::Straight, 0.05f, 0.0f,  -1.0f, 0.0f,  -0.55f, 0.2f, Extra::None, false, 0, false, false},
-    {"french-crop",      false, Tex::Straight, 0.04f, 0.0f,  -1.0f, 0.13f, 0.0f,  0.6f, Extra::None,  false, 0, false, false},
-    {"curly-top-fade",   false, Tex::Curly,    0.16f, 0.0f,  -1.0f, 0.04f, 0.0f,  1, Extra::None,     false, 0, false, false},
-    {"mohawk",           false, Tex::Straight, 0.22f, 0.0f,  -1.0f, 0.0f,  0.0f,  1, Extra::None,     false, 0.1f, false, true},
-    {"faux-hawk",        false, Tex::Straight, 0.15f, 0.0f,  -1.0f, 0.0f,  0.0f,  0.7f, Extra::None,  false, 0.18f, false, true},
-    {"man-bun",          false, Tex::Sleek,    0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::ManBun,   false, 0, false, true},
-    {"long-men",         false, Tex::Straight, 0.04f, 0.05f, 0.35f, 0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
-    {"clean-shave",      false, Tex::Bald,     0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  0, Extra::None,     false, 0, false, false},
+    {"dreadlocks",     false, Kind::Ropes,   0.08f, 0.06f, 0.45f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.3f,  RopeKind::Locs, 0.07f, false},
+    {"rasta",          false, Kind::Ropes,   0.12f, 0.12f, 1.15f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.25f, RopeKind::Locs, 0.095f, true},
+    {"afro-men",       false, Kind::Coils,   0.12f, 0.16f, -0.3f, 0.0f,  0.0f,  Extra::None,     true,  false, 0.0f,   0.0f,  0.0f,   0.3f,  RopeKind::Locs, 0, false},
+    {"bald",           false, Kind::Dome,    0.0f,  0.0f,  -1.0f, 0.0f,  0.0f,  Extra::None,     false, false, 0.0f,   0.0f,  0.0f,   0.0f,  RopeKind::Locs, 0, false},
   };
   return s;
 }
@@ -130,7 +128,7 @@ const std::array<float, 256>& linearLut() {
   return v;
 }
 
-// Smooth value noise in -1..1 (a hashed lattice, smoothstep interpolation).
+// Smooth value noise in -1..1.
 float vnoise(float x, float y, uint32_t seed) {
   const auto x0 = static_cast<int32_t>(std::floor(x)), y0 = static_cast<int32_t>(std::floor(y));
   float tx = x - static_cast<float>(x0), ty = y - static_cast<float>(y0);
@@ -148,7 +146,6 @@ float fbm(float x, float y, uint32_t seed) {
   return 0.55f * vnoise(x, y, seed) + 0.3f * vnoise(x * 2.03f, y * 2.03f, seed + 1) + 0.15f * vnoise(x * 4.1f, y * 4.1f, seed + 2);
 }
 
-// Signed distance (approximate, in the same units) to an axis-aligned ellipse: < 0 inside.
 inline float ellipseSd(float x, float y, float cx, float cy, float rx, float ry) {
   const float dx = (x - cx) / rx, dy = (y - cy) / ry;
   return (std::sqrt(dx * dx + dy * dy) - 1.0f) * std::min(rx, ry);
@@ -161,11 +158,63 @@ inline float boxSd(float x, float y, float x0, float y0, float x1, float y1, flo
          round;
 }
 
-// The parts map's hair (or face skin) as a soft plane at the cut-out's size.
-std::vector<float> zoneAt(const ImageBuffer& zones, Zone zone, int32_t W, int32_t H) {
+struct V2 {
+  float x = 0, y = 0;
+};
+inline V2 norm2(V2 v) {
+  const float l = std::sqrt(v.x * v.x + v.y * v.y);
+  return l > 1e-6f ? V2{v.x / l, v.y / l} : V2{0.0f, 1.0f};
+}
+inline V3 norm3(V3 v) {
+  const float l = std::sqrt(v.r * v.r + v.g * v.g + v.b * v.b);
+  return l > 1e-6f ? V3{v.r / l, v.g / l, v.b / l} : V3{0, 0, 1};
+}
+inline float dot3(V3 a, V3 b) { return a.r * b.r + a.g * b.g + a.b * b.b; }
+
+// A plane on a grid (row-major), sampled bilinearly.
+struct Grid {
+  int32_t w = 0, h = 0;
+  std::vector<float> v;
+  void init(int32_t W, int32_t H, float fill = 0.0f) { w = W, h = H, v.assign(static_cast<size_t>(W) * H, fill); }
+  float& at(int32_t x, int32_t y) { return v[static_cast<size_t>(y) * w + x]; }
+  float at(int32_t x, int32_t y) const { return v[static_cast<size_t>(y) * w + x]; }
+  float sample(float x, float y) const {  // pixel-centre coordinates
+    const float fx = std::clamp(x - 0.5f, 0.0f, static_cast<float>(w - 1)), fy = std::clamp(y - 0.5f, 0.0f, static_cast<float>(h - 1));
+    const auto x0 = static_cast<int32_t>(fx), y0 = static_cast<int32_t>(fy);
+    const int32_t x1 = std::min(w - 1, x0 + 1), y1 = std::min(h - 1, y0 + 1);
+    const float tx = fx - static_cast<float>(x0), ty = fy - static_cast<float>(y0);
+    return (at(x0, y0) * (1 - tx) + at(x1, y0) * tx) * (1 - ty) + (at(x0, y1) * (1 - tx) + at(x1, y1) * tx) * ty;
+  }
+};
+
+void blurGrid(Grid& g, float sigma) {
+  if (sigma < 0.3f) return;
+  const int r = std::max(1, static_cast<int>(std::ceil(sigma * 2.5f)));
+  std::vector<float> k(static_cast<size_t>(2 * r + 1));
+  float s = 0;
+  for (int i = -r; i <= r; ++i) s += k[static_cast<size_t>(i + r)] = std::exp(-0.5f * static_cast<float>(i * i) / (sigma * sigma));
+  for (float& v : k) v /= s;
+  std::vector<float> tmp(g.v.size());
+  for (int32_t y = 0; y < g.h; ++y)
+    for (int32_t x = 0; x < g.w; ++x) {
+      float a = 0;
+      for (int i = -r; i <= r; ++i) a += k[static_cast<size_t>(i + r)] * g.at(std::clamp(x + i, 0, g.w - 1), y);
+      tmp[static_cast<size_t>(y) * g.w + x] = a;
+    }
+  for (int32_t y = 0; y < g.h; ++y)
+    for (int32_t x = 0; x < g.w; ++x) {
+      float a = 0;
+      for (int i = -r; i <= r; ++i) a += k[static_cast<size_t>(i + r)] * tmp[static_cast<size_t>(std::clamp(y + i, 0, g.h - 1)) * g.w + x];
+      g.at(x, y) = a;
+    }
+}
+
+// The parts map's zone as a soft plane on a grid.
+Grid zoneGrid(const ImageBuffer& zones, Zone zone, int32_t W, int32_t H) {
   const int32_t zw = zones.width(), zh = zones.height(), bpp = bytesPerPixel(zones.format());
   const auto id = static_cast<uint8_t>(zone);
-  std::vector<float> out(static_cast<size_t>(W) * H);
+  Grid g;
+  g.init(W, H);
   for (int32_t y = 0; y < H; ++y) {
     const float fy = std::clamp((static_cast<float>(y) + 0.5f) * static_cast<float>(zh) / static_cast<float>(H) - 0.5f, 0.0f,
                                 static_cast<float>(zh - 1));
@@ -179,15 +228,13 @@ std::vector<float> zoneAt(const ImageBuffer& zones, Zone zone, int32_t W, int32_
       const int32_t x1 = std::min(zw - 1, x0 + 1);
       const float tx = fx - static_cast<float>(x0);
       auto at = [&](int32_t xx, int32_t yy) { return zones.row(yy)[xx * bpp] == id ? 1.0f : 0.0f; };
-      out[static_cast<size_t>(y) * W + x] =
-          (at(x0, y0) * (1 - tx) + at(x1, y0) * tx) * (1 - ty) + (at(x0, y1) * (1 - tx) + at(x1, y1) * tx) * ty;
+      g.at(x, y) = (at(x0, y0) * (1 - tx) + at(x1, y0) * tx) * (1 - ty) + (at(x0, y1) * (1 - tx) + at(x1, y1) * tx) * ty;
     }
   }
-  return out;
+  return g;
 }
 
-// Push-pull fill: unknown pixels (w = 0) take the colour of known ones
-// around them, smoothly, at any distance.
+// Push-pull fill: unknown pixels (w = 0) take the colour of known ones around them.
 void pushPull(std::vector<V3>& c, std::vector<float>& w, int32_t W, int32_t H) {
   if (W <= 1 && H <= 1) return;
   const int32_t w2 = (W + 1) / 2, h2 = (H + 1) / 2;
@@ -205,227 +252,146 @@ void pushPull(std::vector<V3>& c, std::vector<float>& w, int32_t W, int32_t H) {
     for (int32_t x = 0; x < W; ++x) {
       const size_t i = static_cast<size_t>(y) * W + x;
       if (w[i] >= 1.0f) continue;
-      const V3 coarse = c2[static_cast<size_t>(y / 2) * w2 + x / 2];
+      // The coarser level, enlarged smoothly (bilinear), so fills have no blocks.
+      const float fx = std::clamp((static_cast<float>(x) + 0.5f) * 0.5f - 0.5f, 0.0f, static_cast<float>(w2 - 1));
+      const float fy = std::clamp((static_cast<float>(y) + 0.5f) * 0.5f - 0.5f, 0.0f, static_cast<float>(h2 - 1));
+      const auto x0 = static_cast<int32_t>(fx), y0 = static_cast<int32_t>(fy);
+      const int32_t x1 = std::min(w2 - 1, x0 + 1), y1 = std::min(h2 - 1, y0 + 1);
+      const float tx = fx - static_cast<float>(x0), ty = fy - static_cast<float>(y0);
+      auto C = [&](int32_t xx, int32_t yy) { return c2[static_cast<size_t>(yy) * w2 + xx]; };
+      const V3 coarse = (C(x0, y0) * (1 - tx) + C(x1, y0) * tx) * (1 - ty) + (C(x0, y1) * (1 - tx) + C(x1, y1) * tx) * ty;
       c[i] = w[i] > 0.0f ? mix(coarse, c[i], w[i]) : coarse;
     }
 }
 
 struct Geometry {
-  float cx, top, unit;  // face centre x, hairline y (pixels); one face height in pixels
-  float halfFace;       // half the face width, in face heights
-  float skullTop;       // the top of the skull (face heights, above the hairline: negative)
-  float skullHalf;      // the skull's half width at the temples (face heights)
+  float cx, top, unit;  // face centre x and hairline y (working-grid pixels); one face height in pixels
+  float halfFace;       // half the face width (face heights)
+  float skullTop;       // top of the skull (face heights, negative)
+  float skullHalf;      // skull half width at the temples
 };
 
-// One pixel of a style: coverage, colour (linear), and whether it lies
-// behind the person (hair behind the neck).
-struct HairPx {
-  float a = 0.0f;
-  V3 c{};
-  bool behind = false;
+// ---------------------------------------------------------------------------
+// The style's shape: signed distance (< 0 inside), whether in an extra (a
+// bun, a puff), drawn as coils.
+struct ShapeAt {
+  float d = 1e9f;
+  bool extra = false;
+  float dExtra = 1e9f;
 };
 
-// `faceSkin`: the parts map's face skin at this pixel (the face stays visible there, below any fringe).
-HairPx shade(const Style& st, const Geometry& g, float X, float Y, V3 base, V3 skin, float faceSkin, uint32_t seed) {
-  HairPx out;
+ShapeAt shapeAt(const Style& st, const Geometry& g, float X, float Y) {
+  ShapeAt out;
   const float a = g.halfFace;
   const float skullCy = 0.2f, skullRx = g.skullHalf, skullRy = skullCy - g.skullTop;
   const bool longHair = st.len > -0.5f;
-  // --- the shape (signed distance, < 0 inside) ---
-  float d = 1e9f;
+  float d;
   if (st.afro) {
-    d = ellipseSd(X, Y, 0.0f, 0.18f - 0.3f * st.top, skullRx + 0.25f + st.side, 0.62f + st.top);
-    d = std::max(d, Y - (0.95f + std::max(0.0f, st.len)));
+    d = ellipseSd(X, Y, 0.0f, 0.12f - 0.3f * st.top, skullRx + 0.14f + 0.7f * st.side, 0.58f + st.top);
+    d += 0.03f * fbm(X * 7.0f, Y * 7.0f, 77);  // a lumpy, natural outline
+    d = std::max(d, (Y - (0.8f + std::max(0.0f, st.len))) * 1.5f);
+  } else if (st.kind == Kind::Dome) {
+    // The scalp continues the forehead: as wide as it at the temples, then
+    // round over the top; its lower sides lie under the face's own.
+    d = ellipseSd(X, Y, 0.0f, 0.15f, skullRx, 0.15f - g.skullTop);
+    d = std::max(d, Y - 0.5f);
+    (void)a;
   } else {
-    // The cap: the skull with the style's volume.
     const float capRx = skullRx + st.side + 0.012f, capRy = skullRy + 0.5f * st.top + 0.012f, capCy = skullCy - 0.5f * st.top;
     float cap = ellipseSd(X, Y, 0.0f, capCy, capRx, capRy);
-    if (st.flat) cap = std::max(cap, -(Y - (-0.30f - st.top)) * 1.0f);  // a flat top
-    // Short hair stops at the ears; long hair falls.
-    const float earLine = longHair ? 0.35f : 0.38f;
+    const float earLine = 0.38f;
     if (!longHair) {
-      // Short sides taper in to the sideburns instead of ending in a block.
       cap = std::max(cap, Y - earLine);
-      cap = std::max(cap, std::fabs(X) - (skullRx + st.side + 0.02f - (0.22f * a) * smooth(0.02f, earLine, Y)));
+      cap = std::max(cap, std::fabs(X) - (capRx + 0.01f - (0.2f * a) * smooth(0.02f, earLine, Y)));
     }
     d = cap;
-    if (st.strip > 0.0f) {
-      // A mohawk or faux-hawk: a strip with height, the rest close.
-      // A mohawk or faux-hawk: a rounded strip with height; the sides are
-      // cut close (stubble, below).
-      const float stripD = ellipseSd(X, Y, 0.0f, -0.12f - 0.5f * st.top, st.strip, 0.3f + 0.5f * st.top);
-      d = std::min(cap, stripD);
-    }
     if (longHair) {
       const float bottom = 0.95f + st.len;
-      // Flaring a little toward the ends.
-      // Falling over the shoulders, fuller toward the ends.
       const float flare = (0.1f + 0.12f * smooth(0.6f, bottom, Y)) * smooth(0.1f, 0.9f, Y) + st.side;
-      const float hang = boxSd(X, Y, -(skullRx + flare), 0.1f, skullRx + flare, bottom, 0.14f);
-      d = std::min(d, hang);
+      d = std::min(d, boxSd(X, Y, -(skullRx + flare), 0.1f, skullRx + flare, bottom, 0.14f));
     }
   }
-  // Extras.
   float dx = 1e9f;
   switch (st.extra) {
-    case Extra::TopKnot: dx = ellipseSd(X, Y, 0.0f, -0.42f, 0.2f, 0.17f); break;
-    case Extra::Puff: dx = ellipseSd(X, Y, 0.0f, -0.4f, 0.36f, 0.3f); break;
-    case Extra::ManBun: dx = ellipseSd(X, Y, 0.0f, -0.38f, 0.14f, 0.12f); break;
+    case Extra::TopKnot: dx = ellipseSd(X, Y, 0.0f, g.skullTop - 0.12f, 0.2f, 0.17f); break;
+    case Extra::CoilBun: dx = ellipseSd(X, Y, 0.0f, g.skullTop - 0.12f, 0.22f, 0.19f); break;
+    case Extra::Puff: dx = ellipseSd(X, Y, 0.0f, g.skullTop - 0.12f, 0.36f, 0.3f); break;
     case Extra::Ponytail: dx = ellipseSd(X, Y, skullRx * 0.95f, 0.05f, 0.1f, 0.3f); break;
     case Extra::Bantu: {
-      const float pts[5][2] = {{-0.3f, -0.18f}, {0.0f, -0.33f}, {0.3f, -0.18f}, {-0.42f, 0.08f}, {0.42f, 0.08f}};
-      for (const auto& p : pts) dx = std::min(dx, ellipseSd(X, Y, p[0], p[1], 0.11f, 0.11f));
+      const float pts[5][2] = {{-0.3f, 0.12f}, {0.0f, 0.0f}, {0.3f, 0.12f}, {-0.42f, 0.4f}, {0.42f, 0.4f}};
+      for (const auto& p : pts) dx = std::min(dx, ellipseSd(X, Y, p[0] * skullRx / 0.46f, g.skullTop + p[1] * 0.6f, 0.11f, 0.11f));
       break;
     }
     default: break;
   }
-  const bool inExtra = dx < 0.03f;
-  d = std::min(d, dx);
-  // The face stays visible below the fringe line.
-  const float face = ellipseSd(X, Y, 0.0f, 0.58f, a * 1.0f, 0.62f);
-  const float fringeLine = std::max(0.0f, st.fringe);
-  const float fringeEdge = fringeLine + 0.025f * fbm(X * 30.0f, 0.0f, seed + 9);
-  float faceCut = 1.0f;
-  if (Y > fringeEdge || st.fringe <= 0.0f) faceCut = 1.0f - smooth(0.3f, 0.75f, faceSkin);
-  // The hairline: over the face, hair stops at the top of the forehead (or
-  // at the fringe), whatever the parts map makes of a forehead in shadow.
-  {
-    const float over = 1.0f - smooth(a * 0.8f, a * 1.0f, std::fabs(X));
-    const float u = X / std::max(a, 1e-3f);
-    const float line = st.fringe > 0.0f ? fringeEdge : -0.03f + 0.12f * u * u + 0.01f * vnoise(X * 60.0f, 0.0f, seed + 10);
-    faceCut = std::min(faceCut, 1.0f - over * smooth(line + 0.006f, line + 0.036f, Y) * (Y < 0.95f ? 1.0f : 0.0f));
-  }
-  // The parts below the chin, in front of the neck and chest, are behind.
-  out.behind = Y > 0.92f && std::fabs(X) < a * 0.95f && !inExtra;
-  if (st.extra == Extra::Ponytail && dx < 0.0f) out.behind = true;
-
-  // --- texture ---
-  const float px = st.part * a * 0.8f;
-  const float crownY = -0.3f - st.top;
-  const float ddx = X - px, ddy = Y - crownY;
-  const float r = std::sqrt(ddx * ddx + ddy * ddy);
-  const float ang = std::atan2(ddx, std::max(ddy, 1e-3f));
-  const float t = longHair ? smooth(0.15f, 0.6f, Y) : 0.0f;
-  float S = mixf(ang * 0.45f, X, t);  // across the strands
-  float L = mixf(r, Y, t);            // along them
-  if (st.slick) S = X * (0.6f + 0.4f * std::fabs(ddy) / std::max(r, 1e-3f)), L = -Y;
-  float strand = 0.0f, alphaMul = 1.0f, scalp = 0.0f;
-  float fuzz = 0.004f, jitter = 0.006f, gloss = 0.5f;
-  switch (st.tex) {
-    case Tex::Straight:
-      strand = 0.6f * vnoise(S * 140.0f, L * 4.0f, seed) + 0.4f * vnoise(S * 380.0f, L * 9.0f, seed + 3);
-      break;
-    case Tex::Sleek:
-      strand = 0.7f * vnoise(S * 120.0f, L * 3.0f, seed) + 0.3f * vnoise(S * 300.0f, L * 6.0f, seed + 3);
-      gloss = 0.9f, jitter = 0.003f;
-      break;
-    case Tex::Wavy: {
-      const float w = S + 0.035f * std::sin(L * 16.0f + 2.0f * vnoise(S * 8.0f, 0.0f, seed + 5));
-      strand = 0.6f * vnoise(w * 130.0f, L * 4.0f, seed) + 0.4f * vnoise(w * 340.0f, L * 8.0f, seed + 3);
-      jitter = 0.012f;
-      break;
-    }
-    case Tex::Curly: {
-      const float w = S + 0.05f * std::sin(L * 38.0f + 3.0f * vnoise(S * 12.0f, L * 3.0f, seed + 5));
-      const float clump = fbm(X * 22.0f, Y * 22.0f, seed + 6);
-      strand = 0.5f * vnoise(w * 120.0f, L * 10.0f, seed) + 0.5f * clump;
-      fuzz = 0.02f, jitter = 0.03f, gloss = 0.35f;
-      break;
-    }
-    case Tex::Coily: {
-      const float fine = fbm(X * 140.0f, Y * 140.0f, seed);
-      const float clump = fbm(X * 28.0f, Y * 28.0f, seed + 6);
-      strand = 0.55f * fine + 0.45f * clump;
-      fuzz = 0.025f, jitter = 0.035f, gloss = 0.2f;
-      break;
-    }
-    case Tex::Locs:
-    case Tex::Braids:
-    case Tex::Twists: {
-      const float freq = st.tex == Tex::Locs ? 13.0f : st.tex == Tex::Braids ? 22.0f : 16.0f;
-      const float q = S * freq + 0.15f * vnoise(L * 3.0f, S * 2.0f, seed + 7);
-      const float f = fract(q);
-      const float cyl = std::sqrt(std::max(0.0f, 1.0f - (2.0f * f - 1.0f) * (2.0f * f - 1.0f)));
-      float pattern;
-      if (st.tex == Tex::Locs) {
-        pattern = 0.6f * fbm(std::floor(q) * 3.1f, L * 35.0f, seed + 8);
-      } else {
-        // Braids and twists: the strands cross the rope at an angle.
-        pattern = std::fabs(fract(L * (st.tex == Tex::Braids ? 40.0f : 30.0f) + (f < 0.5f ? f : 1.0f - f) * 1.2f) - 0.5f) * 2.0f - 0.5f;
-      }
-      strand = cyl * 1.3f - 0.6f + 0.35f * pattern;
-      alphaMul = smooth(0.0f, 0.18f, cyl) * 0.25f + 0.75f;
-      gloss = 0.25f, jitter = 0.012f;
-      break;
-    }
-    case Tex::Cornrows: {
-      // Rows running from the hairline back over the head, braided.
-      const float q = X * 15.0f;
-      const float f = fract(q);
-      const float cyl = std::sqrt(std::max(0.0f, 1.0f - (2.0f * f - 1.0f) * (2.0f * f - 1.0f)));
-      const float chev = std::fabs(fract(Y * 42.0f + (f < 0.5f ? f : 1.0f - f) * 1.2f) - 0.5f) * 2.0f - 0.5f;
-      strand = cyl * 1.3f - 0.6f + 0.35f * chev;
-      // The scalp shows between the rows.
-      if (Y < 0.9f && cyl < 0.25f) scalp = 1.0f - smooth(0.12f, 0.25f, cyl);
-      gloss = 0.3f;
-      break;
-    }
-    case Tex::Waves: {
-      const float q = r * 55.0f + 0.6f * vnoise(X * 6.0f, Y * 6.0f, seed + 4);
-      strand = 0.75f * std::sin(q * 6.2832f) + 0.25f * vnoise(X * 200.0f, Y * 200.0f, seed);
-      gloss = 0.8f;
-      break;
-    }
-    case Tex::Stubble:
-    case Tex::Bald: break;
-  }
-  // Fade: the sides cut close, short hair over skin.
-  float stubbleMix = 0.0f;
-  if (st.tex == Tex::Stubble) stubbleMix = 1.0f;
-  if (st.fade > 0.0f && !inExtra) {
-    const float sideness = smooth(a * 0.55f, a * 0.95f, std::fabs(X)) * smooth(-0.22f, 0.05f, Y);
-    const float shortBelow = st.strip > 0.0f ? smooth(st.strip, st.strip * 1.6f, std::fabs(X)) : 0.0f;
-    stubbleMix = std::max(stubbleMix, st.fade * std::max(sideness, shortBelow));
-  }
-  // --- light ---
-  const float dFace = face;
-  const float ao = mixf(0.62f, 1.0f, smooth(0.0f, 0.1f, dFace)) * mixf(0.8f, 1.0f, smooth(1.4f, 0.5f, Y));
-  const float rr = std::sqrt((X / (skullRx + st.side)) * (X / (skullRx + st.side)) +
-                             ((Y - skullCy + 0.5f * st.top) / (skullRy + 0.5f * st.top)) * ((Y - skullCy + 0.5f * st.top) / (skullRy + 0.5f * st.top)));
-  const float sheenBand = std::exp(-((rr - 0.78f) / 0.11f) * ((rr - 0.78f) / 0.11f)) * smooth(0.35f, -0.25f, Y);
-  const float sheenLong = longHair ? std::exp(-((Y - 0.55f) / 0.12f) * ((Y - 0.55f) / 0.12f)) * 0.5f : 0.0f;
-  const float sheen = gloss * std::max(sheenBand, sheenLong) * (0.55f + 0.45f * std::max(0.0f, strand));
-  // Light from above: the crown a little brighter than the sides.
-  float light = std::clamp(0.62f + 0.38f * strand, 0.15f, 1.3f) * ao * mixf(0.85f, 1.12f, smooth(0.45f, -0.4f, Y));
-  V3 c = base * light;
-  const V3 highlight = mix(base * 4.0f + grey(0.02f), grey(lum(base) * 3.0f + 0.05f), 0.4f);
-  c = c + highlight * (0.55f * sheen);
-  if (st.tex == Tex::Bald) {
-    // A shaved head: the skin of the face, rounded by the light.
-    const float round = std::sqrt(std::max(0.0f, 1.0f - rr * rr));
-    c = skin * (0.6f + 0.25f * round) + grey(0.05f * std::exp(-((rr - 0.55f) / 0.18f) * ((rr - 0.55f) / 0.18f)) * smooth(0.3f, -0.2f, Y));
-  } else if (stubbleMix > 0.0f) {
-    const float dots = vnoise(X * 420.0f, Y * 420.0f, seed + 11) * 0.5f + 0.5f;
-    const float dots2 = std::pow(std::max(0.0f, vnoise(X * 900.0f, Y * 900.0f, seed + 14) * 0.5f + 0.5f), 2.0f);
-    // Close-cut hair: scalp with dark points of hair in it.
-    const V3 stub = mix(skin * 0.62f, base * 0.9f, std::clamp(0.35f + 0.25f * dots + 0.45f * dots2, 0.0f, 1.0f));
-    c = mix(c, stub * mixf(0.85f, 1.0f, std::sqrt(std::max(0.0f, 1.0f - rr * rr))), stubbleMix);
-    fuzz = mixf(fuzz, 0.012f, stubbleMix), jitter = mixf(jitter, 0.004f, stubbleMix);
-  }
-  if (scalp > 0.0f) c = mix(c, skin * 0.85f, scalp);
-  // --- edge ---
-  d += jitter * vnoise(X * 45.0f, Y * 45.0f, seed + 12) + 0.5f * jitter * vnoise(X * 140.0f, Y * 140.0f, seed + 13);
-  if (longHair && (st.tex == Tex::Straight || st.tex == Tex::Sleek || st.tex == Tex::Wavy)) {
-    // Tips: strands end at different lengths.
-    const float bottom = 0.95f + st.len;
-    d += 0.05f * (0.5f - 0.5f * strand) * smooth(bottom - 0.2f, bottom, Y);
-  }
-  float alpha = smooth(fuzz, -fuzz, d) * alphaMul * faceCut;
-  if (stubbleMix > 0.0f) alpha *= mixf(1.0f, 0.92f, stubbleMix);
-  out.a = std::clamp(alpha, 0.0f, 1.0f);
-  out.c = V3{std::max(c.r, 0.0f), std::max(c.g, 0.0f), std::max(c.b, 0.0f)};
+  out.dExtra = dx;
+  out.extra = dx < 0.0f;
+  out.d = std::min(d, dx);
   return out;
 }
+
+// The hair's own direction at a point (unit, image space, y down).
+V2 flowAt(const Style& st, const Geometry& g, float X, float Y) {
+  const float a = g.halfFace;
+  const V2 crown{st.part * a * 0.8f, g.skullTop + 0.04f};
+  if (st.extra == Extra::TopKnot || st.extra == Extra::CoilBun || st.extra == Extra::Puff) {
+    const V2 c{0.0f, g.skullTop - 0.12f};
+    const float dx = X - c.x, dy = Y - c.y;
+    if (dx * dx / 0.05f + dy * dy / 0.04f < 1.0f) return norm2(V2{-dy, dx});  // around the bun
+  }
+  if (st.extra == Extra::Ponytail && X > g.skullHalf * 0.8f) return V2{0.15f, 1.0f};
+  V2 r = norm2(V2{X - crown.x, Y - crown.y});
+  if (st.slick) return V2{-r.x, -r.y};  // combed toward the crown
+  if (st.len > -0.5f) {
+    const float t = smooth(0.0f, 0.5f, Y);
+    const V2 down = norm2(V2{0.12f * (X > 0 ? 1.0f : -1.0f), 1.0f});
+    r = norm2(V2{r.x + (down.x - r.x) * t, r.y + (down.y - r.y) * t});
+  }
+  return r;
+}
+
+// Light from the upper left, toward the viewer.
+const V3 kLight = norm3(V3{-0.35f, -0.8f, 0.5f});
+const V3 kHalf = norm3(V3{-0.35f, -0.8f, 1.5f});
+
+// Hair fibre lighting (Kajiya-Kay): `t` the strand's direction on the
+// surface with normal `n`.
+V3 litFibre(V3 base, V2 t2, V3 n, float gloss, float shade) {
+  V3 t{t2.x, t2.y, -(n.r * t2.x + n.g * t2.y) / std::max(n.b, 0.25f)};
+  t = norm3(t);
+  const float tl = dot3(t, kLight);
+  const float diff = std::sqrt(std::max(0.0f, 1.0f - tl * tl)) * (0.5f + 0.5f * std::max(0.0f, dot3(n, kLight)));
+  const V3 t1 = norm3(t + n * 0.1f), t2b = norm3(t + n * -0.15f);
+  const float h1 = dot3(t1, kHalf), h2 = dot3(t2b, kHalf);
+  const float s1 = std::pow(std::max(0.0f, 1.0f - h1 * h1), 120.0f);
+  const float s2 = std::pow(std::max(0.0f, 1.0f - h2 * h2), 30.0f);
+  return base * (shade * (0.22f + 0.85f * diff)) + grey(0.045f * gloss * s1 * shade) + base * (1.6f * 0.22f * gloss * s2 * shade);
+}
+
+// The hair layer: premultiplied linear colour and coverage on its own grid.
+struct Layer {
+  int32_t w = 0, h = 0;
+  float x0 = 0, y0 = 0, scale = 1;  // face units of pixel (0,0)'s corner; pixels per face height
+  std::vector<V3> c;
+  std::vector<float> a;
+  float toX(float px) const { return x0 + px / scale; }
+  float toY(float py) const { return y0 + py / scale; }
+  // Paint a soft dot of colour `col` and coverage `alpha` (over).
+  void dot(float px, float py, float radius, V3 col, float alpha, const Grid* block) {
+    const int32_t xa = static_cast<int32_t>(std::floor(px - radius - 1)), xb = static_cast<int32_t>(std::ceil(px + radius + 1));
+    const int32_t ya = static_cast<int32_t>(std::floor(py - radius - 1)), yb = static_cast<int32_t>(std::ceil(py + radius + 1));
+    for (int32_t y = std::max(0, ya); y <= std::min(h - 1, yb); ++y)
+      for (int32_t x = std::max(0, xa); x <= std::min(w - 1, xb); ++x) {
+        const float dx = static_cast<float>(x) + 0.5f - px, dy = static_cast<float>(y) + 0.5f - py;
+        float k = std::clamp(radius + 0.5f - std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f) * alpha;
+        if (block != nullptr) k *= block->at(x, y);
+        if (k <= 0.0f) continue;
+        const size_t i = static_cast<size_t>(y) * w + x;
+        c[i] = col * k + c[i] * (1.0f - k);
+        a[i] = k + a[i] * (1.0f - k);
+      }
+  }
+};
 
 }  // namespace
 
@@ -445,66 +411,245 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
   const Style* st = findStyle(params.style);
   if (params.style != nullptr && params.style[0] != '\0' && st == nullptr) return makeError(PP_ERROR_INVALID_ARGUMENT, "Unknown hairstyle");
   if (st == nullptr && !params.recolor) return ok();
+  if (st != nullptr && !(params.faceRight - params.faceLeft > 0.01f && params.faceBottom - params.faceTop > 0.01f)) {
+    return makeError(PP_ERROR_INVALID_ARGUMENT, "A hairstyle needs a face in the photo");
+  }
   const int32_t W = cutout.width(), H = cutout.height();
   const Rgb o = offsets(cutout);
-  const std::array<float, 256>& Lut = linearLut();
-  const size_t n = static_cast<size_t>(W) * H;
-  std::vector<float> hair = zoneAt(zones, Zone::Hair, W, H);
-  // Strands run a little past the coarse parts map: hair near hair counts.
+  const auto& Lut = linearLut();
+
+  // ---- the working grid: the cut-out reduced (area average), long edge <= 1280.
+  const int32_t f = std::max(1, static_cast<int32_t>(std::ceil(static_cast<float>(std::max(W, H)) / 1280.0f)));
+  const int32_t w = (W + f - 1) / f, h = (H + f - 1) / f;
+  const size_t n = static_cast<size_t>(w) * h;
+  std::vector<V3> col(n);
+  std::vector<float> alpha(n, 0.0f);
+  for (int32_t y = 0; y < h; ++y)
+    for (int32_t x = 0; x < w; ++x) {
+      V3 s{};
+      float sa = 0, cnt = 0;
+      for (int32_t yy = y * f; yy < std::min(H, (y + 1) * f); ++yy)
+        for (int32_t xx = x * f; xx < std::min(W, (x + 1) * f); ++xx) {
+          const uint8_t* q = cutout.row(yy) + xx * 4;
+          const float a = static_cast<float>(q[3]) / 255.0f;
+          s = s + V3{Lut[q[o.r]], Lut[q[o.g]], Lut[q[o.b]]} * a, sa += a, cnt += 1;
+        }
+      const size_t i = static_cast<size_t>(y) * w + x;
+      col[i] = sa > 0 ? s * (1.0f / sa) : V3{};
+      alpha[i] = cnt > 0 ? sa / cnt : 0.0f;
+    }
+  Grid hairZ = zoneGrid(zones, Zone::Hair, w, h), faceZ = zoneGrid(zones, Zone::FaceSkin, w, h);
   {
-    Plane p;
-    auto pr = Plane::allocate(W, H);
-    if (!pr) return pr.error();
-    p = std::move(pr).value();
-    for (size_t i = 0; i < n; ++i) p.data()[i] = hair[i];
-    auto b = blurred(p, std::max(1.0f, 0.006f * static_cast<float>(std::min(W, H))), token);
-    if (!b) return b.error();
-    for (size_t i = 0; i < n; ++i) hair[i] = std::max(hair[i], smooth(0.08f, 0.4f, b->data()[i]));
+    Grid wide = hairZ;
+    blurGrid(wide, std::max(1.0f, 0.006f * static_cast<float>(std::min(w, h))));
+    for (size_t i = 0; i < n; ++i) hairZ.v[i] = std::max(hairZ.v[i], smooth(0.08f, 0.4f, wide.v[i]));
   }
-  const std::vector<float> faceSkin = zoneAt(zones, Zone::FaceSkin, W, H);
-  // The person's own hair colour and lightness (linear), and their skin's.
-  double hr = 0, hg = 0, hb = 0, hl = 0, hn = 0, sr = 0, sg = 0, sb = 0, sn = 0;
-  for (int32_t y = 0; y < H; ++y) {
-    const uint8_t* p = cutout.row(y);
-    for (int32_t x = 0; x < W; ++x) {
-      const size_t i = static_cast<size_t>(y) * W + x;
-      const uint8_t* q = p + x * 4;
-      if (q[3] < 200) continue;
-      const V3 c{Lut[q[o.r]], Lut[q[o.g]], Lut[q[o.b]]};
-      if (hair[i] > 0.8f && faceSkin[i] < 0.2f) hr += c.r, hg += c.g, hb += c.b, hl += std::log(std::max(lum(c), 1e-4f)), hn += 1;
-      if (faceSkin[i] > 0.8f) sr += c.r, sg += c.g, sb += c.b, sn += 1;
+
+  // ---- the person's own hair and skin colours.
+  double hr = 0, hg = 0, hb = 0, hl = 0, hn = 0;
+  std::array<double, 3> sm{}, ss{};
+  double sn = 0;
+  V3 skinSum{};
+  auto feat = [](V3 c) {
+    const float s = std::max(c.r + c.g + c.b, 1e-4f);
+    return std::array<float, 3>{std::log(std::max(lum(c), 1e-4f)), c.r / s, c.g / s};
+  };
+  for (size_t i = 0; i < n; ++i) {
+    if (alpha[i] < 0.9f) continue;
+    if (hairZ.v[i] > 0.8f && faceZ.v[i] < 0.2f) hr += col[i].r, hg += col[i].g, hb += col[i].b, hl += std::log(std::max(lum(col[i]), 1e-4f)), hn += 1;
+    if (faceZ.v[i] > 0.9f) {
+      const auto fv = feat(col[i]);
+      for (int k = 0; k < 3; ++k) sm[static_cast<size_t>(k)] += fv[static_cast<size_t>(k)], ss[static_cast<size_t>(k)] += fv[static_cast<size_t>(k)] * fv[static_cast<size_t>(k)];
+      skinSum = skinSum + col[i], sn += 1;
     }
   }
   const V3 ownHair = hn > 30 ? V3{static_cast<float>(hr / hn), static_cast<float>(hg / hn), static_cast<float>(hb / hn)} : V3{0.03f, 0.02f, 0.015f};
   const float ownLogL = hn > 30 ? static_cast<float>(hl / hn) : std::log(0.02f);
-  const V3 skin = sn > 30 ? V3{static_cast<float>(sr / sn), static_cast<float>(sg / sn), static_cast<float>(sb / sn)} : V3{0.25f, 0.15f, 0.1f};
+  const V3 skin = sn > 30 ? skinSum * (1.0f / static_cast<float>(sn)) : V3{0.25f, 0.15f, 0.1f};
+  std::array<float, 3> fm{}, fsd{};
+  const std::array<float, 3> floorSd{0.22f, 0.012f, 0.008f};
+  for (int k = 0; k < 3; ++k) {
+    const auto K = static_cast<size_t>(k);
+    fm[K] = sn > 30 ? static_cast<float>(sm[K] / sn) : 0.0f;
+    fsd[K] = sn > 30 ? std::max(floorSd[K], static_cast<float>(std::sqrt(std::max(0.0, ss[K] / sn - (sm[K] / sn) * (sm[K] / sn))))) : 1.0f;
+  }
+  auto skinLike = [&](V3 c) {
+    if (sn <= 30) return 0.0f;
+    const auto fv = feat(c);
+    float d2 = 0;
+    for (int k = 0; k < 3; ++k) {
+      const auto K = static_cast<size_t>(k);
+      const float z = (fv[K] - fm[K]) / (2.5f * fsd[K]);
+      d2 += z * z;
+    }
+    return 1.0f - smooth(1.0f, 2.2f, d2);
+  };
+
+  // ---- the face, found by its colour from the parts map's face outward
+  // (a cheek in shadow that the parts map calls hair is still face).
+  Geometry g{};
+  g.cx = 0.5f * (params.faceLeft + params.faceRight) * static_cast<float>(w);
+  g.top = params.faceTop * static_cast<float>(h);
+  g.unit = std::max(4.0f, (params.faceBottom - params.faceTop) * static_cast<float>(h));
+  g.halfFace = std::max(0.2f, 0.5f * (params.faceRight - params.faceLeft) * static_cast<float>(w) / g.unit);
+  const float chinY = params.faceBottom * static_cast<float>(h);
+  Grid faceKeep;
+  faceKeep.init(w, h);
+  {
+    // Skin is smooth; hair, even hair the colour of skin (lit gold by the
+    // sun), is textured: the local spread of lightness tells them apart.
+    Grid m1, m2;
+    m1.init(w, h), m2.init(w, h);
+    for (size_t i = 0; i < n; ++i) {
+      const float l = std::log(std::max(lum(col[i]), 1e-4f));
+      m1.v[i] = l, m2.v[i] = l * l;
+    }
+    blurGrid(m1, std::max(1.0f, 0.008f * g.unit)), blurGrid(m2, std::max(1.0f, 0.008f * g.unit));
+    std::vector<float> smoothSkin(n);
+    for (size_t i = 0; i < n; ++i) smoothSkin[i] = 1.0f - smooth(0.12f, 0.22f, std::sqrt(std::max(0.0f, m2.v[i] - m1.v[i] * m1.v[i])));
+    std::vector<uint8_t> seen(n, 0);
+    std::vector<int32_t> stack;
+    for (int32_t y = 0; y < h; ++y)
+      for (int32_t x = 0; x < w; ++x) {
+        const size_t i = static_cast<size_t>(y) * w + x;
+        if (faceZ.v[i] > 0.9f && alpha[i] > 0.5f && skinLike(col[i]) > 0.5f && smoothSkin[i] > 0.5f) seen[i] = 1, stack.push_back(static_cast<int32_t>(i));
+      }
+    // Only within a face-shaped oval around the parts map's face.
+    const float ocx = g.cx, ocy = g.top + 0.5f * g.unit, orx = 1.25f * g.halfFace * g.unit, ory = 0.68f * g.unit;
+    while (!stack.empty()) {
+      const int32_t k = stack.back();
+      stack.pop_back();
+      const int32_t x = k % w, y = k / w;
+      const int32_t nx[4] = {x - 1, x + 1, x, x}, ny[4] = {y, y, y - 1, y + 1};
+      for (int j = 0; j < 4; ++j) {
+        if (nx[j] < 0 || ny[j] < 0 || nx[j] >= w || ny[j] >= h) continue;
+        const size_t i = static_cast<size_t>(ny[j]) * w + nx[j];
+        if (seen[i] || alpha[i] < 0.5f) continue;
+        const float ex = (static_cast<float>(nx[j]) - ocx) / orx, ey = (static_cast<float>(ny[j]) - ocy) / ory;
+        if (ex * ex + ey * ey > 1.0f) continue;
+        if (skinLike(col[i]) < 0.5f || smoothSkin[i] < 0.5f) continue;
+        seen[i] = 1, stack.push_back(static_cast<int32_t>(i));
+      }
+    }
+    // The skin, and everything it encloses: eyes, brows, nostrils and lips
+    // are not skin-coloured but lie inside the face; hair at the hairline
+    // reaches the hair outside, so it is not enclosed and goes.
+    {
+      // First seal the thin lines of the features (the edges of the eyes,
+      // the nose, the lips are not smooth): close the skin a little.
+      {
+        const auto rc = std::max<int32_t>(1, static_cast<int32_t>(0.02f * g.unit));
+        std::vector<uint8_t> t(n), u(n);
+        auto pass = [&](const std::vector<uint8_t>& in, std::vector<uint8_t>& out2, bool grow, bool horizontal) {
+          for (int32_t y = 0; y < h; ++y)
+            for (int32_t x = 0; x < w; ++x) {
+              uint8_t v = grow ? 0 : 1;
+              for (int32_t k = -rc; k <= rc; ++k) {
+                const int32_t xx = horizontal ? std::clamp(x + k, 0, w - 1) : x, yy = horizontal ? y : std::clamp(y + k, 0, h - 1);
+                const uint8_t q = in[static_cast<size_t>(yy) * w + xx];
+                v = grow ? std::max(v, q) : std::min(v, q);
+              }
+              out2[static_cast<size_t>(y) * w + x] = v;
+            }
+        };
+        pass(seen, t, true, true), pass(t, u, true, false), pass(u, t, false, true), pass(t, u, false, false);
+        for (size_t i = 0; i < n; ++i) seen[i] = std::max(seen[i], u[i]);
+      }
+      std::vector<uint8_t> outside(n, 0);
+      std::vector<int32_t> st2;
+      for (int32_t x = 0; x < w; ++x)
+        for (int32_t y : {0, h - 1}) {
+          const size_t i = static_cast<size_t>(y) * w + x;
+          if (!seen[i] && !outside[i]) outside[i] = 1, st2.push_back(static_cast<int32_t>(i));
+        }
+      for (int32_t y = 0; y < h; ++y)
+        for (int32_t x : {0, w - 1}) {
+          const size_t i = static_cast<size_t>(y) * w + x;
+          if (!seen[i] && !outside[i]) outside[i] = 1, st2.push_back(static_cast<int32_t>(i));
+        }
+      while (!st2.empty()) {
+        const int32_t k = st2.back();
+        st2.pop_back();
+        const int32_t x = k % w, y = k / w;
+        const int32_t nx[4] = {x - 1, x + 1, x, x}, ny[4] = {y, y, y - 1, y + 1};
+        for (int j = 0; j < 4; ++j) {
+          if (nx[j] < 0 || ny[j] < 0 || nx[j] >= w || ny[j] >= h) continue;
+          const size_t i = static_cast<size_t>(ny[j]) * w + nx[j];
+          if (seen[i] || outside[i]) continue;
+          outside[i] = 1, st2.push_back(static_cast<int32_t>(i));
+        }
+      }
+      // Enclosed holes count only inside the face itself (not a pocket of
+      // hair between the jaw, the neck and a shoulder).
+      for (int32_t y = 0; y < h; ++y)
+        for (int32_t x = 0; x < w; ++x) {
+          const size_t i = static_cast<size_t>(y) * w + x;
+          const float ex = (static_cast<float>(x) - ocx) / (orx * 0.85f), ey = (static_cast<float>(y) - (g.top + 0.45f * g.unit)) / (ory * 0.85f);
+          const bool hole = !outside[i] && ex * ex + ey * ey < 1.0f;
+          // The parts map's face is reliable below the top of the forehead
+          // (eyes, mouth, a beard); only near the hairline can it take hair.
+          const bool partsFace = faceZ.v[i] > 0.5f && (static_cast<float>(y) - g.top) / g.unit > 0.14f;
+          faceKeep.v[i] = (seen[i] || hole || partsFace) ? 1.0f : 0.0f;
+        }
+    }
+    // If the face's colour couldn't be learnt, the parts map's face stands.
+    if (sn <= 30)
+      for (size_t i = 0; i < n; ++i) faceKeep.v[i] = smooth(0.5f, 0.9f, faceZ.v[i]);
+    blurGrid(faceKeep, std::max(0.7f, 0.004f * g.unit));
+    // Re-centre on the skin found at cheek level.
+    std::vector<float> ls, rs;
+    for (float fy = 0.35f; fy <= 0.62f; fy += 0.03f) {
+      const auto y = static_cast<int32_t>(g.top + fy * g.unit);
+      const auto c0 = static_cast<int32_t>(g.cx);
+      if (y < 0 || y >= h || c0 < 0 || c0 >= w || faceKeep.at(c0, y) < 0.5f) continue;
+      int32_t l = c0, r = c0;
+      while (l > 0 && faceKeep.at(l - 1, y) > 0.5f) --l;
+      while (r < w - 1 && faceKeep.at(r + 1, y) > 0.5f) ++r;
+      ls.push_back(static_cast<float>(l)), rs.push_back(static_cast<float>(r + 1));
+    }
+    if (ls.size() >= 3) {
+      std::sort(ls.begin(), ls.end()), std::sort(rs.begin(), rs.end());
+      const float l = ls[ls.size() / 2], r = rs[rs.size() / 2];
+      const float half = 0.5f * (r - l) / g.unit;
+      if (half > g.halfFace * 0.85f && half < g.halfFace * 1.45f) g.cx = 0.5f * (l + r), g.halfFace = half;
+    }
+  }
+  const float newColourMix = params.recolor ? std::clamp(params.strength, 0.0f, 1.0f) : 0.0f;
   const V3 newColour = params.recolor ? V3{Lut[params.color[0]], Lut[params.color[1]], Lut[params.color[2]]} : ownHair;
-  const float strength = std::clamp(params.strength, 0.0f, 1.0f);
 
   if (st == nullptr) {
-    // A new colour for the person's own hair. Each pixel keeps its light
-    // relative to the hair's average; the average becomes the new colour's.
+    // ---- a new colour for the person's own hair.
+    Grid m;
+    m.init(w, h);
+    for (size_t i = 0; i < n; ++i) m.v[i] = hairZ.v[i] * (1.0f - faceKeep.v[i]);
     const float lt = std::max(lum(newColour), 1e-4f);
+    const float lc = lt;
+    const V3 chroma = newColour * (1.0f / lc);
+    const float strength = newColourMix;
     const bool done = parallelFor(H, token, [&](int32_t b0, int32_t b1) {
       for (int32_t y = b0; y < b1; ++y) {
         uint8_t* p = cutout.row(y);
         for (int32_t x = 0; x < W; ++x) {
-          const size_t i = static_cast<size_t>(y) * W + x;
           uint8_t* q = p + x * 4;
-          const float m = hair[i] * (1.0f - smooth(0.3f, 0.8f, faceSkin[i])) * strength;
-          if (m <= 0.0f || q[3] == 0) continue;
+          if (q[3] == 0) continue;
+          const float mm = m.sample((static_cast<float>(x) + 0.5f) / static_cast<float>(f), (static_cast<float>(y) + 0.5f) / static_cast<float>(f)) * strength;
+          if (mm <= 0.002f) continue;
           const V3 c{Lut[q[o.r]], Lut[q[o.g]], Lut[q[o.b]]};
           const float rel = std::exp(std::clamp(std::log(std::max(lum(c), 1e-4f)) - ownLogL, -2.5f, 2.5f));
-          // A colour swatch is the hair's light side: the average sits a
-          // little below it, and the shadows between strands stay deep (more
-          // so in light colours, which would otherwise read as flat paint).
-          float relShown = std::pow(rel, lt > 0.15f ? 1.5f : 1.2f);
-          // Brightly lit hair stays brighter, softly, instead of flat white.
-          if (relShown > 1.0f) relShown = 1.0f + (relShown - 1.0f) / (1.0f + 1.2f * (relShown - 1.0f));
-          V3 outc = newColour * (0.62f * relShown);
+          float shown = std::pow(rel, lt > 0.15f ? 1.45f : 1.15f);
+          if (shown > 1.0f) shown = 1.0f + (shown - 1.0f) / (1.0f + 1.2f * (shown - 1.0f));
+          const float L = 0.62f * lt * shown;
+          // Shadows: deeper, more saturated, and part natural colour (dye
+          // shows least there); highlights: softer and a little lighter.
+          const float shadow = 1.0f - smooth(0.25f, 0.9f, rel), high = smooth(1.2f, 2.5f, rel);
+          V3 hue = mix(chroma, V3{std::pow(chroma.r, 1.25f), std::pow(chroma.g, 1.25f), std::pow(chroma.b, 1.25f)}, 0.6f * shadow);
+          hue = hue * (1.0f / std::max(lum(hue), 1e-4f));
+          hue = mix(hue, mix(hue, grey(1.0f), 0.15f), high);
+          V3 outc = hue * L;
+          outc = mix(outc, c * (L / std::max(lum(c), 1e-4f)), 0.25f * shadow);
           const float mx = std::max({outc.r, outc.g, outc.b});
           if (mx > 1.0f) outc = outc * (1.0f / mx);
-          outc = mix(c, outc, m);
+          outc = mix(c, outc, mm);
           q[o.r] = toByte(toGamma(outc.r)), q[o.g] = toByte(toGamma(outc.g)), q[o.b] = toByte(toGamma(outc.b));
         }
       }
@@ -512,134 +657,573 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
     return done ? ok() : cancelledError();
   }
 
-  // A new style needs the face.
-  if (!(params.faceRight - params.faceLeft > 0.01f && params.faceBottom - params.faceTop > 0.01f)) {
-    return makeError(PP_ERROR_INVALID_ARGUMENT, "A hairstyle needs a face in the photo");
-  }
-  Geometry g{};
-  g.cx = 0.5f * (params.faceLeft + params.faceRight) * static_cast<float>(W);
-  g.top = params.faceTop * static_cast<float>(H);
-  g.unit = std::max(4.0f, (params.faceBottom - params.faceTop) * static_cast<float>(H));
-  g.halfFace = 0.5f * (params.faceRight - params.faceLeft) * static_cast<float>(W) / g.unit;
-  const float chinY = params.faceBottom * static_cast<float>(H);
-  // The head's own top and width, from the person's outline (with their
-  // own hair, so only ever tightened toward an average skull: a big afro
-  // does not make a big skull, a photo from below does make a lower one).
+  // ---- the head: its own top and width from the outline, toward an average skull.
   {
     float topY = 1e9f;
-    for (int32_t x = static_cast<int32_t>(g.cx - 0.5f * g.halfFace * g.unit); x <= static_cast<int32_t>(g.cx + 0.5f * g.halfFace * g.unit); ++x) {
-      if (x < 0 || x >= W) continue;
-      for (int32_t y = 0; y < H; ++y)
-        if (cutout.row(y)[x * 4 + 3] > 127) {
+    for (auto x = static_cast<int32_t>(g.cx - 0.5f * g.halfFace * g.unit); x <= static_cast<int32_t>(g.cx + 0.5f * g.halfFace * g.unit); ++x) {
+      if (x < 0 || x >= w) continue;
+      for (int32_t y = 0; y < h; ++y)
+        if (alpha[static_cast<size_t>(y) * w + x] > 0.5f) {
           topY = std::min(topY, static_cast<float>(y));
           break;
         }
     }
-    const float ownTop = (topY - g.top) / g.unit;
-    g.skullTop = std::clamp(ownTop + 0.03f, -0.36f, -0.16f);
-    const auto row = static_cast<int32_t>(std::clamp(g.top + 0.1f * g.unit, 0.0f, static_cast<float>(H - 1)));
-    int32_t l = W, r = -1;
-    for (int32_t x = 0; x < W; ++x)
-      if (cutout.row(row)[x * 4 + 3] > 127) l = std::min(l, x), r = std::max(r, x);
+    // A shaved head sits inside the hair's outline.
+    g.skullTop = std::clamp((topY - g.top) / g.unit + (st->kind == Kind::Dome ? 0.1f : 0.03f), -0.36f, -0.12f);
+    const auto row = static_cast<int32_t>(std::clamp(g.top + 0.1f * g.unit, 0.0f, static_cast<float>(h - 1)));
+    int32_t l = w, r = -1;
+    for (int32_t x = 0; x < w; ++x)
+      if (alpha[static_cast<size_t>(row) * w + x] > 0.5f) l = std::min(l, x), r = std::max(r, x);
     const float ownHalf = r > l ? 0.5f * static_cast<float>(r - l) / g.unit : g.halfFace * 1.12f;
     g.skullHalf = std::clamp(ownHalf, g.halfFace * 1.0f, g.halfFace * 1.12f);
-  }
-
-  // 1. Take the person's own hair out. Hair in front of the body (falling
-  // over the shoulders or chest) is filled in with the body around it;
-  // anywhere else it simply goes.
-  std::vector<V3> col(n);
-  std::vector<float> alpha(n), known(n);
-  for (int32_t y = 0; y < H; ++y) {
-    const uint8_t* p = cutout.row(y);
-    for (int32_t x = 0; x < W; ++x) {
-      const size_t i = static_cast<size_t>(y) * W + x;
-      const uint8_t* q = p + x * 4;
-      col[i] = V3{Lut[q[o.r]], Lut[q[o.g]], Lut[q[o.b]]};
-      alpha[i] = static_cast<float>(q[3]) / 255.0f;
-      known[i] = (alpha[i] > 0.9f && hair[i] < 0.05f) ? 1.0f : 0.0f;
+    if (st->kind == Kind::Dome) {
+      // As wide as the forehead (the skin found at its top), a touch over.
+      const auto yT = static_cast<int32_t>(std::clamp(g.top + 0.08f * g.unit, 0.0f, static_cast<float>(h - 1)));
+      const auto c0 = std::clamp(static_cast<int32_t>(g.cx), 0, w - 1);
+      int32_t fl = c0, fr = c0;
+      if (faceKeep.at(c0, yT) > 0.5f) {
+        while (fl > 0 && faceKeep.at(fl - 1, yT) > 0.5f) --fl;
+        while (fr < w - 1 && faceKeep.at(fr + 1, yT) > 0.5f) ++fr;
+      }
+      const float half = 0.5f * static_cast<float>(fr + 1 - fl) / g.unit;
+      g.skullHalf = fr > fl ? std::clamp(half * 1.06f, g.halfFace * 0.8f, g.halfFace * 1.05f) : std::min(g.skullHalf, g.halfFace * 0.98f);
     }
   }
-  std::vector<uint8_t> front(n, 0);
-  for (int32_t y = 0; y < H; ++y) {
-    if (static_cast<float>(y) < chinY) continue;
-    int32_t l = W, r = -1;
-    for (int32_t x = 0; x < W; ++x) {
-      const size_t i = static_cast<size_t>(y) * W + x;
-      if (alpha[i] > 0.5f && hair[i] < 0.3f) l = std::min(l, x), r = std::max(r, x);
-    }
-    const int32_t margin = std::max<int32_t>(2, static_cast<int32_t>(0.01f * static_cast<float>(W)));
-    for (int32_t x = l + margin; x <= r - margin; ++x) front[static_cast<size_t>(y) * W + x] = 1;
-  }
-  // Above the chin, everything that is not face, skin, clothes or jewellery
-  // goes too: the fuzzy outer strands of big hair are often beyond the
-  // parts map's hair.
-  std::vector<float> keep(n, 0.0f);
-  {
-    const auto body = zoneAt(zones, Zone::BodySkin, W, H), cloth = zoneAt(zones, Zone::Clothes, W, H), acc = zoneAt(zones, Zone::Accessory, W, H);
-    auto pr = Plane::allocate(W, H);
-    if (!pr) return pr.error();
-    for (size_t i = 0; i < n; ++i) pr->data()[i] = std::max({faceSkin[i], body[i], cloth[i], acc[i]});
-    auto b = blurred(*pr, std::max(1.0f, 0.004f * static_cast<float>(std::min(W, H))), token);
-    if (!b) return b.error();
-    for (size_t i = 0; i < n; ++i) keep[i] = std::max(pr->data()[i], smooth(0.2f, 0.6f, b->data()[i]));
-  }
-  std::vector<V3> fill = col;
-  std::vector<float> fw = known;
-  pushPull(fill, fw, W, H);
-  for (size_t i = 0; i < n; ++i) {
-    const float m = hair[i] * (1.0f - smooth(0.3f, 0.8f, faceSkin[i]));
-    if (m <= 0.0f || static_cast<float>(i / static_cast<size_t>(W)) < chinY) continue;
-    if (front[i]) {
-      col[i] = mix(col[i], fill[i], m);
-      alpha[i] = std::max(alpha[i], m);
-    } else {
-      alpha[i] *= 1.0f - m;
-    }
-  }
-  // The face itself (below the hairline, between the cheeks) always stays,
-  // whatever the parts map makes of a forehead in shadow.
-  auto faceKept = [&](int32_t x, int32_t y) {
-    const float X = (static_cast<float>(x) + 0.5f - g.cx) / g.unit, Y = (static_cast<float>(y) + 0.5f - g.top) / g.unit;
-    const float u = X / std::max(g.halfFace, 1e-3f);
-    const float line = -0.03f + 0.12f * u * u;
-    return (1.0f - smooth(0.8f, 1.0f, std::fabs(u))) * smooth(line - 0.03f, line + 0.005f, Y);
+  auto unitsX = [&](float px) { return (px - g.cx) / g.unit; };
+  auto unitsY = [&](float py) { return (py - g.top) / g.unit; };
+  const float a = g.halfFace;
+  auto hairline = [&](float X) {
+    const float u = X / std::max(a, 1e-3f);
+    return -0.03f + 0.12f * u * u;
   };
-  for (int32_t y = 0; y < H && static_cast<float>(y) < chinY; ++y)
-    for (int32_t x = 0; x < W; ++x) {
-      const size_t i = static_cast<size_t>(y) * W + x;
-      const float gone = keep[i] * (1.0f - hair[i] * (1.0f - smooth(0.3f, 0.8f, faceSkin[i])));
-      alpha[i] *= mixf(gone, 1.0f, faceKept(x, y));
-    }
 
-  // 2. Draw the style: behind the person where it falls behind the neck,
-  // over them everywhere else.
-  const float inv = 1.0f / g.unit;
+  // ---- 1. Take the person's own hair out (on the working grid: a factor
+  // for the alpha, and a colour filled in where hair lay over the body).
+  Grid keepA, fillMix;
+  keepA.init(w, h, 1.0f), fillMix.init(w, h, 0.0f);
+  std::vector<V3> fill = col;
+  {
+    const Grid body = zoneGrid(zones, Zone::BodySkin, w, h), cloth = zoneGrid(zones, Zone::Clothes, w, h), acc = zoneGrid(zones, Zone::Accessory, w, h);
+    Grid keep;
+    keep.init(w, h);
+    for (size_t i = 0; i < n; ++i) keep.v[i] = std::max({faceKeep.v[i], body.v[i], cloth.v[i], acc.v[i]});
+    Grid kb = keep;
+    blurGrid(kb, std::max(1.0f, 0.004f * static_cast<float>(std::min(w, h))));
+    for (size_t i = 0; i < n; ++i) keep.v[i] = std::max(keep.v[i], smooth(0.2f, 0.6f, kb.v[i]));
+    std::vector<float> known(n);
+    for (size_t i = 0; i < n; ++i) known[i] = (alpha[i] > 0.9f && hairZ.v[i] < 0.05f) ? 1.0f : 0.0f;
+    pushPull(fill, known, w, h);
+    for (int32_t y = 0; y < h; ++y) {
+      const bool belowChin = static_cast<float>(y) >= chinY;
+      int32_t l = w, r = -1;
+      if (belowChin)
+        for (int32_t x = 0; x < w; ++x)
+          if (alpha[static_cast<size_t>(y) * w + x] > 0.5f && hairZ.v[static_cast<size_t>(y) * w + x] < 0.3f) l = std::min(l, x), r = std::max(r, x);
+      const int32_t margin = std::max<int32_t>(2, static_cast<int32_t>(0.01f * static_cast<float>(w)));
+      for (int32_t x = 0; x < w; ++x) {
+        const size_t i = static_cast<size_t>(y) * w + x;
+        const float hm = hairZ.v[i] * (1.0f - faceKeep.v[i]);
+        // The face below the hairline always stays.
+        const float X = unitsX(static_cast<float>(x) + 0.5f), Y = unitsY(static_cast<float>(y) + 0.5f);
+        (void)X, (void)Y;
+        const float protect = faceKeep.v[i];
+        if (belowChin) {
+          if (hm > 0.0f && x >= l + margin && x <= r - margin) {
+            fillMix.v[i] = hm;
+            keepA.v[i] = 1.0f;
+          } else {
+            keepA.v[i] = std::max(1.0f - hm, faceKeep.v[i]);
+          }
+        } else {
+          const float gone = keep.v[i] * (1.0f - hm);
+          keepA.v[i] = gone + (1.0f - gone) * protect;
+        }
+      }
+    }
+  }
+
+  // ---- 2. Draw the style on its own grid.
+  Layer L;
+  {
+    const float rs = std::min(1.0f, 560.0f / g.unit) * g.unit;  // pixels per face height on the layer
+    const float xr = g.skullHalf + st->side + 0.5f, yt = g.skullTop - st->top - 0.5f, yb = std::max(0.6f, 0.95f + st->len + 0.2f);
+    L.scale = rs, L.x0 = -xr, L.y0 = yt;
+    L.w = std::max(8, static_cast<int32_t>(std::ceil(2.0f * xr * rs))), L.h = std::max(8, static_cast<int32_t>(std::ceil((yb - yt) * rs)));
+    L.c.assign(static_cast<size_t>(L.w) * L.h, V3{});
+    L.a.assign(static_cast<size_t>(L.w) * L.h, 0.0f);
+  }
+  // Where hair may be drawn: not over the face (below any fringe).
+  Grid allow, sd;
+  allow.init(L.w, L.h), sd.init(L.w, L.h);
+  std::vector<uint8_t> inExtra(static_cast<size_t>(L.w) * L.h, 0);
+  const float fringeLine = std::max(0.0f, st->fringe);
+  for (int32_t y = 0; y < L.h; ++y)
+    for (int32_t x = 0; x < L.w; ++x) {
+      const float X = L.toX(static_cast<float>(x) + 0.5f), Y = L.toY(static_cast<float>(y) + 0.5f);
+      const ShapeAt s = shapeAt(*st, g, X, Y);
+      sd.at(x, y) = s.d;
+      inExtra[static_cast<size_t>(y) * L.w + x] = s.extra ? 1 : 0;
+      const float fx = g.cx + X * g.unit, fy = g.top + Y * g.unit;
+      const float face = faceKeep.sample(fx, fy);
+      const float fringeEdge = fringeLine + 0.02f * fbm(X * 30.0f, 0.0f, params.seed + 9);
+      float ok = 1.0f;
+      if (st->fringe <= 0.0f || Y > fringeEdge) ok = 1.0f - smooth(0.3f, 0.7f, face);
+      allow.at(x, y) = ok;
+    }
+  // The surface's normal (for light): bulging from the outline inward.
+  auto normalAt = [&](float px, float py) {
+    const auto xi = std::clamp(static_cast<int32_t>(px), 1, L.w - 2), yi = std::clamp(static_cast<int32_t>(py), 1, L.h - 2);
+    V2 gr{sd.at(xi + 1, yi) - sd.at(xi - 1, yi), sd.at(xi, yi + 1) - sd.at(xi, yi - 1)};
+    gr = norm2(gr);
+    const float depth = std::clamp(-sd.at(xi, yi) / 0.14f, 0.0f, 1.0f);
+    const float k = 0.92f * (1.0f - depth);
+    return norm3(V3{gr.x * k, gr.y * k, std::sqrt(std::max(0.05f, 1.0f - k * k))});
+  };
+  const V3 base = mix(ownHair, newColour, params.recolor ? newColourMix : 0.0f);
+  std::mt19937 rng(params.seed * 7919u + 17u);
+  std::uniform_real_distribution<float> U(0.0f, 1.0f);
+  std::normal_distribution<float> N01(0.0f, 1.0f);
+  const float px1 = 1.0f / L.scale;  // one layer pixel in face units
+  // Interior: a dark under-layer, so strands never show the background.
+  auto underlayer = [&](V3 colour, float inset) {
+    for (int32_t y = 0; y < L.h; ++y)
+      for (int32_t x = 0; x < L.w; ++x) {
+        const float d = sd.at(x, y);
+        const float k = smooth(-inset, -inset - 0.03f, d) * allow.at(x, y);
+        if (k <= 0.0f) continue;
+        const V3 nrm = normalAt(static_cast<float>(x), static_cast<float>(y));
+        const size_t i = static_cast<size_t>(y) * L.w + x;
+        const V3 c = colour * (0.55f + 0.45f * std::max(0.0f, dot3(nrm, kLight)));
+        L.c[i] = c * k + L.c[i] * (1.0f - k), L.a[i] = k + L.a[i] * (1.0f - k);
+      }
+  };
+  // Random points inside the shape (or its extras).
+  // which: 0 the main shape, 1 the extras only, 2 both.
+  auto inside = [&](int which, float margin) {
+    for (int t = 0; t < 64; ++t) {
+      const float x = U(rng) * static_cast<float>(L.w), y = U(rng) * static_cast<float>(L.h);
+      const auto xi = static_cast<int32_t>(x), yi = static_cast<int32_t>(y);
+      if (sd.at(xi, yi) > -margin) continue;
+      const bool ex = inExtra[static_cast<size_t>(yi) * L.w + xi] != 0;
+      if ((which == 0 && ex) || (which == 1 && !ex)) continue;
+      return V2{x, y};
+    }
+    return V2{-1, -1};
+  };
+  auto areaOf = [&](int which) {
+    size_t c = 0;
+    for (size_t i = 0; i < sd.v.size(); ++i)
+      if (sd.v[i] < 0.0f && (which == 2 || (inExtra[i] != 0) == (which == 1))) ++c;
+    return static_cast<float>(c);
+  };
+  const float strandR = std::max(0.45f, 0.0011f * L.scale);  // a strand's radius on the layer
+
+  // Strands (and the cap of every style but coils, ropes and the dome).
+  auto drawStrands = [&](bool slickCap) {
+    underlayer(base * 0.32f, 0.012f);
+    const bool longHair = st->len > -0.5f;
+    const float lenU = longHair ? 0.55f : 0.28f;
+    // Buns and ponytails are strands too (puffs and curly buns are coils).
+    const int which = (st->extra == Extra::TopKnot || st->extra == Extra::Ponytail) ? 2 : 0;
+    const float area = areaOf(which);
+    const auto count = static_cast<int32_t>(std::min(60000.0f, 7.0f * area / (lenU * L.scale * strandR * 2.0f)));
+    struct S {
+      V2 p;
+      float depth, jit, phase;
+    };
+    std::vector<S> list;
+    list.reserve(static_cast<size_t>(count));
+    for (int32_t i = 0; i < count; ++i) {
+      const V2 p = inside(which, 0.0f);
+      if (p.x < 0) continue;
+      list.push_back({p, U(rng), std::exp(0.2f * N01(rng)), U(rng) * 6.2832f});
+    }
+    std::sort(list.begin(), list.end(), [](const S& x, const S& y) { return x.depth < y.depth; });
+    const float step = std::max(0.5f, strandR);
+    for (const S& s : list) {
+      // Trace back to the strand's start, then draw forward.
+      V2 p = s.p;
+      const int steps = static_cast<int>(lenU * L.scale / step);
+      for (int k = 0; k < steps / 2; ++k) {
+        const V2 t = flowAt(*st, g, L.toX(p.x), L.toY(p.y));
+        p = V2{p.x - t.x * step, p.y - t.y * step};
+        if (p.x < 1 || p.y < 1 || p.x >= static_cast<float>(L.w - 1) || p.y >= static_cast<float>(L.h - 1)) break;
+        if (sd.at(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y)) > 0.0f) break;
+      }
+      const float shade = 0.55f + 0.45f * s.depth;
+      for (int k = 0; k < steps; ++k) {
+        if (p.x < 1 || p.y < 1 || p.x >= static_cast<float>(L.w - 1) || p.y >= static_cast<float>(L.h - 1)) break;
+        const float d = sd.at(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y));
+        if (d > 0.03f) break;
+        const float X = L.toX(p.x), Y = L.toY(p.y);
+        V2 t = flowAt(*st, g, X, Y);
+        const V2 perp{-t.y, t.x};
+        const float sAlong = static_cast<float>(k) * step * px1;
+        float off = st->wave * std::sin(6.2832f * Y / std::max(st->waveLen, 0.05f) + 0.6f * vnoise(X * 4.0f, 0.0f, params.seed + 3));
+        off += st->curl * std::sin(6.2832f * sAlong / 0.07f + s.phase);
+        const float slope = st->wave * 6.2832f / std::max(st->waveLen, 0.05f) * std::cos(6.2832f * Y / std::max(st->waveLen, 0.05f)) +
+                            st->curl * 6.2832f / 0.07f * std::cos(6.2832f * sAlong / 0.07f + s.phase);
+        t = norm2(V2{t.x + perp.x * slope * 0.5f, t.y + perp.y * slope * 0.5f});
+        const float qx = p.x + perp.x * off * L.scale, qy = p.y + perp.y * off * L.scale;
+        const float taper = smooth(0.0f, 0.12f, static_cast<float>(k) / static_cast<float>(steps)) *
+                            smooth(0.0f, 0.2f, 1.0f - static_cast<float>(k) / static_cast<float>(steps));
+        const float edge = smooth(0.03f, 0.0f, d);
+        const V3 nrm = normalAt(qx, qy);
+        const V3 c = litFibre(base * s.jit, t, nrm, st->gloss * (slickCap ? 1.0f : 1.0f), shade);
+        L.dot(qx, qy, strandR, c, 0.55f * taper * edge, &allow);
+        const V2 tf = flowAt(*st, g, X, Y);
+        p = V2{p.x + tf.x * step, p.y + tf.y * step};
+      }
+    }
+  };
+
+  // Coils: tight curls, everywhere (afros) or in the extras (puffs, buns).
+  auto drawCoils = [&](bool extraOnly, float loose) {
+    if (!extraOnly) underlayer(base * 0.3f, 0.02f);
+    else
+      for (int32_t y = 0; y < L.h; ++y)
+        for (int32_t x = 0; x < L.w; ++x) {
+          const size_t i = static_cast<size_t>(y) * L.w + x;
+          if (!inExtra[i] || sd.v[i] > -0.02f) continue;
+          const V3 nrm = normalAt(static_cast<float>(x), static_cast<float>(y));
+          L.c[i] = base * (0.3f * (0.55f + 0.45f * std::max(0.0f, dot3(nrm, kLight)))), L.a[i] = 1.0f;
+        }
+    const float area = areaOf(extraOnly ? 1 : 0);
+    const float rcU = 0.016f * loose;
+    const float coilLen = 6.2832f * rcU * 2.2f;
+    const auto count = static_cast<int32_t>(std::min(90000.0f, 9.0f * area / (coilLen * L.scale * strandR * 2.0f)));
+    struct C {
+      V2 p;
+      float depth;
+    };
+    std::vector<C> list;
+    for (int32_t i = 0; i < count; ++i) {
+      const V2 p = inside(extraOnly ? 1 : 0, -0.03f);
+      if (p.x < 0) continue;
+      const float d = sd.at(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y));
+      list.push_back({p, std::clamp(0.6f * U(rng) + 0.4f * smooth(-0.25f, 0.0f, d), 0.0f, 1.0f)});
+    }
+    std::sort(list.begin(), list.end(), [](const C& x, const C& y) { return x.depth < y.depth; });
+    for (const C& cl : list) {
+      const float r = rcU * (0.7f + 0.6f * U(rng)) * L.scale;
+      const float turns = 1.6f + 1.2f * U(rng);
+      const float ang0 = U(rng) * 6.2832f;
+      const V2 drift = norm2(V2{N01(rng), N01(rng)});
+      // Coils grow in clumps: neighbours share their light.
+      const float cX = L.toX(cl.p.x), cY = L.toY(cl.p.y);
+      const float clump = 0.75f + 0.35f * fbm(cX * 11.0f, cY * 11.0f, params.seed + 50);
+      const float jit = std::exp(0.18f * N01(rng)) * clump;
+      const float shade = 0.45f + 0.55f * cl.depth;
+      const float total = turns * 6.2832f;
+      const float dth = std::max(0.08f, std::max(0.5f, strandR) / std::max(r, 1.0f));
+      for (float th = 0.0f; th < total; th += dth) {
+        const float f01 = th / total;
+        const float px = cl.p.x + r * std::cos(ang0 + th) + drift.x * r * 1.6f * f01;
+        const float py = cl.p.y + r * 0.8f * std::sin(ang0 + th) + drift.y * r * 1.6f * f01;
+        if (px < 1 || py < 1 || px >= static_cast<float>(L.w - 1) || py >= static_cast<float>(L.h - 1)) continue;
+        const float d = sd.at(static_cast<int32_t>(px), static_cast<int32_t>(py));
+        if (d > 0.045f) continue;
+        const V2 t = norm2(V2{-std::sin(ang0 + th) + drift.x * 0.25f, 0.8f * std::cos(ang0 + th) + drift.y * 0.25f});
+        const V3 nrm = normalAt(px, py);
+        const V3 c = litFibre(base * jit, t, nrm, st->gloss, shade);
+        const float taper = smooth(0.0f, 0.1f, f01) * smooth(0.0f, 0.1f, 1.0f - f01);
+        L.dot(px, py, strandR * 1.2f, c, 0.6f * taper * smooth(0.045f, 0.0f, d), &allow);
+      }
+    }
+  };
+
+  // A rope (a loc, a braid, a twist) along a path, with its surface.
+  auto drawRope = [&](const std::vector<V2>& path, float widthU, RopeKind kind, uint32_t id, float shade) {
+    if (path.size() < 2) return;
+    float sAcc = 0.0f;
+    for (size_t k = 0; k + 1 < path.size(); ++k) {
+      const V2 p = path[k], q = path[k + 1];
+      const float seg = std::hypot(q.x - p.x, q.y - p.y);
+      if (seg <= 1e-4f) continue;
+      const V2 t{(q.x - p.x) / seg, (q.y - p.y) / seg};
+      const V2 perp{-t.y, t.x};
+      const float sU = sAcc * px1;
+      float rU = 0.5f * widthU;
+      if (st->freeform) rU *= 1.0f + 0.28f * fbm(sU * 9.0f, static_cast<float>(id) * 1.7f, params.seed + 21);
+      else if (kind == RopeKind::Locs) rU *= 1.0f + 0.1f * fbm(sU * 12.0f, static_cast<float>(id) * 1.3f, params.seed + 21);
+      // Ends taper.
+      const float total = static_cast<float>(path.size()) * px1 * 0.5f;
+      rU *= 0.55f + 0.45f * smooth(0.0f, 0.05f, total - sU);
+      const float r = rU * L.scale;
+      const int32_t xa = static_cast<int32_t>(std::floor(p.x - r - 1)), xb = static_cast<int32_t>(std::ceil(p.x + r + 1));
+      const int32_t ya = static_cast<int32_t>(std::floor(p.y - r - 1)), yb = static_cast<int32_t>(std::ceil(p.y + r + 1));
+      for (int32_t y = std::max(0, ya); y <= std::min(L.h - 1, yb); ++y)
+        for (int32_t x = std::max(0, xa); x <= std::min(L.w - 1, xb); ++x) {
+          const float dx = static_cast<float>(x) + 0.5f - p.x, dy = static_cast<float>(y) + 0.5f - p.y;
+          const float dist = std::sqrt(dx * dx + dy * dy);
+          float cov = std::clamp(r + 0.5f - dist, 0.0f, 1.0f) * allow.at(x, y);
+          if (cov <= 0.0f) continue;
+          const float ov = std::clamp((dx * perp.x + dy * perp.y) / std::max(r, 0.5f), -1.0f, 1.0f);
+          const float along = sU + (dx * t.x + dy * t.y) * px1;
+          const V3 ng = normalAt(static_cast<float>(x), static_cast<float>(y));
+          const V3 nr = norm3(V3{perp.x * ov, perp.y * ov, 0.0f} * 1.0f + ng * std::sqrt(std::max(0.0f, 1.0f - ov * ov)));
+          float tex;
+          switch (kind) {
+            case RopeKind::Braids:
+            case RopeKind::Cornrows: {
+              const float lambda = widthU * 0.9f;
+              const float g2 = fract(along / lambda + std::fabs(ov) * 0.55f + (ov < 0.0f ? 0.5f : 0.0f));
+              tex = 0.55f + 0.45f * std::sin(3.1416f * g2);
+              tex *= 0.9f + 0.1f * vnoise(along * 400.0f, ov * 8.0f, params.seed + id);
+              break;
+            }
+            case RopeKind::Twists:
+            case RopeKind::Knots: {
+              const float lambda = widthU * 1.3f;
+              const float g2 = fract(along / lambda + ov * 0.5f);
+              tex = 0.55f + 0.45f * std::sin(3.1416f * g2);
+              tex *= 0.9f + 0.1f * vnoise(along * 400.0f, ov * 8.0f, params.seed + id);
+              break;
+            }
+            default:  // locs: matted, bumpy fibres
+              tex = 0.78f + 0.22f * fbm(along * 60.0f, ov * 3.0f + static_cast<float>(id), params.seed + 5) +
+                    0.12f * vnoise(along * 500.0f, ov * 14.0f, params.seed + 6);
+              break;
+          }
+          const float diff = 0.25f + 0.75f * std::max(0.0f, dot3(nr, kLight));
+          const float spec = std::pow(std::max(0.0f, dot3(nr, kHalf)), 16.0f) * st->gloss;
+          const V3 c = base * (tex * diff * shade) + (base * 1.6f + grey(0.02f)) * (0.35f * spec);
+          const size_t i = static_cast<size_t>(y) * L.w + x;
+          L.c[i] = c * cov + L.c[i] * (1.0f - cov), L.a[i] = cov + L.a[i] * (1.0f - cov);
+        }
+      sAcc += seg;
+    }
+    // Stray fibres on locs.
+    if (kind == RopeKind::Locs) {
+      for (size_t k = 0; k + 1 < path.size(); k += std::max<size_t>(3, static_cast<size_t>(0.02f * L.scale))) {
+        const V2 p = path[k], q = path[k + 1];
+        const V2 t = norm2(V2{q.x - p.x, q.y - p.y});
+        const float side = U(rng) < 0.5f ? -1.0f : 1.0f;
+        const float ang = side * (0.4f + 0.8f * U(rng));
+        const V2 dir{t.x * std::cos(ang) - t.y * std::sin(ang), t.x * std::sin(ang) + t.y * std::cos(ang)};
+        const float start = 0.45f * widthU * L.scale;
+        V2 fp{p.x - t.y * side * start, p.y + t.x * side * start};
+        const float lenPx = (0.008f + 0.015f * U(rng)) * L.scale;
+        for (float s = 0.0f; s < lenPx; s += 0.6f) {
+          const V3 nrm = normalAt(fp.x, fp.y);
+          L.dot(fp.x, fp.y, std::max(0.35f, strandR * 0.7f), litFibre(base * 1.15f, dir, nrm, 0.3f, shade), 0.45f * (1.0f - s / lenPx), &allow);
+          fp = V2{fp.x + dir.x * 0.6f, fp.y + dir.y * 0.6f};
+        }
+      }
+    }
+  };
+  // A rope's path from a point, along the flow (or toward the crown), on the layer.
+  auto ropePath = [&](V2 start, bool towardCrown, float maxLenU) {
+    std::vector<V2> path;
+    V2 p = start;
+    const float step = 0.7f;
+    const auto steps = static_cast<int>(maxLenU * L.scale / step);
+    for (int k = 0; k < steps; ++k) {
+      if (p.x < 1 || p.y < 1 || p.x >= static_cast<float>(L.w - 1) || p.y >= static_cast<float>(L.h - 1)) break;
+      if (sd.at(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y)) > 0.01f) break;
+      path.push_back(p);
+      V2 t = flowAt(*st, g, L.toX(p.x), L.toY(p.y));
+      if (towardCrown) t = V2{-t.x, -t.y};
+      if (st->freeform) {
+        const float wob = 0.35f * vnoise(static_cast<float>(k) * 0.02f, start.x * 0.1f, params.seed + 30);
+        t = norm2(V2{t.x + t.y * wob, t.y - t.x * wob});
+      }
+      p = V2{p.x + t.x * step, p.y + t.y * step};
+    }
+    return path;
+  };
+
+  if (st->kind == Kind::Strands) {
+    drawStrands(st->slick);
+    if (st->extra == Extra::Puff || st->extra == Extra::CoilBun) drawCoils(true, 1.0f);
+  } else if (st->kind == Kind::Coils) {
+    drawCoils(false, st->afro ? 1.0f : 1.7f);
+  } else if (st->kind == Kind::Ropes) {
+    const float wU = st->ropeW;
+    if (st->rope == RopeKind::Cornrows) {
+      // Rows from the hairline back over the head, scalp between them;
+      // braids falling from the back.
+      underlayer(skin * 0.5f, -0.03f);
+      // The braids below the cap fall over a dark base, not scalp.
+      for (int32_t y = 0; y < L.h; ++y)
+        for (int32_t x = 0; x < L.w; ++x)
+          if (L.toY(static_cast<float>(y) + 0.5f) > 0.36f) L.c[static_cast<size_t>(y) * L.w + x] = base * 0.22f * L.a[static_cast<size_t>(y) * L.w + x];
+      const int rows = std::max(6, static_cast<int>(2.0f * g.skullHalf / (wU * 1.25f)));
+      for (int i = 0; i < rows; ++i) {
+        const float X = -g.skullHalf * 0.97f + (static_cast<float>(i) + 0.5f) * (1.94f * g.skullHalf / static_cast<float>(rows));
+        const float Y = hairline(X) + 0.01f;
+        // Straight back over the head, converging a little toward the crown.
+        std::vector<V2> path;
+        V2 p{(X - L.x0) * L.scale, (Y - L.y0) * L.scale};
+        const V2 dir = norm2(V2{-X * 0.35f, -1.0f});
+        for (int k = 0; k < static_cast<int>(1.2f * L.scale / 0.7f); ++k) {
+          if (p.x < 1 || p.y < 1 || p.x >= static_cast<float>(L.w - 1) || p.y >= static_cast<float>(L.h - 1)) break;
+          if (sd.at(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y)) > 0.004f) break;
+          path.push_back(p);
+          p = V2{p.x + dir.x * 0.7f, p.y + dir.y * 0.7f};
+        }
+        drawRope(path, wU, RopeKind::Cornrows, static_cast<uint32_t>(i), 0.95f);
+      }
+      if (st->len > -0.5f) {
+        const int hang = std::max(8, static_cast<int>(3.2f * (g.skullHalf + 0.1f) / wU));
+        for (int i = 0; i < hang; ++i) {
+          const float X = -(g.skullHalf + 0.08f) + (static_cast<float>(i) + 0.5f) * (2.0f * (g.skullHalf + 0.08f) / static_cast<float>(hang));
+          if (std::fabs(X) < a * 0.85f) continue;  // the face is in front of them
+          const V2 s{(X - L.x0) * L.scale, (0.25f - L.y0) * L.scale};
+          drawRope(ropePath(s, false, 1.8f), wU, RopeKind::Braids, static_cast<uint32_t>(100 + i), 0.85f);
+        }
+      }
+    } else if (st->rope == RopeKind::Knots) {
+      // A sleek parted base, then the knots: coiled ropes.
+      underlayer(base * 0.32f, 0.0f);
+      const float kx[5] = {-0.3f, 0.0f, 0.3f, -0.42f, 0.42f}, ky[5] = {0.12f, 0.0f, 0.12f, 0.4f, 0.4f};
+      for (int k = 0; k < 5; ++k) {
+        const V2 c{(kx[k] * g.skullHalf / 0.46f - L.x0) * L.scale, (g.skullTop + ky[k] * 0.6f - L.y0) * L.scale};
+        std::vector<V2> path;
+        const float R0 = 0.085f * L.scale;
+        for (float th = 0.0f; th < 3.0f * 6.2832f; th += 0.03f) {
+          const float r = R0 * (1.0f - th / (3.2f * 6.2832f));
+          path.push_back(V2{c.x + r * std::cos(th), c.y + r * std::sin(th)});
+        }
+        drawRope(path, wU, RopeKind::Knots, static_cast<uint32_t>(k), 1.0f);
+      }
+    } else {
+      // Locs, braids, twists: roots over the scalp; those nearer the face on top.
+      underlayer(base * 0.25f, 0.01f);
+      struct R {
+        V2 p;
+        float depth;
+      };
+      std::vector<R> roots;
+      const float spacing = wU * 0.85f;
+      for (float Y = g.skullTop + 0.02f; Y < 0.3f; Y += spacing)
+        for (float X = -g.skullHalf - st->side; X <= g.skullHalf + st->side; X += spacing) {
+          const float jx = X + (U(rng) - 0.5f) * spacing * 0.6f, jy = Y + (U(rng) - 0.5f) * spacing * 0.6f;
+          const V2 p{(jx - L.x0) * L.scale, (jy - L.y0) * L.scale};
+          if (p.x < 1 || p.y < 1 || p.x >= static_cast<float>(L.w - 1) || p.y >= static_cast<float>(L.h - 1)) continue;
+          if (sd.at(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y)) > -0.01f) continue;
+          roots.push_back({p, std::clamp((jy - g.skullTop) / 0.6f + 0.25f * (U(rng) - 0.5f), 0.0f, 1.0f)});
+        }
+      std::sort(roots.begin(), roots.end(), [](const R& x, const R& y) { return x.depth < y.depth; });
+      uint32_t id = 0;
+      for (const R& r : roots) {
+        drawRope(ropePath(r.p, false, 2.2f), wU * (0.85f + 0.3f * U(rng)), st->rope, id++, 0.6f + 0.4f * r.depth);
+      }
+    }
+  } else {
+    // A shaved head: the person's own skin carried up from the forehead and
+    // temples (a smooth fill, so it matches where it meets them), rounded by
+    // the light relative to the forehead, with a soft sheen and skin grain.
+    Grid faceWide = faceKeep;
+    blurGrid(faceWide, std::max(1.0f, 0.03f * g.unit));
+    std::vector<V3> skinFill = col;
+    {
+      std::vector<float> known(n);
+      for (size_t i = 0; i < n; ++i) known[i] = (faceKeep.v[i] > 0.9f && alpha[i] > 0.9f && skinLike(col[i]) > 0.5f) ? 1.0f : 0.0f;
+      pushPull(skinFill, known, w, h);
+    }
+    auto fillAt = [&](float X, float Y) {
+      const auto x = std::clamp(static_cast<int32_t>(g.cx + X * g.unit), 0, w - 1), y = std::clamp(static_cast<int32_t>(g.top + Y * g.unit), 0, h - 1);
+      return skinFill[static_cast<size_t>(y) * w + x];
+    };
+    const V3 nHair = norm3(V3{0.0f, 0.25f, 1.0f});  // the forehead's normal, near the hairline
+    const float foreLight = 0.55f + 0.45f * std::max(0.0f, dot3(nHair, kLight));
+    for (int32_t y = 0; y < L.h; ++y)
+      for (int32_t x = 0; x < L.w; ++x) {
+        const float X = L.toX(static_cast<float>(x) + 0.5f), Y = L.toY(static_cast<float>(y) + 0.5f);
+        float cov = smooth(0.006f, -0.006f, sd.at(x, y));
+        // Over the face, fading into it across a band (no seam).
+        const float fk = faceWide.sample(g.cx + X * g.unit, g.top + Y * g.unit);
+        cov *= 1.0f - smooth(0.45f, 0.97f, fk);
+        if (cov <= 0.0f) continue;
+        const float ex = X / (g.skullHalf + 0.005f), ey = (Y - 0.2f) / (0.2f - g.skullTop + 0.005f);
+        const float rr = std::min(1.0f, std::sqrt(ex * ex + ey * ey));
+        const V3 nrm = norm3(V3{ex, ey, std::sqrt(std::max(0.02f, 1.0f - rr * rr))});
+        const float light = std::clamp((0.55f + 0.45f * std::max(0.0f, dot3(nrm, kLight))) / foreLight, 0.7f, 1.1f) * (1.0f - 0.18f * smooth(0.75f, 1.0f, rr));
+        const float spec = std::pow(std::max(0.0f, dot3(nrm, kHalf)), 24.0f);
+        const float tex = 1.0f + 0.03f * fbm(X * 160.0f, Y * 160.0f, params.seed + 41) + 0.018f * vnoise(X * 520.0f, Y * 520.0f, params.seed + 42);
+        const float stub = 1.0f - 0.05f * smooth(0.6f, 1.0f, vnoise(X * 700.0f, Y * 700.0f, params.seed + 40)) * smooth(0.3f, 0.9f, rr);
+        const V3 sk = fillAt(X, Y);
+        const V3 c = sk * (light * tex * stub) + sk * (0.3f * spec);
+        const size_t i = static_cast<size_t>(y) * L.w + x;
+        L.c[i] = c * cov + L.c[i] * (1.0f - cov), L.a[i] = cov + L.a[i] * (1.0f - cov);
+      }
+    (void)skin;
+  }
+  // Like the photo: a touch soft, a touch of grain.
+  {
+    Grid ch[4];
+    for (auto& gch : ch) gch.init(L.w, L.h);
+    for (size_t i = 0; i < L.a.size(); ++i) ch[0].v[i] = L.c[i].r, ch[1].v[i] = L.c[i].g, ch[2].v[i] = L.c[i].b, ch[3].v[i] = L.a[i];
+    for (auto& gch : ch) blurGrid(gch, 0.45f);
+    for (size_t i = 0; i < L.a.size(); ++i) {
+      const float grain = 1.0f + 0.03f * N01(rng);
+      L.c[i] = V3{ch[0].v[i], ch[1].v[i], ch[2].v[i]} * grain, L.a[i] = ch[3].v[i];
+    }
+  }
+  // The hair's soft shadow on the face and neck.
+  Grid shadow;
+  shadow.init(L.w, L.h);
+  {
+    const auto off = static_cast<int32_t>(0.025f * L.scale);
+    for (int32_t y = 0; y < L.h; ++y)
+      for (int32_t x = 0; x < L.w; ++x) shadow.at(x, y) = y - off >= 0 ? L.a[static_cast<size_t>(y - off) * L.w + x] : 0.0f;
+    blurGrid(shadow, 0.025f * L.scale);
+  }
+
+  // ---- 3. Composite at the cut-out's own size.
+  const float invF = 1.0f / static_cast<float>(f);
   const bool done = parallelFor(H, token, [&](int32_t b0, int32_t b1) {
     for (int32_t y = b0; y < b1; ++y) {
       uint8_t* p = cutout.row(y);
       for (int32_t x = 0; x < W; ++x) {
-        const size_t i = static_cast<size_t>(y) * W + x;
-        const float X = (static_cast<float>(x) + 0.5f - g.cx) * inv, Y = (static_cast<float>(y) + 0.5f - g.top) * inv;
-        V3 c = col[i];
-        float a = alpha[i];
-        if (X > -2.5f && X < 2.5f && Y > -1.6f && Y < 3.2f) {
-          const HairPx h = shade(*st, g, X, Y, mix(ownHair, newColour, params.recolor ? strength : 1.0f), skin, faceSkin[i], params.seed);
-          if (h.a > 0.0f) {
-            if (h.behind) {
-              // Person over hair.
-              const float ao = a + h.a * (1.0f - a);
-              if (ao > 0.0f) c = (c * a + h.c * (h.a * (1.0f - a))) * (1.0f / ao);
-              a = ao;
-            } else {
-              const float ao = h.a + a * (1.0f - h.a);
-              if (ao > 0.0f) c = (h.c * h.a + c * (a * (1.0f - h.a))) * (1.0f / ao);
-              a = ao;
-            }
-          }
-        }
         uint8_t* q = p + x * 4;
-        q[o.r] = toByte(toGamma(c.r)), q[o.g] = toByte(toGamma(c.g)), q[o.b] = toByte(toGamma(c.b)), q[3] = toByte(a);
+        const float gx = (static_cast<float>(x) + 0.5f) * invF, gy = (static_cast<float>(y) + 0.5f) * invF;
+        V3 c{Lut[q[o.r]], Lut[q[o.g]], Lut[q[o.b]]};
+        float aP = static_cast<float>(q[3]) / 255.0f;
+        // Own hair out; body filled in where hair lay over it.
+        const float km = keepA.sample(gx, gy);
+        const float fillK = fillMix.sample(gx, gy);
+        if (fillK > 0.0f) {
+          const auto gi = static_cast<size_t>(std::clamp(static_cast<int32_t>(gy), 0, h - 1)) * w + std::clamp(static_cast<int32_t>(gx), 0, w - 1);
+          c = mix(c, fill[gi], fillK);
+          aP = std::max(aP, fillK);
+        }
+        aP = std::clamp(aP * km, 0.0f, 1.0f);
+        // The hair layer here.
+        const float X = (gx - g.cx) / g.unit, Y = (gy - g.top) / g.unit;
+        const float lx = (X - L.x0) * L.scale, ly = (Y - L.y0) * L.scale;
+        V3 hc{};
+        float ha = 0.0f, sh = 0.0f;
+        if (lx >= 0.0f && ly >= 0.0f && lx < static_cast<float>(L.w) && ly < static_cast<float>(L.h)) {
+          const float fx = std::clamp(lx - 0.5f, 0.0f, static_cast<float>(L.w - 1)), fy = std::clamp(ly - 0.5f, 0.0f, static_cast<float>(L.h - 1));
+          const auto x0 = static_cast<int32_t>(fx), y0 = static_cast<int32_t>(fy);
+          const int32_t x1 = std::min(L.w - 1, x0 + 1), y1 = std::min(L.h - 1, y0 + 1);
+          const float tx = fx - static_cast<float>(x0), ty = fy - static_cast<float>(y0);
+          const float w00 = (1 - tx) * (1 - ty), w10 = tx * (1 - ty), w01 = (1 - tx) * ty, w11 = tx * ty;
+          auto I = [&](int32_t xx, int32_t yy) { return static_cast<size_t>(yy) * L.w + xx; };
+          hc = L.c[I(x0, y0)] * w00 + L.c[I(x1, y0)] * w10 + L.c[I(x0, y1)] * w01 + L.c[I(x1, y1)] * w11;
+          ha = L.a[I(x0, y0)] * w00 + L.a[I(x1, y0)] * w10 + L.a[I(x0, y1)] * w01 + L.a[I(x1, y1)] * w11;
+          sh = shadow.sample(lx, ly);
+        }
+        // Behind the neck and chest (softly: no corner where it changes).
+        const float behind = smooth(0.86f, 0.98f, Y) * (1.0f - smooth(a * 0.8f, a * 1.05f, std::fabs(X)));
+        // Shadow on the person where the hair doesn't cover them.
+        if (sh > 0.0f) c = c * (1.0f - 0.35f * sh * (1.0f - ha) * (1.0f - behind));
+        V3 outc;
+        float outa;
+        if (ha <= 0.0f) {
+          outc = c, outa = aP;
+        } else {
+          const float aF = ha + aP * (1.0f - ha);
+          const V3 cF = aF > 0.0f ? (hc + c * (aP * (1.0f - ha))) * (1.0f / aF) : c;
+          const float aB = aP + ha * (1.0f - aP);
+          const V3 cB = aB > 0.0f ? (c * aP + hc * (1.0f - aP)) * (1.0f / aB) : c;
+          outa = aF + (aB - aF) * behind;
+          outc = mix(cF, cB, behind);
+        }
+        q[o.r] = toByte(toGamma(std::max(outc.r, 0.0f))), q[o.g] = toByte(toGamma(std::max(outc.g, 0.0f))),
+        q[o.b] = toByte(toGamma(std::max(outc.b, 0.0f))), q[3] = toByte(outa);
       }
     }
   });
