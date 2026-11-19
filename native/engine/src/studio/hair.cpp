@@ -474,7 +474,7 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
   const float ownLogL = hn > 30 ? static_cast<float>(hl / hn) : std::log(0.02f);
   const V3 skin = sn > 30 ? skinSum * (1.0f / static_cast<float>(sn)) : V3{0.25f, 0.15f, 0.1f};
   std::array<float, 3> fm{}, fsd{};
-  const std::array<float, 3> floorSd{0.22f, 0.012f, 0.008f};
+  const std::array<float, 3> floorSd{0.4f, 0.012f, 0.008f};  // light varies across a face (one side in shadow); its colour much less
   for (int k = 0; k < 3; ++k) {
     const auto K = static_cast<size_t>(k);
     fm[K] = sn > 30 ? static_cast<float>(sm[K] / sn) : 0.0f;
@@ -692,8 +692,6 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
       g.skullHalf = std::clamp(ownHalf - 0.035f, g.halfFace * 0.95f, g.halfFace * 1.18f);
     }
   }
-  auto unitsX = [&](float px) { return (px - g.cx) / g.unit; };
-  auto unitsY = [&](float py) { return (py - g.top) / g.unit; };
   const float a = g.halfFace;
   auto hairline = [&](float X) {
     const float u = X / std::max(a, 1e-3f);
@@ -715,33 +713,324 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
     for (size_t i = 0; i < n; ++i) keep.v[i] = std::max(keep.v[i], smooth(0.2f, 0.6f, kb.v[i]));
     std::vector<float> known(n);
     for (size_t i = 0; i < n; ++i) known[i] = (alpha[i] > 0.9f && hairZ.v[i] < 0.05f) ? 1.0f : 0.0f;
-    pushPull(fill, known, w, h);
+    // ---- The face's true outline. Hair over one side of the face hides its
+    // edge, so the outline is fitted (an oval, tilted with the head) to the
+    // edges that border the background or the neck, and must hold all the
+    // visible face; the oval then says where a cheek lay under the hair.
+    float ecx = g.cx, ecy = g.top + 0.5f * g.unit, erx = g.halfFace * g.unit, ery = 0.62f * g.unit, eang = 0.0f;
+    {
+      std::vector<std::array<float, 2>> sure, edge;
+      for (int32_t y = 1; y < h - 1; ++y)
+        for (int32_t x = 1; x < w - 1; ++x) {
+          const size_t i = static_cast<size_t>(y) * w + x;
+          if (faceKeep.v[i] < 0.5f) continue;
+          bool border = false, bg = false, hairSide = false;
+          const size_t nb[4] = {i - 1, i + 1, i - static_cast<size_t>(w), i + static_cast<size_t>(w)};
+          for (size_t j : nb) {
+            if (faceKeep.v[j] >= 0.5f) continue;
+            border = true;
+            if (alpha[j] < 0.5f) bg = true;
+            else if (hairZ.v[j] > 0.3f) hairSide = true;
+          }
+          if (!border) continue;
+          const auto pt = std::array<float, 2>{static_cast<float>(x), static_cast<float>(y)};
+          edge.push_back(pt);
+          // The chin against the neck, or the face against the background.
+          const bool chin = !hairSide && (static_cast<float>(y) - g.top) / g.unit > 0.75f;
+          if (bg || chin) sure.push_back(pt);
+        }
+      auto thin = [](std::vector<std::array<float, 2>>& v, size_t most) {
+        if (v.size() <= most) return;
+        std::vector<std::array<float, 2>> kept;
+        const double step = static_cast<double>(v.size()) / static_cast<double>(most);
+        for (size_t k = 0; k < most; ++k) kept.push_back(v[static_cast<size_t>(static_cast<double>(k) * step)]);
+        v.swap(kept);
+      };
+      thin(sure, 240), thin(edge, 240);
+      if (sure.size() >= 12 && edge.size() >= 12) {
+        const float U = g.unit, hf = g.halfFace * g.unit;
+        float best = 1e9f;
+        for (float an = -0.44f; an <= 0.441f; an += 0.087f) {
+          const float ca = std::cos(an), sa = std::sin(an);
+          for (float dx = -0.3f; dx <= 0.301f; dx += 0.03f)
+            for (float dy = -0.1f; dy <= 0.101f; dy += 0.025f)
+              for (float kx = 0.9f; kx <= 1.341f; kx += 0.04f)
+                for (float ky = 0.5f; ky <= 0.601f; ky += 0.025f) {
+                  const float cx = g.cx + dx * U, cy = g.top + (0.5f + dy) * U, rx = kx * hf, ry = ky * U;
+                  auto r = [&](const std::array<float, 2>& q) {
+                    const float px = q[0] - cx, py = q[1] - cy;
+                    const float u = px * ca + py * sa, v = -px * sa + py * ca;
+                    return std::sqrt(u * u / (rx * rx) + v * v / (ry * ry));
+                  };
+                  float fit = 0, out = 0;
+                  for (const auto& q : sure) fit += std::abs(r(q) - 1.0f);
+                  for (const auto& q : edge) out += std::max(0.0f, r(q) - 1.0f);
+                  const float score = fit / static_cast<float>(sure.size()) + 3.0f * out / static_cast<float>(edge.size()) + 0.25f * std::max(0.0f, kx - 1.0f) +
+                                      0.01f * std::abs(an);
+                  if (score < best) best = score, ecx = cx, ecy = cy, erx = rx, ery = ry, eang = an;
+                }
+        }
+      }
+    }
+    const float eca = std::cos(eang), esa = std::sin(eang);
+    auto inOval = [&](int32_t x, int32_t y) {
+      const float px = static_cast<float>(x) - ecx, py = static_cast<float>(y) - ecy;
+      const float u = px * eca + py * esa, v = -px * esa + py * eca;
+      return u * u / (erx * erx) + v * v / (ery * ery) < 1.0f;
+    };
+
+    // ---- The body under long hair: per row, the body's outline. Where its
+    // edge meets the background (or the photo's border) it is seen; where it
+    // meets hair the hair hid it, and the edge is drawn between the neck and
+    // the next seen edge below (a shoulder's curve), or mirrored from the other
+    // side; never narrower than the body seen, never past the person's outline.
+    std::vector<float> spanL(static_cast<size_t>(h), 0.0f), spanR(static_cast<size_t>(h), -1.0f);
+    {
+      const auto y0 = static_cast<int32_t>(std::clamp(chinY, 0.0f, static_cast<float>(h - 1)));
+      const float neckHalf = 0.55f * g.halfFace * g.unit;
+      const auto H2 = static_cast<size_t>(h);
+      std::vector<float> E[2] = {std::vector<float>(H2, -1.0f), std::vector<float>(H2, -1.0f)};
+      std::vector<float> A[2] = {std::vector<float>(H2, -1.0f), std::vector<float>(H2, -1.0f)};
+      std::vector<uint8_t> rel[2] = {std::vector<uint8_t>(H2, 0), std::vector<uint8_t>(H2, 0)};
+      auto vis = [&](int32_t x, int32_t y) {
+        const size_t i = static_cast<size_t>(y) * w + x;
+        return alpha[i] > 0.5f && hairZ.v[i] < 0.3f;
+      };
+      for (int32_t y = y0; y < h; ++y) {
+        for (int side = 0; side < 2; ++side) {
+          const int32_t dir = side == 0 ? 1 : -1, start = side == 0 ? 0 : w - 1;
+          // The person's outline, and the first run of 3 visible body pixels.
+          int32_t ax = -1, ex = -1;
+          for (int32_t x = start; x >= 0 && x < w; x += dir) {
+            if (ax < 0 && alpha[static_cast<size_t>(y) * w + x] > 0.5f) ax = x;
+            const int32_t x2 = x + 2 * dir;
+            if (x2 >= 0 && x2 < w && vis(x, y) && vis(x + dir, y) && vis(x2, y)) {
+              ex = x;
+              break;
+            }
+          }
+          if (ax < 0) continue;
+          A[side][static_cast<size_t>(y)] = static_cast<float>(ax);
+          if (ex < 0) continue;
+          E[side][static_cast<size_t>(y)] = static_cast<float>(ex);
+          bool hidden = false;
+          for (int32_t k = 1; k <= 3; ++k) {
+            const int32_t xx = ex - k * dir;
+            if (xx >= 0 && xx < w && alpha[static_cast<size_t>(y) * w + xx] > 0.5f) hidden = true;
+          }
+          rel[side][static_cast<size_t>(y)] = hidden ? 0 : 1;
+        }
+      }
+      std::vector<float> est[2] = {std::vector<float>(H2, -1.0f), std::vector<float>(H2, -1.0f)};
+      for (int side = 0; side < 2; ++side) {
+        const float sgn = side == 0 ? -1.0f : 1.0f;  // outward
+        auto& e = E[side];
+        auto& r = rel[side];
+        // The neck under the chin.
+        const float neck = g.cx + sgn * neckHalf;
+        const auto Y0 = static_cast<size_t>(y0);
+        if (!r[Y0]) e[Y0] = e[Y0] < 0 ? neck : (side == 0 ? std::min(e[Y0], neck) : std::max(e[Y0], neck)), r[Y0] = 1;
+        size_t last = Y0;
+        for (size_t y = Y0; y < H2; ++y) {
+          if (r[y] && e[y] >= 0) {
+            est[side][y] = e[y], last = y;
+            continue;
+          }
+          size_t next = y + 1;
+          while (next < H2 && !(r[next] && e[next] >= 0)) ++next;
+          float v;
+          if (next < H2) {
+            const float t = static_cast<float>(y - last) / static_cast<float>(next - last);
+            v = e[last] + (e[next] - e[last]) * t * t * (3.0f - 2.0f * t);
+          } else {
+            const auto& other = E[1 - side];
+            const bool otherSeen = rel[1 - side][y] && other[y] >= 0;
+            v = otherSeen ? 2.0f * g.cx - other[y] : e[last];
+            // Never narrower than the last seen edge above.
+            v = side == 0 ? std::min(v, e[last]) : std::max(v, e[last]);
+          }
+          est[side][y] = v;
+        }
+        // A shoulder drawn where hair hid it slopes down from the neck (not
+        // a ledge sticking out under the chin).
+        for (size_t y = Y0; y < H2; ++y) {
+          if (r[y] && e[y] >= 0) continue;
+          const float most = neckHalf + 1.6f * static_cast<float>(y - Y0);
+          est[side][y] = side == 0 ? std::max(est[side][y], g.cx - most) : std::min(est[side][y], g.cx + most);
+        }
+        // Inside the person's outline; holding the body seen.
+        for (size_t y = Y0; y < H2; ++y) {
+          float v = est[side][y];
+          if (A[side][y] < 0) {
+            est[side][y] = -1;
+            continue;
+          }
+          v = side == 0 ? std::max(v, A[side][y]) : std::min(v, A[side][y]);
+          if (e[y] >= 0) v = side == 0 ? std::min(v, e[y]) : std::max(v, e[y]);
+          est[side][y] = v;
+        }
+      }
+      // A little smoothing down the rows (no stair steps).
+      const auto rr = std::max<int32_t>(1, static_cast<int32_t>(0.015f * g.unit));
+      for (int32_t y = y0; y < h; ++y) {
+        float sl = 0, sr = 0, cnt = 0;
+        for (int32_t k = -rr; k <= rr; ++k) {
+          const int32_t yy = y + k;
+          if (yy < y0 || yy >= h || est[0][static_cast<size_t>(yy)] < 0 || est[1][static_cast<size_t>(yy)] < 0) continue;
+          sl += est[0][static_cast<size_t>(yy)], sr += est[1][static_cast<size_t>(yy)], cnt += 1;
+        }
+        if (cnt > 0 && est[0][static_cast<size_t>(y)] >= 0) spanL[static_cast<size_t>(y)] = sl / cnt, spanR[static_cast<size_t>(y)] = sr / cnt;
+      }
+    }
+    auto knownAt = [&](int32_t x, int32_t y) {
+      if (x < 0 || y < 0 || x >= w || y >= h) return false;
+      return known[static_cast<size_t>(y) * w + x] > 0.5f;
+    };
+    // What lay under the hair: the mirror image (across the face's own axis
+    // for a cheek, the body's middle below) when that side shows; else the
+    // body just below the hair, reflected upward (the cloth's own texture);
+    // else a smooth fill.
+    // What lay under the hair. A cheek: the mirror image across the face's
+    // own axis when that side shows, else skin. The body: the colour of the
+    // nearest part seen (skin or cloth, never a blend of the two), smoothly
+    // filled; copying texture from elsewhere draws seams and streaks.
+    std::vector<V3> skinFill = col, clothFill = col;
+    Grid clothW;
+    clothW.init(w, h);
+    {
+      std::vector<float> ks(n, 0.0f), kc(n, 0.0f);
+      std::vector<int8_t> lab(n, -1);
+      std::vector<int32_t> queue;
+      queue.reserve(n);
+      for (size_t i = 0; i < n; ++i) {
+        if (known[i] < 0.5f) continue;
+        const bool isCloth = std::max(cloth.v[i], acc.v[i]) > std::max(body.v[i], faceKeep.v[i]);
+        (isCloth ? kc : ks)[i] = 1.0f;
+        lab[i] = isCloth ? 1 : 0;
+        queue.push_back(static_cast<int32_t>(i));
+      }
+      for (size_t qi = 0; qi < queue.size(); ++qi) {
+        const int32_t k = queue[qi];
+        const int32_t x = k % w, y = k / w;
+        const int32_t nx[4] = {x - 1, x + 1, x, x}, ny[4] = {y, y, y - 1, y + 1};
+        for (int j = 0; j < 4; ++j) {
+          if (nx[j] < 0 || ny[j] < 0 || nx[j] >= w || ny[j] >= h) continue;
+          const size_t i = static_cast<size_t>(ny[j]) * w + nx[j];
+          if (lab[i] >= 0) continue;
+          lab[i] = lab[static_cast<size_t>(k)], queue.push_back(static_cast<int32_t>(i));
+        }
+      }
+      // The neck is skin. Out past it (the shoulders), what the body nearby
+      // shows outside the neck: a sleeve, or bare skin; counted from the
+      // pixels seen around it, so no single strip of view decides.
+      const float neckBand = 0.6f * g.halfFace * g.unit;
+      Grid vs, vc;
+      vs.init(w, h), vc.init(w, h);
+      double sideS[2] = {0, 0}, sideC[2] = {0, 0};
+      for (int32_t y = 0; y < h; ++y)
+        for (int32_t x = 0; x < w; ++x) {
+          const size_t i = static_cast<size_t>(y) * w + x;
+          const float off = static_cast<float>(x) - g.cx;
+          if (known[i] < 0.5f || static_cast<float>(y) < chinY || std::abs(off) < neckBand) continue;
+          (lab[i] == 1 ? vc : vs).v[i] = 1.0f;
+          (lab[i] == 1 ? sideC : sideS)[off < 0 ? 0 : 1] += 1;
+        }
+      blurGrid(vs, std::max(1.0f, 0.15f * g.unit)), blurGrid(vc, std::max(1.0f, 0.15f * g.unit));
+      for (int32_t y = 0; y < h; ++y)
+        for (int32_t x = 0; x < w; ++x) {
+          const size_t i = static_cast<size_t>(y) * w + x;
+          float v = lab[i] == 1 ? 1.0f : 0.0f;
+          if (known[i] < 0.5f && static_cast<float>(y) >= chinY) {
+            const float off = static_cast<float>(x) - g.cx;
+            if (std::abs(off) < neckBand) {
+              v = 0.0f;
+            } else {
+              const float t = vs.v[i] + vc.v[i];
+              const int sd2 = off < 0 ? 0 : 1;
+              const double all = sideS[sd2] + sideC[sd2];
+              v = t > 1e-3f ? vc.v[i] / t : (all > 0 ? static_cast<float>(sideC[sd2] / all) : 1.0f);
+            }
+          }
+          clothW.v[i] = v;
+        }
+      blurGrid(clothW, std::max(1.0f, 0.02f * g.unit));
+      pushPull(skinFill, ks, w, h);
+      pushPull(clothFill, kc, w, h);
+    }
+    auto under = [&](int32_t x, int32_t y, bool face) {
+      const size_t i = static_cast<size_t>(y) * w + x;
+      if (face) {
+        const float px = static_cast<float>(x) - ecx, py = static_cast<float>(y) - ecy;
+        const float ax = -esa, ay = eca;  // the face's up-down axis
+        const float d = px * ax + py * ay;
+        const auto mx = static_cast<int32_t>(std::lround(ecx + 2.0f * d * ax - px)), my = static_cast<int32_t>(std::lround(ecy + 2.0f * d * ay - py));
+        if (knownAt(mx, my) && faceKeep.at(mx, my) > 0.5f) return col[static_cast<size_t>(my) * w + mx];
+        return skinFill[i];
+      }
+      // A faint weave, so a filled patch is not flatter than the cloth around it.
+      const float grain = 1.0f + 0.04f * (fbm(static_cast<float>(x) * 0.7f, static_cast<float>(y) * 0.7f, params.seed + 23) - 0.5f);
+      return mix(skinFill[i], clothFill[i], clothW.v[i]) * grain;
+    };
+    // Near the hair: faint strands the parts map missed (wisps against the
+    // background, not body or clothes) go with it.
+    Grid nearHair = hairZ;
+    blurGrid(nearHair, std::max(1.0f, 0.1f * g.unit));
     for (int32_t y = 0; y < h; ++y) {
       const bool belowChin = static_cast<float>(y) >= chinY;
-      int32_t l = w, r = -1;
-      if (belowChin)
-        for (int32_t x = 0; x < w; ++x)
-          if (alpha[static_cast<size_t>(y) * w + x] > 0.5f && hairZ.v[static_cast<size_t>(y) * w + x] < 0.3f) l = std::min(l, x), r = std::max(r, x);
-      const int32_t margin = std::max<int32_t>(2, static_cast<int32_t>(0.01f * static_cast<float>(w)));
       for (int32_t x = 0; x < w; ++x) {
         const size_t i = static_cast<size_t>(y) * w + x;
         const float hm = hairZ.v[i] * (1.0f - faceKeep.v[i]);
-        // The face below the hairline always stays.
-        const float X = unitsX(static_cast<float>(x) + 0.5f), Y = unitsY(static_cast<float>(y) + 0.5f);
-        (void)X, (void)Y;
-        const float protect = faceKeep.v[i];
-        if (belowChin) {
-          if (hm > 0.0f && x >= l + margin && x <= r - margin) {
-            fillMix.v[i] = hm;
-            keepA.v[i] = 1.0f;
-          } else {
-            keepA.v[i] = std::max(1.0f - hm, faceKeep.v[i]);
-          }
+        if (hm <= 0.0f) {
+          if (alpha[i] > 0.0f && alpha[i] < 0.7f && nearHair.v[i] > 0.03f && keep.v[i] < 0.5f) keepA.v[i] = 0.0f;
+          continue;
+        }
+        // A cheek, below the hairline (the top of the head is the new style's).
+        const bool face = inOval(x, y) && alpha[i] > 0.5f && (static_cast<float>(y) - g.top) / g.unit > 0.18f;
+        const bool onBody = belowChin && alpha[i] > 0.5f && static_cast<float>(x) >= spanL[static_cast<size_t>(y)] && static_cast<float>(x) <= spanR[static_cast<size_t>(y)];
+        if (face || onBody) {
+          // Hair over a cheek or over the body: what was under it.
+          fill[i] = under(x, y, face);
+          fillMix.v[i] = hm;
+          keepA.v[i] = 1.0f;
         } else {
-          const float gone = keep.v[i] * (1.0f - hm);
-          keepA.v[i] = gone + (1.0f - gone) * protect;
+          // Hair against the background goes, stray strands too.
+          const float gone = keep.v[i] * (1.0f - smooth(0.05f, 0.35f, hm));
+          keepA.v[i] = gone + (1.0f - gone) * faceKeep.v[i];
         }
       }
+    }
+    // Scraps of cloth glimpsed between strands, where hair covered most of
+    // the body, go with the hair (or they float in the fill as patches).
+    {
+      Grid dense;
+      dense.init(w, h);
+      for (size_t i = 0; i < n; ++i) dense.v[i] = fillMix.v[i] > 0.0f ? 1.0f : 0.0f;
+      blurGrid(dense, std::max(1.0f, 0.03f * g.unit));
+      for (int32_t y = 0; y < h; ++y) {
+        if (static_cast<float>(y) < chinY) continue;
+        for (int32_t x = 0; x < w; ++x) {
+          const size_t i = static_cast<size_t>(y) * w + x;
+          if (faceKeep.v[i] > 0.5f || alpha[i] < 0.5f || static_cast<float>(x) < spanL[static_cast<size_t>(y)] || static_cast<float>(x) > spanR[static_cast<size_t>(y)]) continue;
+          const float k = smooth(0.45f, 0.75f, dense.v[i]);
+          if (k <= fillMix.v[i]) continue;
+          if (fillMix.v[i] <= 0.0f) fill[i] = under(x, y, false);
+          fillMix.v[i] = k;
+        }
+      }
+    }
+    // Soften the filled colours a little (no hard pixel seams), keeping texture.
+    {
+      std::vector<V3> soft = fill;
+      for (int32_t y = 1; y < h - 1; ++y)
+        for (int32_t x = 1; x < w - 1; ++x) {
+          const size_t i = static_cast<size_t>(y) * w + x;
+          if (fillMix.v[i] <= 0.0f) continue;
+          V3 a3{};
+          for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) a3 = a3 + fill[static_cast<size_t>(y + dy) * w + x + dx];
+          soft[i] = mix(fill[i], a3 * (1.0f / 9.0f), 0.5f);
+        }
+      fill.swap(soft);
     }
   }
 

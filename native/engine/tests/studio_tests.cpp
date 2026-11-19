@@ -909,6 +909,35 @@ TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
   pp_image_destroy(h.zones);
 }
 
+TEST(studio_hair_long_hair_over_the_shoulders) {
+  // Long hair falls over both shoulders, past the body's sides on the left.
+  HairHead h = hairHead();
+  for (int y = 100; y < 290; ++y)
+    for (int x = 0; x < 240; ++x) {
+      const bool left = x >= 30 && x < 85, right = x >= 155 && x < 190;
+      if (!(left || right)) continue;
+      uint8_t* p = at(h.cut, x, y);
+      if (std::hypot((x - 120.0) / 22, (y - 140.0) / 32) < 1.0) continue;  // not over the face
+      const uint8_t v = (x / 3) % 2 ? 40 : 20;
+      p[0] = v, p[1] = static_cast<uint8_t>(v * 0.7), p[2] = static_cast<uint8_t>(v * 0.5), p[3] = 255;
+      *at(h.zones, x, y, 1) = 1;
+    }
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "pixie", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
+  // Over the body: the clothes come back under where the hair lay.
+  for (const int x : {60, 170}) {
+    const uint8_t* p = at(h.cut, x, 250);
+    std::printf("    shoulder at x=%d: %d %d %d a=%d\n", x, p[0], p[1], p[2], p[3]);
+    EXPECT_EQ(p[3], 255);
+    EXPECT_TRUE(std::abs(p[0] - 30) < 14 && std::abs(p[1] - 90) < 14 && std::abs(p[2] - 70) < 14);
+  }
+  // Past the body's side: the hair is simply gone.
+  EXPECT_EQ(at(h.cut, 34, 250)[3], 0);
+  // The face stays.
+  EXPECT_TRUE(at(h.cut, 120, 150)[3] == 255 && std::abs(at(h.cut, 120, 150)[0] - 120) < 3);
+  pp_image_destroy(h.cut);
+  pp_image_destroy(h.zones);
+}
+
 TEST(studio_rejects_bad_input) {
   Scene s = makeScene();
   pp_image* mask = coarseMask(s);
