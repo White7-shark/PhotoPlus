@@ -902,6 +902,32 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
   });
 }
 
+pp_status pp_studio_hair(pp_image* cutout, const pp_image* zones, const char* style, int32_t recolor, uint8_t r, uint8_t g, uint8_t b,
+                         float strength, const float face[4], uint32_t seed, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (cutout == nullptr || zones == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "cutout and zones are required");
+    photoplus::studio::HairParams p;
+    p.style = style, p.recolor = recolor != 0, p.color = {r, g, b}, p.strength = strength, p.seed = seed;
+    if (face != nullptr) p.faceLeft = face[0], p.faceTop = face[1], p.faceRight = face[2], p.faceBottom = face[3];
+    if (!std::isfinite(p.strength) || !std::isfinite(p.faceLeft) || !std::isfinite(p.faceTop) || !std::isfinite(p.faceRight) ||
+        !std::isfinite(p.faceBottom)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Bad hair settings");
+    }
+    const photoplus::Error e = photoplus::studio::restyleHair(cutout->buffer, zones->buffer, p, token ? &token->token : nullptr);
+    return e.status == PP_OK ? succeed() : fail(e);
+  });
+}
+
+int32_t pp_studio_hair_style_count(void) { return static_cast<int32_t>(photoplus::studio::hairStyles().size()); }
+const char* pp_studio_hair_style_id(int32_t index) {
+  const auto& s = photoplus::studio::hairStyles();
+  return index >= 0 && static_cast<size_t>(index) < s.size() ? s[static_cast<size_t>(index)].id : nullptr;
+}
+int32_t pp_studio_hair_style_women(int32_t index) {
+  const auto& s = photoplus::studio::hairStyles();
+  return index >= 0 && static_cast<size_t>(index) < s.size() && s[static_cast<size_t>(index)].women ? 1 : 0;
+}
+
 pp_status pp_studio_backdrop(pp_image* out, uint8_t r, uint8_t g, uint8_t b, float light, float center_x, float center_y,
                              uint32_t seed, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {

@@ -281,6 +281,39 @@ Previews of the studio paper with real people are private and were sent separate
 - Engine test: dark room just above a shoulder is kept out (23 of 255) and a hole in the other shoulder is filled (255). The earlier head cases (lost face, ceiling, hair, far room) are unchanged.
 - On your clip: average frame-to-frame flicker on the right shoulder 6.3 → 3.8. The head is unchanged (5.95 → 5.97), and the frames that showed the head problems look the same.
 
+## Update: an arm torn at the edge, and hair (Premium)
+
+### The arm beside the hand looked ripped off
+
+**Report:** in the green-dress photo, the part by her hand looked torn off.
+
+**Cause:** her brown arm against a brown background. Where the person and the room beside them are the same colour, colour can't place the edge. The cut-out still let colour decide, so the arm's outer edge came out ragged and partly see-through. This was older than the recent changes: the arm's alpha was identical before them. A second, smaller problem *was* new: the edge-light step turned her gold brooch greenish. The parts map calls the brooch part of the dress, so it was compared with the green dress.
+
+**Fix:**
+- The person model's own outline is kept. Where the nearby person and background colours are close, the final edge follows that outline, made crisp. Where they differ clearly, colour still decides. Hair always keeps colour's say, because strands need it.
+- The edge-light step may only take light out, never change what a thing is. An edge whose hue is far from its surface's own (a gold brooch said to be part of a green dress) is left alone, and jewellery is always left alone.
+- **600-photo ground-truth benchmark:** average error 20.23 → 19.94; edge error 8.71 → 8.67. Edge squared error rose 2% (65.4 → 66.7): a few outlines are a little softer where the model was a little off.
+
+### Hair: colours and styles (Premium)
+
+In the Scene Swap's **Hair** panel there are three tabs: Colour, Women and Men.
+
+- **18 colours:** natural blacks and browns, blondes, platinum, ash grey, copper, auburn, burgundy, rose gold, pink, purple, blue, teal and ginger.
+  - Each hair pixel keeps its light relative to the hair's average, so strands, shine and shadow stay.
+  - The average sits a little below the swatch colour (a swatch shows the light side of hair). Shadows between strands are kept deeper in light colours, and brightly lit hair stays brighter softly instead of going flat.
+- **46 styles, 23 for women and 23 for men.** Women: long straight, silk press, waves, beach waves, curls, bob, bob with bangs, long bob, pixie, curtain bangs, shag, side swept, top knot, sleek ponytail, curly updo, afro, afro puff, twist-out, Bantu knots, box braids, cornrow braids, long locs and finger waves. Men: buzz cut, crew cut, skin fade, high-top fade, afro, caesar, 360 waves, short and shoulder locs, twists, sponge twists, cornrows, slicked undercut, pompadour, quiff, side part, French crop, curly top fade, mohawk, faux hawk, man bun, long, and a clean shave.
+- **How a style is made** (`native/engine/src/studio/hair.cpp`, all on the phone):
+  1. The person's own hair is taken out of the cut-out. Above the chin, everything that isn't face, skin, clothes or jewellery goes, including fuzzy outer strands. Below the chin, hair lying in front of the body is filled in from the body around it.
+  2. The skull is fitted to the person's own head (its top and width from their outline, limited so a big afro doesn't inflate it). The face below the hairline is always kept.
+  3. The style is drawn in its place, with the shape built from the skull, the length and volume, and extras (a bun, a puff, Bantu knots, a mohawk strip). Strands follow a flow from the parting with the style's texture (straight, wavy, curly, coily, locs, braids, cornrows with scalp between the rows, waves, stubble), shaded darker toward the roots and the face, lit from above with a glossy band. Tips are soft or fuzzy by texture.
+  4. Long hair falls behind the neck and in front of the shoulders.
+- **Premium:** on the free plan, choosing opens Premium, and the device refuses hair requests from the free plan too. A style needs a face in the photo, and it says so if there isn't one.
+- **Honest limits:** the styles are drawn by the engine, not generated from photographs by AI. They look right at photo size, but up close they look illustrated rather than photographic. Truly photographic hairstyle swaps need a large AI image model, which doesn't run on a phone. Ears hidden under the old hair don't reappear under a shorter style.
+- **Tests:**
+  - Engine: colour keeps the strands and leaves the face untouched. Every one of the 46 styles draws, keeps the face and body, and removes the old hair's far sides. Unknown styles, a missing face and a missing parts map are refused.
+  - Kotlin: the hair request is checked.
+  - Jest: the catalogue's ids and lists match the engine's table exactly; requests carry only what was chosen; the picker opens Premium on the free plan.
+
 ## Limits
 
 - **No reconstruction:** nothing behind the person in their own photo is reconstructed or reused, by design. Only clean plates go behind them.

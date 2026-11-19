@@ -131,6 +131,33 @@ struct ComposeReport {
 Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placement& placement, const Look& look,
               const CancellationToken* token, ComposeReport* report);
 
+// Hair (Photoshoot Studio, Premium): a new colour for the person's own
+// hair, or a new hairstyle in place of it. Works on a cut-out (straight
+// alpha) with its parts map; the face box comes from the cut-out report.
+struct HairParams {
+  // A style id from hairStyles(), or empty to keep the person's own hair.
+  const char* style = nullptr;
+  // A new colour (sRGB 0..255); without it a new style takes the colour of
+  // the person's own hair.
+  bool recolor = false;
+  std::array<uint8_t, 3> color{};
+  float strength = 1.0f;  // 0..1, how fully the new colour replaces the old
+  float faceLeft = 0.0f, faceTop = 0.0f, faceRight = 0.0f, faceBottom = 0.0f;  // normalised
+  uint32_t seed = 5;
+};
+
+struct HairStyleInfo {
+  const char* id;
+  bool women;  // in the women's list (else the men's)
+};
+
+// Every style the engine draws.
+const std::vector<HairStyleInfo>& hairStyles();
+
+// `cutout` (RGBA8/BGRA8, straight alpha) is edited in place. `zones`: the
+// person-parts map (required: hair has to be found). A style needs the face.
+Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParams& params, const CancellationToken* token);
+
 // A seamless paper backdrop in one colour, lit as in a studio: a soft pool
 // of light behind the people, falling off toward the edges and corners, a
 // floor a touch darker than the wall, and a faint paper texture. Worked in

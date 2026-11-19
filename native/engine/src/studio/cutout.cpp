@@ -99,7 +99,13 @@ V3 despill(V3 c, V3 f, V3 b, float band) {
   const float cn = std::sqrt(ct.r * ct.r + ct.g * ct.g + ct.b * ct.b);
   const float same = cn > 1e-4f ? (ct.r * tint.r + ct.g * tint.g + ct.b * tint.b) / (cn * tn) : 0.0f;
   const float bright = smoothstep(1.5f, 2.5f, lc / lf) * smoothstep(0.3f, 0.7f, lb) * smoothstep(0.3f, 0.7f, same);
-  const float w = k * std::max(smoothstep(0.03f, 0.12f, along), bright);
+  // Only the light changes, never what the thing is: an edge whose hue is
+  // far from its surface's own (a gold brooch the parts map calls part of
+  // a green dress) is not that surface, and is left alone.
+  const V3 ot = own - grey(lum(own));
+  const float on = std::sqrt(ot.r * ot.r + ot.g * ot.g + ot.b * ot.b);
+  const float hueOk = (on < 0.02f || cn < 0.02f) ? 1.0f : smoothstep(0.3f, 0.7f, (ct.r * ot.r + ct.g * ot.g + ct.b * ot.b) / (cn * on));
+  const float w = k * hueOk * std::max(smoothstep(0.03f, 0.12f, along), bright);
   if (w <= 0.0f) return c;
   V3 out = mix(c, own, w);
   // The brightness the old light added, mostly taken out.
@@ -447,6 +453,14 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
   Rgb3 hairF, hairB;
   Plane hairD;
   bool twoColour = false;
+  // The person model's own outline, kept: where the person and the room
+  // beside them are the same colour (brown skin before a brown wall), colour
+  // can't place the edge, and the model's outline is the better guess.
+  auto modelR = blurred(mask, std::max(0.75f, 0.0015f * shortSide), token);
+  if (!modelR) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+  Plane modelMask = std::move(modelR).value();
+  // The model's mask is coarse and soft: a crisp edge at its middle.
+  for (size_t i = 0; i < modelMask.size(); ++i) modelMask.data()[i] = smoothstep(0.38f, 0.62f, modelMask.data()[i]);
   {
     auto reach = blurred(mask, 0.012f * shortSide, token);
     auto reachW = blurred(mask, 0.016f * shortSide, token);
@@ -520,12 +534,27 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
   Plane& mB = *mBR;
   const int32_t gr = std::max<int32_t>(2, static_cast<int32_t>(shortSide) / 200);
   if (Error e = guidedCoefficientsColor({&gam.r, &gam.g, &gam.b}, mask, gr, 1e-3f, mA, mB, token); e.status != PP_OK) return e;
+  // How much colour may say where the edge is: where the person's and the
+  // room's colours are far apart; hair keeps colour's say (strands need it).
+  Plane colourSays;
+  if (twoColour) {
+    auto cs = Plane::allocate(lw, lh);
+    if (!cs) return cs.error();
+    for (size_t i = 0; i < cs->size(); ++i) {
+      const V3 df = hairF.at(i) - hairB.at(i);
+      const float apart = std::sqrt(df.r * df.r + df.g * df.g + df.b * df.b);
+      const float hz = haveHair ? hairZone.data()[i] : 0.0f;
+      cs->data()[i] = std::max(smoothstep(0.1f, 0.22f, apart), hz);
+    }
+    colourSays = std::move(cs).value();
+  }
   auto alphaR = Plane::allocate(lw, lh);
   if (!alphaR) return alphaR.error();
   Plane& A = *alphaR;
   for (size_t i = 0; i < A.size(); ++i) {
     float a = mA[0].data()[i] * gam.r.data()[i] + mA[1].data()[i] * gam.g.data()[i] + mA[2].data()[i] * gam.b.data()[i] + mB.data()[i];
     a = std::clamp(a, 0.0f, 1.0f);
+    if (twoColour) a = modelMask.data()[i] + (a - modelMask.data()[i]) * colourSays.data()[i];
     if (sp.any) a = std::min(std::max(a, sp.keep.data()[i]), 1.0f - sp.remove.data()[i]);
     A.data()[i] = a;
   }
@@ -582,9 +611,10 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
       auto face = zonePlane(*zones, Zone::FaceSkin, lw, lh, token);
       auto bodySkin = zonePlane(*zones, Zone::BodySkin, lw, lh, token);
       auto cloth = zonePlane(*zones, Zone::Clothes, lw, lh, token);
+      auto accessory = zonePlane(*zones, Zone::Accessory, lw, lh, token);
       auto ownR = allocRgb(lw, lh);
       auto sureP = Plane::allocate(lw, lh);
-      if (!blurA || !wi || !rp || !face || !bodySkin || !cloth || !ownR || !sureP) {
+      if (!blurA || !wi || !rp || !face || !bodySkin || !cloth || !accessory || !ownR || !sureP) {
         return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
       }
       for (size_t i = 0; i < A.size(); ++i) {
@@ -630,7 +660,12 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
       auto sureW = blurred(*sureP, std::max(1.0f, 0.01f * shortSide), token);
       auto ownW = weightedPlate(*ownR, *sureP, std::max(1.0f, 0.01f * shortSide), grey(0.3f), token);
       if (!sureW || !ownW) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
-      for (size_t i = 0; i < A.size(); ++i) sureW->data()[i] = std::max(sureP->data()[i], std::min(1.0f, 2.0f * sureW->data()[i]));
+      // Jewellery and other accessories are their own colour (a gold brooch
+      // is not the dress beside it): left alone.
+      for (size_t i = 0; i < A.size(); ++i) {
+        sureW->data()[i] = std::max(sureP->data()[i], std::min(1.0f, 2.0f * sureW->data()[i]));
+        sureW->data()[i] *= 1.0f - smoothstep(0.1f, 0.4f, accessory->data()[i]);
+      }
       spillOwn = std::move(ownW).value(), spillSure = std::move(sureW).value();
       spill = true;
     }
@@ -666,6 +701,10 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
               a += (ap - a) * twoW;
             }
           }
+        }
+        if (twoColour) {
+          const float m = modelMask.sample(lx, ly);
+          a = m + (a - m) * colourSays.sample(lx, ly);
         }
         // Solid inside, clear outside: a person at 97% is see-through, and
         // 2% of the old room is a veil.

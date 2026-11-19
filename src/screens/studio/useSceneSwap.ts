@@ -26,6 +26,8 @@ import {
   type Stroke,
   type StudioService,
 } from '../../services/studio/StudioService';
+import { friendlyMessage } from '../../services/errors';
+import type { HairChoice } from '../../services/studio/hair';
 
 export type Step = 'pick' | 'cutout' | 'scene';
 
@@ -73,6 +75,8 @@ export function useSceneSwap(studio: StudioService) {
   const [redo, setRedo] = useState<Stroke[]>([]);
   const [edge, setEdge] = useState<EdgeSettings>(DEFAULT_EDGE);
   const [background, setBackground] = useState<Background>({ kind: 'plate', plate: PLATES[0] });
+  // Hair (Premium): the person's own, recoloured, or a new style.
+  const [hair, setHair] = useState<HairChoice>({});
   const [shape, setShape] = useState<FrameShape>('portrait');
   const [placement, setPlacement] = useState<Placement | null>(null);
   // What auto framing chose last: the crop of the background, the size and blur.
@@ -235,18 +239,18 @@ export function useSceneSwap(studio: StudioService) {
     [sizeReference],
   );
 
-  const render = useLatest(async ({ id, bg, c, p, l, aspect }: { id: string; bg: Background; c: Crop; p: Placement; l: SceneLook; aspect: number }) => {
+  const render = useLatest(async ({ id, bg, c, p, l, aspect, h }: { id: string; bg: Background; c: Crop; p: Placement; l: SceneLook; aspect: number; h: HairChoice }) => {
     setBusy('render');
     try {
       const [withPerson, without] = await Promise.all([
-        studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect }, 'preview'),
+        studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect, hair: h }, 'preview'),
         bg.kind === 'transparent' ? Promise.resolve(null) : studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect }, 'preview', true),
       ]);
       setScene(withPerson);
       setEmpty(without);
       setError(null);
-    } catch {
-      setError('The scene couldn’t be drawn. Please try again.');
+    } catch (err) {
+      setError(err instanceof StudioError && err.code === 'NO_FACE' ? friendlyMessage('NO_FACE') : 'The scene couldn’t be drawn. Please try again.');
     } finally {
       setBusy(b => (b === 'render' ? null : b));
     }
@@ -254,8 +258,8 @@ export function useSceneSwap(studio: StudioService) {
 
   useEffect(() => {
     if (step !== 'scene' || !session || !placement) return;
-    render({ id: session.sessionId, bg: background, c: crop, p: placement, l: look, aspect: frameAspect });
-  }, [step, session, background, crop, placement, look, frameAspect, render, cut]);
+    render({ id: session.sessionId, bg: background, c: crop, p: placement, l: look, aspect: frameAspect, h: hair });
+  }, [step, session, background, crop, placement, look, frameAspect, render, cut, hair]);
 
   const goToScene = useCallback(() => {
     setStep('scene');
@@ -285,7 +289,7 @@ export function useSceneSwap(studio: StudioService) {
     setBusy('save');
     setError(null);
     try {
-      return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect }, 'full');
+      return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect, hair }, 'full');
     } catch (err) {
       if (err instanceof StudioError && err.code === 'PREMIUM_REQUIRED') throw err;
       setError('Your photo couldn’t be saved. Please try again.');
@@ -293,7 +297,7 @@ export function useSceneSwap(studio: StudioService) {
     } finally {
       setBusy(null);
     }
-  }, [session, placement, background, crop, look, frameAspect, studio]);
+  }, [session, placement, background, crop, look, frameAspect, studio, hair]);
 
   const saveCutout = useCallback(async (): Promise<SceneResult | null> => {
     if (!session) return null;
@@ -302,7 +306,7 @@ export function useSceneSwap(studio: StudioService) {
     try {
       return await studio.render(
         session.sessionId,
-        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: placement ?? { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look },
+        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: placement ?? { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look, hair },
         'full',
       );
     } catch (err) {
@@ -312,7 +316,7 @@ export function useSceneSwap(studio: StudioService) {
     } finally {
       setBusy(null);
     }
-  }, [session, placement, look, studio]);
+  }, [session, placement, look, studio, hair]);
 
   useEffect(() => () => {
     if (session) studio.end(session.sessionId);
@@ -321,6 +325,9 @@ export function useSceneSwap(studio: StudioService) {
   return {
     step,
     setStep,
+    hair,
+    setHair,
+    hairChosen: Boolean(hair.style || hair.color),
     session,
     cut,
     report,

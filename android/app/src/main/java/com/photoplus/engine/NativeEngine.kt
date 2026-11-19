@@ -258,6 +258,26 @@ object NativeEngine {
     report: FloatArray,
   )
 
+  /**
+   * Hair (Photoshoot Studio): [cutout] (a nativeStudioCutout result) edited
+   * in place with its parts map [zones]: a new [style] (an engine style id)
+   * or, with [style] null, the person's own hair recoloured ([recolor]).
+   * [face] (4): the cut-out report's face box, normalised.
+   */
+  external fun nativeStudioHair(
+    cutout: Bitmap,
+    zones: Bitmap,
+    style: String?,
+    recolor: Boolean,
+    r: Int,
+    g: Int,
+    b: Int,
+    strength: Float,
+    face: FloatArray,
+    seed: Int,
+    token: Long,
+  )
+
   /** A studio paper backdrop in one colour (0..255) filling [bitmap]: [light] 0 flat .. 1 lit, its light at ([cx], [cy]). */
   external fun nativeStudioBackdrop(bitmap: Bitmap, r: Int, g: Int, b: Int, light: Float, cx: Float, cy: Float, seed: Int)
 

@@ -1657,4 +1657,32 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioBackdr
   if (st != PP_OK) throwStatus(env, st);
 }
 
+// Hair (Photoshoot Studio): `cutout` (a nativeStudioCutout result, not
+// premultiplied) edited in place with the parts map `zones`. `style` null
+// or empty keeps the person's own hair (recoloured when `recolor`);
+// `face` (4): the cut-out report's face box.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioHair(
+    JNIEnv* env, jobject, jobject cutout, jobject zones, jstring style, jboolean recolor, jint r, jint g, jint b, jfloat strength,
+    jfloatArray face, jint seed, jlong token) {
+  if (cutout == nullptr || zones == nullptr || face == nullptr || env->GetArrayLength(face) < 4) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad hair arguments");
+    return;
+  }
+  jfloat f[4];
+  env->GetFloatArrayRegion(face, 0, 4, f);
+  std::string id;
+  if (style != nullptr) {
+    const char* chars = env->GetStringUTFChars(style, nullptr);
+    if (chars == nullptr) return;
+    id = chars;
+    env->ReleaseStringUTFChars(style, chars);
+  }
+  WrappedBitmap img, zon;
+  if (!img.open(env, cutout, false) || !zon.open(env, zones, true)) return;
+  const auto c = [](jint v) { return static_cast<uint8_t>(std::clamp(v, 0, 255)); };
+  const pp_status st = pp_studio_hair(img.image, zon.image, id.empty() ? nullptr : id.c_str(), recolor ? 1 : 0, c(r), c(g), c(b), strength, f,
+                                      static_cast<uint32_t>(seed), reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
 }  // extern "C"

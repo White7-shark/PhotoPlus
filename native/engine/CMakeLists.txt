@@ -36,6 +36,7 @@ add_library(photoplus_engine STATIC
   src/matte/tools.cpp
   src/studio/cutout.cpp
   src/studio/compose.cpp
+  src/studio/hair.cpp
   src/skintone/skintone.cpp
   src/light/light.cpp
   src/pose/pose.cpp

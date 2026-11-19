@@ -8,6 +8,7 @@ const MESSAGES: Record<string, string> = {
   CAMERA_UNAVAILABLE: 'The camera is busy or unavailable. Close other camera apps and try again.',
   CAPTURE_FAILED: 'That photo didn’t come through. Please try again.',
   RECORDING_FAILED: 'That clip didn’t come through. Please try again.',
+  NO_FACE: 'A new hairstyle needs a face in the photo. Choose a photo where the face shows.',
   CLIP_TOO_SHORT: 'Glide needs at least a second of video. Hold on a little longer.',
   RAW_UNAVAILABLE: 'RAW isn’t available on this camera.',
   CANCELLED: 'Cancelled.',

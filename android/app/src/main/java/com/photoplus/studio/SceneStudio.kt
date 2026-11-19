@@ -144,6 +144,30 @@ data class SceneLook(
   }
 }
 
+/**
+ * Hair in the Photoshoot Studio (Premium): a new [style] (an engine style
+ * id) and/or a new [color] (0xRRGGBB) for the person's hair.
+ */
+data class HairSpec(val style: String?, val color: Int?, val strength: Float = 1f) {
+  val any get() = style != null || color != null
+
+  companion object {
+    private val ID = Regex("^[a-z0-9-]{1,40}$")
+    private val HEX = Regex("^#[0-9a-fA-F]{6}$")
+
+    /** Null when nothing is asked. */
+    fun fromMap(m: Map<String, Any?>?): HairSpec? {
+      if (m == null) return null
+      val style = (m["style"] as? String)?.takeIf { it.isNotEmpty() }
+      if (style != null && !ID.matches(style)) throw EngineException(EngineException.INVALID_ARGUMENT, "Unknown hairstyle")
+      val c = (m["color"] as? String)?.takeIf { it.isNotEmpty() }
+      if (c != null && !HEX.matches(c)) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad hair colour")
+      val strength = ((m["strength"] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: 1f).coerceIn(0f, 1f)
+      return HairSpec(style, c?.substring(1)?.toInt(16), strength).takeIf { it.any }
+    }
+  }
+}
+
 /** What goes behind the person. */
 sealed class SceneBackground {
   data class Plate(val assetId: String) : SceneBackground()

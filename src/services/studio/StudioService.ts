@@ -6,6 +6,7 @@
 import { errorCode, errorMessage, nativeModules, requireNative, type StudioSpec } from '../../native';
 import { createId } from '../database/ids';
 import type { OutfitColour } from './colors';
+import { hairRequest, type HairChoice } from './hair';
 import { backgroundRequest, type Background, type Crop, type Placement, type SceneLook } from './scene';
 
 export type Brush = 'keep' | 'remove' | 'hair';
@@ -140,7 +141,7 @@ export class StudioService {
 
   render(
     sessionId: string,
-    scene: { background: Background; crop: Crop; placement: Placement; look: SceneLook; aspect?: number },
+    scene: { background: Background; crop: Crop; placement: Placement; look: SceneLook; aspect?: number; hair?: HairChoice | null },
     quality: 'preview' | 'full',
     hidePerson = false,
   ): Promise<SceneResult> {
@@ -155,6 +156,7 @@ export class StudioService {
           aspect: scene.aspect,
           quality,
           hidePerson,
+          ...(hairRequest(scene.hair) ? { hair: hairRequest(scene.hair) } : {}),
         }),
       isScene,
     );

@@ -90,6 +90,19 @@ class SceneStudioTest {
     assertTrue(SceneStudio.outfit(FloatArray(16)).isEmpty()) // an older, shorter report
   }
 
+  @Test fun hairRequestsAreChecked() {
+    assertEquals(null, HairSpec.fromMap(null))
+    assertEquals(null, HairSpec.fromMap(mapOf("style" to "", "color" to "")))
+    val h = HairSpec.fromMap(mapOf("style" to "box-braids", "color" to "#B85C2E"))!!
+    assertEquals("box-braids", h.style)
+    assertEquals(0xB85C2E, h.color)
+    assertEquals(1f, h.strength)
+    assertEquals(null, HairSpec.fromMap(mapOf("color" to "#121012"))!!.style)
+    assertEquals(0.5f, HairSpec.fromMap(mapOf("color" to "#121012", "strength" to 0.5))!!.strength)
+    assertThrows<EngineException> { HairSpec.fromMap(mapOf("style" to "../etc")) }
+    assertThrows<EngineException> { HairSpec.fromMap(mapOf("color" to "red")) }
+  }
+
   @Test fun exportsKeepThePersonsOwnDetail() {
     // A person 3000 px tall filling 75% of a 4:5 frame: a 4000 px tall frame…
     val (w, h) = SceneStudio.exportSize(0.8f, 3000, 0.75f, 8192)

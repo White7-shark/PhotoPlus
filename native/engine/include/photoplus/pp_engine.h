@@ -859,6 +859,18 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
  * (RGBA8/BGRA8). `light` 0 is a flat colour, 1 the full studio light (a
  * pool of light at center_x, center_y, falling off toward the edges, a
  * faint paper texture). */
+/* Hair (Photoshoot Studio): `cutout` (a pp_studio_cutout result) edited in
+ * place with its parts map `zones`. `style`: a style id (see
+ * pp_studio_hair_style_id) or NULL/"" to keep the person's own hair, which
+ * is recoloured when `recolor` is set. `face` is the cut-out report's face
+ * box (left, top, right, bottom, normalised); a style needs it. */
+pp_status pp_studio_hair(pp_image* cutout, const pp_image* zones, const char* style, int32_t recolor, uint8_t r, uint8_t g, uint8_t b,
+                         float strength, const float face[4], uint32_t seed, const pp_cancel_token* token);
+/* The styles the engine draws: their count, ids, and whether each is in the women's list. */
+int32_t pp_studio_hair_style_count(void);
+const char* pp_studio_hair_style_id(int32_t index);
+int32_t pp_studio_hair_style_women(int32_t index);
+
 pp_status pp_studio_backdrop(pp_image* out, uint8_t r, uint8_t g, uint8_t b, float light, float center_x, float center_y,
                              uint32_t seed, const pp_cancel_token* token);
 

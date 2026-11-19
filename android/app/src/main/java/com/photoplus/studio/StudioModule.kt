@@ -79,6 +79,11 @@ class StudioModule(reactContext: ReactApplicationContext) :
     @Volatile var strokes: List<StudioStroke> = emptyList()
     @Volatile var settings = CutoutSettings()
     @Volatile var previewCutout: Bitmap? = null
+    /** The face box from the last cut-out report (normalised), for hairstyles. */
+    @Volatile var face: FloatArray? = null
+    /** The last preview cut-out with hair, by what made it. */
+    var hairPreview: Bitmap? = null
+    var hairKey: Any? = null
     var fullCutout: Bitmap? = null
     var fullKey: Any? = null
     var serial = 0
@@ -87,6 +92,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
     fun release() {
       previewCutout?.recycle()
       fullCutout?.recycle()
+      hairPreview?.recycle()
       mask.recycle()
       zones?.recycle()
       preview.recycle()
@@ -187,6 +193,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       s.previewCutout?.recycle()
       s.previewCutout = out
       s.serial++
+      s.face = if (report[11] > 0.5f) floatArrayOf(report[12], report[13], report[14], report[15]) else null
     }
     // A new name each time, so the app's image cache shows the new one.
     s.dir.listFiles { f -> f.name.startsWith("cut_") }?.forEach { it.delete() }
@@ -266,9 +273,21 @@ class StudioModule(reactContext: ReactApplicationContext) :
     val (background, crop, pl) = parsed
     val (placement, look) = pl
     val aspectHint = (map["aspect"] as? Number)?.toFloat()?.takeIf { it.isFinite() && it in 0.2f..5f }
+    @Suppress("UNCHECKED_CAST")
+    val hair = try {
+      HairSpec.fromMap(map["hair"] as? Map<String, Any?>)
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    if (hair != null && Entitlements.plan != Plan.PREMIUM) {
+      promise.reject("PREMIUM_REQUIRED", "Hair colours and hairstyles are part of Premium")
+      return
+    }
     jobs.submit(jobId, listener(promise)) { token ->
       val s = session(map)
-      val cutout = if (full) fullCutout(s, token) else synchronized(s) { s.previewCutout } ?: throw EngineException(NO_PERSON, "Nobody was found in this photo")
+      val base = if (full) fullCutout(s, token) else synchronized(s) { s.previewCutout } ?: throw EngineException(NO_PERSON, "Nobody was found in this photo")
+      val cutout = if (hair != null && !(!full && map["hidePerson"] == true)) withHair(s, base, hair, full, token) else base
       if (background is SceneBackground.Transparent) {
         return@submit transparent(s, cutout, full)
       }
@@ -326,6 +345,39 @@ class StudioModule(reactContext: ReactApplicationContext) :
         frame.recycle()
       }
     }
+  }
+
+  /**
+   * The cut-out with new hair: a copy (the session's own cut-out stays as it
+   * is). Previews keep the last one, so dragging the person doesn't redraw
+   * the hair; a full save draws it afresh (and the caller's frame is freed
+   * by GC, as it is not the session's).
+   */
+  private fun withHair(s: Session, base: Bitmap, hair: HairSpec, full: Boolean, token: Long): Bitmap {
+    val zones = s.zones ?: throw EngineException(EngineException.INVALID_ARGUMENT, "Hair can't be found in this photo")
+    val face = s.face
+    if (hair.style != null && face == null) throw EngineException(NO_FACE, "A hairstyle needs a face in the photo")
+    val key = Triple(hair, s.serial, base.generationId)
+    if (!full) synchronized(s) { s.hairPreview?.let { if (s.hairKey == key) return it } }
+    // A raw copy (the cut-out is not premultiplied; a Bitmap copy could convert it).
+    val out = createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
+    val raw = java.nio.ByteBuffer.allocateDirect(base.byteCount)
+    base.copyPixelsToBuffer(raw)
+    raw.rewind()
+    out.copyPixelsFromBuffer(raw)
+    val c = hair.color
+    NativeEngine.nativeStudioHair(
+      out, zones, hair.style, c != null, (c ?: 0) shr 16 and 0xFF, (c ?: 0) shr 8 and 0xFF, (c ?: 0) and 0xFF, hair.strength,
+      face ?: FloatArray(4), 5, token,
+    )
+    if (!full) {
+      synchronized(s) {
+        if (s.hairPreview !== out) s.hairPreview?.recycle()
+        s.hairPreview = out
+        s.hairKey = key
+      }
+    }
+    return out
   }
 
   private fun transparent(s: Session, cutout: Bitmap, full: Boolean): Map<String, Any?> {
@@ -425,6 +477,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
   companion object {
     const val NAME = "PhotoPlusStudio"
     const val NO_PERSON = "NO_PERSON"
+    const val NO_FACE = "NO_FACE"
     /** Person masks are found on a copy this size. */
     private const val ANALYSIS_EDGE = 2048
     /** Exports: up to 4096 px on the long edge (~12 MP at 4:3). */

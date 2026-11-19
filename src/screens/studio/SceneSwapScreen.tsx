@@ -14,6 +14,7 @@ import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
 import { isOutfit } from '../../services/studio/colors';
 import { BackgroundPicker } from './BackgroundPicker';
+import { HairPicker } from './HairPicker';
 import { BrushCanvas, type Backing } from './BrushCanvas';
 import { PlacementView } from './PlacementView';
 import { useSceneSwap, type Step } from './useSceneSwap';
@@ -37,9 +38,10 @@ const BACKINGS: { value: Backing; label: string }[] = [
   { value: 'black', label: 'Black' },
 ];
 
-type Panel = 'backgrounds' | 'adjust' | 'frame';
+type Panel = 'backgrounds' | 'hair' | 'adjust' | 'frame';
 const PANELS: { value: Panel; label: string }[] = [
   { value: 'backgrounds', label: 'Backgrounds' },
+  { value: 'hair', label: 'Hair' },
   { value: 'adjust', label: 'Adjust' },
   { value: 'frame', label: 'Frame' },
 ];
@@ -68,7 +70,8 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
   const [backing, setBacking] = useState<Backing>('dim');
   const [tapMode, setTapMode] = useState(false);
   const [panel, setPanel] = useState<Panel>('backgrounds');
-  const [premiumOpen, setPremiumOpen] = useState(false);
+  const [premiumOpen, setPremiumOpen] = useState<null | 'backgroundReplace' | 'studioHair'>(null);
+  const hairAllowed = can('studioHair').allowed;
 
   const back = () => {
     if (s.step === 'scene') s.setStep('cutout');
@@ -131,15 +134,15 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
   };
 
   const save = async (cutoutOnly: boolean) => {
-    if (!allowed) {
-      setPremiumOpen(true);
+    if (!allowed || (!hairAllowed && s.hairChosen)) {
+      setPremiumOpen(allowed ? 'studioHair' : 'backgroundReplace');
       return;
     }
     try {
       const r = cutoutOnly ? await s.saveCutout() : await s.save();
       if (r) await keep(r);
     } catch (e) {
-      if (e instanceof StudioError && e.code === 'PREMIUM_REQUIRED') setPremiumOpen(true);
+      if (e instanceof StudioError && e.code === 'PREMIUM_REQUIRED') setPremiumOpen('backgroundReplace');
     }
   };
 
@@ -262,6 +265,9 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                 outfit={isOutfit(s.report.outfit) ? s.report.outfit : []}
               />
             ) : null}
+            {panel === 'hair' ? (
+              <HairPicker value={s.hair} onChange={s.setHair} locked={!hairAllowed} onLocked={() => setPremiumOpen('studioHair')} />
+            ) : null}
             {panel === 'adjust' ? (
               <GlassSurface radius={18} style={{ padding: 14, gap: 10 }}>
                 <ValueSlider
@@ -337,7 +343,7 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
           </>
         ) : null}
       </View>
-      <PremiumSheet feature={premiumOpen ? 'backgroundReplace' : null} onClose={() => setPremiumOpen(false)} />
+      <PremiumSheet feature={premiumOpen} onClose={() => setPremiumOpen(null)} />
     </Screen>
   );
 }

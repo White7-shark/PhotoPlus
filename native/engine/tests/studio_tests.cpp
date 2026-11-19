@@ -824,6 +824,90 @@ TEST(studio_backdrop_is_lit_like_paper_keeps_its_hue_and_never_bands) {
   for (pp_image* i : {flat, lit, navy, again, other}) pp_image_destroy(i);
 }
 
+namespace {
+// A head for the hair tests, 240 x 300: dark hair (a big round shape) over
+// a face, a body below; and its parts map. Hair is textured (stripes).
+struct HairHead {
+  pp_image* cut = nullptr;
+  pp_image* zones = nullptr;
+  float face[4] = {100.0f / 240, 110.0f / 300, 140.0f / 240, 170.0f / 300};
+};
+HairHead hairHead() {
+  HairHead h;
+  const int W = 240, H = 300;
+  h.cut = rgba(W, H);
+  h.zones = gray(W, H);
+  for (int y = 0; y < H; ++y)
+    for (int x = 0; x < W; ++x) {
+      uint8_t* p = at(h.cut, x, y);
+      uint8_t& z = *at(h.zones, x, y, 1);
+      const bool faceIn = std::hypot((x - 120.0) / 22, (y - 140.0) / 32) < 1.0;
+      const bool hairIn = std::hypot((x - 120.0) / 70, (y - 110.0) / 70) < 1.0 && !faceIn;
+      const bool body = y > 190 && std::abs(x - 120) < 80;
+      if (faceIn) p[0] = 120, p[1] = 80, p[2] = 60, p[3] = 255, z = 3;
+      else if (hairIn) {
+        const uint8_t v = (x / 3) % 2 ? 40 : 20;  // strands
+        p[0] = v, p[1] = static_cast<uint8_t>(v * 0.7), p[2] = static_cast<uint8_t>(v * 0.5), p[3] = 255, z = 1;
+      } else if (body) p[0] = 30, p[1] = 90, p[2] = 70, p[3] = 255, z = 4;
+      else p[0] = p[1] = p[2] = 0, p[3] = 0, z = 0;
+    }
+  return h;
+}
+}  // namespace
+
+TEST(studio_hair_colour_keeps_the_strands_and_the_face) {
+  HairHead h = hairHead();
+  // Copper: the hair takes the colour, still striped; the face is untouched.
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, nullptr, 1, 184, 92, 40, 1.0f, h.face, 5, nullptr));
+  const uint8_t* a = at(h.cut, 99, 70);  // a light strand
+  const uint8_t* b = at(h.cut, 102, 70); // a dark one
+  const uint8_t* f = at(h.cut, 120, 140);
+  std::printf("    strands %d %d %d / %d %d %d, face %d %d %d\n", a[0], a[1], a[2], b[0], b[1], b[2], f[0], f[1], f[2]);
+  EXPECT_TRUE(a[0] > a[1] + 30 && a[1] > a[2]);  // copper
+  EXPECT_TRUE(std::abs(static_cast<int>(a[0]) - b[0]) > 15);  // the strands still show
+  EXPECT_TRUE(f[0] == 120 && f[1] == 80 && f[2] == 60);
+  pp_image_destroy(h.cut);
+  pp_image_destroy(h.zones);
+}
+
+TEST(studio_hair_styles_replace_the_hair_and_keep_the_face) {
+  int women = 0, men = 0;
+  for (int i = 0; i < pp_studio_hair_style_count(); ++i) (pp_studio_hair_style_women(i) ? women : men)++;
+  std::printf("    %d women's styles, %d men's\n", women, men);
+  EXPECT_TRUE(women >= 20 && men >= 20);
+  EXPECT_TRUE(pp_studio_hair_style_id(-1) == nullptr && pp_studio_hair_style_id(pp_studio_hair_style_count()) == nullptr);
+  // Every style draws, keeps the face and the body, and takes out the old
+  // hair far from the head (the big round shape's sides).
+  for (int i = 0; i < pp_studio_hair_style_count(); ++i) {
+    HairHead h = hairHead();
+    const char* id = pp_studio_hair_style_id(i);
+    ASSERT_OK(pp_studio_hair(h.cut, h.zones, id, 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
+    const uint8_t* f = at(h.cut, 120, 150);
+    const uint8_t* body = at(h.cut, 120, 260);
+    if (!(f[3] == 255 && std::abs(f[0] - 120) < 3) || body[3] != 255) std::printf("    %s: face or body changed\n", id);
+    EXPECT_TRUE(f[3] == 255 && std::abs(f[0] - 120) < 3);
+    EXPECT_TRUE(body[3] == 255);
+    double drawn = 0;
+    for (int y = 40; y < 110; ++y)
+      for (int x = 90; x < 150; ++x) drawn += at(h.cut, x, y)[3];
+    EXPECT_TRUE(drawn > 0);  // something on the head
+    pp_image_destroy(h.cut);
+    pp_image_destroy(h.zones);
+  }
+  // A short cut: the old hair's far sides are gone.
+  HairHead h = hairHead();
+  ASSERT_OK(pp_studio_hair(h.cut, h.zones, "buzz-cut", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr));
+  EXPECT_EQ(at(h.cut, 55, 110)[3], 0);
+  EXPECT_EQ(at(h.cut, 185, 110)[3], 0);
+  // Bad input.
+  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "no-such-style", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  const float noFace[4] = {0, 0, 0, 0};
+  EXPECT_EQ(pp_studio_hair(h.cut, h.zones, "bob", 0, 0, 0, 0, 1.0f, noFace, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_hair(h.cut, nullptr, "bob", 0, 0, 0, 0, 1.0f, h.face, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(h.cut);
+  pp_image_destroy(h.zones);
+}
+
 TEST(studio_rejects_bad_input) {
   Scene s = makeScene();
   pp_image* mask = coarseMask(s);
