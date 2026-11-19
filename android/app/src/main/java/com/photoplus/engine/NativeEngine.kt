@@ -274,6 +274,8 @@ object NativeEngine {
     b: Int,
     strength: Float,
     face: FloatArray,
+    edit: FloatArray,
+    strokes: FloatArray,
     seed: Int,
     token: Long,
   )

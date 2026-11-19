@@ -327,6 +327,17 @@ In the Scene Swap's **Hair** panel there are three tabs: Colour, Women and Men.
 - **Colour on long hair** (tested on long blonde hair and long dark curls; six colours each). The colour reaches the ends over the shoulders, and strands, waves and curls keep their light. Two fixes came from this test:
   - Black now keeps a soft sheen where the hair caught the light; before, it went flat.
   - Much lighter colours on dark hair (platinum on dark brown) soften the shadows to grey, as bleached hair's are; before, they stayed near black and looked striped.
+- **Hair, finished by hand (Premium; the Hair panel's Edit tab).** Every head and every photo is different, so the engine's result is a start that a photographer can make right, instead of a guess that must be right for every head. The Edit tab appears once a style or colour is chosen:
+  - **Shape** (a style): length, volume, height on top, fringe, the parting (or "as styled"), waves and curls, shine.
+  - **Fit to the head**: move left or right and up or down, size (70–140%), turn (±30°), on top of the automatic fit to the face and the head's tilt.
+  - **Colour finish**: depth (softer or more contrast between strands), shine, darker roots (grown-out colour), lighter or darker ends (ombré).
+  - **Brushes**, painted with a finger on the photo (the person with their new hair, shown in the photo's own frame and redrawn after each stroke):
+    - Erase hair: no new hair here.
+    - Restore: the photo as it was here (their own hair, skin, clothes).
+    - Add colour: colour hair the colour missed.
+    - Remove colour: keep the colour off brows, skin or a hat.
+  - Undo for strokes, a reset for all hand edits, and the same edits used for the preview and the full-size save.
+  - Engine: `HairEdit` and `HairStroke` (`pp_studio_hair_edited`); the strokes are the cut-out's stroke format with four hair brushes. Tests: longer reaches further down, erase leaves no new hair, restore brings back the photo exactly, remove-colour leaves the spot exactly as it was, darker roots darken the crown, bad edits and brushes are refused (engine); edits and brushes are parsed, clamped and refused (Kotlin); requests carry only what changed, and the editor, brushes, undo, reset and the Premium lock work (Jest).
 - **Under removed long hair, the garment's own texture.** The smooth fill looked like a flat, see-through patch (your feedback). Now the shading is filled smoothly and the fine texture is copied, at full resolution, from where the same garment (or skin) shows: a few large shifts, each copying a whole stretch, so the weave stays continuous instead of repeating a small patch. Sources near hair are skipped (thin strands the parts map missed would be copied too).
   - Tried and rejected: MI-GAN, a mobile inpainting model (MIT licence, LiteRT build). It is trained on landscapes: on large regions under hair it invented a ghostly face on a shoulder, and on a blouse it painted dark blobs and bits of hair.
 - **A cheek hidden by hair is rebuilt only where clearly hidden**: as far as the other side of the face shows, and only when the hair hid more than a sliver (a sliver only made the face look wider). Its outer edge is soft.

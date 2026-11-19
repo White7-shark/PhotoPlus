@@ -904,14 +904,41 @@ pp_status pp_studio_compose(pp_image* background, const pp_image* cutout, const 
 
 pp_status pp_studio_hair(pp_image* cutout, const pp_image* zones, const char* style, int32_t recolor, uint8_t r, uint8_t g, uint8_t b,
                          float strength, const float face[4], uint32_t seed, const pp_cancel_token* token) {
+  return pp_studio_hair_edited(cutout, zones, style, recolor, r, g, b, strength, face, nullptr, nullptr, 0, seed, token);
+}
+
+pp_status pp_studio_hair_edited(pp_image* cutout, const pp_image* zones, const char* style, int32_t recolor, uint8_t r, uint8_t g,
+                                uint8_t b, float strength, const float face[4], const pp_studio_hair_edit* edit,
+                                const pp_studio_stroke* strokes, int32_t stroke_count, uint32_t seed, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
     if (cutout == nullptr || zones == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "cutout and zones are required");
+    if (stroke_count < 0 || stroke_count > 4096 || (stroke_count > 0 && strokes == nullptr)) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad strokes");
     photoplus::studio::HairParams p;
     p.style = style, p.recolor = recolor != 0, p.color = {r, g, b}, p.strength = strength, p.seed = seed;
     if (face != nullptr) p.faceLeft = face[0], p.faceTop = face[1], p.faceRight = face[2], p.faceBottom = face[3];
     if (!std::isfinite(p.strength) || !std::isfinite(p.faceLeft) || !std::isfinite(p.faceTop) || !std::isfinite(p.faceRight) ||
         !std::isfinite(p.faceBottom)) {
       return fail(PP_ERROR_INVALID_ARGUMENT, "Bad hair settings");
+    }
+    if (edit != nullptr) {
+      auto& e = p.edit;
+      e.length = edit->length, e.volume = edit->volume, e.height = edit->height, e.fringe = edit->fringe;
+      e.partSet = edit->part_set != 0, e.part = edit->part, e.waves = edit->waves, e.shine = edit->shine;
+      e.moveX = edit->move_x, e.moveY = edit->move_y, e.size = edit->size, e.rotate = edit->rotate;
+      e.depth = edit->depth, e.roots = edit->roots, e.ends = edit->ends;
+    }
+    for (int32_t i = 0; i < stroke_count; ++i) {
+      const pp_studio_stroke& s = strokes[i];
+      if (s.brush < PP_STUDIO_HAIR_ERASE || s.brush > PP_STUDIO_HAIR_COLOUR_OFF || s.count < 0 || s.count > 100000 ||
+          (s.count > 0 && s.points == nullptr)) {
+        return fail(PP_ERROR_INVALID_ARGUMENT, "Bad stroke");
+      }
+      photoplus::studio::HairStroke hs;
+      hs.brush = static_cast<photoplus::studio::HairBrush>(s.brush);
+      hs.radius = s.radius;
+      hs.points.reserve(static_cast<size_t>(s.count));
+      for (int32_t k = 0; k < s.count; ++k) hs.points.push_back({s.points[2 * k], s.points[2 * k + 1]});
+      p.strokes.push_back(std::move(hs));
     }
     const photoplus::Error e = photoplus::studio::restyleHair(cutout->buffer, zones->buffer, p, token ? &token->token : nullptr);
     return e.status == PP_OK ? succeed() : fail(e);

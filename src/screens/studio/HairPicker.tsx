@@ -2,15 +2,34 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Icon } from '../../components';
-import { HAIR_COLOURS, hairSummary, stylesFor, type HairChoice, type HairGroup } from '../../services/studio/hair';
+import {
+  HAIR_COLOURS,
+  hairSummary,
+  stylesFor,
+  type HairBrush,
+  type HairChoice,
+  type HairGroup,
+} from '../../services/studio/hair';
+import { HairEditor } from './HairEditor';
 import { useTheme } from '../../theme';
 
-type Tab = 'colour' | HairGroup;
+type Tab = 'colour' | HairGroup | 'edit';
 const TABS: { value: Tab; label: string }[] = [
   { value: 'colour', label: 'Colour' },
   { value: 'women', label: 'Women' },
   { value: 'men', label: 'Men' },
+  { value: 'edit', label: 'Edit' },
 ];
+
+/** The brush state the screen keeps (it shows the canvas). */
+export interface HairBrushState {
+  brushing: boolean;
+  onBrushing: (on: boolean) => void;
+  brush: HairBrush;
+  onBrush: (b: HairBrush) => void;
+  radius: number;
+  onRadius: (r: number) => void;
+}
 
 /**
  * Hair (Premium): a colour for the person's own hair, or a new style from
@@ -22,11 +41,14 @@ export function HairPicker({
   onChange,
   locked,
   onLocked,
+  brushes,
 }: {
   value: HairChoice;
   onChange: (c: HairChoice) => void;
   locked: boolean;
   onLocked: () => void;
+  /** Hand editing (style shape, fit, colour finish, brushes); none: no Edit tab. */
+  brushes?: HairBrushState;
 }) {
   const theme = useTheme();
   const [tab, setTab] = useState<Tab>('colour');
@@ -39,7 +61,13 @@ export function HairPicker({
       accessibilityLabel={label}
       accessibilityState={{ selected }}
       testID={`hair-${key}`}
-      style={[styles.chip, { borderColor: selected ? theme.colors.accent : 'rgba(255,255,255,0.14)', backgroundColor: selected ? 'rgba(255,255,255,0.08)' : 'transparent' }]}
+      style={[
+        styles.chip,
+        {
+          borderColor: selected ? theme.colors.accent : 'rgba(255,255,255,0.14)',
+          backgroundColor: selected ? 'rgba(255,255,255,0.08)' : 'transparent',
+        },
+      ]}
     >
       {swatch ? <View style={[styles.dot, { backgroundColor: swatch }]} /> : null}
       <AppText variant="caption" style={{ fontWeight: selected ? '700' : '500' }}>
@@ -63,38 +91,57 @@ export function HairPicker({
         ) : null}
       </View>
       <View style={styles.row} accessibilityRole="tablist">
-        {TABS.map(t => (
+        {TABS.filter(t => t.value !== 'edit' || (brushes && (value.style || value.color))).map(t => (
           <Pressable
             key={t.value}
-            onPress={() => setTab(t.value)}
+            onPress={() => (t.value === 'edit' && locked ? onLocked() : setTab(t.value))}
             accessibilityRole="tab"
             accessibilityState={{ selected: tab === t.value }}
             testID={`hair-tab-${t.value}`}
             style={[styles.tab, { backgroundColor: tab === t.value ? theme.colors.accent : 'rgba(255,255,255,0.08)' }]}
           >
-            <AppText variant="caption" style={{ color: tab === t.value ? '#FFFFFF' : theme.colors.textSecondary, fontWeight: '700' }}>
+            <AppText
+              variant="caption"
+              style={{ color: tab === t.value ? '#FFFFFF' : theme.colors.textSecondary, fontWeight: '700' }}
+            >
               {t.label}
             </AppText>
           </Pressable>
         ))}
       </View>
-      <View style={styles.wrap} accessibilityRole="radiogroup">
-        {tab === 'colour' ? (
-          <>
-            {chip('own-colour', 'Own colour', !value.color, () => choose({ ...value, color: null }))}
-            {HAIR_COLOURS.map(c => chip(c.id, c.name, value.color?.toUpperCase() === c.color, () => choose({ ...value, color: c.color }), c.color))}
-          </>
-        ) : (
-          <>
-            {chip('own-style', 'Own hair', !value.style, () => choose({ ...value, style: null }))}
-            {stylesFor(tab).map(st => chip(st.id, st.name, value.style === st.id, () => choose({ ...value, style: st.id })))}
-          </>
-        )}
-      </View>
+      {tab === 'edit' && brushes && (value.style || value.color) ? (
+        <HairEditor value={value} onChange={onChange} {...brushes} />
+      ) : (
+        <View style={styles.wrap} accessibilityRole="radiogroup">
+          {tab === 'colour' ? (
+            <>
+              {chip('own-colour', 'Own colour', !value.color, () => choose({ ...value, color: null }))}
+              {HAIR_COLOURS.map(c =>
+                chip(
+                  c.id,
+                  c.name,
+                  value.color?.toUpperCase() === c.color,
+                  () => choose({ ...value, color: c.color }),
+                  c.color,
+                ),
+              )}
+            </>
+          ) : (
+            <>
+              {chip('own-style', 'Own hair', !value.style, () => choose({ ...value, style: null }))}
+              {stylesFor(tab === 'men' ? 'men' : 'women').map(st =>
+                chip(st.id, st.name, value.style === st.id, () => choose({ ...value, style: st.id })),
+              )}
+            </>
+          )}
+        </View>
+      )}
       <AppText variant="caption" tone="tertiary">
         {tab === 'colour'
           ? 'Colours your own hair, or a new style. The strands and shine stay.'
-          : 'Your own hair is taken away and the new style drawn in, fitted to your head.'}
+          : tab === 'edit'
+            ? 'Make it right by hand: shape the style, fit it to the head, finish the colour, and paint where it should or should not be.'
+            : 'Your own hair is taken away and the new style drawn in, fitted to your head.'}
       </AppText>
     </View>
   );
@@ -106,6 +153,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 8 },
   tab: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1.5 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1.5,
+  },
   dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
 });

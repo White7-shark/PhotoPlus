@@ -902,6 +902,32 @@ pp_status pp_studio_finish_frame(pp_image* frame, const pp_studio_finish* finish
 pp_status pp_studio_gradient(pp_image* out, const uint8_t from[3], const uint8_t to[3], int32_t kind, float angle, float center_x,
                              float center_y, float radius);
 
+/* A photographer's own edit of a hairstyle and its colour (all zero, size
+ * 1: as the engine made it). Shape -1..1: length, volume, height, fringe,
+ * waves, shine; the parting -1 left .. 1 right when part_set. Placement:
+ * move_x, move_y (face heights, -0.5..0.5), size (0.7..1.4), rotate
+ * (degrees, -30..30). Colour: depth (-1 softer .. 1 more contrast), roots
+ * (0..1 darker roots), ends (-1 darker .. 1 lighter ends). */
+typedef struct pp_studio_hair_edit {
+  float length, volume, height, fringe;
+  int32_t part_set;
+  float part, waves, shine;
+  float move_x, move_y, size, rotate;
+  float depth, roots, ends;
+} pp_studio_hair_edit;
+
+/* Hair brushes, painted on the cut-out (pp_studio_stroke.brush). */
+typedef enum pp_studio_hair_brush {
+  PP_STUDIO_HAIR_ERASE = 0,      /* no new hair here */
+  PP_STUDIO_HAIR_RESTORE = 1,    /* the photo as it was here */
+  PP_STUDIO_HAIR_COLOUR_ON = 2,  /* colour here too */
+  PP_STUDIO_HAIR_COLOUR_OFF = 3  /* no colour here */
+} pp_studio_hair_brush;
+
+/* pp_studio_hair with a photographer's edit and brushes (either may be NULL / 0). */
+pp_status pp_studio_hair_edited(pp_image* cutout, const pp_image* zones, const char* style, int32_t recolor, uint8_t r, uint8_t g,
+                                uint8_t b, float strength, const float face[4], const pp_studio_hair_edit* edit,
+                                const pp_studio_stroke* strokes, int32_t stroke_count, uint32_t seed, const pp_cancel_token* token);
 /* The styles the engine draws: their count, ids, and whether each is in the women's list. */
 int32_t pp_studio_hair_style_count(void);
 const char* pp_studio_hair_style_id(int32_t index);

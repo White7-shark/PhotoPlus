@@ -432,7 +432,21 @@ const std::vector<HairStyleInfo>& hairStyles() {
 // average (`meanLogL`: the mean log lightness of the hair). Shadows go deeper
 // and keep some of the natural colour (dye shows least there); highlights
 // stay soft and a little lighter. `mix01`: how fully the colour replaces it.
-static V3 recolourHair(V3 c, float meanLogL, V3 colour, float mix01) {
+// The photographer's colour finish at a point `Y` face heights below the
+// top of the face: depth, shine, and how much of darker roots or lighter
+// (or darker) ends applies there.
+struct ColourFinish {
+  float depth = 0.0f, shine = 0.0f, roots = 0.0f, ends = 0.0f;
+};
+static ColourFinish colourFinish(const HairEdit& e, float Y) {
+  ColourFinish cf;
+  cf.depth = std::clamp(e.depth, -1.0f, 1.0f), cf.shine = std::clamp(e.shine, -1.0f, 1.0f);
+  cf.roots = std::clamp(e.roots, 0.0f, 1.0f) * (1.0f - smooth(-0.15f, 0.45f, Y));  // the top of the head, fading by the cheeks
+  cf.ends = std::clamp(e.ends, -1.0f, 1.0f) * smooth(0.7f, 1.6f, Y);              // the lengths below the chin
+  return cf;
+}
+
+static V3 recolourHair(V3 c, float meanLogL, V3 colour, float mix01, ColourFinish fin = {}) {
   const float lt = std::max(lum(colour), 1e-4f);
   const V3 chroma = colour * (1.0f / lt);
   const float rel = std::exp(std::clamp(std::log(std::max(lum(c), 1e-4f)) - meanLogL, -2.5f, 2.5f));
@@ -440,18 +454,18 @@ static V3 recolourHair(V3 c, float meanLogL, V3 colour, float mix01) {
   // to grey, as bleached hair's do, instead of staying near black.
   const float lighter = lt / std::max(std::exp(meanLogL), 1e-4f);
   const float contrast = (lt > 0.15f ? 1.45f : 1.15f) + ((lt > 0.15f ? 0.85f : 0.9f) - (lt > 0.15f ? 1.45f : 1.15f)) * smooth(2.0f, 8.0f, lighter);
-  float shown = std::pow(rel, contrast);
+  float shown = std::pow(rel, contrast * (1.0f + 0.45f * fin.depth));
   if (shown > 1.0f) shown = 1.0f + (shown - 1.0f) / (1.0f + 1.2f * (shown - 1.0f));
-  const float L = 0.62f * lt * shown;
+  const float L = 0.62f * lt * shown * (1.0f - 0.5f * fin.roots) * (fin.ends >= 0.0f ? 1.0f + 0.9f * fin.ends : 1.0f + 0.5f * fin.ends);
   const float shadow = 1.0f - smooth(0.25f, 0.9f, rel), high = smooth(1.2f, 2.5f, rel);
   V3 hue = mix(chroma, V3{std::pow(chroma.r, 1.25f), std::pow(chroma.g, 1.25f), std::pow(chroma.b, 1.25f)}, 0.6f * shadow);
   hue = hue * (1.0f / std::max(lum(hue), 1e-4f));
-  hue = mix(hue, mix(hue, grey(1.0f), 0.15f), high);
+  hue = mix(hue, mix(hue, grey(1.0f), 0.15f), high * std::max(0.0f, 1.0f + fin.shine));
   V3 outc = hue * L;
   outc = mix(outc, c * (L / std::max(lum(c), 1e-4f)), 0.25f * shadow * (1.0f - smooth(2.0f, 8.0f, lighter)));
   // Black and near-black still shine: a soft, nearly white sheen where the
   // hair caught the light.
-  const float sheen = high * 0.05f * (1.0f - smooth(0.04f, 0.2f, lt));
+  const float sheen = high * (0.05f * (1.0f - smooth(0.04f, 0.2f, lt)) + 0.06f * std::max(0.0f, fin.shine));
   outc = outc + mix(grey(1.0f), chroma * lt, 0.3f) * sheen;
   const float mx = std::max({outc.r, outc.g, outc.b});
   if (mx > 1.0f) outc = outc * (1.0f / mx);
@@ -467,6 +481,34 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
   if (st == nullptr && !params.recolor) return ok();
   if (st != nullptr && !(params.faceRight - params.faceLeft > 0.01f && params.faceBottom - params.faceTop > 0.01f)) {
     return makeError(PP_ERROR_INVALID_ARGUMENT, "A hairstyle needs a face in the photo");
+  }
+  // ---- A photographer's own edit: the style's shape changed on a copy.
+  const HairEdit& ed = params.edit;
+  for (float v : {ed.length, ed.volume, ed.height, ed.fringe, ed.part, ed.waves, ed.shine, ed.moveX, ed.moveY, ed.size, ed.rotate, ed.depth,
+                  ed.roots, ed.ends}) {
+    if (!std::isfinite(v)) return makeError(PP_ERROR_INVALID_ARGUMENT, "Bad hair edit");
+  }
+  for (const HairStroke& sk : params.strokes) {
+    if (!std::isfinite(sk.radius) || static_cast<int32_t>(sk.brush) < 0 || static_cast<int32_t>(sk.brush) > 3) {
+      return makeError(PP_ERROR_INVALID_ARGUMENT, "Bad hair stroke");
+    }
+    for (const auto& pt : sk.points)
+      if (!std::isfinite(pt[0]) || !std::isfinite(pt[1])) return makeError(PP_ERROR_INVALID_ARGUMENT, "Bad hair stroke");
+  }
+  auto c1 = [](float v) { return std::clamp(v, -1.0f, 1.0f); };
+  Style edited{};
+  if (st != nullptr) {
+    edited = *st;
+    if (edited.len > -0.5f) edited.len = std::max(-0.35f, edited.len + 0.45f * c1(ed.length));
+    edited.side = std::max(-0.06f, edited.side + 0.12f * c1(ed.volume));
+    edited.top = std::max(0.0f, edited.top + 0.1f * c1(ed.height));
+    if (edited.fringe > 0.0f) edited.fringe = std::clamp(edited.fringe + 0.12f * c1(ed.fringe), 0.04f, 0.45f);
+    if (ed.partSet) edited.part = c1(ed.part);
+    const float wv = c1(ed.waves);
+    edited.wave *= 1.0f + wv, edited.curl *= 1.0f + wv;
+    if (wv > 0.0f && edited.kind == Kind::Strands && edited.wave == 0.0f && edited.curl == 0.0f) edited.wave = 0.016f * wv, edited.waveLen = 0.16f;
+    edited.gloss = std::clamp(edited.gloss + 0.3f * c1(ed.shine), 0.0f, 1.0f);
+    st = &edited;
   }
   const int32_t W = cutout.width(), H = cutout.height();
   const Rgb o = offsets(cutout);
@@ -492,6 +534,35 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
       col[i] = sa > 0 ? s * (1.0f / sa) : V3{};
       alpha[i] = cnt > 0 ? sa / cnt : 0.0f;
     }
+  // The photographer's brushes, on the working grid: soft round dabs along
+  // each stroke (0..1, the strongest where strokes overlap).
+  Grid brushEraseNew, brushRestore, brushColourOn, brushColourOff;
+  brushEraseNew.init(w, h), brushRestore.init(w, h), brushColourOn.init(w, h), brushColourOff.init(w, h);
+  for (const HairStroke& sk : params.strokes) {
+    Grid& target = sk.brush == HairBrush::EraseNew ? brushEraseNew : sk.brush == HairBrush::Restore ? brushRestore
+                 : sk.brush == HairBrush::ColourOn ? brushColourOn : brushColourOff;
+    const float r = std::max(1.0f, std::clamp(sk.radius, 0.002f, 0.3f) * static_cast<float>(std::min(W, H)) / static_cast<float>(f));
+    auto dab = [&](float cx, float cy) {
+      for (auto y = static_cast<int32_t>(cy - r - 1); y <= static_cast<int32_t>(cy + r + 1); ++y)
+        for (auto x = static_cast<int32_t>(cx - r - 1); x <= static_cast<int32_t>(cx + r + 1); ++x) {
+          if (x < 0 || y < 0 || x >= w || y >= h) continue;
+          const float d = std::hypot(static_cast<float>(x) + 0.5f - cx, static_cast<float>(y) + 0.5f - cy);
+          const float v = 1.0f - smooth(0.65f * r, r, d);
+          if (v > target.at(x, y)) target.at(x, y) = v;
+        }
+    };
+    for (size_t k = 0; k < sk.points.size(); ++k) {
+      const float x1 = sk.points[k][0] * static_cast<float>(w), y1 = sk.points[k][1] * static_cast<float>(h);
+      if (k == 0) {
+        dab(x1, y1);
+        continue;
+      }
+      const float x0 = sk.points[k - 1][0] * static_cast<float>(w), y0 = sk.points[k - 1][1] * static_cast<float>(h);
+      const float len = std::hypot(x1 - x0, y1 - y0);
+      const int steps = std::max(1, static_cast<int>(std::ceil(len / std::max(0.5f, r * 0.3f))));
+      for (int t = 1; t <= steps; ++t) dab(x0 + (x1 - x0) * static_cast<float>(t) / static_cast<float>(steps), y0 + (y1 - y0) * static_cast<float>(t) / static_cast<float>(steps));
+    }
+  }
   Grid hairZ = zoneGrid(zones, Zone::Hair, w, h), faceZ = zoneGrid(zones, Zone::FaceSkin, w, h);
   {
     Grid wide = hairZ;
@@ -675,7 +746,8 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
     // ---- a new colour for the person's own hair.
     Grid m;
     m.init(w, h);
-    for (size_t i = 0; i < n; ++i) m.v[i] = hairZ.v[i] * (1.0f - faceKeep.v[i]);
+    for (size_t i = 0; i < n; ++i)
+      m.v[i] = std::max(hairZ.v[i] * (1.0f - faceKeep.v[i]), brushColourOn.v[i]) * (1.0f - brushColourOff.v[i]) * (1.0f - brushRestore.v[i]);
     const float strength = newColourMix;
     const bool done = parallelFor(H, token, [&](int32_t b0, int32_t b1) {
       for (int32_t y = b0; y < b1; ++y) {
@@ -686,7 +758,8 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
           const float mm = m.sample((static_cast<float>(x) + 0.5f) / static_cast<float>(f), (static_cast<float>(y) + 0.5f) / static_cast<float>(f)) * strength;
           if (mm <= 0.002f) continue;
           const V3 c{Lut[q[o.r]], Lut[q[o.g]], Lut[q[o.b]]};
-          const V3 outc = recolourHair(c, ownLogL, newColour, mm);
+          const float Yf = ((static_cast<float>(y) + 0.5f) / static_cast<float>(f) - g.top) / g.unit;
+          const V3 outc = recolourHair(c, ownLogL, newColour, mm, colourFinish(ed, Yf));
           q[o.r] = toByte(toGamma(outc.r)), q[o.g] = toByte(toGamma(outc.g)), q[o.b] = toByte(toGamma(outc.b));
         }
       }
@@ -1174,15 +1247,18 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
   // The style follows the head: drawn upright in the head's own frame (face
   // units), then turned with it about the middle of the face (the tilt of
   // the face's fitted outline).
-  const float tiltC = std::cos(fitAng), tiltS = std::sin(fitAng);
-  const V2 pivot{g.cx, g.top + 0.5f * g.unit};
+  // The photographer can move, size and turn it further.
+  const float turn = fitAng + std::clamp(ed.rotate, -30.0f, 30.0f) * 3.14159265f / 180.0f;
+  const float tiltC = std::cos(turn), tiltS = std::sin(turn);
+  const float sizeK = std::clamp(ed.size, 0.7f, 1.4f) * g.unit;
+  const V2 pivot{g.cx + std::clamp(ed.moveX, -0.5f, 0.5f) * g.unit, g.top + (0.5f + std::clamp(ed.moveY, -0.5f, 0.5f)) * g.unit};
   auto headToGrid = [&](float X, float Y) {
-    const float dx = X * g.unit, dy = (Y - 0.5f) * g.unit;
+    const float dx = X * sizeK, dy = (Y - 0.5f) * sizeK;
     return V2{pivot.x + dx * tiltC - dy * tiltS, pivot.y + dx * tiltS + dy * tiltC};
   };
   auto gridToHead = [&](float gx, float gy) {
     const float dx = gx - pivot.x, dy = gy - pivot.y;
-    return V2{(dx * tiltC + dy * tiltS) / g.unit, (-dx * tiltS + dy * tiltC) / g.unit + 0.5f};
+    return V2{(dx * tiltC + dy * tiltS) / sizeK, (-dx * tiltS + dy * tiltC) / sizeK + 0.5f};
   };
   Layer L;
   {
@@ -1759,6 +1835,14 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
         }
         // Behind the neck and chest (softly: no corner where it changes).
         const float behind = smooth(0.86f, 0.98f, Y) * (1.0f - smooth(a * 0.8f, a * 1.05f, std::fabs(X)));
+        // The photographer's brushes: no new hair where erased.
+        const float erase = brushEraseNew.sample(gx, gy);
+        if (erase > 0.0f) ha *= 1.0f - erase, sh *= 1.0f - erase, hc = hc * (1.0f - erase);
+        // The colour finish on the drawn hair: darker roots, lighter or darker ends.
+        if (ha > 0.0f && (ed.roots != 0.0f || ed.ends != 0.0f)) {
+          const ColourFinish cf = colourFinish(ed, Y);
+          hc = hc * ((1.0f - 0.5f * cf.roots) * (cf.ends >= 0.0f ? 1.0f + 0.9f * cf.ends : 1.0f + 0.5f * cf.ends));
+        }
         // Shadow on the person where the hair doesn't cover them.
         if (sh > 0.0f) c = c * (1.0f - 0.35f * sh * (1.0f - ha) * (1.0f - behind));
         V3 outc;
@@ -1772,6 +1856,14 @@ Error restyleHair(ImageBuffer& cutout, const ImageBuffer& zones, const HairParam
           const V3 cB = aB > 0.0f ? (c * aP + hc * (1.0f - aP)) * (1.0f / aB) : c;
           outa = aF + (aB - aF) * behind;
           outc = mix(cF, cB, behind);
+        }
+        // Restored: the photo as it was here.
+        const float restore = brushRestore.sample(gx, gy);
+        if (restore > 0.0f) {
+          const V3 orig{Lut[q[o.r]], Lut[q[o.g]], Lut[q[o.b]]};
+          const float oa = static_cast<float>(q[3]) / 255.0f;
+          outc = mix(outc * outa, orig * oa, restore), outa = outa + (oa - outa) * restore;
+          if (outa > 1e-4f) outc = outc * (1.0f / outa);
         }
         q[o.r] = toByte(toGamma(std::max(outc.r, 0.0f))), q[o.g] = toByte(toGamma(std::max(outc.g, 0.0f))),
         q[o.b] = toByte(toGamma(std::max(outc.b, 0.0f))), q[3] = toByte(outa);

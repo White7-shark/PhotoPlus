@@ -169,6 +169,8 @@ export class StudioService {
       light?: LightChoice | null;
       /** The finished photo's grade: the person's choice over the light look's own. */
       finish?: FinishChoice | null;
+      /** A transparent preview in the photo's own frame (not trimmed): to paint hair brushes over. */
+      aligned?: boolean;
     },
     quality: 'preview' | 'full',
     hidePerson = false,
@@ -186,6 +188,7 @@ export class StudioService {
           hidePerson,
           ...(hairRequest(scene.hair) ? { hair: hairRequest(scene.hair) } : {}),
           ...studioLightRequest(scene.light ?? null, scene.finish ?? null, scene.background.kind === 'transparent'),
+          ...(scene.aligned ? { aligned: true } : {}),
         }),
       isScene,
     );

@@ -954,6 +954,65 @@ TEST(studio_hair_long_hair_over_the_shoulders) {
   pp_image_destroy(h.zones);
 }
 
+TEST(studio_hair_can_be_edited_by_hand) {
+  // Longer or shorter: a long style reaches further down (count drawn pixels low on the 240 x 300 head).
+  auto lowHair = [](float length) {
+    HairHead h = hairHead();
+    pp_studio_hair_edit e{};
+    e.size = 1.0f, e.length = length;
+    EXPECT_EQ(pp_studio_hair_edited(h.cut, h.zones, "long-straight", 0, 0, 0, 0, 1.0f, h.face, &e, nullptr, 0, 5, nullptr), PP_OK);
+    int count = 0;
+    for (int y = 200; y < 300; ++y)
+      for (int x = 0; x < 240; ++x) {
+        const uint8_t* p = at(h.cut, x, y);
+        if (p[3] > 128 && p[0] < 90 && std::abs(p[1] - 90) > 20) ++count;  // hair, not the green body
+      }
+    pp_image_destroy(h.cut), pp_image_destroy(h.zones);
+    return count;
+  };
+  const int shorter = lowHair(-1.0f), longer = lowHair(1.0f);
+  std::printf("    hair low on the body: shorter %d, longer %d\n", shorter, longer);
+  EXPECT_TRUE(longer > shorter + 200);
+
+  // Erase: no new hair where painted (the old hair's far side, x 55-75, stays gone).
+  HairHead a = hairHead();
+  const float erasePts[] = {120.0f / 240, 60.0f / 300, 120.0f / 240, 90.0f / 300};
+  const pp_studio_stroke erase{PP_STUDIO_HAIR_ERASE, 0.08f, 2, erasePts};
+  pp_studio_hair_edit none{};
+  none.size = 1.0f;
+  ASSERT_OK(pp_studio_hair_edited(a.cut, a.zones, "bob", 0, 0, 0, 0, 1.0f, a.face, &none, &erase, 1, 5, nullptr));
+  EXPECT_TRUE(at(a.cut, 120, 75)[3] < 40);
+  // Restore: the photo as it was (the old hair's dark strands at the side, kept).
+  HairHead b = hairHead();
+  const float restorePts[] = {60.0f / 240, 110.0f / 300};
+  const pp_studio_stroke restore{PP_STUDIO_HAIR_RESTORE, 0.05f, 1, restorePts};
+  const uint8_t before = at(b.cut, 60, 110)[0];
+  ASSERT_OK(pp_studio_hair_edited(b.cut, b.zones, "pixie", 0, 0, 0, 0, 1.0f, b.face, &none, &restore, 1, 5, nullptr));
+  EXPECT_TRUE(at(b.cut, 60, 110)[3] == 255 && std::abs(at(b.cut, 60, 110)[0] - before) <= 2);
+  // Colour off: a recolour leaves the painted spot as it was; elsewhere it is copper.
+  HairHead c = hairHead();
+  const float offPts[] = {99.0f / 240, 70.0f / 300};
+  const pp_studio_stroke off{PP_STUDIO_HAIR_COLOUR_OFF, 0.03f, 1, offPts};
+  const uint8_t r0 = at(c.cut, 99, 70)[0], g0 = at(c.cut, 99, 70)[1];
+  ASSERT_OK(pp_studio_hair_edited(c.cut, c.zones, nullptr, 1, 184, 92, 40, 1.0f, c.face, &none, &off, 1, 5, nullptr));
+  EXPECT_TRUE(at(c.cut, 99, 70)[0] == r0 && at(c.cut, 99, 70)[1] == g0);
+  EXPECT_TRUE(at(c.cut, 150, 70)[0] > at(c.cut, 150, 70)[1] + 30);
+  // Darker roots on a recolour: the hair at the crown darker than with none.
+  HairHead d1 = hairHead(), d2 = hairHead();
+  pp_studio_hair_edit ombre = none;
+  ombre.roots = 1.0f;
+  ASSERT_OK(pp_studio_hair_edited(d1.cut, d1.zones, nullptr, 1, 184, 92, 40, 1.0f, d1.face, &none, nullptr, 0, 5, nullptr));
+  ASSERT_OK(pp_studio_hair_edited(d2.cut, d2.zones, nullptr, 1, 184, 92, 40, 1.0f, d2.face, &ombre, nullptr, 0, 5, nullptr));
+  EXPECT_TRUE(at(d2.cut, 120, 60)[0] + 10 < at(d1.cut, 120, 60)[0]);
+  // Bad edits and strokes are refused.
+  pp_studio_hair_edit bad = none;
+  bad.rotate = NAN;
+  EXPECT_EQ(pp_studio_hair_edited(d1.cut, d1.zones, "bob", 0, 0, 0, 0, 1.0f, d1.face, &bad, nullptr, 0, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  const pp_studio_stroke wrong{9, 0.05f, 1, restorePts};
+  EXPECT_EQ(pp_studio_hair_edited(d1.cut, d1.zones, "bob", 0, 0, 0, 0, 1.0f, d1.face, &none, &wrong, 1, 5, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  for (HairHead* x : {&a, &b, &c, &d1, &d2}) pp_image_destroy(x->cut), pp_image_destroy(x->zones);
+}
+
 TEST(studio_rejects_bad_input) {
   Scene s = makeScene();
   pp_image* mask = coarseMask(s);

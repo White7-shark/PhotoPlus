@@ -23,13 +23,13 @@ data class StudioStroke(val brush: Int, val radius: Float, val points: FloatArra
     const val MAX_POINTS = 4000
 
     @Suppress("UNCHECKED_CAST")
-    fun listFrom(raw: Any?): List<StudioStroke> {
+    fun listFrom(raw: Any?, brushes: IntRange = 0..2): List<StudioStroke> {
       val list = raw as? List<Any?> ?: return emptyList()
       if (list.size > MAX_STROKES) throw EngineException(EngineException.INVALID_ARGUMENT, "Too many strokes")
       return list.mapNotNull { item ->
         val m = item as? Map<String, Any?> ?: return@mapNotNull null
         val brush = (m["brush"] as? Number)?.toInt() ?: return@mapNotNull null
-        if (brush !in 0..2) throw EngineException(EngineException.INVALID_ARGUMENT, "Unknown brush")
+        if (brush !in brushes) throw EngineException(EngineException.INVALID_ARGUMENT, "Unknown brush")
         val radius = ((m["radius"] as? Number)?.toFloat() ?: 0.02f).takeIf { it.isFinite() }?.coerceIn(0.002f, 0.3f) ?: 0.02f
         val pts = (m["points"] as? List<Any?>)?.mapNotNull { (it as? Number)?.toFloat()?.takeIf { v -> v.isFinite() } } ?: emptyList()
         if (pts.size > MAX_POINTS * 2) throw EngineException(EngineException.INVALID_ARGUMENT, "Stroke too long")
@@ -145,10 +145,61 @@ data class SceneLook(
 }
 
 /**
- * Hair in the Photoshoot Studio (Premium): a new [style] (an engine style
- * id) and/or a new [color] (0xRRGGBB) for the person's hair.
+ * A photographer's own edit of a hairstyle and its colour. Shape -1..1
+ * (length, volume, height, fringe, waves, shine), the parting -1..1 when
+ * [partSet]; placement: moved (face heights), sized, turned (degrees);
+ * colour: depth, darker roots (0..1), lighter or darker ends.
  */
-data class HairSpec(val style: String?, val color: Int?, val strength: Float = 1f) {
+data class HairEdit(
+  val length: Float = 0f,
+  val volume: Float = 0f,
+  val height: Float = 0f,
+  val fringe: Float = 0f,
+  val partSet: Boolean = false,
+  val part: Float = 0f,
+  val waves: Float = 0f,
+  val shine: Float = 0f,
+  val moveX: Float = 0f,
+  val moveY: Float = 0f,
+  val size: Float = 1f,
+  val rotate: Float = 0f,
+  val depth: Float = 0f,
+  val roots: Float = 0f,
+  val ends: Float = 0f,
+) {
+  /** The engine's layout (15 values). */
+  fun toArray() = floatArrayOf(
+    length, volume, height, fringe, if (partSet) 1f else 0f, part, waves, shine, moveX, moveY, size, rotate, depth, roots, ends,
+  )
+
+  companion object {
+    fun fromMap(m: Map<String, Any?>?): HairEdit {
+      if (m == null) return HairEdit()
+      fun f(k: String, d: Float, lo: Float, hi: Float) = ((m[k] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: d).coerceIn(lo, hi)
+      val part = (m["part"] as? Number)?.toFloat()?.takeIf { it.isFinite() }
+      return HairEdit(
+        f("length", 0f, -1f, 1f), f("volume", 0f, -1f, 1f), f("height", 0f, -1f, 1f), f("fringe", 0f, -1f, 1f),
+        part != null, (part ?: 0f).coerceIn(-1f, 1f), f("waves", 0f, -1f, 1f), f("shine", 0f, -1f, 1f),
+        f("moveX", 0f, -0.5f, 0.5f), f("moveY", 0f, -0.5f, 0.5f), f("size", 1f, 0.7f, 1.4f), f("rotate", 0f, -30f, 30f),
+        f("depth", 0f, -1f, 1f), f("roots", 0f, 0f, 1f), f("ends", 0f, -1f, 1f),
+      )
+    }
+  }
+}
+
+/**
+ * Hair in the Photoshoot Studio (Premium): a new [style] (an engine style
+ * id) and/or a new [color] (0xRRGGBB) for the person's hair, with a
+ * photographer's [edit] and [strokes] (brushes 0 erase new hair, 1 restore
+ * the photo, 2 colour here too, 3 no colour here).
+ */
+data class HairSpec(
+  val style: String?,
+  val color: Int?,
+  val strength: Float = 1f,
+  val edit: HairEdit = HairEdit(),
+  val strokes: List<StudioStroke> = emptyList(),
+) {
   val any get() = style != null || color != null
 
   companion object {
@@ -163,7 +214,10 @@ data class HairSpec(val style: String?, val color: Int?, val strength: Float = 1
       val c = (m["color"] as? String)?.takeIf { it.isNotEmpty() }
       if (c != null && !HEX.matches(c)) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad hair colour")
       val strength = ((m["strength"] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: 1f).coerceIn(0f, 1f)
-      return HairSpec(style, c?.substring(1)?.toInt(16), strength).takeIf { it.any }
+      @Suppress("UNCHECKED_CAST")
+      val edit = HairEdit.fromMap(m["edit"] as? Map<String, Any?>)
+      val strokes = StudioStroke.listFrom(m["strokes"], 0..3)
+      return HairSpec(style, c?.substring(1)?.toInt(16), strength, edit, strokes).takeIf { it.any }
     }
   }
 }

@@ -1660,16 +1660,49 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioBackdr
 // Hair (Photoshoot Studio): `cutout` (a nativeStudioCutout result, not
 // premultiplied) edited in place with the parts map `zones`. `style` null
 // or empty keeps the person's own hair (recoloured when `recolor`);
-// `face` (4): the cut-out report's face box.
+// `face` (4): the cut-out report's face box; `edit` (15): a photographer's
+// shape, placement and colour finish; `strokes`: their hair brushes.
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioHair(
     JNIEnv* env, jobject, jobject cutout, jobject zones, jstring style, jboolean recolor, jint r, jint g, jint b, jfloat strength,
-    jfloatArray face, jint seed, jlong token) {
-  if (cutout == nullptr || zones == nullptr || face == nullptr || env->GetArrayLength(face) < 4) {
+    jfloatArray face, jfloatArray edit, jfloatArray strokes, jint seed, jlong token) {
+  if (cutout == nullptr || zones == nullptr || face == nullptr || env->GetArrayLength(face) < 4 || edit == nullptr ||
+      env->GetArrayLength(edit) < 15) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad hair arguments");
     return;
   }
   jfloat f[4];
   env->GetFloatArrayRegion(face, 0, 4, f);
+  jfloat e[15];
+  env->GetFloatArrayRegion(edit, 0, 15, e);
+  const pp_studio_hair_edit ed{e[0], e[1], e[2], e[3], e[4] > 0.5f ? 1 : 0, e[5], e[6], e[7], e[8], e[9], e[10], e[11], e[12], e[13], e[14]};
+  // Brushes: count, then per stroke brush, radius, n, x0, y0, ... (as the cut-out's).
+  std::vector<float> sv;
+  if (strokes != nullptr) {
+    sv.resize(static_cast<size_t>(env->GetArrayLength(strokes)));
+    if (!sv.empty()) env->GetFloatArrayRegion(strokes, 0, static_cast<jsize>(sv.size()), sv.data());
+  }
+  std::vector<pp_studio_stroke> list;
+  size_t at = 0;
+  const int count = sv.empty() ? 0 : static_cast<int>(sv[at++]);
+  if (count < 0 || count > 4096) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+    return;
+  }
+  for (int i = 0; i < count; ++i) {
+    if (at + 3 > sv.size()) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+      return;
+    }
+    pp_studio_stroke st{static_cast<int32_t>(sv[at]), sv[at + 1], static_cast<int32_t>(sv[at + 2]), nullptr};
+    at += 3;
+    if (st.count < 0 || at + static_cast<size_t>(st.count) * 2 > sv.size()) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+      return;
+    }
+    st.points = sv.data() + at;
+    at += static_cast<size_t>(st.count) * 2;
+    list.push_back(st);
+  }
   std::string id;
   if (style != nullptr) {
     const char* chars = env->GetStringUTFChars(style, nullptr);
@@ -1680,8 +1713,9 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioHair(
   WrappedBitmap img, zon;
   if (!img.open(env, cutout, false) || !zon.open(env, zones, true)) return;
   const auto c = [](jint v) { return static_cast<uint8_t>(std::clamp(v, 0, 255)); };
-  const pp_status st = pp_studio_hair(img.image, zon.image, id.empty() ? nullptr : id.c_str(), recolor ? 1 : 0, c(r), c(g), c(b), strength, f,
-                                      static_cast<uint32_t>(seed), reinterpret_cast<const pp_cancel_token*>(token));
+  const pp_status st = pp_studio_hair_edited(img.image, zon.image, id.empty() ? nullptr : id.c_str(), recolor ? 1 : 0, c(r), c(g), c(b), strength,
+                                             f, &ed, list.data(), static_cast<int32_t>(list.size()), static_cast<uint32_t>(seed),
+                                             reinterpret_cast<const pp_cancel_token*>(token));
   if (st != PP_OK) throwStatus(env, st);
 }
 

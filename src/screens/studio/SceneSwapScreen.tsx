@@ -8,12 +8,22 @@ import { useFeatureCheck } from '../../hooks/useFeature';
 import type { RootScreenProps } from '../../navigation/types';
 import { createId } from '../../services/database/ids';
 import { getStorageService } from '../../services/storage/StorageService';
-import { MAX_MY_BACKGROUNDS, myPlate, SHAPE_LABELS, SIZE_MAX, SIZE_MIN, type FrameShape, type PlateDef } from '../../services/studio/scene';
+import {
+  MAX_MY_BACKGROUNDS,
+  myPlate,
+  SHAPE_LABELS,
+  SIZE_MAX,
+  SIZE_MIN,
+  type FrameShape,
+  type PlateDef,
+} from '../../services/studio/scene';
 import { getStudioService, StudioError, type Brush, type SceneResult } from '../../services/studio/StudioService';
 import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
 import { isOutfit } from '../../services/studio/colors';
+import type { HairBrush } from '../../services/studio/hair';
 import { BackgroundPicker } from './BackgroundPicker';
+import { HAIR_BRUSH_COLOURS } from './HairEditor';
 import { HairPicker } from './HairPicker';
 import { FinishPanel, LightPanel, TemplateRow } from './StudioLightPanel';
 import { BrushCanvas, type Backing } from './BrushCanvas';
@@ -76,6 +86,9 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
   const [premiumOpen, setPremiumOpen] = useState<null | 'backgroundReplace' | 'studioHair' | 'studioLight'>(null);
   const hairAllowed = can('studioHair').allowed;
   const lightAllowed = can('studioLight').allowed;
+  // Hair brushes (painted on the photo while editing the hair).
+  const [hairBrush, setHairBrush] = useState<HairBrush>('erase');
+  const [hairRadius, setHairRadius] = useState(0.03);
 
   const back = () => {
     if (s.step === 'scene') s.setStep('cutout');
@@ -109,7 +122,11 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => void updateSetting('myBackgrounds', settings.myBackgrounds.filter(m => m.id !== p.id)).catch(() => undefined),
+        onPress: () =>
+          void updateSetting(
+            'myBackgrounds',
+            settings.myBackgrounds.filter(m => m.id !== p.id),
+          ).catch(() => undefined),
       },
     ]);
 
@@ -154,7 +171,11 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
   return (
     <Screen title="Scene Swap" onBack={back} bottomInset={32}>
       <View style={{ gap: 14 }}>
-        <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="progressbar" accessibilityLabel={`Step ${stepIndex + 1} of 3`}>
+        <View
+          style={{ flexDirection: 'row', gap: 8 }}
+          accessibilityRole="progressbar"
+          accessibilityLabel={`Step ${stepIndex + 1} of 3`}
+        >
           {STEPS.map((x, i) => (
             <View
               key={x.step}
@@ -166,7 +187,10 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                 backgroundColor: i <= stepIndex ? theme.colors.accent : 'rgba(255,255,255,0.08)',
               }}
             >
-              <AppText variant="caption" style={{ color: i <= stepIndex ? '#FFFFFF' : theme.colors.textSecondary, fontWeight: '700' }}>
+              <AppText
+                variant="caption"
+                style={{ color: i <= stepIndex ? '#FFFFFF' : theme.colors.textSecondary, fontWeight: '700' }}
+              >
                 {x.label}
               </AppText>
             </View>
@@ -185,13 +209,20 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
           <GlassSurface radius={22} style={{ padding: 20, gap: 12 }}>
             <AppText variant="title2">Put yourself in a new place</AppText>
             <AppText variant="body" tone="secondary">
-              Choose a photo of a person. They are cut out on this phone — hair and all — and you choose where they go: a studio, a
-              park at golden hour, a café, a plain colour, or a photo of your own.
+              Choose a photo of a person. They are cut out on this phone — hair and all — and you choose where they go:
+              a studio, a park at golden hour, a café, a plain colour, or a photo of your own.
             </AppText>
             <AppText variant="caption" tone="secondary">
               Works best with one person, head and shoulders or head to toe, in a sharp photo.
             </AppText>
-            <Button label="Choose a photo" icon="image" size="lg" loading={s.busy === 'start'} onPress={() => void pick()} testID="scene-pick" />
+            <Button
+              label="Choose a photo"
+              icon="image"
+              size="lg"
+              loading={s.busy === 'start'}
+              onPress={() => void pick()}
+              testID="scene-pick"
+            />
           </GlassSurface>
         ) : null}
 
@@ -227,37 +258,91 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                   : 'Paint over fine hair, fur or lace: the colours decide what stays.'}
               {s.busy === 'cut' ? '  Updating…' : ''}
             </AppText>
-            <ValueSlider label="Brush size" value={radius} min={0.01} max={0.08} step={0.005} onChange={setRadius} format={v => `${Math.round(v * 1000) / 10}`} />
+            <ValueSlider
+              label="Brush size"
+              value={radius}
+              min={0.01}
+              max={0.08}
+              step={0.005}
+              onChange={setRadius}
+              format={v => `${Math.round(v * 1000) / 10}`}
+            />
             <SegmentedControl label="Show on" options={BACKINGS} value={backing} onChange={setBacking} />
             <GlassSurface radius={18} style={{ padding: 14, gap: 10 }}>
               <AppText variant="bodyStrong">Edges</AppText>
-              <ValueSlider label="Hair detail" value={s.edge.hairDetail} onChange={v => s.changeEdge({ hairDetail: v })} format={pct} />
-              <ValueSlider label="Softer edge" value={s.edge.softness} onChange={v => s.changeEdge({ softness: v })} format={pct} />
-              <ValueSlider label="Shrink or grow" value={s.edge.shift} min={-1} max={1} onChange={v => s.changeEdge({ shift: v })} format={v => signed(-v)} />
+              <ValueSlider
+                label="Hair detail"
+                value={s.edge.hairDetail}
+                onChange={v => s.changeEdge({ hairDetail: v })}
+                format={pct}
+              />
+              <ValueSlider
+                label="Softer edge"
+                value={s.edge.softness}
+                onChange={v => s.changeEdge({ softness: v })}
+                format={pct}
+              />
+              <ValueSlider
+                label="Shrink or grow"
+                value={s.edge.shift}
+                min={-1}
+                max={1}
+                onChange={v => s.changeEdge({ shift: v })}
+                format={v => signed(-v)}
+              />
             </GlassSurface>
             <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-              <Button label={tapMode ? 'Tap the person…' : 'Wrong person?'} variant="glass" icon="figure" onPress={() => setTapMode(t => !t)} />
+              <Button
+                label={tapMode ? 'Tap the person…' : 'Wrong person?'}
+                variant="glass"
+                icon="figure"
+                onPress={() => setTapMode(t => !t)}
+              />
               <Button label="Start over" variant="ghost" icon="refresh" onPress={s.resetCutout} />
             </View>
-            <Button label="Choose a scene" icon="layers" size="lg" disabled={!s.report?.found} onPress={s.goToScene} testID="scene-next" />
+            <Button
+              label="Choose a scene"
+              icon="layers"
+              size="lg"
+              disabled={!s.report?.found}
+              onPress={s.goToScene}
+              testID="scene-next"
+            />
           </>
         ) : null}
 
         {s.step === 'scene' && s.session && s.cut && s.placement && s.report ? (
           <>
-            <PlacementView
-              sceneUri={s.scene ? `file://${s.scene.outputPath}` : null}
-              emptyUri={s.empty ? `file://${s.empty.outputPath}` : null}
-              cutoutUri={`file://${s.cut.cutoutPath}`}
-              frameAspect={s.background.kind === 'transparent' ? s.photoAspect : s.frameAspect}
-              photoAspect={s.photoAspect}
-              box={s.report.box}
-              placement={s.placement}
-              horizon={s.horizon}
-              follow={s.follow}
-              rendering={s.busy === 'render'}
-              onChange={s.setPlacement}
-            />
+            {s.hairBrushing && s.hairCanvas ? (
+              <BrushCanvas<HairBrush>
+                photoUri={`file://${s.session.photoPath}`}
+                cutoutUri={`file://${s.hairCanvas}`}
+                photoWidth={s.session.width}
+                photoHeight={s.session.height}
+                brush={hairBrush}
+                radius={hairRadius}
+                backing="dim"
+                tapMode={false}
+                colours={HAIR_BRUSH_COLOURS}
+                label="The person with their hair. Paint with a finger to erase, restore or colour"
+                onStroke={st => s.setHair({ ...s.hair, strokes: [...(s.hair.strokes ?? []), st] })}
+                onTap={() => undefined}
+              />
+            ) : (
+              <PlacementView
+                sceneUri={s.scene ? `file://${s.scene.outputPath}` : null}
+                emptyUri={s.empty ? `file://${s.empty.outputPath}` : null}
+                cutoutUri={`file://${s.cut.cutoutPath}`}
+                frameAspect={s.background.kind === 'transparent' ? s.photoAspect : s.frameAspect}
+                photoAspect={s.photoAspect}
+                box={s.report.box}
+                placement={s.placement}
+                horizon={s.horizon}
+                follow={s.follow}
+                rendering={s.busy === 'render'}
+                onChange={s.setPlacement}
+              />
+            )}
             <SegmentedControl label="Scene options" options={PANELS} value={panel} onChange={setPanel} />
             {panel === 'backgrounds' ? (
               <BackgroundPicker
@@ -270,13 +355,37 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
               />
             ) : null}
             {panel === 'light' ? (
-              <LightPanel value={s.light} onChoose={s.chooseLight} onChange={s.setLight} premium={lightAllowed} onLocked={() => setPremiumOpen('studioLight')} />
+              <LightPanel
+                value={s.light}
+                onChoose={s.chooseLight}
+                onChange={s.setLight}
+                premium={lightAllowed}
+                onLocked={() => setPremiumOpen('studioLight')}
+              />
             ) : null}
             {panel === 'finish' ? (
-              <FinishPanel value={s.finish} onChange={s.setFinish} premium={lightAllowed} onLocked={() => setPremiumOpen('studioLight')} />
+              <FinishPanel
+                value={s.finish}
+                onChange={s.setFinish}
+                premium={lightAllowed}
+                onLocked={() => setPremiumOpen('studioLight')}
+              />
             ) : null}
             {panel === 'hair' ? (
-              <HairPicker value={s.hair} onChange={s.setHair} locked={!hairAllowed} onLocked={() => setPremiumOpen('studioHair')} />
+              <HairPicker
+                value={s.hair}
+                onChange={s.setHair}
+                locked={!hairAllowed}
+                onLocked={() => setPremiumOpen('studioHair')}
+                brushes={{
+                  brushing: s.hairBrushing,
+                  onBrushing: s.setHairBrushing,
+                  brush: hairBrush,
+                  onBrush: setHairBrush,
+                  radius: hairRadius,
+                  onRadius: setHairRadius,
+                }}
+              />
             ) : null}
             {panel === 'adjust' ? (
               <GlassSurface radius={18} style={{ padding: 14, gap: 10 }}>
@@ -291,7 +400,12 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                   testID="scene-size"
                 />
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <AppText variant="caption" tone={s.trueToScene ? 'accent' : 'secondary'} style={{ flex: 1 }} testID="scene-size-note">
+                  <AppText
+                    variant="caption"
+                    tone={s.trueToScene ? 'accent' : 'secondary'}
+                    style={{ flex: 1 }}
+                    testID="scene-size-note"
+                  >
                     {s.sizeIsTrue
                       ? s.trueToScene
                         ? 'True to the scene for where you stand.'
@@ -302,17 +416,62 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                         ? 'The size that suits this frame.'
                         : 'Your own size.'}
                   </AppText>
-                  <Button label="Auto size" variant="glass" icon="wand" disabled={s.trueToScene} onPress={s.autoSize} testID="scene-auto-size" />
+                  <Button
+                    label="Auto size"
+                    variant="glass"
+                    icon="wand"
+                    disabled={s.trueToScene}
+                    onPress={s.autoSize}
+                    testID="scene-auto-size"
+                  />
                 </View>
-                <ValueSlider label="Spotlight" value={s.look.spotlight} onChange={v => s.setLook({ spotlight: v })} format={pct} testID="scene-spotlight" />
-                <ValueSlider label="Match the light" value={s.look.colorMatch} onChange={v => s.setLook({ colorMatch: v })} format={pct} />
-                <ValueSlider label="Blend the edges" value={s.look.lightWrap} onChange={v => s.setLook({ lightWrap: v })} format={pct} />
-                <ValueSlider label="Shadow" value={s.look.shadow} onChange={v => s.setLook({ shadow: v })} format={pct} />
+                <ValueSlider
+                  label="Spotlight"
+                  value={s.look.spotlight}
+                  onChange={v => s.setLook({ spotlight: v })}
+                  format={pct}
+                  testID="scene-spotlight"
+                />
+                <ValueSlider
+                  label="Match the light"
+                  value={s.look.colorMatch}
+                  onChange={v => s.setLook({ colorMatch: v })}
+                  format={pct}
+                />
+                <ValueSlider
+                  label="Blend the edges"
+                  value={s.look.lightWrap}
+                  onChange={v => s.setLook({ lightWrap: v })}
+                  format={pct}
+                />
+                <ValueSlider
+                  label="Shadow"
+                  value={s.look.shadow}
+                  onChange={v => s.setLook({ shadow: v })}
+                  format={pct}
+                />
                 {s.background.kind === 'plate' ? (
-                  <ValueSlider label="Background blur" value={s.look.bgBlur} onChange={v => s.setLook({ bgBlur: v })} format={pct} />
+                  <ValueSlider
+                    label="Background blur"
+                    value={s.look.bgBlur}
+                    onChange={v => s.setLook({ bgBlur: v })}
+                    format={pct}
+                  />
                 ) : null}
-                <ValueSlider label="Tilt" value={s.placement.tilt} min={-1} max={1} onChange={v => s.setPlacement({ ...s.placement!, tilt: v })} format={signed} />
-                <ToggleRow title="Mirror" icon="flip" value={s.placement.flip} onChange={v => s.setPlacement({ ...s.placement!, flip: v })} />
+                <ValueSlider
+                  label="Tilt"
+                  value={s.placement.tilt}
+                  min={-1}
+                  max={1}
+                  onChange={v => s.setPlacement({ ...s.placement!, tilt: v })}
+                  format={signed}
+                />
+                <ToggleRow
+                  title="Mirror"
+                  icon="flip"
+                  value={s.placement.flip}
+                  onChange={v => s.setPlacement({ ...s.placement!, flip: v })}
+                />
                 <ToggleRow
                   title="Follow the scene’s depth"
                   subtitle="Drag back and you shrink, drag nearer and you grow, as in the scene"
@@ -332,7 +491,11 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                   value={s.shape}
                   onChange={s.chooseShape}
                 />
-                <TemplateRow onApply={s.applyTemplate} premium={lightAllowed} onLocked={() => setPremiumOpen('studioLight')} />
+                <TemplateRow
+                  onApply={s.applyTemplate}
+                  premium={lightAllowed}
+                  onLocked={() => setPremiumOpen('studioLight')}
+                />
               </>
             ) : null}
             {s.background.kind === 'plate' && s.background.plate.credit ? (
@@ -351,7 +514,13 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
                   testID="scene-save"
                 />
               </View>
-              <Button label="Cut-out only" variant="glass" icon="layers" onPress={() => void save(true)} testID="scene-save-cutout" />
+              <Button
+                label="Cut-out only"
+                variant="glass"
+                icon="layers"
+                onPress={() => void save(true)}
+                testID="scene-save-cutout"
+              />
             </View>
           </>
         ) : null}

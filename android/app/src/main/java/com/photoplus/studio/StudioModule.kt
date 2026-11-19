@@ -307,7 +307,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
       val haired = if (hair != null && !hidden) withHair(s, base, hair, full, token) else base
       val cutout = if (light != null && !hidden) withLight(s, haired, light, full, token) else haired
       if (background is SceneBackground.Transparent) {
-        return@submit transparent(s, cutout, full)
+        // `aligned`: the whole photo's frame (for painting hair brushes over the photo), not trimmed.
+        return@submit transparent(s, cutout, full, aligned = !full && map["aligned"] == true)
       }
       val maxEdge = min(budget.maxDecodeDimension, MAX_EXPORT_EDGE)
       // Frame size: preview long edge, or as large as keeps the person's own detail.
@@ -394,7 +395,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
     val c = hair.color
     NativeEngine.nativeStudioHair(
       out, zones, hair.style, c != null, (c ?: 0) shr 16 and 0xFF, (c ?: 0) shr 8 and 0xFF, (c ?: 0) and 0xFF, hair.strength,
-      face ?: FloatArray(4), 5, token,
+      face ?: FloatArray(4), hair.edit.toArray(), StudioStroke.encode(hair.strokes), 5, token,
     )
     if (!full) {
       synchronized(s) {
@@ -429,13 +430,14 @@ class StudioModule(reactContext: ReactApplicationContext) :
     return out
   }
 
-  private fun transparent(s: Session, cutout: Bitmap, full: Boolean): Map<String, Any?> {
-    val trimmed = SceneStudio.trimmed(cutout)
+  private fun transparent(s: Session, cutout: Bitmap, full: Boolean, aligned: Boolean = false): Map<String, Any?> {
+    val trimmed = if (aligned) cutout.copy(Bitmap.Config.ARGB_8888, false) else SceneStudio.trimmed(cutout)
     try {
       val target = if (full) {
         paths.studio.mkdirs()
         File(paths.studio, "Studio_${stamp()}.png")
       } else {
+        s.dir.listFiles { f -> f.name.startsWith("transparent_") }?.forEach { it.delete() }
         File(s.dir, "transparent_${System.nanoTime()}.png")
       }
       ImageCodec.encode(trimmed, target, OutputFormat.PNG, 100)

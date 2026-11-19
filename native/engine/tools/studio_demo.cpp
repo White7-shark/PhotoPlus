@@ -167,8 +167,54 @@ int hair(int argc, char** argv) {
   const auto c = [&](int i) { return static_cast<uint8_t>(argc > i ? std::atoi(argv[i]) : 0); };
   const float face[4] = {r.face_left, r.face_top, r.face_right, r.face_bottom};
   const auto t0 = std::chrono::steady_clock::now();
-  if (pp_studio_hair(out, zones, style, recolor ? 1 : 0, c(7), c(8), c(9), argc > 10 ? std::strtof(argv[10], nullptr) : 1.0f, face, 5,
-                     nullptr) != PP_OK) {
+  // A photographer's edit: PP_HAIR_EDIT="length=0.5,volume=-0.3,..." (keys as in
+  // pp_studio_hair_edit) and brushes PP_HAIR_STROKES="brush radius x y x y ...;...".
+  pp_studio_hair_edit ed{};
+  ed.size = 1.0f;
+  if (const char* e = std::getenv("PP_HAIR_EDIT")) {
+    std::stringstream ss(e);
+    std::string kv;
+    while (std::getline(ss, kv, ',')) {
+      const auto eq = kv.find('=');
+      if (eq == std::string::npos) continue;
+      const std::string k = kv.substr(0, eq);
+      const float v = std::strtof(kv.c_str() + eq + 1, nullptr);
+      if (k == "length") ed.length = v;
+      else if (k == "volume") ed.volume = v;
+      else if (k == "height") ed.height = v;
+      else if (k == "fringe") ed.fringe = v;
+      else if (k == "part") ed.part_set = 1, ed.part = v;
+      else if (k == "waves") ed.waves = v;
+      else if (k == "shine") ed.shine = v;
+      else if (k == "moveX") ed.move_x = v;
+      else if (k == "moveY") ed.move_y = v;
+      else if (k == "size") ed.size = v;
+      else if (k == "rotate") ed.rotate = v;
+      else if (k == "depth") ed.depth = v;
+      else if (k == "roots") ed.roots = v;
+      else if (k == "ends") ed.ends = v;
+    }
+  }
+  std::vector<std::vector<float>> pts;
+  std::vector<pp_studio_stroke> strokes;
+  if (const char* e = std::getenv("PP_HAIR_STROKES")) {
+    std::stringstream ss(e);
+    std::string one;
+    while (std::getline(ss, one, ';')) {
+      std::stringstream ls(one);
+      int brush = 0;
+      float radius = 0.02f;
+      ls >> brush >> radius;
+      std::vector<float> v;
+      float x = 0;
+      while (ls >> x) v.push_back(x);
+      pts.push_back(v);
+      strokes.push_back({brush, radius, static_cast<int32_t>(v.size() / 2), nullptr});
+    }
+    for (size_t i = 0; i < strokes.size(); ++i) strokes[i].points = pts[i].data();
+  }
+  if (pp_studio_hair_edited(out, zones, style, recolor ? 1 : 0, c(7), c(8), c(9), argc > 10 ? std::strtof(argv[10], nullptr) : 1.0f, face, &ed,
+                            strokes.data(), static_cast<int32_t>(strokes.size()), 5, nullptr) != PP_OK) {
     std::fprintf(stderr, "hair failed: %s\n", pp_last_error_message());
     return 1;
   }

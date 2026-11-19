@@ -87,6 +87,10 @@ export function useSceneSwap(studio: StudioService) {
   const [background, setBackground] = useState<Background>({ kind: 'plate', plate: PLATES[0] });
   // Hair (Premium): the person's own, recoloured, or a new style.
   const [hair, setHair] = useState<HairChoice>({});
+  // Hair brushes (Premium): while painting, the person with their hair in the
+  // photo's own frame, redrawn after each stroke.
+  const [hairBrushing, setHairBrushing] = useState(false);
+  const [hairCanvas, setHairCanvas] = useState<string | null>(null);
   // Studio light and the finish (Phase 11).
   const [light, setLight] = useState<LightChoice | null>(null);
   const [finish, setFinish] = useState<FinishChoice>(NO_FINISH);
@@ -275,6 +279,23 @@ export function useSceneSwap(studio: StudioService) {
     render({ id: session.sessionId, bg: background, c: crop, p: placement, l: look, aspect: frameAspect, h: hair, li: light, fi: finish });
   }, [step, session, background, crop, placement, look, frameAspect, render, cut, hair, light, finish]);
 
+  const drawHairCanvas = useLatest(async ({ id, h, l }: { id: string; h: HairChoice; l: SceneLook }) => {
+    try {
+      const r = await studio.render(
+        id,
+        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look: l, hair: h, aligned: true },
+        'preview',
+      );
+      setHairCanvas(r.outputPath);
+    } catch {
+      setHairCanvas(null);
+    }
+  });
+  useEffect(() => {
+    if (!hairBrushing || !session) return;
+    drawHairCanvas({ id: session.sessionId, h: hair, l: look });
+  }, [hairBrushing, session, hair, look, drawHairCanvas]);
+
   const goToScene = useCallback(() => {
     setStep('scene');
     if (!placement) applyFraming(frameFor(background, shape));
@@ -369,6 +390,10 @@ export function useSceneSwap(studio: StudioService) {
     hair,
     setHair,
     hairChosen: Boolean(hair.style || hair.color),
+    hairBrushing,
+    setHairBrushing,
+    /** The person with their hair, in the photo's frame (while brushing). */
+    hairCanvas,
     light,
     setLight,
     chooseLight,

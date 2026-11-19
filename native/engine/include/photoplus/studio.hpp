@@ -134,6 +134,42 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
 // Hair (Photoshoot Studio, Premium): a new colour for the person's own
 // hair, or a new hairstyle in place of it. Works on a cut-out (straight
 // alpha) with its parts map; the face box comes from the cut-out report.
+// A photographer's own finishing of a hairstyle and its colour: every value
+// at its default leaves the style and colour as the engine made them.
+struct HairEdit {
+  // The style's shape (-1..1, 0 as designed).
+  float length = 0.0f;   // shorter .. longer
+  float volume = 0.0f;   // closer to the head .. fuller at the sides
+  float height = 0.0f;   // flatter .. more lift on top
+  float fringe = 0.0f;   // shorter .. longer bangs (styles that have them)
+  bool partSet = false;
+  float part = 0.0f;     // the parting, -1 left .. 1 right (when partSet)
+  float waves = 0.0f;    // straighter .. wavier / curlier
+  float shine = 0.0f;    // matte .. glossy (the style and the colour)
+  // Where the style sits: moved (face heights), sized and turned on the head.
+  float moveX = 0.0f, moveY = 0.0f;  // -0.5..0.5
+  float size = 1.0f;                 // 0.7..1.4
+  float rotate = 0.0f;               // degrees, -30..30
+  // The colour's finish.
+  float depth = 0.0f;  // -1 softer .. 1 more contrast between strands
+  float roots = 0.0f;  // 0..1 darker roots, as grown-out colour
+  float ends = 0.0f;   // -1 darker .. 1 lighter ends (ombre)
+};
+
+// Where a photographer paints on the hair (strokes in the cut-out's own
+// normalised coordinates, like the cut-out's brushes).
+enum class HairBrush : int32_t {
+  EraseNew = 0,   // no new hair here
+  Restore = 1,    // the photo as it was here (their own hair, skin, clothes)
+  ColourOn = 2,   // colour here too (hair the parts map missed)
+  ColourOff = 3,  // no colour here (a brow, skin, a hat)
+};
+struct HairStroke {
+  HairBrush brush = HairBrush::EraseNew;
+  float radius = 0.02f;                      // share of the image's short side
+  std::vector<std::array<float, 2>> points;  // normalised 0..1
+};
+
 struct HairParams {
   // A style id from hairStyles(), or empty to keep the person's own hair.
   const char* style = nullptr;
@@ -144,6 +180,8 @@ struct HairParams {
   float strength = 1.0f;  // 0..1, how fully the new colour replaces the old
   float faceLeft = 0.0f, faceTop = 0.0f, faceRight = 0.0f, faceBottom = 0.0f;  // normalised
   uint32_t seed = 5;
+  HairEdit edit;
+  std::vector<HairStroke> strokes;
 };
 
 struct HairStyleInfo {

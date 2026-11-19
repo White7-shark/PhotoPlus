@@ -17,10 +17,10 @@ export const BRUSH_COLOURS: Record<Brush, string> = {
 /**
  * The cut-out to review and correct: the person in full colour over their
  * photo dimmed (or over checks, white or black), and a finger paints keep,
- * remove or "fix hair" strokes. `tapMode` turns a tap into a choice of
- * person instead.
+ * remove or "fix hair" strokes (or, with `colours`, any other brushes: the
+ * hair brushes). `tapMode` turns a tap into a choice of person instead.
  */
-export function BrushCanvas({
+export function BrushCanvas<B extends string = Brush>({
   photoUri,
   cutoutUri,
   photoWidth,
@@ -31,19 +31,26 @@ export function BrushCanvas({
   tapMode,
   onStroke,
   onTap,
+  colours,
+  label,
 }: {
   photoUri: string;
   cutoutUri: string;
   photoWidth: number;
   photoHeight: number;
-  brush: Brush;
+  brush: B;
   /** Share of the photo's short side. */
   radius: number;
   backing: Backing;
   tapMode: boolean;
-  onStroke: (s: Stroke) => void;
+  onStroke: (s: { brush: B; radius: number; points: Stroke['points'] }) => void;
   onTap: (p: Touch) => void;
+  /** Each brush's paint colour (the cut-out's brushes when not given). */
+  colours?: Record<B, string>;
+  /** What a screen reader says it is. */
+  label?: string;
 }) {
+  const paint = (colours ?? (BRUSH_COLOURS as unknown as Record<B, string>))[brush];
   const [view, setView] = useState({ w: 0, h: 0 });
   const [live, setLive] = useState<Touch[]>([]);
   // The stroke being drawn: collected in handlers (the screen shows `live`).
@@ -82,12 +89,16 @@ export function BrushCanvas({
   };
 
   const shortPx = Math.min(area.w, area.h);
-  const path = live.map((p, i) => `${i ? 'L' : 'M'}${(area.x + p.x * area.w).toFixed(1)} ${(area.y + p.y * area.h).toFixed(1)}`).join(' ');
+  const path = live
+    .map((p, i) => `${i ? 'L' : 'M'}${(area.x + p.x * area.w).toFixed(1)} ${(area.y + p.y * area.h).toFixed(1)}`)
+    .join(' ');
   return (
     <View
       style={styles.wrap}
       onLayout={(e: LayoutChangeEvent) => setView({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-      accessibilityLabel={tapMode ? 'Photo. Tap the person to keep' : 'Your cut-out. Paint with a finger to correct it'}
+      accessibilityLabel={
+        tapMode ? 'Photo. Tap the person to keep' : (label ?? 'Your cut-out. Paint with a finger to correct it')
+      }
       testID="brush-canvas"
       {...handlers}
     >
@@ -105,7 +116,7 @@ export function BrushCanvas({
         <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
           <Path
             d={live.length === 1 ? `${path} l0.1 0` : path}
-            stroke={BRUSH_COLOURS[brush]}
+            stroke={paint}
             strokeWidth={Math.max(4, radius * 2 * shortPx)}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -122,7 +133,20 @@ function Checks() {
   const cells = [];
   for (let y = 0; y < 24; y++)
     for (let x = 0; x < 24; x++)
-      if ((x + y) % 2 === 0) cells.push(<View key={`${x}-${y}`} style={{ position: 'absolute', left: `${(x * 100) / 24}%`, top: `${(y * 100) / 24}%`, width: `${100 / 24}%`, height: `${100 / 24}%`, backgroundColor: '#CFCFD4' }} />);
+      if ((x + y) % 2 === 0)
+        cells.push(
+          <View
+            key={`${x}-${y}`}
+            style={{
+              position: 'absolute',
+              left: `${(x * 100) / 24}%`,
+              top: `${(y * 100) / 24}%`,
+              width: `${100 / 24}%`,
+              height: `${100 / 24}%`,
+              backgroundColor: '#CFCFD4',
+            }}
+          />,
+        );
   return <View style={[StyleSheet.absoluteFill, { backgroundColor: '#F2F2F5' }]}>{cells}</View>;
 }
 

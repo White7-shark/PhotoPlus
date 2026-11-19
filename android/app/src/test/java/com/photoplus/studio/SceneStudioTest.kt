@@ -103,6 +103,38 @@ class SceneStudioTest {
     assertThrows<EngineException> { HairSpec.fromMap(mapOf("color" to "red")) }
   }
 
+  @Test fun hairEditsAndBrushesAreChecked() {
+    val h = HairSpec.fromMap(
+      mapOf(
+        "style" to "long-waves",
+        "edit" to mapOf("length" to 0.5, "volume" to 9, "part" to -0.4, "size" to 3, "rotate" to -90, "roots" to 0.6),
+        "strokes" to listOf(
+          mapOf("brush" to 0, "radius" to 0.05, "points" to listOf(0.2, 0.3, 0.25, 0.35)),
+          mapOf("brush" to 3, "radius" to 0.02, "points" to listOf(0.5, 0.5)),
+        ),
+      ),
+    )!!
+    val e = h.edit
+    assertEquals(0.5f, e.length)
+    assertEquals(1f, e.volume) // held in range
+    assertTrue(e.partSet)
+    assertEquals(-0.4f, e.part)
+    assertEquals(1.4f, e.size)
+    assertEquals(-30f, e.rotate)
+    val arr = e.toArray()
+    assertEquals(15, arr.size) // what the native side reads
+    assertEquals(1f, arr[4]) // the parting is set
+    assertEquals(2, h.strokes.size)
+    assertEquals(3, h.strokes[1].brush)
+    // Without an edit: as the engine made it (size 1, no parting).
+    val plain = HairSpec.fromMap(mapOf("style" to "bob"))!!.edit
+    assertFalse(plain.partSet)
+    assertEquals(1f, plain.size)
+    // A hair brush beyond the four is refused; the cut-out's brushes stay 0..2.
+    assertThrows<EngineException> { HairSpec.fromMap(mapOf("style" to "bob", "strokes" to listOf(mapOf("brush" to 4, "points" to listOf(0.1, 0.1))))) }
+    assertThrows<EngineException> { StudioStroke.listFrom(listOf(mapOf("brush" to 3, "points" to listOf(0.1, 0.1)))) }
+  }
+
   @Test fun exportsKeepThePersonsOwnDetail() {
     // A person 3000 px tall filling 75% of a 4:5 frame: a 4000 px tall frame…
     val (w, h) = SceneStudio.exportSize(0.8f, 3000, 0.75f, 8192)
