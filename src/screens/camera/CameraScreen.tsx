@@ -80,6 +80,7 @@ import {
   glideSummary,
   glideMaxMs,
   secondsLeft,
+  type GlideSpeed,
   type GlideSpotlight,
 } from '../../services/camera/glide';
 import { useCameraSession } from './useCameraSession';
@@ -133,6 +134,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const [beautyOpen, setBeautyOpen] = useState(false);
   const [liveNote, setLiveNote] = useState<string | null>(null);
   const [glideSpotlight, setGlideSpotlight] = useState<GlideSpotlight>('off');
+  const [glideSpeed, setGlideSpeed] = useState<GlideSpeed>('normal');
   const [lastClip, setLastClip] = useState<GlideClip | null>(null);
   const [vibeOpen, setVibeOpen] = useState(false);
   const [premiumFor, setPremiumFor] = useState<FeatureKey | null>(null);
@@ -525,7 +527,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     saveRecord,
   ]);
 
-  // ---- Glide: record up to the plan's limit (10 s, or 30 s with Premium), then craft the clip
+  // ---- Glide: record up to the plan's limit (7 s, or 20 s with Premium), then craft the clip
   const focusedRef = useRef(focused);
   useEffect(() => {
     focusedRef.current = focused;
@@ -545,6 +547,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       ),
       watermark: settings.watermark,
       maxMs: glideMaxMs(plan),
+      speed: glideSpeed,
     },
     onDone: clip => {
       setLastClip(clip);
@@ -1130,6 +1133,9 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
             look={beautyChipLabel(beauty, premiumBeauty)}
             audio={glide.audio}
             onSpotlight={setGlideSpotlight}
+            speed={glideSpeed}
+            onSpeed={setGlideSpeed}
+            maxSeconds={Math.round(glideMaxMs(plan) / 1000)}
           />
         ) : null}
 

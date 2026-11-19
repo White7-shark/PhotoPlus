@@ -20,6 +20,7 @@ Every model the app runs goes through one interface (`com.photoplus.ml`), and is
 | Model | Used for | Licence | File | Host CPU, 4 threads | Host CPU, 1 thread | Working memory (host, peak) | Device |
 |---|---|---|---|---|---|---|---|
 | **Depth Anything V2 Small**, LiteRT, int8 weights, float activations (`litert-community/depth-anything-v2-small`, rev `178427e`, SHA-256 checked at build) | Spotlight: background blur that grows with distance | **Apache-2.0** | 27.7 MB | load 111 ms, run **244 ms** median (first 234 ms), input 686×518 NCHW | run 992 ms | **+234 MB** (weights unpacked to float by XNNPACK) | to be measured |
+| **MODNet portrait matting**, LiteRT (`litert-community` build, rev `4d5bd22`, SHA-256 checked at build) | Glide: the person's head and hair outline, fused with the selfie segmenter | **Apache-2.0** | 26 MB | input 512×512 NCHW, letterboxed | — | **+205 MB** | to be measured |
 | ML Kit selfie segmentation (bundled with ML Kit 16.0.0-beta6) | Spotlight: person mask when no subject was tapped | Google ML Kit terms (free for commercial use) | 0.25 MB | run 5 ms, input 256×256 | — | +16 MB | to be measured |
 | ML Kit face detection 16.1.7 (bundled) | Glow, props fitting, camera props, **Phase 5 face landmarks** (contours for every face via per-face crops) | Google ML Kit terms | bundled | not measured separately | — | — | to be measured |
 

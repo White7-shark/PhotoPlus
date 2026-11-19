@@ -80,7 +80,7 @@ export interface SessionConfig {
   beauty?: boolean;
 }
 
-/** Glide recording options (the clip ends at maxMs: at most 10 s free, 30 s with Premium, enforced natively). */
+/** Glide recording options (the clip ends at maxMs: 7 s as standard, up to 20 s with Premium, enforced natively). */
 export interface VideoOptions {
   audio: boolean;
   maxMs: number;

@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Icon } from '../../components';
-import { GLIDE_SPOTLIGHT_LEVELS, type GlideSpotlight } from '../../services/camera/glide';
+import { GLIDE_SPEEDS, GLIDE_SPOTLIGHT_LEVELS, type GlideSpeed, type GlideSpotlight } from '../../services/camera/glide';
 import { BLUR_LEVELS, GLOW_LEVELS, type BlurLevel, type GlowLevel } from '../../services/camera/model';
 import { useTheme } from '../../theme';
 
@@ -118,19 +118,27 @@ export function GlidePanel({
   look,
   audio,
   onSpotlight,
+  speed = 'normal',
+  onSpeed,
+  maxSeconds = 7,
 }: {
   spotlight: GlideSpotlight;
   /** The beauty filter's name, when one is on. */
   look: string | undefined;
   audio: boolean;
   onSpotlight: (s: GlideSpotlight) => void;
+  speed?: GlideSpeed;
+  onSpeed?: (s: GlideSpeed) => void;
+  /** The longest clip the plan allows. */
+  maxSeconds?: number;
 }) {
+  const silent = !audio || speed !== 'normal';
   return (
     <View style={styles.panel} testID="glide-panel">
       <View style={styles.hintRow}>
         <Icon name="play" size={14} color="#FFFFFF" strokeWidth={2} />
         <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.86)', flex: 1 }}>
-          {`Up to 7 seconds · steadied, cleaned and sharpened${look ? ` · ${look}` : ''}${audio ? '' : ' · no sound'}`}
+          {`Up to ${maxSeconds} seconds · steadied, cleaned and sharpened${look ? ` · ${look}` : ''}${silent ? ' · no sound' : ''}`}
         </AppText>
       </View>
       <AppText variant="caption" style={[styles.rowLabel, { width: undefined }]}>
@@ -141,6 +149,18 @@ export function GlidePanel({
           <Pill key={l.id} label={l.label} selected={spotlight === l.id} onPress={() => onSpotlight(l.id)} />
         ))}
       </View>
+      {onSpeed ? (
+        <>
+          <AppText variant="caption" style={[styles.rowLabel, { width: undefined }]}>
+            Speed
+          </AppText>
+          <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Glide speed">
+            {GLIDE_SPEEDS.map(l => (
+              <Pill key={l.id} label={l.label} selected={speed === l.id} onPress={() => onSpeed(l.id)} />
+            ))}
+          </View>
+        </>
+      ) : null}
     </View>
   );
 }

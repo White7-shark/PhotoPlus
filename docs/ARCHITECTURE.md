@@ -195,21 +195,22 @@ ML Kit subject / selfie segmentation ─ DepthEstimator (optional)
 | `PortraitPanel.tsx` | Basic (presets) and Advanced (Premium) modes, Reset to Glow, Restore original; `SpotlightAdvanced` holds the background controls |
 | Fairness rule | Every face threshold is relative to the person's own measurements. Exposure lifts are judged on the light around the head and the presence of frontal highlights, never on skin brightness |
 
-## Glide: pro video, 10 s free / 30 s Premium (Phase 6, lengthened in Phase 7)
+## Glide: pro video, 7 s standard / 20 s Premium (Phase 6, lengthened in Phase 7)
 
 Full report: [`PHASE6_GLIDE_REPORT.md`](PHASE6_GLIDE_REPORT.md).
 
 ```
 Camera (Glide mode) ── configure({ video: true, aspectRatio: '16:9' }) ── CameraX VideoCapture<Recorder>
-   startVideo ≤ 10 s free / 30 s Premium (the plan is read natively) → captures/glide/*_raw.mp4
+   startVideo ≤ 7 s standard / 20 s Premium (the plan is read natively) → captures/glide/*_raw.mp4
 EngineModule.glide → GlideProcessor   (frames capped by the plan; free clips always marked)
    motion (pp_video_estimate_motion) → plan (pp_video_stabilize) → per frame:
    pp_video_enhance_frame → person mask (made as pass 2 reaches it: ≤ 3 masks held;
-     vote of three → room memory → shape memory → steadied) →
+     selfie segmenter + portrait matte fused (pp_video_fuse_masks) → vote of three → room memory → steadied) →
      Spotlight / Glow: pp_portrait / pp_face_adjust → pp_video_warp
      or a new scene (Premium): pp_studio_cutout → pp_video_warp of the cut-out → pp_studio_compose
        (fixed box, colour match kept from frame 1)
-   → watermark → GlideEncoder (MediaCodec H.264 + original sound) → exports → gallery (Movies/Photo Plus)
+   → speed: normal as is · fast merges frame pairs · slow adds a motion-matched frame between each pair (pp_video_interpolate)
+   → watermark → GlideEncoder (MediaCodec H.264; original sound at normal speed only) → exports → gallery (Movies/Photo Plus)
 GlidePreview: Glide / As recorded, share, save, "Put me in a new scene" (glideSubject → autoFrame → glide)
 ```
 
@@ -264,7 +265,8 @@ PortraitProcessor.applyBeauty(recipe?, backdrop?, skinTone?): one set of masks (
 | `native/engine/src/skintone/skintone.cpp` | Skin weight (colour, brightness, texture, feathered region); the shade as gains on the skin's own colour in linear light (the scene's light stays), natural-hue guard, headroom for fair skin, even tone |
 | `pp_video_consensus_mask` | Three-frame median of subject masks: one-frame segmentation mistakes never reach a clip |
 | `pp_video_room_*` (`video::RoomMemory`) | The room remembered behind the person (follows the camera, corrects exposure drift): pieces of room the model swallows for many frames are given back; the person's long-held outline and dark close calls are kept. Used by Glide (with `MaskVote`) before steadying |
-| `pp_video_shape_*` (`video::ShapeMemory`) | The person's shape remembered through a clip, so the head never flickers where the model hesitates. It tracks the person's own motion (a coarse match of their whole area, then distinctive blocks) and the room's motion separately. A change the model asks for is taken only as fast as the frame supports it: a new piece must look like the person nearby **and** something must have arrived there (judged against where the room came from); a lost piece goes at once if it looks like the room or no longer looks like the person did there. Used by Glide after room memory, before steadying |
+| `pp_video_fuse_masks` (`video::fuseMasks`) | Joins the two person models Glide runs on each frame: the portrait matte (MODNet, which draws hair and the head's outline, also against a dark background) and the selfie segmenter (which always finds the face and body, even in a blurred frame). The matte is trusted near the segmenter's person and above each column's own head line; the segmenter's solid core is always kept. Used by Glide before the vote |
+| `pp_video_interpolate` (`video::interpolate`) | A frame between two frames, for slow motion: block motion searched both ways (to half a pixel), smoothed, and each block and pixel trusted only as far as the two moved frames agree. Where they don't (an eye opening, a hand appearing), it falls back to a plain blend, so it never tears. A plain blend is used for fast motion |
 | `scripts/backdrop-demo.py`, `scripts/backdrop-video-demo.py` | Sheets and clips on real photos and video |
 | `scripts/skintone-demo.py`, `scripts/skintone-video-demo.py` | Sheets, per-region measurements (face, body, hair, clothes, background) and clips |
 

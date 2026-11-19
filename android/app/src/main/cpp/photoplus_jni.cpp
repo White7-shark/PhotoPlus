@@ -1387,6 +1387,58 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativePoseDescribe
 }
 
 // The room remembered behind the person, for one clip (see pp_video_room).
+// A frame between `a` and `b` (ARGB_8888) at time t into `out` (pp_video_interpolate).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoInterpolate(JNIEnv* env, jobject, jobject a, jobject b,
+                                                                                   jfloat t, jboolean motion, jobject out,
+                                                                                   jlong token) {
+  if (a == nullptr || b == nullptr || out == nullptr) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad frames");
+    return;
+  }
+  WrappedBitmap fa, fb, fo;
+  if (!fa.open(env, a, false) || !fb.open(env, b, false) || !fo.open(env, out, false)) return;
+  const pp_status st = pp_video_interpolate(fa.image, fb.image, t, motion ? 1 : 0, fo.image, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+// The person from two models (pp_video_fuse_masks): `matte` (mw x mh bytes,
+// the portrait matting model) and `segment` (sw x sh bytes, the person
+// segmenter, same aspect); `out` receives mw x mh bytes.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoFuseMasks(JNIEnv* env, jobject, jbyteArray matte, jint mw,
+                                                                                 jint mh, jbyteArray segment, jint sw, jint sh,
+                                                                                 jbyteArray out) {
+  if (matte == nullptr || segment == nullptr || out == nullptr || mw < 8 || mh < 8 || sw < 2 || sh < 2 ||
+      env->GetArrayLength(matte) < static_cast<jsize>(mw) * mh || env->GetArrayLength(segment) < static_cast<jsize>(sw) * sh ||
+      env->GetArrayLength(out) < static_cast<jsize>(mw) * mh) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad mask arguments");
+    return;
+  }
+  auto image = [&](jbyteArray src, jint w, jint h) -> pp_image* {
+    pp_image* img = nullptr;
+    if (pp_image_create(w, h, PP_FORMAT_GRAY8, &img) != PP_OK) return nullptr;
+    pp_image_info info{};
+    pp_image_get_info(img, &info);
+    auto* px = static_cast<jbyte*>(pp_image_pixels(img));
+    if (src != nullptr)
+      for (jint y = 0; y < h; ++y) env->GetByteArrayRegion(src, y * w, w, px + static_cast<size_t>(y) * info.stride);
+    return img;
+  };
+  pp_image* m = image(matte, mw, mh);
+  pp_image* sg = image(segment, sw, sh);
+  pp_image* o = image(nullptr, mw, mh);
+  const pp_status st = (m && sg && o) ? pp_video_fuse_masks(m, sg, o) : PP_ERROR_OUT_OF_MEMORY;
+  if (st == PP_OK) {
+    pp_image_info info{};
+    pp_image_get_info(o, &info);
+    const auto* px = static_cast<const jbyte*>(pp_image_pixels(o));
+    for (jint y = 0; y < mh; ++y) env->SetByteArrayRegion(out, y * mw, mw, px + static_cast<size_t>(y) * info.stride);
+  }
+  if (m) pp_image_destroy(m);
+  if (sg) pp_image_destroy(sg);
+  if (o) pp_image_destroy(o);
+  if (st != PP_OK) throwStatus(env, st);
+}
+
 JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoRoomCreate(JNIEnv* env, jobject) {
   pp_video_room* room = nullptr;
   const pp_status st = pp_video_room_create(&room);
@@ -1429,41 +1481,6 @@ JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoRoomC
     return 0.0f;
   }
   return reclaimed;
-}
-
-JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoShapeCreate(JNIEnv* env, jobject) {
-  pp_video_shape* shape = nullptr;
-  const pp_status st = pp_video_shape_create(&shape);
-  if (st != PP_OK) {
-    throwStatus(env, st);
-    return 0;
-  }
-  return reinterpret_cast<jlong>(shape);
-}
-
-JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoShapeDestroy(JNIEnv*, jobject, jlong shape) {
-  pp_video_shape_destroy(reinterpret_cast<pp_video_shape*>(shape));
-}
-
-// Corrects `mask` (ALPHA_8) for `frame` (ARGB_8888) in place with the
-// person's remembered shape (no head flickering where the model hesitates).
-// Returns the mean change made.
-JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoShapeCheck(JNIEnv* env, jobject, jlong shape,
-                                                                                    jobject frame, jobject mask, jlong token) {
-  if (shape == 0) {
-    throwEngineException(env, "INVALID_ARGUMENT", "Bad shape arguments");
-    return 0.0f;
-  }
-  WrappedBitmap img, m;
-  if (!img.open(env, frame, false) || !m.open(env, mask, true)) return 0.0f;
-  float changed = 0.0f;
-  const pp_status st = pp_video_shape_check(reinterpret_cast<pp_video_shape*>(shape), img.image, m.image,
-                                            reinterpret_cast<const pp_cancel_token*>(token), &changed);
-  if (st != PP_OK) {
-    throwStatus(env, st);
-    return 0.0f;
-  }
-  return changed;
 }
 
 // RGBA bitmap → the encoder's YUV 4:2:0 planes (BT.601 limited range, as

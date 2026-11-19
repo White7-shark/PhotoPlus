@@ -298,6 +298,30 @@ if (providers.gradleProperty("photoplus.poseModels").getOrElse("true").toBoolean
     }
 }
 
+// Glide's person matte: MODNet (Apache-2.0, ZHKKKe/MODNet), the LiteRT
+// community build (GPU-ready, 26 MB), pinned to a revision and its SHA-256.
+// It draws the person's outline and hair far better than the selfie
+// segmenter where hair meets a dark background; Glide fuses the two. Offline
+// builds can pass -Pphotoplus.matteModel=false: Glide then uses the selfie
+// segmenter alone.
+def matteModelSha = "f7d1e9eca9562abddb60e4b0a3ed0c29441ef09cd621954978f1613914cc64bc"
+def fetchMatteModel = tasks.register("fetchMatteModel", FetchModel) {
+    label = "person matte model"
+    url = "https://huggingface.co/litert-community/MODNet-LiteRT/resolve/" +
+          "4d5bd22bde15c8ae5e215ca4799513844979a431/modnet.tflite"
+    sha256 = matteModelSha
+    assetName = "portrait_matte.tflite" // ModelRegistry.MATTE
+    cacheFile = new File(gradle.gradleUserHomeDir, "caches/photoplus/matte-${matteModelSha.take(16)}.tflite")
+    outputDir = layout.buildDirectory.dir("generated/matteModel")
+}
+if (providers.gradleProperty("photoplus.matteModel").getOrElse("true").toBoolean()) {
+    androidComponents {
+        onVariants(selector().all()) { variant ->
+            variant.sources.assets?.addGeneratedSourceDirectory(fetchMatteModel, { it.outputDir })
+        }
+    }
+}
+
 // Photoshoot studio: MediaPipe Selfie Multiclass (Apache-2.0), version 1,
 // pinned by SHA-256. It maps a person's hair, skin and clothes, so the
 // cut-out can let colour decide where hair is fine and stay firm elsewhere.

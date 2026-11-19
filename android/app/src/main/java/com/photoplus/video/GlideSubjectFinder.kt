@@ -9,6 +9,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
+import com.photoplus.engine.NativeEngine
 import com.photoplus.studio.PortraitProcessor
 import java.io.File
 import java.nio.ByteOrder
@@ -16,7 +17,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/** Finds where the person usually is in a clip: a dozen frames, the on-device person model, [GlideSubject]. */
+/** Finds where the person usually is in a clip: a dozen frames, the on-device person models (fused), [GlideSubject]. */
 object GlideSubjectFinder {
   private const val TAG = "PhotoPlusGlide"
   private const val SAMPLES = 12
@@ -51,8 +52,17 @@ object GlideSubjectFinder {
         try {
           val result = Tasks.await(segmenter.process(InputImage.fromBitmap(small, 0)), 5, TimeUnit.SECONDS)
           val floats = result.buffer.order(ByteOrder.nativeOrder()).asFloatBuffer()
-          val bytes = PortraitProcessor.floatsToBytes(floats, result.width * result.height)
-          GlideSubject.frameBox(bytes, result.width, result.height)?.let { boxes.add(it) }
+          val seg = PortraitProcessor.floatsToBytes(floats, result.width * result.height)
+          // With the portrait matting model, the outline (the top of the head) is its own.
+          val matte = PersonMatte.estimate(small)
+          val box = if (matte != null) {
+            val fused = ByteArray(matte.width * matte.height)
+            NativeEngine.nativeVideoFuseMasks(matte.bytes, matte.width, matte.height, seg, result.width, result.height, fused)
+            GlideSubject.frameBox(fused, matte.width, matte.height)
+          } else {
+            GlideSubject.frameBox(seg, result.width, result.height)
+          }
+          box?.let { boxes.add(it) }
         } catch (e: Exception) {
           Log.w(TAG, "person segmentation unavailable", e)
         } finally {

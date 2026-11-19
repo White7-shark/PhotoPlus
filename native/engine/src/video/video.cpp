@@ -884,360 +884,297 @@ Result<float> RoomMemory::check(const ImageBuffer& frame, ImageBuffer& mask, con
 
 namespace photoplus::video {
 
-// ------------------------------------------------------------ shape memory
+namespace {
 
-void ShapeMemory::reset() {
-  w_ = h_ = 0;
-  shape_.clear();
-  luma_.clear();
-  colour_.clear();
+// Sliding minimum (or maximum) of `v` over windows of 2r+1 (clamped at the
+// ends), in place, with a monotonic deque: O(n).
+void slideExtreme(std::vector<float>& v, int32_t r, bool takeMax) {
+  const auto n = static_cast<int32_t>(v.size());
+  if (r <= 0 || n == 0) return;
+  std::vector<float> out(v.size());
+  std::vector<int32_t> dq(v.size() + static_cast<size_t>(r) + 1);
+  int32_t head = 0, tail = 0, next = 0;
+  auto better = [&](float a, float b) { return takeMax ? a >= b : a <= b; };
+  for (int32_t i = 0; i < n; ++i) {
+    const int32_t hi = std::min(n - 1, i + r);
+    while (next <= hi) {
+      while (tail > head && better(v[static_cast<size_t>(next)], v[static_cast<size_t>(dq[static_cast<size_t>(tail - 1)])])) --tail;
+      dq[static_cast<size_t>(tail++)] = next++;
+    }
+    while (dq[static_cast<size_t>(head)] < i - r) ++head;
+    out[static_cast<size_t>(i)] = v[static_cast<size_t>(dq[static_cast<size_t>(head)])];
+  }
+  v.swap(out);
 }
 
-Result<float> ShapeMemory::check(const ImageBuffer& frame, ImageBuffer& mask, const CancellationToken* token) {
-  ScopedTimer timer("video.shape");
-  const PixelFormat ff = frame.format();
-  if ((ff != PixelFormat::RGBA8 && ff != PixelFormat::BGRA8) || mask.format() != PixelFormat::Gray8) {
-    return failure(invalid("ShapeMemory needs an RGBA frame and a GRAY8 mask"));
+// A square min (erode) or max (dilate) filter of radius r over a w x h plane.
+void squareFilter(std::vector<float>& p, int32_t w, int32_t h, int32_t r, bool takeMax) {
+  std::vector<float> line;
+  line.resize(static_cast<size_t>(w));
+  for (int32_t y = 0; y < h; ++y) {
+    std::copy_n(p.begin() + static_cast<std::ptrdiff_t>(y) * w, w, line.begin());
+    slideExtreme(line, r, takeMax);
+    std::copy(line.begin(), line.end(), p.begin() + static_cast<std::ptrdiff_t>(y) * w);
   }
-  if (frame.width() < 16 || frame.height() < 16 || mask.width() < 16 || mask.height() < 16) {
-    return failure(invalid("Frame or mask too small"));
+  line.resize(static_cast<size_t>(h));
+  for (int32_t x = 0; x < w; ++x) {
+    for (int32_t y = 0; y < h; ++y) line[static_cast<size_t>(y)] = p[static_cast<size_t>(y) * w + x];
+    slideExtreme(line, r, takeMax);
+    for (int32_t y = 0; y < h; ++y) p[static_cast<size_t>(y) * w + x] = line[static_cast<size_t>(y)];
   }
-  if (isCancelled(token)) return failure(cancelledError());
-  // Worked at the mask's size, its long side capped at 640.
-  const int32_t MW = mask.width(), MH = mask.height();
-  const float k = std::min(1.0f, 640.0f / static_cast<float>(std::max(MW, MH)));
-  const int32_t gw = std::max<int32_t>(16, static_cast<int32_t>(std::lround(static_cast<float>(MW) * k)));
-  const int32_t gh = std::max<int32_t>(16, static_cast<int32_t>(std::lround(static_cast<float>(MH) * k)));
-  const size_t n = static_cast<size_t>(gw) * gh;
-  // The frame and the mask on that grid.
-  std::vector<float> col(n * 3), lum(n), m(n);
-  const int ro = ff == PixelFormat::RGBA8 ? 0 : 2, bo = 2 - ro;
-  const int32_t FW = frame.width(), FH = frame.height();
-  for (int32_t gy = 0; gy < gh; ++gy) {
-    const int32_t fy0 = gy * FH / gh, fy1 = std::max(fy0 + 1, (gy + 1) * FH / gh);
-    const int32_t my0 = gy * MH / gh, my1 = std::max(my0 + 1, (gy + 1) * MH / gh);
-    for (int32_t gx = 0; gx < gw; ++gx) {
-      const int32_t fx0 = gx * FW / gw, fx1 = std::max(fx0 + 1, (gx + 1) * FW / gw);
-      const int32_t mx0 = gx * MW / gw, mx1 = std::max(mx0 + 1, (gx + 1) * MW / gw);
-      double r = 0, g = 0, b = 0;
-      int32_t cnt = 0;
-      for (int32_t y = fy0; y < fy1; ++y) {
-        const uint8_t* row = frame.row(y);
-        for (int32_t x = fx0; x < fx1; ++x, ++cnt) {
-          const uint8_t* q = row + x * 4;
-          r += q[ro], g += q[1], b += q[bo];
-        }
-      }
-      const size_t i = static_cast<size_t>(gy) * gw + gx;
-      const double inv = 1.0 / (255.0 * std::max(cnt, 1));
-      col[i * 3] = static_cast<float>(r * inv), col[i * 3 + 1] = static_cast<float>(g * inv), col[i * 3 + 2] = static_cast<float>(b * inv);
-      lum[i] = 0.299f * col[i * 3] + 0.587f * col[i * 3 + 1] + 0.114f * col[i * 3 + 2];
-      double ms = 0;
-      for (int32_t y = my0; y < my1; ++y) {
-        const uint8_t* row = mask.row(y);
-        for (int32_t x = mx0; x < mx1; ++x) ms += row[x];
-      }
-      m[i] = static_cast<float>(ms / (255.0 * (my1 - my0) * (mx1 - mx0)));
+}
+
+}  // namespace
+
+Error fuseMasks(const ImageBuffer& matte, const ImageBuffer& segment, ImageBuffer& out) {
+  ScopedTimer timer("video.fuse");
+  if (matte.format() != PixelFormat::Gray8 || segment.format() != PixelFormat::Gray8 || out.format() != PixelFormat::Gray8) {
+    return invalid("Masks must be GRAY8");
+  }
+  const int32_t W = matte.width(), H = matte.height();
+  if (W < 8 || H < 8 || segment.width() < 2 || segment.height() < 2) return invalid("Masks too small");
+  if (out.width() != W || out.height() != H) return invalid("The output must be the matte's size");
+  const size_t n = static_cast<size_t>(W) * H;
+  std::vector<float> mat(n), seg(n);
+  const int32_t SW = segment.width(), SH = segment.height();
+  for (int32_t y = 0; y < H; ++y) {
+    const uint8_t* mr = matte.row(y);
+    // The segmenter's mask at the matte's size (bilinear).
+    const float fy = std::clamp((static_cast<float>(y) + 0.5f) * static_cast<float>(SH) / static_cast<float>(H) - 0.5f, 0.0f,
+                                static_cast<float>(SH - 1));
+    const auto y0 = static_cast<int32_t>(fy);
+    const int32_t y1 = std::min(SH - 1, y0 + 1);
+    const float ty = fy - static_cast<float>(y0);
+    for (int32_t x = 0; x < W; ++x) {
+      mat[static_cast<size_t>(y) * W + x] = static_cast<float>(mr[x]) / 255.0f;
+      const float fx = std::clamp((static_cast<float>(x) + 0.5f) * static_cast<float>(SW) / static_cast<float>(W) - 0.5f, 0.0f,
+                                  static_cast<float>(SW - 1));
+      const auto x0 = static_cast<int32_t>(fx);
+      const int32_t x1 = std::min(SW - 1, x0 + 1);
+      const float tx = fx - static_cast<float>(x0);
+      const float a = segment.row(y0)[x0], b = segment.row(y0)[x1], c = segment.row(y1)[x0], d = segment.row(y1)[x1];
+      seg[static_cast<size_t>(y) * W + x] = ((a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty) / 255.0f;
     }
   }
-  if (gw != w_ || gh != h_ || shape_.size() != n) {
-    // The first frame: the model's shape as it is.
-    w_ = gw, h_ = gh;
-    shape_ = m;
-    luma_ = lum;
-    colour_ = col;
-    return 0.0f;
+  const int32_t e = std::max<int32_t>(2, static_cast<int32_t>(std::lround(0.07f * static_cast<float>(std::min(W, H)))));
+  // The segmenter's solid body: opened (eroded then dilated), so a thin piece
+  // of room it took for the person (a strip of ceiling, a column up a wall) is gone.
+  std::vector<float> core = seg;
+  squareFilter(core, W, H, e, false);
+  squareFilter(core, W, H, e, true);
+  // Within reach of the segmenter's person: the matte's hair reaches past it,
+  // a piece of room the matte takes far away does not.
+  std::vector<float> near = seg;
+  squareFilter(near, W, H, e, true);
+  // The top of the person, column by column, as the matte sees it (each
+  // column takes the highest point of its close neighbours, so a missing
+  // cheek still counts as below the hair).
+  std::vector<float> top(static_cast<size_t>(W));
+  for (int32_t x = 0; x < W; ++x) {
+    int32_t t = H;
+    for (int32_t y = 0; y < H; ++y)
+      if (mat[static_cast<size_t>(y) * W + x] > 0.5f) {
+        t = y;
+        break;
+      }
+    top[static_cast<size_t>(x)] = static_cast<float>(t);
   }
-  auto plane = [&](const std::vector<float>& v) -> Result<Plane> {
-    auto p = Plane::allocate(gw, gh);
-    if (!p) return failure(p.error());
-    std::copy(v.begin(), v.end(), p->data());
-    return p;
-  };
-  auto blurVec = [&](const std::vector<float>& src, float sigma) -> Result<std::vector<float>> {
-    auto p = plane(src);
-    auto q = Plane::allocate(gw, gh);
-    if (!p || !q) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the shape"));
-    if (Error e = gaussianBlur(*p, *q, sigma, token); e.status != PP_OK) return failure(e);
-    return std::vector<float>(q->data(), q->data() + n);
-  };
-  const float shortSide = static_cast<float>(std::min(gw, gh));
+  slideExtreme(top, std::max<int32_t>(1, static_cast<int32_t>(std::lround(0.03f * static_cast<float>(W)))), false);
+  const float margin = 0.01f * static_cast<float>(H), ramp = std::max(1.0f, 0.01f * static_cast<float>(H));
+  for (int32_t y = 0; y < H; ++y) {
+    uint8_t* o = out.row(y);
+    for (int32_t x = 0; x < W; ++x) {
+      const size_t i = static_cast<size_t>(y) * W + x;
+      const float below = std::clamp((static_cast<float>(y) - (top[static_cast<size_t>(x)] - margin)) / ramp, 0.0f, 1.0f);
+      const float v = std::max(std::min(mat[i], near[i]), core[i] * below);
+      o[x] = static_cast<uint8_t>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f));
+    }
+  }
+  return ok();
+}
 
-  // 1. The person's own motion, from their texture inside the remembered
-  //    shape, and the room's, from its texture well outside it (block
-  //    matching, then a similarity fit without the outliers). In a selfie
-  //    they differ: the person moves with the phone, the room slides behind.
-  Similarity S{1, 0, 0, 0}, R{1, 0, 0, 0};
-  {
-    auto P = plane(luma_), C = plane(lum);
-    auto inside = blurVec(shape_, 0.02f * shortSide);
-    if (!P || !C || !inside) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the shape"));
-    const int32_t bs = std::max<int32_t>(8, static_cast<int32_t>(0.045f * shortSide));
-    const int32_t step = std::max<int32_t>(4, bs / 2);
-    // `search`: how far a block may have moved; coarse steps of `stride`, then refined.
-    // `cx0, cy0`: where the search is centred (a coarse shift found first).
-    auto track = [&](bool person, int32_t search, int32_t stride, int32_t cx0, int32_t cy0, Similarity& out) {
-      std::vector<Vec> from, to;
-      const int32_t reachX = search + std::abs(cx0) + 1, reachY = search + std::abs(cy0) + 1;
-      for (int32_t by = reachY; by + bs + reachY < gh; by += step)
-        for (int32_t bx = reachX; bx + bs + reachX < gw; bx += step) {
-          const size_t c = static_cast<size_t>(by + bs / 2) * gw + static_cast<size_t>(bx + bs / 2);
-          const float in = (*inside)[c];
-          if (person ? in < 0.97f : in > 0.03f) continue;  // well inside the person, or well clear of them
-          double mean = 0, m2 = 0;
-          for (int32_t y = 0; y < bs; ++y)
-            for (int32_t x = 0; x < bs; ++x) {
-              const double v = P->row(by + y)[bx + x];
-              mean += v, m2 += v * v;
+}  // namespace photoplus::video
+
+namespace photoplus::video {
+
+Error interpolate(const ImageBuffer& a, const ImageBuffer& b, float t, bool motionCompensated, ImageBuffer& out,
+                  const CancellationToken* token) {
+  ScopedTimer timer("video.interpolate");
+  if (!colour(a) || a.format() != b.format() || a.format() != out.format()) return invalid("Frames must be RGBA of one format");
+  if (a.width() != b.width() || a.height() != b.height() || a.width() != out.width() || a.height() != out.height()) {
+    return invalid("Frames must be the same size");
+  }
+  if (!std::isfinite(t)) return invalid("Bad time");
+  t = std::clamp(t, 0.0f, 1.0f);
+  const int32_t W = a.width(), H = a.height();
+  if (W < 16 || H < 16) return invalid("Frames too small");
+  // The motion field (quarter-size pixels), at block centres; zero without compensation.
+  int32_t gw = 0, gh = 0, bsz = 8;
+  int32_t f = 4;
+  std::vector<float> vx, vy, trustB;
+  if (motionCompensated) {
+    f = std::clamp(std::min(W, H) / 270, 1, 4);  // 1080p: a quarter-size copy
+    auto A = smallLuma(a, f), B = smallLuma(b, f);
+    if (!A) return A.error();
+    if (!B) return B.error();
+    const int32_t lw = A->width(), lh = A->height();
+    gw = std::max(1, lw / bsz), gh = std::max(1, lh / bsz);
+    vx.assign(static_cast<size_t>(gw) * gh, 0.0f), vy.assign(static_cast<size_t>(gw) * gh, 0.0f);
+    // Symmetric matching: a block at the in-between frame looks back by t·v
+    // into a and forward by (1-t)·v into b (no holes in the in-between frame).
+    auto cost = [&](int32_t cx, int32_t cy, float dx, float dy) {
+      double s = 0;
+      for (int32_t y = -bsz / 2; y < bsz / 2; ++y)
+        for (int32_t x = -bsz / 2; x < bsz / 2; ++x) {
+          const float px = static_cast<float>(cx + x), py = static_cast<float>(cy + y);
+          const float va = A->sample(std::clamp(px - t * dx, 0.0f, static_cast<float>(lw - 1)), std::clamp(py - t * dy, 0.0f, static_cast<float>(lh - 1)));
+          const float vb = B->sample(std::clamp(px + (1 - t) * dx, 0.0f, static_cast<float>(lw - 1)),
+                                     std::clamp(py + (1 - t) * dy, 0.0f, static_cast<float>(lh - 1)));
+          s += std::fabs(va - vb);
+        }
+      // A small preference for less motion (flat areas match anywhere).
+      return s + 0.02 * std::hypot(dx, dy);
+    };
+    // The coarse search reads pixels directly (nearest), the refinement samples between them.
+    auto costNearest = [&](int32_t cx, int32_t cy, int32_t dx, int32_t dy) {
+      const auto ax = static_cast<int32_t>(std::lround(t * static_cast<float>(dx))), ay = static_cast<int32_t>(std::lround(t * static_cast<float>(dy)));
+      const int32_t bx = dx - ax, by = dy - ay;
+      double sum = 0;
+      for (int32_t y = -bsz / 2; y < bsz / 2; ++y) {
+        const int32_t ya = std::clamp(cy + y - ay, 0, lh - 1), yb = std::clamp(cy + y + by, 0, lh - 1);
+        const float* ra = A->row(ya);
+        const float* rb = B->row(yb);
+        for (int32_t x = -bsz / 2; x < bsz / 2; ++x)
+          sum += std::fabs(ra[std::clamp(cx + x - ax, 0, lw - 1)] - rb[std::clamp(cx + x + bx, 0, lw - 1)]);
+      }
+      return sum + 0.02 * std::hypot(static_cast<double>(dx), static_cast<double>(dy));
+    };
+    // Up to an eighth of the frame between two frames (a quick turn of the head).
+    const int32_t coarse = std::max<int32_t>(6, std::min(lw, lh) / 8), step = 2;
+    const bool done = parallelFor(gh, token, [&](int32_t y0, int32_t y1) {
+      for (int32_t gy = y0; gy < y1; ++gy)
+        for (int32_t gx = 0; gx < gw; ++gx) {
+          const int32_t cx = gx * bsz + bsz / 2, cy = gy * bsz + bsz / 2;
+          double best = 1e30;
+          float bx = 0, by = 0;
+          for (int32_t dy = -coarse; dy <= coarse; dy += step)
+            for (int32_t dx = -coarse; dx <= coarse; dx += step) {
+              const double c = costNearest(cx, cy, dx, dy);
+              if (c < best) best = c, bx = static_cast<float>(dx), by = static_cast<float>(dy);
             }
-          const double nn = static_cast<double>(bs) * bs, var = m2 / nn - (mean / nn) * (mean / nn);
-          if (var < 1e-4) continue;  // flat: matches anywhere
-          // Every candidate position's cost, then the best; a block counts only
-          // if its best is clearly better than any position away from it
-          // (flat or repeating texture matches anywhere: plain walls, ceilings).
-          struct Cand {
-            int32_t dx, dy;
-            float sad;
-          };
-          std::vector<Cand> cands;
-          float best = 1e30f;
-          int32_t bdx = 0, bdy = 0;
-          for (int32_t dy = cy0 - search; dy <= cy0 + search; dy += stride)
-            for (int32_t dx = cx0 - search; dx <= cx0 + search; dx += stride) {
-              const float sd = sad(*P, *C, bx, by, bx + dx, by + dy, bs);
-              cands.push_back({dx, dy, sd});
-              if (sd < best) best = sd, bdx = dx, bdy = dy;
-            }
-          float other = 1e30f;
-          for (const Cand& cand : cands)
-            if (std::abs(cand.dx - bdx) > stride + 1 || std::abs(cand.dy - bdy) > stride + 1) other = std::min(other, cand.sad);
-          if (!(best < (person ? 0.85f : 0.7f) * other)) continue;
-          if (stride > 1) {
-            const int32_t ex = bdx, ey = bdy;
-            for (int32_t dy = ey - stride + 1; dy <= ey + stride - 1; ++dy)
-              for (int32_t dx = ex - stride + 1; dx <= ex + stride - 1; ++dx) {
-                if (std::abs(dx - cx0) > search || std::abs(dy - cy0) > search) continue;
-                const float sd = sad(*P, *C, bx, by, bx + dx, by + dy, bs);
-                if (sd < best) best = sd, bdx = dx, bdy = dy;
+          best = cost(cx, cy, bx, by);
+          // Refine to half a pixel.
+          for (float r : {1.0f, 0.5f}) {
+            const float ox = bx, oy = by;
+            for (int dy = -1; dy <= 1; ++dy)
+              for (int dx = -1; dx <= 1; ++dx) {
+                const double c = cost(cx, cy, ox + r * static_cast<float>(dx), oy + r * static_cast<float>(dy));
+                if (c < best) best = c, bx = ox + r * static_cast<float>(dx), by = oy + r * static_cast<float>(dy);
               }
           }
-          // A match at the edge of the search may lie beyond it: not used.
-          if (std::abs(bdx - cx0) >= search || std::abs(bdy - cy0) >= search) continue;
-          const double px = bx + bs * 0.5 - gw * 0.5, py = by + bs * 0.5 - gh * 0.5;
-          from.push_back({px, py});
-          to.push_back({px + bdx, py + bdy});
+          vx[static_cast<size_t>(gy) * gw + gx] = bx, vy[static_cast<size_t>(gy) * gw + gx] = by;
         }
-      std::vector<char> use(from.size(), 1);
-      Similarity fit;
-      bool good = from.size() >= 6 && fitSimilarity(from, to, use, fit);
-      for (int iter = 0; good && iter < 3; ++iter) {
-        std::vector<double> res(from.size());
-        for (size_t i = 0; i < from.size(); ++i) {
-          const double x = fit.a * from[i].x - fit.b * from[i].y + fit.tx, y = fit.b * from[i].x + fit.a * from[i].y + fit.ty;
-          res[i] = std::hypot(x - to[i].x, y - to[i].y);
+    });
+    if (!done) return cancelledError();
+    // Smoothed: each vector the median of its 3 x 3 neighbourhood (one wrong block never shows).
+    auto median9 = [&](const std::vector<float>& v) {
+      std::vector<float> o(v.size());
+      for (int32_t gy = 0; gy < gh; ++gy)
+        for (int32_t gx = 0; gx < gw; ++gx) {
+          float w9[9];
+          int k = 0;
+          for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) {
+              const int32_t xx = std::clamp(gx + dx, 0, gw - 1), yy = std::clamp(gy + dy, 0, gh - 1);
+              w9[k++] = v[static_cast<size_t>(yy) * gw + xx];
+            }
+          std::nth_element(w9, w9 + 4, w9 + 9);
+          o[static_cast<size_t>(gy) * gw + gx] = w9[4];
         }
-        std::vector<double> sorted = res;
-        std::nth_element(sorted.begin(), sorted.begin() + static_cast<std::ptrdiff_t>(sorted.size() / 2), sorted.end());
-        const double limit = std::max(1.0, 2.5 * sorted[sorted.size() / 2]);
-        for (size_t i = 0; i < from.size(); ++i) use[i] = res[i] <= limit ? 1 : 0;
-        good = std::count(use.begin(), use.end(), 1) >= 4 && fitSimilarity(from, to, use, fit);
-      }
-      const double scale = good ? std::hypot(fit.a, fit.b) : 1.0;
-      if (good && scale > 0.9 && scale < 1.1 && std::fabs(std::atan2(fit.b, fit.a)) < 0.1) out = fit;
+      return o;
     };
-    // The person can jolt (a hand-held phone): first their whole area is
-    // matched at once over a wide range (a face with its outline does not
-    // repeat, so this cannot latch onto the wrong copy of a pattern), then
-    // each block is refined close to that.
-    int32_t px0 = 0, py0 = 0;
-    {
-      // On softened copies: the large shapes (a face, its outline) stay; fine
-      // repeating texture (stripes, tiles, a woven shirt) that could match a
-      // period away is gone.
-      auto Pb = blurVec(luma_, 0.02f * shortSide), Cb = blurVec(lum, 0.02f * shortSide);
-      auto Ps = Pb ? plane(*Pb) : Result<Plane>(failure(Pb.error())), Cs = Cb ? plane(*Cb) : Result<Plane>(failure(Cb.error()));
-      if (!Ps || !Cs) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the shape"));
-      const int32_t wide = std::max<int32_t>(6, static_cast<int32_t>(0.08f * shortSide));
-      double bestCost = 1e30;
-      for (int32_t dy = -wide; dy <= wide; ++dy)
-        for (int32_t dx = -wide; dx <= wide; ++dx) {
-          double cost = 0;
-          int32_t cnt = 0;
-          for (int32_t y = std::max(0, -dy); y < std::min(gh, gh - dy); y += 2) {
-            const float* rp = Ps->row(y);
-            const float* rc = Cs->row(y + dy);
-            const float* in = &(*inside)[static_cast<size_t>(y) * gw];
-            for (int32_t x = std::max(0, -dx); x < std::min(gw, gw - dx); x += 2)
-              if (in[x] >= 0.97f) cost += std::fabs(rp[x] - rc[x + dx]), ++cnt;
-          }
-          if (cnt < 64) continue;
-          // Of two near-equal matches, the smaller move.
-          cost = cost / cnt + 2e-4 * std::hypot(dx, dy);
-          if (cost < bestCost) bestCost = cost, px0 = dx, py0 = dy;
+    vx = median9(vx), vy = median9(vy);
+    // How well the final motion explains each block: where it does not (an
+    // eye blinking, a mouth opening: not a movement), the block fades to a
+    // plain blend, smoothly across neighbouring blocks (no torn details).
+    trustB.assign(static_cast<size_t>(gw) * gh, 0.0f);
+    const bool done2 = parallelFor(gh, token, [&](int32_t y0, int32_t y1) {
+      for (int32_t gy = y0; gy < y1; ++gy)
+        for (int32_t gx = 0; gx < gw; ++gx) {
+          const size_t i = static_cast<size_t>(gy) * gw + gx;
+          const int32_t cx = gx * bsz + bsz / 2, cy = gy * bsz + bsz / 2;
+          const double res = (cost(cx, cy, vx[i], vy[i]) - 0.02 * std::hypot(vx[i], vy[i])) / (bsz * bsz);
+          trustB[i] = 1.0f - std::clamp(static_cast<float>((res - 0.035) / 0.05), 0.0f, 1.0f);
         }
-    }
-    track(true, std::max<int32_t>(3, static_cast<int32_t>(0.02f * shortSide)), 1, px0, py0, S);
-    // The room jolts too: a wide search in coarse steps, then refined.
-    track(false, std::max<int32_t>(6, static_cast<int32_t>(0.07f * shortSide)), 2, 0, 0, R);
-    // Too few distinctive blocks on the person: at least their shift.
-    if (S.a == 1 && S.b == 0 && S.tx == 0 && S.ty == 0) S.tx = px0, S.ty = py0;
-  }
-
-  // The previous frame's colour where the room now at each point was then
-  // (for judging whether anything new arrived there).
-  std::vector<float> roomWas(n * 3, 0.0f);
-  {
-    const double det = R.a * R.a + R.b * R.b;
-    const double hw = gw * 0.5, hh = gh * 0.5;
-    std::vector<float> ch(n);
-    for (int c = 0; c < 3; ++c) {
-      for (size_t i = 0; i < n; ++i) ch[i] = colour_[i * 3 + static_cast<size_t>(c)];
-      auto pc = plane(ch);
-      if (!pc) return failure(pc.error());
-      for (int32_t y = 0; y < gh; ++y)
-        for (int32_t x = 0; x < gw; ++x) {
-          const double X = x + 0.5 - hw - R.tx, Y = y + 0.5 - hh - R.ty;
-          const double px = (R.a * X + R.b * Y) / det + hw - 0.5, py = (-R.b * X + R.a * Y) / det + hh - 0.5;
-          roomWas[(static_cast<size_t>(y) * gw + x) * 3 + static_cast<size_t>(c)] =
-              pc->sample(static_cast<float>(std::clamp(px, 0.0, gw - 1.0)), static_cast<float>(std::clamp(py, 0.0, gh - 1.0)));
-        }
-    }
-  }
-
-  // 2. The remembered shape, and what the person looked like a moment ago,
-  //    moved with the person (output → previous).
-  std::vector<float> pred(n, 0.0f), was(n * 3, 0.0f);
-  {
-    const double det = S.a * S.a + S.b * S.b;
-    const double hw = gw * 0.5, hh = gh * 0.5;
-    auto sp = plane(shape_);
-    std::vector<float> ch(n);
-    std::vector<Plane> cp;
-    for (int c = 0; c < 3; ++c) {
-      for (size_t i = 0; i < n; ++i) ch[i] = colour_[i * 3 + static_cast<size_t>(c)];
-      auto pc = plane(ch);
-      if (!pc) return failure(pc.error());
-      cp.push_back(std::move(pc).value());
-    }
-    if (!sp) return failure(sp.error());
-    for (int32_t y = 0; y < gh; ++y)
-      for (int32_t x = 0; x < gw; ++x) {
-        const double X = x + 0.5 - hw - S.tx, Y = y + 0.5 - hh - S.ty;
-        const double px = (S.a * X + S.b * Y) / det + hw - 0.5, py = (-S.b * X + S.a * Y) / det + hh - 0.5;
-        // Off the edge: the edge as it was (a person running off the bottom stays).
-        const auto fx = static_cast<float>(std::clamp(px, 0.0, gw - 1.0)), fy = static_cast<float>(std::clamp(py, 0.0, gh - 1.0));
-        const size_t i = static_cast<size_t>(y) * gw + x;
-        pred[i] = sp->sample(fx, fy);
-        for (int c = 0; c < 3; ++c) was[i * 3 + static_cast<size_t>(c)] = cp[static_cast<size_t>(c)].sample(fx, fy);
-      }
-  }
-
-  // 3. What the frame's colours say: this point against the person's colour
-  //    nearby a moment ago (from well inside the remembered shape) and the
-  //    room's colour nearby now (from well outside both the shape and the
-  //    model's mask). Near the outline the colours are taken close by; a
-  //    point far from either is judged on a wider neighbourhood.
-  std::vector<float> wIn(n), wOut(n);
-  {
-    auto inside = blurVec(pred, 0.015f * shortSide);
-    std::vector<float> both(n);
-    for (size_t i = 0; i < n; ++i) both[i] = std::max(pred[i], m[i]);
-    auto near = blurVec(both, 0.015f * shortSide);
-    if (!inside || !near) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the shape"));
-    for (size_t i = 0; i < n; ++i) {
-      wIn[i] = smoothstep(0.9f, 0.99f, (*inside)[i]);
-      wOut[i] = 1.0f - smoothstep(0.01f, 0.1f, (*near)[i]);
-    }
-  }
-  struct Model {
-    std::vector<float> w, r, g, b;
-  };
-  auto model = [&](const std::vector<float>& wt, const std::vector<float>& c3, float sigma) -> Result<Model> {
-    std::vector<float> r(n), g(n), b(n);
-    for (size_t i = 0; i < n; ++i) r[i] = c3[i * 3] * wt[i], g[i] = c3[i * 3 + 1] * wt[i], b[i] = c3[i * 3 + 2] * wt[i];
-    auto sw = blurVec(wt, sigma), sr = blurVec(r, sigma), sg = blurVec(g, sigma), sb = blurVec(b, sigma);
-    if (!sw || !sr || !sg || !sb) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the shape"));
-    return Model{std::move(sw).value(), std::move(sr).value(), std::move(sg).value(), std::move(sb).value()};
-  };
-  const float cs = 0.06f * shortSide;
-  auto fNear = model(wIn, was, cs), fWide = model(wIn, was, 4.0f * cs);
-  auto bNear = model(wOut, col, cs), bWide = model(wOut, col, 4.0f * cs);
-  if (!fNear || !fWide || !bNear || !bWide) return failure(makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the shape"));
-  // The model's colour at i (near if there is enough of it, else wide), or false.
-  auto pick = [&](const Model& nearM, const Model& wideM, size_t i, float out[3]) {
-    const Model* mm = nearM.w[i] > 0.05f ? &nearM : (wideM.w[i] > 0.01f ? &wideM : nullptr);
-    if (mm == nullptr) return false;
-    const float inv = 1.0f / mm->w[i];
-    out[0] = mm->r[i] * inv, out[1] = mm->g[i] * inv, out[2] = mm->b[i] * inv;
-    return true;
-  };
-  auto dist3 = [](const float* a, const float* b) {
-    return std::sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
-  };
-
-  // 4. The shape, updated as fast as the colours allow.
-  double changed = 0;
-  for (size_t i = 0; i < n; ++i) {
-    const float d = m[i] - pred[i];
-    float next = m[i];
-    if (std::fabs(d) > 0.02f) {
-      // +1: looks like the person nearby; -1: like the room nearby.
-      float e = 0.0f;
-      float F[3], B[3];
-      const bool hasF = pick(*fNear, *fWide, i, F), hasB = pick(*bNear, *bWide, i, B);
-      if (hasF && hasB) {
-        const float* c = &col[i * 3];
-        const float dF = dist3(c, F), dB = dist3(c, B);
-        e = (dB - dF) / (dB + dF + 0.02f) * smoothstep(0.04f, 0.12f, dist3(F, B));
-      } else if (!hasF) {
-        e = 0.6f;  // no person remembered anywhere near: the model is trusted (someone walking in)
-      }
-      // Growth taken fast when it looks like the person, slowly when like the room;
-      // a loss fast when it looks like the room, or no longer looks like the
-      // person did there a moment ago (they moved away, or left); slowly when
-      // it still does (hair the model missed).
-      float support = d > 0 ? e : -e;
-      if (d < 0) support = std::max(support, smoothstep(0.1f, 0.25f, dist3(&col[i * 3], &was[i * 3])));
-      if (d > 0) {
-        // A real growth (a hand coming up, someone stepping in) changes what
-        // is there; a piece of the room the model takes for the person (a
-        // dark beam beside dark hair) looks as it did a moment ago. The head
-        // moving needs no growth: the remembered shape moved with it. Room
-        // a moment ago: the previous frame where the room came from (its own
-        // motion measured), allowing a pixel or two of error.
-        const auto x = static_cast<int32_t>(i % static_cast<size_t>(gw)), y = static_cast<int32_t>(i / static_cast<size_t>(gw));
-        float still = 1e9f;
-        for (int32_t dy = -2; dy <= 2; ++dy)
-          for (int32_t dx = -2; dx <= 2; ++dx) {
-            const int32_t xx = std::clamp(x + dx, 0, gw - 1), yy = std::clamp(y + dy, 0, gh - 1);
-            still = std::min(still, dist3(&col[i * 3], &roomWas[(static_cast<size_t>(yy) * gw + static_cast<size_t>(xx)) * 3]));
+    });
+    if (!done2) return cancelledError();
+    // A block next to an unexplained one is not fully trusted either.
+    std::vector<float> spread = trustB;
+    for (int32_t gy = 0; gy < gh; ++gy)
+      for (int32_t gx = 0; gx < gw; ++gx) {
+        float m = 1.0f;
+        for (int dy = -1; dy <= 1; ++dy)
+          for (int dx = -1; dx <= 1; ++dx) {
+            const int32_t xx = std::clamp(gx + dx, 0, gw - 1), yy = std::clamp(gy + dy, 0, gh - 1);
+            m = std::min(m, trustB[static_cast<size_t>(yy) * gw + xx]);
           }
-        // Only new ground is judged so: where the shape was already partly the
-        // person (hair coming back, a hand accepted a frame ago) it grows freely.
-        const float fresh = 1.0f - smoothstep(0.15f, 0.4f, pred[i]);
-        support = std::min(support, support * (1.0f - fresh) + fresh * smoothstep(0.04f, 0.12f, still));
+        spread[static_cast<size_t>(gy) * gw + gx] = 0.75f * trustB[static_cast<size_t>(gy) * gw + gx] + 0.25f * m;
       }
-      const float rate = 0.04f + 0.86f * smoothstep(0.0f, 0.5f, support);
-      next = pred[i] + rate * d;
-    }
-    changed += std::fabs(next - m[i]);
-    shape_[i] = next;
+    trustB.swap(spread);
   }
-  luma_ = lum;
-  colour_ = col;
-  // 5. Back to the mask at its own size.
-  auto sp = plane(shape_);
-  if (!sp) return failure(sp.error());
-  const float sx = static_cast<float>(gw) / static_cast<float>(MW), sy = static_cast<float>(gh) / static_cast<float>(MH);
-  for (int32_t y = 0; y < MH; ++y) {
-    uint8_t* row = mask.row(y);
-    const float gyf = (static_cast<float>(y) + 0.5f) * sy - 0.5f;
-    for (int32_t x = 0; x < MW; ++x) {
-      const float v = sp->sample((static_cast<float>(x) + 0.5f) * sx - 0.5f, gyf);
-      row[x] = static_cast<uint8_t>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f));
+  const int bpp = 4;
+  const int32_t side = bsz * f;  // a block, in full-size pixels
+  auto fieldAt = [&](float x, float y, float& ox, float& oy, float& tr) {
+    if (gw == 0) {
+      ox = oy = 0, tr = 0;
+      return;
     }
-  }
-  return static_cast<float>(changed / static_cast<double>(n));
+    // Bilinear over block centres; quarter-size pixels to full size.
+    const float gxf = std::clamp(x / static_cast<float>(side) - 0.5f, 0.0f, static_cast<float>(gw - 1));
+    const float gyf = std::clamp(y / static_cast<float>(side) - 0.5f, 0.0f, static_cast<float>(gh - 1));
+    const auto x0 = static_cast<int32_t>(gxf), y0 = static_cast<int32_t>(gyf);
+    const int32_t x1 = std::min(gw - 1, x0 + 1), y1 = std::min(gh - 1, y0 + 1);
+    const float tx = gxf - static_cast<float>(x0), ty = gyf - static_cast<float>(y0);
+    auto at = [&](const std::vector<float>& v, int32_t xx, int32_t yy) { return v[static_cast<size_t>(yy) * gw + xx]; };
+    ox = ((at(vx, x0, y0) * (1 - tx) + at(vx, x1, y0) * tx) * (1 - ty) + (at(vx, x0, y1) * (1 - tx) + at(vx, x1, y1) * tx) * ty) * static_cast<float>(f);
+    oy = ((at(vy, x0, y0) * (1 - tx) + at(vy, x1, y0) * tx) * (1 - ty) + (at(vy, x0, y1) * (1 - tx) + at(vy, x1, y1) * tx) * ty) * static_cast<float>(f);
+    tr = (at(trustB, x0, y0) * (1 - tx) + at(trustB, x1, y0) * tx) * (1 - ty) + (at(trustB, x0, y1) * (1 - tx) + at(trustB, x1, y1) * tx) * ty;
+  };
+  auto sample = [&](const ImageBuffer& img, float x, float y, float px[4]) {
+    x = std::clamp(x, 0.0f, static_cast<float>(W - 1)), y = std::clamp(y, 0.0f, static_cast<float>(H - 1));
+    const auto x0 = static_cast<int32_t>(x), y0 = static_cast<int32_t>(y);
+    const int32_t x1 = std::min(W - 1, x0 + 1), y1 = std::min(H - 1, y0 + 1);
+    const float tx = x - static_cast<float>(x0), ty = y - static_cast<float>(y0);
+    const uint8_t *p00 = img.row(y0) + x0 * bpp, *p10 = img.row(y0) + x1 * bpp, *p01 = img.row(y1) + x0 * bpp, *p11 = img.row(y1) + x1 * bpp;
+    for (int c = 0; c < 4; ++c)
+      px[c] = (static_cast<float>(p00[c]) * (1 - tx) + static_cast<float>(p10[c]) * tx) * (1 - ty) +
+              (static_cast<float>(p01[c]) * (1 - tx) + static_cast<float>(p11[c]) * tx) * ty;
+  };
+  const bool done = parallelFor(H, token, [&](int32_t y0, int32_t y1) {
+    for (int32_t y = y0; y < y1; ++y) {
+      uint8_t* o = out.row(y);
+      const uint8_t* ra = a.row(y);
+      const uint8_t* rb = b.row(y);
+      for (int32_t x = 0; x < W; ++x) {
+        float plain[4];
+        for (int c = 0; c < 4; ++c) plain[c] = static_cast<float>(ra[x * bpp + c]) * (1 - t) + static_cast<float>(rb[x * bpp + c]) * t;
+        float res[4] = {plain[0], plain[1], plain[2], plain[3]};
+        if (gw > 0) {
+          float dx, dy, blockTrust;
+          fieldAt(static_cast<float>(x), static_cast<float>(y), dx, dy, blockTrust);
+          float pa[4], pb[4];
+          sample(a, static_cast<float>(x) - t * dx, static_cast<float>(y) - t * dy, pa);
+          sample(b, static_cast<float>(x) + (1 - t) * dx, static_cast<float>(y) + (1 - t) * dy, pb);
+          const float diff = (std::fabs(pa[0] - pb[0]) + std::fabs(pa[1] - pb[1]) + std::fabs(pa[2] - pb[2])) / (3.0f * 255.0f);
+          // Where the two moved frames disagree (something revealed or hidden), the plain blend.
+          const float trust = blockTrust * (1.0f - std::clamp((diff - 0.08f) / 0.17f, 0.0f, 1.0f));
+          for (int c = 0; c < 4; ++c) res[c] = plain[c] + ((pa[c] * (1 - t) + pb[c] * t) - plain[c]) * trust;
+        }
+        for (int c = 0; c < 4; ++c) o[x * bpp + c] = static_cast<uint8_t>(std::clamp(res[c] + 0.5f, 0.0f, 255.0f));
+      }
+    }
+  });
+  return done ? ok() : cancelledError();
 }
 
 }  // namespace photoplus::video

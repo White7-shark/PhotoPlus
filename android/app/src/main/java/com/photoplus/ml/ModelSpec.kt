@@ -69,7 +69,19 @@ object ModelRegistry {
     memoryBytes = 240L * 1024 * 1024,
   )
 
-  val ALL: List<ModelSpec> = listOf(DEPTH)
+  /** The person's outline and hair, for Glide (MODNet, Apache-2.0): a soft matte at 512 x 512. */
+  val MATTE = ModelSpec(
+    id = "matte",
+    asset = "portrait_matte.tflite",
+    purpose = "The person's outline and hair in Glide clips (fused with the person segmenter)",
+    license = "Apache-2.0",
+    source = "MODNet (ZHKKKe/MODNet), LiteRT community build",
+    input = TensorInput(512, 512, TensorInput.Layout.NCHW, TensorInput.Fit.LETTERBOX, floatArrayOf(0.5f, 0.5f, 0.5f), floatArrayOf(0.5f, 0.5f, 0.5f)),
+    // Measured: +205 MB peak on the CPU path (float weights and 512 px activations).
+    memoryBytes = 210L * 1024 * 1024,
+  )
+
+  val ALL: List<ModelSpec> = listOf(DEPTH, MATTE)
 
   fun byId(id: String): ModelSpec? = ALL.firstOrNull { it.id == id }
 }

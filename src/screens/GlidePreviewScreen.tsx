@@ -93,7 +93,7 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
       const paths = await getStorageService().getPaths();
       const outputPath = joinPath(paths.exports, glideFileName(new Date()));
       const result = await processing.glide(
-        glideRequest({ inputPath: clip.rawPath, outputPath, spotlight: 'off', recipe: null, watermark: settings.watermark, scene: framed.scene }),
+        glideRequest({ inputPath: clip.rawPath, outputPath, spotlight: 'off', recipe: null, watermark: settings.watermark, scene: framed.scene, speed: clip.speed }),
         { signal: controller.signal, onProgress: setCrafting },
       );
       const galleryUri = await getStorageService()

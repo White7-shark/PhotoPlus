@@ -6,7 +6,7 @@
 //
 //   scene_video_demo IN_DIR OUT_DIR COUNT BG.ppm x y height boxL boxT boxR boxB [options]
 //   IN_DIR: frame_%04d.ppm (the frames the cut-out sees) and subject_%04d.pgm
-//   options: --no-room  --no-vote  --shape  --steady S  --look colorMatch wrap shadow cast lightX horizon blur grain rim spotlight
+//   options: --no-room  --no-vote  --matte DIR  --steady S  --look colorMatch wrap shadow cast lightX horizon blur grain rim spotlight
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -127,15 +127,16 @@ int main(int argc, char** argv) {
   pp_studio_placement pl{std::strtof(argv[5], nullptr), std::strtof(argv[6], nullptr), std::strtof(argv[7], nullptr), 0, 0, 0, 1,
                          std::strtof(argv[8], nullptr), std::strtof(argv[9], nullptr), std::strtof(argv[10], nullptr), std::strtof(argv[11], nullptr)};
   pp_studio_look lk{0.7f, 0.35f, 0.6f, 0, 0, 0.45f, 0.3f, 1, 11u, 0, 0, 0, 1, 1, {1, 1, 1}};
-  bool room = true, vote = true, compose = true, shapeMem = false;
+  bool room = true, vote = true, compose = true;
+  std::string matteDir;  // --matte DIR: matte_%04d.pgm fused with each subject mask, as Glide does
   float steadyK = 0.6f;
   for (int i = 12; i < argc; ++i) {
     const std::string k = argv[i];
     auto next = [&]() { return i + 1 < argc ? std::strtof(argv[++i], nullptr) : 0.0f; };
     if (k == "--no-room") room = false;
     else if (k == "--no-vote") vote = false;
-    else if (k == "--shape") shapeMem = true;
     else if (k == "--masks-only") compose = false;
+    else if (k == "--matte" && i + 1 < argc) matteDir = argv[++i];
     else if (k == "--steady") steadyK = next();
     else if (k == "--look") {
       lk.color_match = next(), lk.light_wrap = next(), lk.shadow = next(), lk.cast_shadow = next(), lk.light_x = next();
@@ -147,14 +148,27 @@ int main(int argc, char** argv) {
   }
   pp_video_room* memory = nullptr;
   if (room) pp_video_room_create(&memory);
-  pp_video_shape* shape = nullptr;
-  if (shapeMem) pp_video_shape_create(&shape);
   pp_image* steady = nullptr;
   pp_image* prevFrame = nullptr;
   std::vector<pp_image*> masks(static_cast<size_t>(n), nullptr);
   auto maskOf = [&](int k) {
     if (k < 0 || k >= n) return static_cast<pp_image*>(nullptr);
-    if (masks[static_cast<size_t>(k)] == nullptr) masks[static_cast<size_t>(k)] = readPgm(name(in, "subject", k, "pgm"));
+    if (masks[static_cast<size_t>(k)] == nullptr) {
+      pp_image* seg = readPgm(name(in, "subject", k, "pgm"));
+      if (!matteDir.empty() && seg != nullptr) {
+        pp_image* mat = readPgm(name(matteDir, "matte", k, "pgm"));
+        if (mat != nullptr) {
+          pp_image_info mi{};
+          pp_image_get_info(mat, &mi);
+          pp_image* fused = nullptr;
+          pp_image_create(mi.width, mi.height, PP_FORMAT_GRAY8, &fused);
+          if (pp_video_fuse_masks(mat, seg, fused) == PP_OK) std::swap(seg, fused);
+          pp_image_destroy(fused);
+          pp_image_destroy(mat);
+        }
+      }
+      masks[static_cast<size_t>(k)] = seg;
+    }
     return masks[static_cast<size_t>(k)];
   };
   bool harmony = false;
@@ -169,7 +183,6 @@ int main(int argc, char** argv) {
     pp_image* subj = copyOf(cur);
     if (vote) pp_video_consensus_mask(maskOf(k - 1), cur, maskOf(k + 1), subj);
     if (memory != nullptr) pp_video_room_check(memory, frame, subj, prevFrame != nullptr ? &motion : nullptr, nullptr, nullptr);
-    if (shape != nullptr) pp_video_shape_check(shape, frame, subj, nullptr, nullptr);
     if (steady == nullptr) {
       steady = subj;
     } else {
@@ -218,7 +231,6 @@ int main(int argc, char** argv) {
   if (steady != nullptr) pp_image_destroy(steady);
   if (prevFrame != nullptr) pp_image_destroy(prevFrame);
   if (memory != nullptr) pp_video_room_destroy(memory);
-  if (shape != nullptr) pp_video_shape_destroy(shape);
   pp_image_destroy(bg);
   return 0;
 }

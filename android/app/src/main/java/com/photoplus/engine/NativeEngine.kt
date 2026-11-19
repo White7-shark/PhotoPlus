@@ -342,6 +342,22 @@ object NativeEngine {
   external fun nativeVideoSteadyMask(previous: Bitmap, current: Bitmap, smoothing: Float)
 
   /**
+   * A frame between [a] and [b] (ARGB_8888, same size) at time [t] (0 = a,
+   * 1 = b) into [out]: along the measured motion ([motion], slow motion) or
+   * a plain blend (fast motion: two frames merged).
+   */
+  external fun nativeVideoInterpolate(a: Bitmap, b: Bitmap, t: Float, motion: Boolean, out: Bitmap, token: Long)
+
+  /**
+   * The person from two models: [matte] ([mw] x [mh] bytes, the portrait
+   * matting model: outline and hair) and [segment] ([sw] x [sh] bytes, the
+   * person segmenter: body and face, same aspect) fused into [out] ([mw] x
+   * [mh] bytes): the matte near the person, filled in with the segmenter's
+   * solid body below the top of the person the matte sees.
+   */
+  external fun nativeVideoFuseMasks(matte: ByteArray, mw: Int, mh: Int, segment: ByteArray, sw: Int, sh: Int, out: ByteArray)
+
+  /**
    * The room remembered behind the person, for one clip: [nativeVideoRoomCheck]
    * gives back pieces of the room the person model swallowed for many frames
    * (a beam above the head, a shelf beside it), which would otherwise grow
@@ -356,19 +372,6 @@ object NativeEngine {
    * Returns the share of the person area given back.
    */
   external fun nativeVideoRoomCheck(room: Long, frame: Bitmap, mask: Bitmap, motion: FloatArray?, token: Long): Float
-
-  /**
-   * The person's shape remembered through one clip: [nativeVideoShapeCheck]
-   * once per frame, in order, after [nativeVideoRoomCheck] and before
-   * steadying, corrects the mask (ALPHA_8) in place so the head does not
-   * flicker where the model hesitates (a piece of it missing one moment and
-   * back the next, or a piece of the room taken for it). Real changes (a head
-   * turning, a hand coming up, the person leaving) go through at once.
-   * Returns the mean change made. Free the shape with [nativeVideoShapeDestroy].
-   */
-  external fun nativeVideoShapeCreate(): Long
-  external fun nativeVideoShapeDestroy(shape: Long)
-  external fun nativeVideoShapeCheck(shape: Long, frame: Bitmap, mask: Bitmap, token: Long): Float
   /** ARGB_8888 frame → encoder YUV 4:2:0 planes (direct buffers, with their strides). */
   external fun nativeRgbaToYuv420(
     bitmap: Bitmap, y: java.nio.ByteBuffer, u: java.nio.ByteBuffer, v: java.nio.ByteBuffer,

@@ -1,3 +1,4 @@
+/* global document, window */
 /**
  * Live-preview parity: runs the phone's beauty shaders (android assets
  * beauty/*.glsl, *.frag, *.vert — the same files) in headless Chromium's

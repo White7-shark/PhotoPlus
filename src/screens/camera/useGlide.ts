@@ -7,6 +7,7 @@ import {
   glideFileName,
   glideRequest,
   type GlideClip,
+  type GlideSpeed,
   type GlideSpotlight,
   type GlideStage,
 } from '../../services/camera/glide';
@@ -28,12 +29,14 @@ export interface GlideSettings {
   /** The beauty preset (with Spotlight's blur when on), resolved; null = a plain steady clip. */
   recipe: BeautyRecipe | null;
   watermark: WatermarkSpec;
-  /** The longest clip the plan allows (10 s free, 30 s Premium). */
+  /** The longest clip the plan allows (7 s as standard, 20 s with Premium). */
   maxMs: number;
+  /** Normal, fast (2×) or slow motion. */
+  speed?: GlideSpeed;
 }
 
 /**
- * The Glide flow in the camera: record (up to 10 s, or 30 s with Premium), then craft the clip
+ * The Glide flow in the camera: record (up to 7 s, or 20 s with Premium), then craft the clip
  * (steady, clean, sharp, plus Spotlight and Glow), then save it to the
  * gallery. One clip at a time; recording stops when the camera goes away.
  */
@@ -107,6 +110,7 @@ export function useGlide({
           spotlight: s.spotlight,
           recipe: s.recipe,
           watermark: s.watermark,
+          speed: s.speed,
         }),
         { signal: controller.signal, onProgress: setFraction, onStage: setStage },
       );

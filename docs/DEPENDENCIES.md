@@ -46,6 +46,7 @@
 | MediaPipe Selfie Multiclass 256 × 256 (hair, skin, clothes; Apache-2.0; float32 version 1, fetched and SHA-256-verified at build time) | **v1** | — |
 | Studio scenes: 15 Poly Haven backplates (CC0, MD5-verified, rebuilt by `scripts/studio-plates.py`) | 2.56 K | — |
 | MediaPipe Pose Landmarker Lite and Full models (Apache-2.0; float16 version 1, fetched and SHA-256-verified at build time) | **v1** | — |
+| MODNet portrait matting, LiteRT (Apache-2.0; fetched and SHA-256-verified at build time, revision `4d5bd22`) | **2021 release** | — |
 | Depth Anything V2 Small, LiteRT 8-bit weights (Apache-2.0; fetched and SHA-256-verified at build time, revision `178427e`) | **2024 release** | — |
 | JUnit (Jupiter, via BOM) | **6.1.3** | 6.1.3 (migrated from JUnit 4, which is maintenance-only) |
 | org.json (tests) | **20260814** | 20260814 |

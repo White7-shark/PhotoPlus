@@ -942,27 +942,22 @@ pp_status pp_video_room_check(pp_video_room* room, const pp_image* frame, pp_ima
   });
 }
 
-struct pp_video_shape {
-  photoplus::video::ShapeMemory memory;
-};
-
-pp_status pp_video_shape_create(pp_video_shape** out) {
+pp_status pp_video_interpolate(const pp_image* a, const pp_image* b, float t, int32_t motion_compensated, pp_image* out,
+                               const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
-    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
-    *out = new (std::nothrow) pp_video_shape();
-    return *out != nullptr ? succeed() : fail(PP_ERROR_OUT_OF_MEMORY, "Unable to allocate the shape memory");
+    if (a == nullptr || b == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    const photoplus::Error e = photoplus::video::interpolate(a->buffer, b->buffer, t, motion_compensated != 0, out->buffer,
+                                                            token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
+    return succeed();
   });
 }
 
-void pp_video_shape_destroy(pp_video_shape* shape) { delete shape; }
-
-pp_status pp_video_shape_check(pp_video_shape* shape, const pp_image* frame, pp_image* mask, const pp_cancel_token* token,
-                               float* changed_out) {
+pp_status pp_video_fuse_masks(const pp_image* matte, const pp_image* segment, pp_image* out) {
   return guarded([&]() -> pp_status {
-    if (shape == nullptr || frame == nullptr || mask == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
-    auto r = shape->memory.check(frame->buffer, mask->buffer, token ? &token->token : nullptr);
-    if (!r) return fail(r.error());
-    if (changed_out != nullptr) *changed_out = *r;
+    if (matte == nullptr || segment == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    const photoplus::Error e = photoplus::video::fuseMasks(matte->buffer, segment->buffer, out->buffer);
+    if (e.status != PP_OK) return fail(e);
     return succeed();
   });
 }

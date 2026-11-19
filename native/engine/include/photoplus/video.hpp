@@ -53,6 +53,17 @@ struct Plan {
 Result<Plan> stabilize(const std::vector<Motion>& motions, int32_t width, int32_t height, float strength,
                        float maxZoom);
 
+// A frame between `a` and `b` (same size and format) at time t (0 = a,
+// 1 = b), for slow motion. With `motionCompensated` the motion between them
+// is measured (blocks on a quarter-size copy, coarse to fine, smoothed) and
+// both frames are moved part of the way along it before blending, so moving
+// things stay sharp instead of ghosting; where the two disagree (something
+// appearing from behind something else) it falls back to a plain blend.
+// Without it, a plain blend (fast motion: two frames merged into one, like a
+// shutter left open).
+Error interpolate(const ImageBuffer& a, const ImageBuffer& b, float t, bool motionCompensated, ImageBuffer& out,
+                  const CancellationToken* token);
+
 // dst (same format as src, any size) receives src through the warp.
 Error warp(const ImageBuffer& src, const Affine& m, ImageBuffer& dst, const CancellationToken* token);
 
@@ -103,35 +114,18 @@ class RoomMemory {
   std::vector<float> held_;    // where the person has been lately (slow average of the corrected mask)
 };
 
-// The person's shape remembered through a clip, so the outline does not
-// flicker where the person model hesitates (dark hair against a dark beam: a
-// piece of the head missing one moment and back the next, or a piece of the
-// room taken for the head). Each frame:
-//  - the person's own motion is measured on their texture (inside the
-//    remembered shape; in a selfie the person moves with the phone while the
-//    room slides behind them), and the remembered shape follows it;
-//  - where the model now disagrees with that shape, the change is taken only
-//    as fast as the frame's colours support it: a new piece that looks like
-//    the person beside it (a head turning, a hand coming up) is taken at
-//    once; one that looks like the room around it (a piece of ceiling) only
-//    if the model insists for many frames; a lost piece that looks like the
-//    room (they moved away) goes at once, one that still looks like them
-//    (hair the model missed) stays.
-// Call check() once per frame, in order, after RoomMemory and before
-// steadying, on same-sized frames and masks.
-class ShapeMemory {
- public:
-  // `frame`: RGBA/BGRA; `mask`: GRAY8 (any size, the frame's aspect),
-  // corrected in place. Returns the share of the frame changed.
-  Result<float> check(const ImageBuffer& frame, ImageBuffer& mask, const CancellationToken* token);
-  void reset();
-
- private:
-  int32_t w_ = 0, h_ = 0;
-  std::vector<float> shape_;  // the remembered shape, 0..1, at the mask's size (capped)
-  std::vector<float> luma_;   // the previous frame's luma at that size
-  std::vector<float> colour_; // the previous frame's colour at that size (3 per cell)
-};
+// The person from two models, each where it is reliable. A portrait matting
+// model (`matte`: soft alpha, the person's outline and hair drawn well) can
+// lose part of a blurred, brightly lit face; a person segmenter (`segment`:
+// finds the body and face every time) gets the outline wrong where hair meets
+// a dark background (a piece of ceiling taken for the head, a bite out of the
+// hair). Fused: the matte, limited to near the segmenter's person (a stray
+// piece of room the matte takes far from the person is dropped), filled in
+// with the segmenter's solid body (its thin protrusions removed) only below
+// the top of the person the matte sees, so whatever is above the head is the
+// matte's alone. `matte` GRAY8 (any size), `segment` GRAY8 with the same
+// aspect (any size); `out` GRAY8 the matte's size.
+Error fuseMasks(const ImageBuffer& matte, const ImageBuffer& segment, ImageBuffer& out);
 
 // Consensus of three neighbouring frames' subject masks (GRAY8, same size):
 // the per-pixel median. A segmentation mistake in a single frame (a patch

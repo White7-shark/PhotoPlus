@@ -3,7 +3,7 @@ package com.photoplus.video
 import com.photoplus.studio.FaceTuning
 
 /**
- * Glide: a clip (up to 10 s on the free plan, 30 s on Premium) made steady,
+ * Glide: a clip (7 s as standard, up to 20 s with Premium) made steady,
  * clean and sharp, with optional Spotlight and Glow, or (Premium) the person
  * moved into a new scene. Pure Kotlin (unit-tested).
  */
@@ -26,6 +26,8 @@ data class GlideOptions(
   val recipe: com.photoplus.beauty.BeautyRecipe? = null,
   /** Premium: the person cut out of every frame and placed in this scene. */
   val scene: GlideScene? = null,
+  /** Normal, fast (2x: frame pairs merged) or slow (0.5x: frames made in between). */
+  val speed: GlideSpeed = GlideSpeed.NORMAL,
 ) {
   val beautyLook: Boolean get() = recipe?.active == true
   val spotlight: Boolean get() = blur > 0f
@@ -36,13 +38,13 @@ data class GlideOptions(
 
   companion object {
     /** The longest clip on the free plan (always with the Photo Plus mark). */
-    const val FREE_MAX_DURATION_MS = 10_000L
+    const val FREE_MAX_DURATION_MS = 7_000L
     /** The longest clip on Premium. */
-    const val PREMIUM_MAX_DURATION_MS = 30_000L
+    const val PREMIUM_MAX_DURATION_MS = 20_000L
     /** The longest clip Glide records and processes on any plan. */
     const val MAX_DURATION_MS = PREMIUM_MAX_DURATION_MS
-    /** Frames processed at most (30 s at 30 fps, with room for 31 fps sensors). */
-    const val MAX_FRAMES = 960
+    /** Frames processed at most (20 s at 30 fps, with room for 31 fps sensors). */
+    const val MAX_FRAMES = 640
 
     fun maxDurationMs(plan: com.photoplus.edit.Plan): Long =
       if (plan == com.photoplus.edit.Plan.PREMIUM) PREMIUM_MAX_DURATION_MS else FREE_MAX_DURATION_MS
@@ -72,6 +74,7 @@ data class GlideOptions(
         beauty = FaceTuning(eyes = b("eyes"), underEye = b("underEye"), shine = b("shine"), faceLight = b("faceLight")),
         recipe = com.photoplus.beauty.BeautyRecipe.fromMap(map["beautyRecipe"] as? Map<*, *>),
         scene = GlideScene.fromMap(map["scene"] as? Map<*, *>),
+        speed = GlideSpeed.fromId(map["speed"] as? String),
       )
     }
 
@@ -84,6 +87,31 @@ data class GlideOptions(
 
     /** Presentation time of frame [index] at [fps], in microseconds (exact, no drift). */
     fun frameTimeUs(index: Int, fps: Float): Long = (index * 1_000_000.0 / fps.coerceIn(1f, 240f)).toLong()
+  }
+}
+
+/**
+ * Glide's playback speed. Fast merges each pair of frames into one (the
+ * slight blur of a real fast-forward, half the length); slow makes a frame
+ * between each pair from the measured motion (smooth slow motion, twice the
+ * length). Fast and slow clips are silent: sound at another speed is noise.
+ */
+enum class GlideSpeed(val id: String, val factor: Float) {
+  NORMAL("normal", 1f),
+  FAST("fast", 2f),
+  SLOW("slow", 0.5f);
+
+  /** Frames written for [frames] processed frames. */
+  fun outputFrames(frames: Int): Int = when (this) {
+    NORMAL -> frames
+    FAST -> (frames + 1) / 2
+    SLOW -> if (frames <= 0) 0 else frames * 2 - 1
+  }
+
+  val keepsSound: Boolean get() = this == NORMAL
+
+  companion object {
+    fun fromId(id: String?): GlideSpeed = entries.firstOrNull { it.id == id } ?: NORMAL
   }
 }
 

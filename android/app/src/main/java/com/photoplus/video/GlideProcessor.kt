@@ -24,7 +24,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Glide: turns a clip (up to 30 s) into a steady, clean, pro-looking video.
+ * Glide: turns a clip (up to 20 s) into a steady, clean, pro-looking video.
  *
  *   pass 1  every frame: camera motion (on a small copy) and, when Glow is
  *           on, face landmarks (on-device model)
@@ -32,11 +32,11 @@ import kotlin.math.roundToInt
  *           pipeline's automatic white balance and levels, fitted as curves),
  *           and the steadying plan
  *   pass 2  every frame: temporal denoise + lens deblur + tone; the person's
- *           mask (on-device model, three frames' vote, room memory, shape
- *           memory, steadied); Spotlight and Glow; the steadying warp; or, in a new
- *           scene (Premium), the person cut out, steadied and composed into
- *           the scene at a fixed size and place; then H.264 with the
- *           original sound
+ *           mask (the person segmenter fused with the portrait matting
+ *           model, three frames' vote, room memory, steadied); Spotlight and
+ *           Glow; the steadying warp; or, in a new scene (Premium), the
+ *           person cut out, steadied and composed into the scene at a fixed
+ *           size and place; then H.264 with the original sound
  *
  * Memory stays bounded whatever the length: at most three full frames and
  * three masks are held at a time (masks are made as pass 2 reaches them).
@@ -56,6 +56,7 @@ class GlideProcessor {
     val shakeBefore: Float,
     val shakeAfter: Float,
     val processMs: Long,
+    val speed: GlideSpeed = GlideSpeed.NORMAL,
   )
 
   private val segmenter by lazy {
@@ -153,7 +154,23 @@ class GlideProcessor {
 
       // ---- Pass 2: every frame, encoded as it is finished ----
       val fps = source.fps
-      val encoder = GlideEncoder(output, w, h, fps, input)
+      val encoder = GlideEncoder(output, w, h, fps, if (options.speed.keepsSound) input else null)
+      // Fast and slow: the previous finished frame (before the mark) and the frame made from two.
+      val speed = options.speed
+      val held = if (speed != GlideSpeed.NORMAL) createBitmap(w, h).apply { isPremultiplied = false } else null
+      val made = if (speed != GlideSpeed.NORMAL) createBitmap(w, h).apply { isPremultiplied = false } else null
+      val pixels = if (speed != GlideSpeed.NORMAL) IntArray(w * h) else null
+      var heldValid = false
+      var written = 0
+      fun emit(frame: Bitmap) {
+        decorate?.invoke(frame)
+        encoder.encode(frame, GlideOptions.frameTimeUs(written++, fps))
+      }
+      fun hold(frame: Bitmap) {
+        frame.getPixels(pixels!!, 0, w, 0, 0, w, h)
+        held!!.setPixels(pixels, 0, w, 0, 0, w, h)
+        heldValid = true
+      }
       try {
         val frameParams = floatArrayOf(noise, blur, options.denoise, options.sharpen)
         val portraitParams = floatArrayOf(
@@ -167,16 +184,26 @@ class GlideProcessor {
         // swallows for many frames are given back (no shadow growing from the
         // person and shrinking back).
         val room = if (options.subject) NativeEngine.nativeVideoRoomCreate() else 0L
-        // The person's shape remembered through the clip: no piece of the head
-        // missing one moment and back the next where the model hesitates.
-        val shape = if (options.subject) NativeEngine.nativeVideoShapeCreate() else 0L
         // Person masks, made as pass 2 reaches them (frame i needs i-1, i, i+1).
         val masks = HashMap<Int, ByteArray?>()
+        // One mask size for the whole clip: the matte's (when the matting
+        // model runs) or the segmenter's, fixed by the first frame.
+        var maskW = 0
+        var maskH = 0
         fun maskOf(j: Int, frame: Bitmap): ByteArray? {
           if (!masks.containsKey(j)) {
             val small = frame.scale(aw, ah)
-            masks[j] = subjectMask(small)
-            small.recycle()
+            masks[j] = try {
+              personMask(small, maskW, maskH)?.let { (bytes, mw, mh) ->
+                if (maskW == 0) {
+                  maskW = mw
+                  maskH = mh
+                }
+                bytes
+              }
+            } finally {
+              small.recycle()
+            }
           }
           return masks[j]
         }
@@ -213,9 +240,8 @@ class GlideProcessor {
               // Three frames' vote first (a one-frame mistake never shows),
               // then the room memory, then steadying.
               val voted = MaskVote.median(masks[i - 1], mask, masks[i + 1])
-              val subject = PortraitProcessor.alphaBitmap(voted, aw, ah)
+              val subject = PortraitProcessor.alphaBitmap(voted, maskW, maskH)
               if (room != 0L) NativeEngine.nativeVideoRoomCheck(room, cur, subject, if (prev != null) fromPrev else null, token)
-              if (shape != 0L) NativeEngine.nativeVideoShapeCheck(shape, cur, subject, token)
               val held = steady
               if (held == null) {
                 steady = subject
@@ -249,20 +275,41 @@ class GlideProcessor {
             } else {
               NativeEngine.nativeVideoWarp(work, warp, out, token)
             }
-            decorate?.invoke(out)
-            encoder.encode(out, GlideOptions.frameTimeUs(i, fps))
+            when (speed) {
+              GlideSpeed.NORMAL -> emit(out)
+              GlideSpeed.FAST -> if (!heldValid) {
+                hold(out)
+              } else {
+                // Two frames merged into one, like a shutter left open.
+                NativeEngine.nativeVideoInterpolate(held!!, out, 0.5f, false, made!!, token)
+                heldValid = false
+                emit(made)
+              }
+              GlideSpeed.SLOW -> {
+                if (heldValid) {
+                  // A frame between the last one and this, along the measured motion.
+                  NativeEngine.nativeVideoInterpolate(held!!, out, 0.5f, true, made!!, token)
+                  emit(made)
+                }
+                hold(out)
+                emit(out)
+              }
+            }
             progress.onProgress("crafting", 0.25 + 0.73 * (i + 1) / n)
           }
+          // Fast, an odd number of frames: the last one on its own.
+          if (speed == GlideSpeed.FAST && heldValid) emit(held!!)
         } finally {
+          held?.recycle()
+          made?.recycle()
           work.recycle()
           out.recycle()
           steady?.recycle()
           composer?.release()
           if (room != 0L) NativeEngine.nativeVideoRoomDestroy(room)
-          if (shape != 0L) NativeEngine.nativeVideoShapeDestroy(shape)
           source.releaseAll()
         }
-        encoder.finish(GlideOptions.frameTimeUs(n, fps))
+        encoder.finish(GlideOptions.frameTimeUs(written, fps))
       } catch (e: Throwable) {
         encoder.close()
         output.delete()
@@ -270,12 +317,33 @@ class GlideProcessor {
       }
       progress.onProgress("done", 1.0)
       return Result(
-        w, h, n, fps, (n * 1000 / fps).toLong(), plan[0], plan[1], plan[2],
-        SystemClock.elapsedRealtime() - started,
+        w, h, written, fps, (written * 1000 / fps).toLong(), plan[0], plan[1], plan[2],
+        SystemClock.elapsedRealtime() - started, options.speed,
       )
     } finally {
       source.close()
     }
+  }
+
+  /**
+   * The person in a small frame: the person segmenter (finds the body and
+   * face every time) fused with the portrait matting model (draws the outline
+   * and hair, also against a dark background); the segmenter alone when the
+   * matting model is unavailable. At [width] x [height] when given (the
+   * clip's mask size), else at the matte's size (or the segmenter's).
+   */
+  private fun personMask(small: Bitmap, width: Int, height: Int): Triple<ByteArray, Int, Int>? {
+    val seg = subjectMask(small) ?: return null
+    val matte = PersonMatte.estimate(small)
+    val (bytes, w, h) = if (matte != null) {
+      val out = ByteArray(matte.width * matte.height)
+      NativeEngine.nativeVideoFuseMasks(matte.bytes, matte.width, matte.height, seg, small.width, small.height, out)
+      Triple(out, matte.width, matte.height)
+    } else {
+      Triple(seg, small.width, small.height)
+    }
+    if (width <= 0 || (w == width && h == height)) return Triple(bytes, w, h)
+    return Triple(PortraitProcessor.resizeNearest(bytes, w, h, width, height), width, height)
   }
 
   private fun subjectMask(small: Bitmap): ByteArray? {

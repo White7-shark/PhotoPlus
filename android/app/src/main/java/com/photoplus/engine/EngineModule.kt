@@ -557,6 +557,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
         "processMs" to r.processMs.toDouble(),
         "watermarked" to (mark != null),
         "scene" to (options.scene != null),
+        "speed" to r.speed.id,
       )
     }
   }

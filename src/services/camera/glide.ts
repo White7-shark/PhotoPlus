@@ -1,5 +1,5 @@
 /**
- * Glide: a pro video from the camera (up to 10 s free, 30 s with Premium),
+ * Glide: a pro video from the camera (7 s as standard, up to 20 s with Premium),
  * made steady, clean and sharp, with optional Spotlight (background blur)
  * and Glow (beauty), or (Premium) moved into a new scene. Pure logic —
  * request building, timing and labels — so every rule is unit-tested.
@@ -8,10 +8,10 @@ import { isActive, type BeautyRecipe } from '../beauty/recipe';
 import type { WatermarkSpec } from '../edit/watermark';
 import { BLUR_LEVELS, type BeautySettings, type BlurLevel } from './model';
 
-/** The longest Glide clip on the free plan (always with the Photo Plus mark). */
-export const GLIDE_FREE_MAX_MS = 10_000;
+/** The standard Glide clip length (the free plan, always with the Photo Plus mark). */
+export const GLIDE_FREE_MAX_MS = 7_000;
 /** The longest Glide clip with Premium. */
-export const GLIDE_PREMIUM_MAX_MS = 30_000;
+export const GLIDE_PREMIUM_MAX_MS = 20_000;
 
 /** The longest clip for a plan (the native recorder enforces the same limit from the plan it holds). */
 export function glideMaxMs(plan: 'free' | 'premium'): number {
@@ -21,6 +21,20 @@ export function glideMaxMs(plan: 'free' | 'premium'): number {
 export const GLIDE_MIN_MS = 1_000;
 
 export type GlideSpotlight = 'off' | BlurLevel;
+
+/** Playback speed: fast merges frame pairs (2×), slow makes frames in between (½×). */
+export type GlideSpeed = 'normal' | 'fast' | 'slow';
+
+export const GLIDE_SPEEDS: readonly { id: GlideSpeed; label: string }[] = [
+  { id: 'normal', label: 'Normal' },
+  { id: 'fast', label: 'Fast 2×' },
+  { id: 'slow', label: 'Slow motion' },
+];
+
+/** How long a clip of `recordedMs` plays at a speed. */
+export function playedMs(recordedMs: number, speed: GlideSpeed): number {
+  return speed === 'fast' ? recordedMs / 2 : speed === 'slow' ? recordedMs * 2 : recordedMs;
+}
 
 export const GLIDE_SPOTLIGHT_LEVELS: readonly { id: GlideSpotlight; label: string }[] = [
   { id: 'off', label: 'Off' },
@@ -48,6 +62,8 @@ export interface GlideRequest {
   watermark?: WatermarkSpec;
   /** Premium: the person moved into a new scene (see glideSceneRequest). */
   scene?: GlideSceneRequest;
+  /** Fast or slow (normal when absent). Fast and slow clips are silent. */
+  speed?: GlideSpeed;
 }
 
 /** The person in a new scene: the background, its crop, where and how big the person is, the look, and their usual box in the clip. */
@@ -85,6 +101,8 @@ export interface GlideResult {
   watermarked: boolean;
   /** Made in a new scene. */
   scene?: boolean;
+  /** Played fast or in slow motion (normal when absent). */
+  speed?: GlideSpeed;
 }
 
 /** A finished Glide clip: the result, the untouched recording, and its gallery copy. */
@@ -108,6 +126,7 @@ export function glideRequest(args: {
   recipe: BeautyRecipe | null;
   watermark?: WatermarkSpec;
   scene?: GlideSceneRequest;
+  speed?: GlideSpeed;
 }): GlideRequest {
   const recipe = args.recipe && isActive(args.recipe) ? args.recipe : null;
   const blur = recipe ? 0 : glideBlur(args.spotlight);
@@ -124,6 +143,7 @@ export function glideRequest(args: {
     ...(recipe ? { beautyRecipe: recipe } : {}),
     ...(args.watermark ? { watermark: args.watermark } : {}),
     ...(args.scene ? { scene: args.scene } : {}),
+    ...(args.speed && args.speed !== 'normal' ? { speed: args.speed } : {}),
   };
 }
 
@@ -173,8 +193,9 @@ export function steadierPercent(shakeBefore: number, shakeAfter: number): number
   return pct > 0 ? Math.min(pct, 99) : null;
 }
 
-export function glideSummary(r: Pick<GlideResult, 'shakeBefore' | 'shakeAfter' | 'durationMs'>): string {
-  const seconds = `${(r.durationMs / 1000).toFixed(1)} s`;
+export function glideSummary(r: Pick<GlideResult, 'shakeBefore' | 'shakeAfter' | 'durationMs' | 'speed'>): string {
+  const pace = r.speed && r.speed !== 'normal' ? ` · ${GLIDE_SPEEDS.find(x => x.id === r.speed)?.label ?? ''}` : '';
+  const seconds = `${(r.durationMs / 1000).toFixed(1)} s${pace}`;
   const steadier = steadierPercent(r.shakeBefore, r.shakeAfter);
   return steadier ? `${seconds} · ${steadier}% steadier` : seconds;
 }

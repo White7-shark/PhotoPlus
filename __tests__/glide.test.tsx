@@ -10,8 +10,10 @@ import {
   glideBlur,
   glideMaxMs,
   glideFileName,
+  GLIDE_SPEEDS,
   glideRequest,
   glideStageLabel,
+  playedMs,
   glideSummary,
   isGlideStage,
   recordedFraction,
@@ -190,21 +192,35 @@ describe('Glide logic', () => {
     ).not.toHaveProperty('beautyRecipe');
   });
 
-  it('times the recording by plan: 10 s free, 30 s with Premium', () => {
-    expect(GLIDE_FREE_MAX_MS).toBe(10_000);
-    expect(GLIDE_PREMIUM_MAX_MS).toBe(30_000);
-    expect(glideMaxMs('free')).toBe(10_000);
-    expect(glideMaxMs('premium')).toBe(30_000);
-    expect(secondsLeft(0)).toBe(10);
-    expect(secondsLeft(100)).toBe(10);
-    expect(secondsLeft(1000)).toBe(9);
-    expect(secondsLeft(9900)).toBe(1);
-    expect(secondsLeft(12000)).toBe(0);
-    expect(secondsLeft(-50)).toBe(10);
-    expect(secondsLeft(1000, 30_000)).toBe(29);
-    expect(recordedFraction(5000)).toBe(0.5);
-    expect(recordedFraction(15_000, 30_000)).toBe(0.5);
-    expect(recordedFraction(40_000, 30_000)).toBe(1);
+  it('sends fast or slow motion only when chosen', () => {
+    const base = { inputPath: '/a.mp4', outputPath: '/b.mp4', spotlight: 'off' as const, recipe: null };
+    expect(glideRequest({ ...base, speed: 'normal' })).not.toHaveProperty('speed');
+    expect(glideRequest(base)).not.toHaveProperty('speed');
+    expect(glideRequest({ ...base, speed: 'fast' }).speed).toBe('fast');
+    expect(glideRequest({ ...base, speed: 'slow' }).speed).toBe('slow');
+    expect(GLIDE_SPEEDS.map(s => s.label)).toEqual(['Normal', 'Fast 2×', 'Slow motion']);
+    expect(playedMs(7000, 'fast')).toBe(3500);
+    expect(playedMs(7000, 'slow')).toBe(14_000);
+    expect(playedMs(7000, 'normal')).toBe(7000);
+    expect(glideSummary({ shakeBefore: 0.2, shakeAfter: 0.2, durationMs: 14_000, speed: 'slow' })).toBe('14.0 s · Slow motion');
+    expect(glideSummary({ shakeBefore: 0.2, shakeAfter: 0.2, durationMs: 3500, speed: 'fast' })).toBe('3.5 s · Fast 2×');
+  });
+
+  it('times the recording by plan: 7 s as standard, 20 s with Premium', () => {
+    expect(GLIDE_FREE_MAX_MS).toBe(7_000);
+    expect(GLIDE_PREMIUM_MAX_MS).toBe(20_000);
+    expect(glideMaxMs('free')).toBe(7_000);
+    expect(glideMaxMs('premium')).toBe(20_000);
+    expect(secondsLeft(0)).toBe(7);
+    expect(secondsLeft(100)).toBe(7);
+    expect(secondsLeft(1000)).toBe(6);
+    expect(secondsLeft(6900)).toBe(1);
+    expect(secondsLeft(9000)).toBe(0);
+    expect(secondsLeft(-50)).toBe(7);
+    expect(secondsLeft(1000, 20_000)).toBe(19);
+    expect(recordedFraction(3500)).toBe(0.5);
+    expect(recordedFraction(10_000, 20_000)).toBe(0.5);
+    expect(recordedFraction(40_000, 20_000)).toBe(1);
   });
 
   it('names clips by date and labels each step in plain words', () => {
@@ -332,9 +348,9 @@ describe('Glide in the camera', () => {
     await fireEvent.press(screen.getByRole('radio', { name: 'Medium' }));
 
     await fireEvent.press(screen.getByTestId('shutter'));
-    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: true, maxMs: 10_000 }));
+    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: true, maxMs: 7_000 }));
     expect(screen.getByTestId('glide-recording')).toBeTruthy();
-    expect(screen.getByText('10s left')).toBeTruthy();
+    expect(screen.getByText('7s left')).toBeTruthy();
     expect(screen.getByLabelText('Stop recording')).toBeTruthy();
     expect(screen.queryByTestId('mode-photo')).toBeNull(); // no mode changes mid-clip
 
@@ -374,7 +390,7 @@ describe('Glide in the camera', () => {
     await renderGlideCamera();
     expect(screen.getByText(/Peach Perfection · no sound/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('shutter'));
-    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: false, maxMs: 10_000 }));
+    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: false, maxMs: 7_000 }));
     await act(async () => finishRecording?.({ path: '/captures/glide/GLIDE_2_raw.mp4', durationMs: 7000 }));
     await waitFor(() => expect(mockEngine.glide).toHaveBeenCalled());
     expect(mockEngine.glide.mock.calls[0][1]).toMatchObject({
@@ -384,13 +400,28 @@ describe('Glide in the camera', () => {
     mockEnsure.mockImplementation(async () => 'granted');
   });
 
-  it('records up to 30 s with Premium', async () => {
+  it('makes the clip in slow motion when chosen, and says it will be silent', async () => {
+    await renderGlideCamera();
+    expect(screen.getByText(/Up to 7 seconds/)).toBeTruthy();
+    expect(screen.queryByText(/no sound/)).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Normal' }).props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByRole('radio', { name: 'Slow motion' }));
+    expect(screen.getByText(/no sound/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalled());
+    await act(async () => finishRecording?.({ path: '/captures/glide/GLIDE_4_raw.mp4', durationMs: 5000 }));
+    await waitFor(() => expect(mockEngine.glide).toHaveBeenCalled());
+    expect(mockEngine.glide.mock.calls[0][1]).toMatchObject({ speed: 'slow' });
+  });
+
+  it('records up to 20 s with Premium', async () => {
     useAppStore.setState(st => ({ entitlements: { ...st.entitlements, plan: 'premium' } }));
     await renderGlideCamera();
+    expect(screen.getByText(/Up to 20 seconds/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('shutter'));
-    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: true, maxMs: 30_000 }));
-    expect(screen.getByText('30s left')).toBeTruthy();
-    await act(async () => finishRecording?.({ path: '/captures/glide/GLIDE_3_raw.mp4', durationMs: 25_000 }));
+    await waitFor(() => expect(mockCamera.startVideo).toHaveBeenCalledWith({ audio: true, maxMs: 20_000 }));
+    expect(screen.getByText('20s left')).toBeTruthy();
+    await act(async () => finishRecording?.({ path: '/captures/glide/GLIDE_3_raw.mp4', durationMs: 18_000 }));
     await waitFor(() => expect(mockEngine.glide).toHaveBeenCalled());
     useAppStore.setState(st => ({ entitlements: { ...st.entitlements, plan: 'free' } }));
   });

@@ -184,7 +184,7 @@ In the Glide preview, **Put me in a new scene** works like this:
 2. The app finds where the person usually is in the clip: the median box over a dozen frames, and the edges that cut them off.
 3. It frames them with the same auto framing as photos, in the clip's own shape.
 4. Every frame is then processed:
-   - the person's mask: a three-frame vote, room memory, shape memory (below), steadied;
+   - the person's mask: the selfie segmenter and the portrait matte fused (below), a three-frame vote, room memory, steadied;
    - a studio cut-out at 960 px;
    - the steadying warp applied to the cut-out, so the person is steady and the scene never moves;
    - a studio compose at a **fixed box** (one size and place for the whole clip, even when an arm goes up or the person leaves the frame), with the **colour match measured on the first frame and kept** (no flicker). Grain changes every frame, as a camera's does.
@@ -206,31 +206,44 @@ The engine tests cover the fixed box (the body is unchanged when an arm goes up,
    - during a camera jolt, a column up the ceiling is taken for the head.
 
    The three-frame vote outvotes only one-frame mistakes, and room memory only takes back pieces of room it has already seen.
-   - **Fix: shape memory** (`video::ShapeMemory`, `pp_video_shape_*`), after room memory. It remembers the person's outline and moves it with the person: a coarse match of their whole area (blurred, so stripes or tiles cannot fool it), then distinctive blocks.
-     - It tracks the room's motion separately (in a selfie the two differ), from distinctive blocks only, because plain walls and ceilings match anywhere.
-     - A change the model asks for is accepted only as fast as the frame supports it.
-     - **Growth** (the model adds something): it needs to look like the person nearby, and something must actually have arrived there, judged against where the room came from. Ceiling, or a dark strip of room that merely looks like hair, is let in only if the model insists for many frames.
-     - **Loss** (the model drops something): it goes at once if it now looks like the room, or no longer looks like the person did there a moment ago (they moved away or left). Hair the model missed still looks like hair, so it stays.
-     - Real changes go through: a raised hand shows at about 65% on its first frame and over 80% by the third, and a person who walks out is gone in two frames.
-   - **Engine tests (synthetic clip with known truth):**
-     - a swallowed beam stays out (21/255, the model says 235);
-     - bitten hair stays (129, against 144 true);
-     - outline agreement 99.99%;
-     - a dark strip of room grabbed during a camera jolt stays out (36/255);
-     - a moving person is followed (99.6%);
-     - the hand and the person leaving behave as above.
+   - **First fix, withdrawn: "shape memory".** It remembered the person's outline and moved it with them, accepting a change only as fast as the frame supported it. On the synthetic tests it looked right, but on your clip it kept a dark tuft of the beam above the head, which made the head look taller and stretched. (I measured the face's height-to-width ratio in the before and after frames: it was the same, 1.00 to 1.02, so nothing was actually stretched; the extra dark shape on top was what read as stretching.) You saw that the "after" clip was worse than the "before", and it was removed completely.
+   - **Fix: a second, stronger model for hair.** The selfie segmenter is a small, fast model that sees the frame at 256 px and has never been good at hair. Glide now also runs a **portrait matting model** (MODNet, Apache-2.0, 26 MB, fetched and SHA-256-checked at build time; LiteRT build). It is made for exactly this: the outline of a person's head and hair, also against dark backgrounds.
+     - MODNet alone is not enough either: on the blurred frames of a camera jolt it lost the face altogether. The two are fused (`video::fuseMasks`, `pp_video_fuse_masks`):
+       - the segmenter's solid core is always kept, so the face and body never go missing;
+       - MODNet decides the outline, but only near the segmenter's person;
+       - and only below each column's own head line, so a piece of ceiling next to the head cannot sit on top of it.
+     - The frame is letterboxed for MODNet, not stretched (stretching collapsed the mask on some frames).
+     - When the model can't be loaded (a low-memory phone: it needs about 205 MB while running), Glide uses the segmenter alone, as before.
+   - **Engine test:** a lost face is kept from the segmenter (255), ceiling next to the head stays out (0), hair only MODNet saw is kept (255), far room stays out (0), the body is solid (255).
 3. **The cut-out's edge snapping flattened hair against a dark beam.** Where the person and the room beside them are the same colour, colour can't separate them, and the fit cut along the beam's straight edge.
    - **Fix:** the cut-out now checks how much of the mask colour explains nearby, and keeps the model's edge where it can't.
    - **Check:** the 600-photo ground-truth benchmark is unchanged or slightly better (SAD 20.3 → 20.2, edge SAD 8.80 → 8.71).
 
-**Result on the reported clip:** big jumps in the head outline (over 2% of the frame between frames) went from 13 to 5, and the largest from 6.2% to 3% of the frame. The average movement is unchanged, so the head still moves freely. The grey cap, the bites, the flat-topped hair and the lid on the head are gone. Glide with Spotlight or Glow uses the same mask chain, so it benefits too.
+**Result on the reported clip** (the head's top edge, frame to frame, across 105 frames):
+
+| | Big jumps (over 2% of the frame) | Largest jump | Mean movement |
+|---|---|---|---|
+| Before (segmenter alone) | 13 | 6.2% | 2.9‰ |
+| After (segmenter + MODNet fused) | 7 | 2.5% | 2.3‰ |
+
+The lost face (frames 13 and 14), the grey cap of ceiling (16), the flat-topped hair (20) and the bites out of the hair (90, 100) are gone. Two frames (28, 29) still show a thin sliver at the top of the hair; that is the honest remaining limit. Glide with Spotlight or Glow uses the same mask chain, so it benefits too.
+
+### Fast and slow motion
+
+Glide now has a **Speed** choice: Normal, Fast 2× and Slow motion.
+- **Fast 2×** plays like a video fast-forwarded in a player: each pair of frames is merged into one, so movement keeps a light, natural motion blur instead of jumping.
+- **Slow motion** is made the way films slow a moment down: a new frame is made between every pair of real frames from the motion between them (block motion found both ways, to half a pixel). Where the two frames don't agree, such as an eye opening or a hand coming into view, it blends instead, so nothing tears.
+  - On a test with a textured object moving 12 px, the made frame's error against the true middle frame is 6.6, against 18.0 for a plain blend.
+  - It costs about 128 ms per made frame at 540 × 960 on a computer.
+- Fast and slow clips are silent, since sped-up or slowed sound is not wanted in a highlight. The camera says "no sound" when one is chosen.
+- A clip moved into a new scene keeps its speed.
 
 ### Glide length by plan
 
-- **Free:** at most 10 s, and always with the Photo Plus watermark. The watermark is now drawn natively on every free clip, whatever the request says.
-- **Premium:** at most 30 s.
+- **Standard (free):** 7 s, and always with the Photo Plus watermark. The watermark is now drawn natively on every free clip, whatever the request says.
+- **Premium:** up to 20 s (first set at 30 s, then changed to 20 s at your request).
 - **Where it is enforced:** the recorder reads the plan natively, and processing also stops at the plan's limit (an imported longer clip is cut). The camera's countdown follows the plan.
-- **Memory:** a 30 s clip no longer holds a mask for every frame (about 200 MB at 900 frames). Masks are made as the second pass reaches them, so at most three frames and three masks are held whatever the length.
+- **Memory:** a long clip no longer holds a mask for every frame (about 140 MB at 600 frames). Masks are made as the second pass reaches them, so at most three frames and three masks are held whatever the length.
 
 ## Limits
 

@@ -151,14 +151,14 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
   }
 
   /**
-   * Glide: records up to 10 s on the free plan, 30 s on Premium (the session must be configured with video).
+   * Glide: records up to 7 s as standard, 20 s with Premium (the session must be configured with video).
    * Resolves when the clip is finished, at the limit or on [stopVideo], with
    * { path, durationMs }.
    */
   override fun startVideo(options: ReadableMap, promise: Promise) {
     val map = options.toHashMap()
     val audio = map["audio"] as? Boolean ?: true
-    // The plan is read here, not taken from the app: 10 s on the free plan, 30 s on Premium.
+    // The plan is read here, not taken from the app: 7 s as standard, up to 20 s with Premium.
     val maxMs = com.photoplus.video.GlideOptions.clampDurationMs((map["maxMs"] as? Number)?.toLong(), com.photoplus.entitlement.Entitlements.plan)
     main.post {
       val dir = File(paths.captures, "glide").apply { mkdirs() }

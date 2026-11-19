@@ -15,16 +15,32 @@ import org.junit.jupiter.api.Test
 /** Glide length by plan, and Glide in a new scene: the request, the person's usual box, the steadied cut-out. */
 class GlideSceneTest {
   @Test
-  fun `free clips stop at 10 s and Premium at 30 s, whatever the app asks`() {
-    assertEquals(10_000L, GlideOptions.maxDurationMs(Plan.FREE))
-    assertEquals(30_000L, GlideOptions.maxDurationMs(Plan.PREMIUM))
-    assertEquals(10_000L, GlideOptions.clampDurationMs(30_000L, Plan.FREE))
-    assertEquals(30_000L, GlideOptions.clampDurationMs(60_000L, Plan.PREMIUM))
-    assertEquals(10_000L, GlideOptions.clampDurationMs(null, Plan.FREE))
+  fun `fast merges frame pairs, slow makes one frame between each pair, and only normal keeps the sound`() {
+    assertEquals(GlideSpeed.NORMAL, GlideOptions.fromMap(emptyMap()).speed)
+    assertEquals(GlideSpeed.FAST, GlideOptions.fromMap(mapOf("speed" to "fast")).speed)
+    assertEquals(GlideSpeed.SLOW, GlideOptions.fromMap(mapOf("speed" to "slow")).speed)
+    assertEquals(GlideSpeed.NORMAL, GlideOptions.fromMap(mapOf("speed" to "warp")).speed)
+    assertEquals(210, GlideSpeed.NORMAL.outputFrames(210))
+    assertEquals(105, GlideSpeed.FAST.outputFrames(210))
+    assertEquals(106, GlideSpeed.FAST.outputFrames(211)) // the last frame is kept
+    assertEquals(419, GlideSpeed.SLOW.outputFrames(210))
+    assertEquals(0, GlideSpeed.SLOW.outputFrames(0))
+    assertTrue(GlideSpeed.NORMAL.keepsSound)
+    assertFalse(GlideSpeed.FAST.keepsSound)
+    assertFalse(GlideSpeed.SLOW.keepsSound)
+  }
+
+  @Test
+  fun `clips stop at 7 s as standard and 20 s with Premium, whatever the app asks`() {
+    assertEquals(7_000L, GlideOptions.maxDurationMs(Plan.FREE))
+    assertEquals(20_000L, GlideOptions.maxDurationMs(Plan.PREMIUM))
+    assertEquals(7_000L, GlideOptions.clampDurationMs(20_000L, Plan.FREE))
+    assertEquals(20_000L, GlideOptions.clampDurationMs(60_000L, Plan.PREMIUM))
+    assertEquals(7_000L, GlideOptions.clampDurationMs(null, Plan.FREE))
     assertEquals(1_000L, GlideOptions.clampDurationMs(10L, Plan.PREMIUM))
     // Processing a longer clip (an import) stops at the plan's limit too.
-    assertEquals(301, GlideOptions.maxFrames(30f, Plan.FREE))
-    assertEquals(901, GlideOptions.maxFrames(30f, Plan.PREMIUM))
+    assertEquals(211, GlideOptions.maxFrames(30f, Plan.FREE))
+    assertEquals(601, GlideOptions.maxFrames(30f, Plan.PREMIUM))
     assertEquals(GlideOptions.MAX_FRAMES, GlideOptions.maxFrames(60f, Plan.PREMIUM))
   }
 
@@ -88,5 +104,18 @@ class GlideSceneTest {
     assertArrayEquals(floatArrayOf(0.25f, 0.25f, 0.75f, 0.75f), SceneComposer.boxIn(floatArrayOf(0.25f, 0.25f, 0.75f, 0.75f), 1f), 1e-6f)
     val z = SceneComposer.boxIn(floatArrayOf(0.3f, 0.1f, 0.7f, 0.9f), 1.1f)
     assertArrayEquals(floatArrayOf(0.28f, 0.06f, 0.72f, 0.94f), z, 1e-5f)
+  }
+
+  @Test
+  fun `the matte is cropped back to the frame's own shape`() {
+    // A 9:16 frame letterboxed into 8 x 8: 4.5 wide, centred (offset 1.75).
+    val side = 8
+    val raw = FloatArray(side * side) { i -> if (i % side in 2..5) 1f else 0f }
+    raw[3 * side + 3] = Float.NaN
+    val m = PersonMatte.crop(raw, side, floatArrayOf(0.5f, 0.5f, 1.75f, 0f), 9, 16)
+    assertEquals(5, m.width)
+    assertEquals(8, m.height)
+    assertEquals(-1, m.bytes[1].toInt()) // 255 (inside the frame)
+    assertEquals(0, m.bytes[3 * 5 + 1].toInt()) // a broken value reads as background
   }
 }

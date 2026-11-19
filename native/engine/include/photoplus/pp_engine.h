@@ -940,21 +940,20 @@ void pp_video_room_destroy(pp_video_room* room);
 pp_status pp_video_room_check(pp_video_room* room, const pp_image* frame, pp_image* mask, const pp_video_motion* from_previous,
                               const pp_cancel_token* token, float* reclaimed_out);
 
-/* The person's shape remembered through a clip, so the outline does not
- * flicker where the person model hesitates (a piece of the head missing one
- * moment and back the next, or a piece of the room taken for the head). The
- * shape follows the person's own motion; a change the model asks for is
- * taken as fast as the frame's colours support it (a head turning or a hand
- * coming up at once; a piece of ceiling, or hair the model missed, only if
- * the model insists for many frames). One per clip; call pp_video_shape_check
- * once per frame, in order, after pp_video_room_check and before steadying. */
-typedef struct pp_video_shape pp_video_shape;
-pp_status pp_video_shape_create(pp_video_shape** out);
-void pp_video_shape_destroy(pp_video_shape* shape);
-/* `frame` RGBA/BGRA, `mask` GRAY8 with the frame's aspect (any size),
- * corrected in place. `changed_out` (optional): mean change made (0..1). */
-pp_status pp_video_shape_check(pp_video_shape* shape, const pp_image* frame, pp_image* mask, const pp_cancel_token* token,
-                               float* changed_out);
+/* A frame between `a` and `b` (RGBA/BGRA, same size) at time t (0 = a, 1 = b)
+ * into `out`. motion_compensated 1: slow motion (both frames moved along the
+ * measured motion, so moving things stay sharp); 0: a plain blend (fast
+ * motion: two frames merged, like a shutter left open). */
+pp_status pp_video_interpolate(const pp_image* a, const pp_image* b, float t, int32_t motion_compensated, pp_image* out,
+                               const pp_cancel_token* token);
+
+/* The person from two models, each where it is reliable: a portrait matting
+ * model's soft `matte` (outline and hair, GRAY8, any size) and a person
+ * segmenter's `segment` (body and face, GRAY8, same aspect, any size).
+ * Written to `out` (GRAY8, the matte's size): the matte near the segmenter's
+ * person, filled in with the segmenter's solid body below the top of the
+ * person the matte sees. See video::fuseMasks. */
+pp_status pp_video_fuse_masks(const pp_image* matte, const pp_image* segment, pp_image* out);
 
 /* ---- Codec (Phase 4) ---------------------------------------------------- */
 /* JPEG and PNG (read and write), BMP and GIF (read). Decoded images are RGBA8
