@@ -564,3 +564,255 @@ TEST(video_room_checks_input_and_resets_on_a_new_size) {
   pp_video_room_destroy(room);
   pp_video_room_destroy(nullptr);  // allowed
 }
+
+namespace {
+// A selfie-like clip for the shape memory: the room of RoomClip, a head with
+// textured skin (pores and shading that move with it), hair, a shirt, and
+// optionally a raised hand. The model's mask can swallow a piece of the beam
+// above the head or bite a piece out of the hair.
+struct ShapeClip {
+  int w = 320, h = 400;
+  float cx = 160, cy = 220, r = 70;
+  bool hand = false;
+  bool present = true;
+  // A dark strip in the room (the underside of a beam), the colour of hair,
+  // and the room's own shift (a jolt of the camera that the person rides out).
+  bool strip = false;
+  int jolt = 0;
+  int part(int x, int y) const {  // 0 room, 1 skin, 2 hair, 3 shirt
+    if (!present) return 0;
+    const float dx = static_cast<float>(x) - cx, dy = static_cast<float>(y) - cy;
+    const float d = std::sqrt(dx * dx + dy * dy);
+    if (y > cy + r * 0.8f && std::abs(dx) < r * 1.6f) return 3;
+    if (hand && dx > r + 20 && dx < r + 60 && dy > -r && dy < r * 0.8f) return 1;  // a hand beside the face
+    if (d < r) return 1;
+    if (d < r + 12.0f && dy < 0) return 2;
+    return 0;
+  }
+  pp_image* frame(unsigned seed) const {
+    pp_image* img = nullptr;
+    pp_image_create(w, h, PP_FORMAT_RGBA8, &img);
+    auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+    std::mt19937 rng(seed);
+    std::normal_distribution<float> noise(0.0f, 0.01f);
+    for (int y = 0; y < h; ++y)
+      for (int x = 0; x < w; ++x) {
+        float c[3];
+        const int p = part(x, y);
+        const float lx = static_cast<float>(x) - cx, ly = static_cast<float>(y) - cy;  // moves with the person
+        if (p == 0) {
+          const int ry = y - jolt;
+          RoomClip::room(x, ry, h, c);
+          if (strip && ry >= h / 3 && ry < h / 3 + 16) {
+            const float g = 0.03f * std::sin(static_cast<float>(x) * 0.7f);
+            c[0] = 0.09f + g, c[1] = 0.07f + g, c[2] = 0.06f + g;
+          }
+        } else if (p == 1) {
+          const float t = 0.06f * std::sin(lx * 0.37f) * std::cos(ly * 0.29f) + 0.04f * std::sin((lx + ly) * 0.11f);
+          c[0] = 0.45f + t, c[1] = 0.28f + t, c[2] = 0.2f + t;
+        } else if (p == 2) {
+          const float curl = 0.05f * std::sin(lx * 1.3f) * std::cos(ly * 1.1f);
+          c[0] = 0.08f + curl, c[1] = 0.06f + curl, c[2] = 0.05f + curl;
+        } else {
+          c[0] = 0.3f, c[1] = 0.31f, c[2] = 0.33f;
+        }
+        uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+        for (int k = 0; k < 3; ++k) q[k] = static_cast<uint8_t>(std::lround(std::clamp(c[k] + noise(rng), 0.0f, 1.0f) * 255.0f));
+        q[3] = 255;
+      }
+    return img;
+  }
+  // The model's mask at half size: right, or with a swallowed piece of beam
+  // (attached to the hair) or a bite out of the hair on the right.
+  pp_image* mask(bool swallow, bool bite) const {
+    pp_image* m = nullptr;
+    const int mw = w / 2, mh = h / 2;
+    pp_image_create(mw, mh, PP_FORMAT_GRAY8, &m);
+    auto* px = static_cast<uint8_t*>(pp_image_pixels(m));
+    for (int y = 0; y < mh; ++y)
+      for (int x = 0; x < mw; ++x) {
+        const int fx = x * 2 + 1, fy = y * 2 + 1;
+        bool on = part(fx, fy) != 0;
+        if (swallow && fx > cx - 35 && fx < cx + 25 && fy > h / 6 + 8 && fy < cy - r) on = true;
+        if (bite && fx > cx + 15 && fx < cx + r + 14 && fy < cy - 25) on = false;
+        px[static_cast<size_t>(y) * mw + x] = on ? 255 : 0;
+      }
+    return m;
+  }
+  // Agreement of a corrected mask with the truth (share of pixels within 0.5).
+  double agreement(pp_image* m) const {
+    pp_image_info i{};
+    pp_image_get_info(m, &i);
+    const auto* px = static_cast<const uint8_t*>(pp_image_pixels(m));
+    int good = 0, n = 0;
+    for (int y = 0; y < i.height; ++y)
+      for (int x = 0; x < i.width; ++x, ++n) {
+        const bool truth = part(x * 2 + 1, y * 2 + 1) != 0;
+        if ((px[static_cast<size_t>(y) * i.stride + x] > 127) == truth) ++good;
+      }
+    return static_cast<double>(good) / n;
+  }
+};
+}  // namespace
+
+TEST(video_shape_holds_the_head_through_the_models_mistakes) {
+  ShapeClip clip;
+  pp_video_shape* shape = nullptr;
+  ASSERT_OK(pp_video_shape_create(&shape));
+  for (int k = 0; k < 10; ++k) {
+    pp_image* f = clip.frame(10 + k);
+    pp_image* m = clip.mask(false, false);
+    ASSERT_OK(pp_video_shape_check(shape, f, m, nullptr, nullptr));
+    EXPECT_TRUE(clip.agreement(m) > 0.995);
+    pp_image_destroy(f);
+    pp_image_destroy(m);
+  }
+  // Ten frames of the model hesitating: a piece of the beam one frame, a bite
+  // out of the hair the next, both at once, and so on.
+  const int bx0 = static_cast<int>(clip.cx) - 30, bx1 = static_cast<int>(clip.cx) + 20;
+  const int by0 = clip.h / 6 + 14, by1 = static_cast<int>(clip.cy - clip.r) - 16;
+  const int hx0 = static_cast<int>(clip.cx) + 30, hx1 = static_cast<int>(clip.cx + clip.r) + 6;
+  const int hy0 = static_cast<int>(clip.cy - clip.r) - 6, hy1 = static_cast<int>(clip.cy) - 40;
+  pp_image* truth = clip.mask(false, false);
+  const double hairTruth = RoomClip::meanIn(truth, hx0, hy0, hx1, hy1);
+  pp_image_destroy(truth);
+  double worstBeam = 0, worstHair = 255, worstAgree = 1;
+  for (int k = 10; k < 20; ++k) {
+    const bool swallow = k % 3 != 1, bite = k % 2 == 0;
+    pp_image* f = clip.frame(10 + k);
+    pp_image* m = clip.mask(swallow, bite);
+    if (k == 12) std::printf("    model: beam %.0f, hair %.0f (truth %.0f)\n", RoomClip::meanIn(m, bx0, by0, bx1, by1), RoomClip::meanIn(m, hx0, hy0, hx1, hy1), hairTruth);
+    float changed = -1;
+    ASSERT_OK(pp_video_shape_check(shape, f, m, nullptr, &changed));
+    worstBeam = std::max(worstBeam, RoomClip::meanIn(m, bx0, by0, bx1, by1));
+    worstHair = std::min(worstHair, RoomClip::meanIn(m, hx0, hy0, hx1, hy1));
+    worstAgree = std::min(worstAgree, clip.agreement(m));
+    EXPECT_TRUE(changed > 0.0f);
+    pp_image_destroy(f);
+    pp_image_destroy(m);
+  }
+  std::printf("    with shape memory: beam at most %.0f, hair at least %.0f, agreement at least %.4f\n", worstBeam, worstHair, worstAgree);
+  EXPECT_TRUE(worstBeam < 60);   // the swallowed beam never shows as the person
+  EXPECT_TRUE(worstHair > hairTruth - 15);  // the bitten hair never goes missing
+  EXPECT_TRUE(worstAgree > 0.985);
+  pp_video_shape_destroy(shape);
+}
+
+TEST(video_shape_follows_the_person_and_real_changes) {
+  ShapeClip clip;
+  pp_video_shape* shape = nullptr;
+  ASSERT_OK(pp_video_shape_create(&shape));
+  unsigned seed = 50;
+  auto step = [&](bool swallow, bool bite) {
+    pp_image* f = clip.frame(seed++);
+    pp_image* m = clip.mask(swallow, bite);
+    EXPECT_EQ(pp_video_shape_check(shape, f, m, nullptr, nullptr), PP_OK);
+    pp_image_destroy(f);
+    return m;
+  };
+  for (int k = 0; k < 5; ++k) pp_image_destroy(step(false, false));
+  // The person sways 3 px a frame to the right, then back up and left: the shape keeps up.
+  double worst = 1;
+  for (int k = 0; k < 12; ++k) {
+    clip.cx += 3, clip.cy -= k % 2;
+    pp_image* m = step(false, false);
+    worst = std::min(worst, clip.agreement(m));
+    pp_image_destroy(m);
+  }
+  // A hand comes up beside the face and stays: mostly there at once, whole by the third frame.
+  clip.hand = true;
+  const int ax0 = static_cast<int>(clip.cx + clip.r) + 26, ax1 = static_cast<int>(clip.cx + clip.r) + 54;
+  const int ay0 = static_cast<int>(clip.cy) - 50, ay1 = static_cast<int>(clip.cy) + 30;
+  double handFirst = 0, handIn = 0;
+  for (int k = 0; k < 3; ++k) {
+    pp_image* g = step(false, false);
+    handIn = RoomClip::meanIn(g, ax0, ay0, ax1, ay1);
+    if (k == 0) handFirst = handIn;
+    pp_image_destroy(g);
+  }
+  pp_image* m = nullptr;
+  // The person walks out of the frame: gone within two frames.
+  clip.present = false;
+  const int px0 = static_cast<int>(clip.cx) - 40, px1 = static_cast<int>(clip.cx) + 40;
+  const int py0 = static_cast<int>(clip.cy) - 40, py1 = static_cast<int>(clip.cy) + 40;
+  pp_image_destroy(step(false, false));
+  m = step(false, false);
+  const double left = RoomClip::meanIn(m, px0, py0, px1, py1);
+  pp_image_destroy(m);
+  std::printf("    moving: agreement at least %.4f; a raised hand %.0f at once, %.0f by frame 3; after leaving %.0f\n", worst, handFirst,
+              handIn, left);
+  EXPECT_TRUE(worst > 0.985);
+  EXPECT_TRUE(handFirst > 150);
+  EXPECT_TRUE(handIn > 200);
+  EXPECT_TRUE(left < 30);
+  pp_video_shape_destroy(shape);
+}
+
+TEST(video_shape_keeps_out_a_dark_strip_of_room_taken_during_a_jolt) {
+  // The head just under a dark strip of the room, the colour of hair. The
+  // camera jolts (the room jumps 10 px) and the model takes the strip above
+  // the head for the person: it looks like hair, but nothing arrived there.
+  ShapeClip clip;
+  clip.strip = true;
+  clip.cy = static_cast<float>(clip.h) / 3 + 16 + 14 + 26 + clip.r + 12;  // hair 26 px under the strip after the jolt
+  pp_video_shape* shape = nullptr;
+  ASSERT_OK(pp_video_shape_create(&shape));
+  for (int k = 0; k < 8; ++k) {
+    pp_image* f = clip.frame(300 + k);
+    pp_image* m = clip.mask(false, false);
+    ASSERT_OK(pp_video_shape_check(shape, f, m, nullptr, nullptr));
+    pp_image_destroy(f);
+    pp_image_destroy(m);
+  }
+  const int sx0 = static_cast<int>(clip.cx) - 40, sx1 = static_cast<int>(clip.cx) + 40;
+  double worst = 0;
+  for (int k = 0; k < 4; ++k) {
+    clip.jolt = k == 0 ? 10 : 10 + k;
+    pp_image* f = clip.frame(400 + k);
+    pp_image* m = clip.mask(false, false);
+    // The model's mistake: the strip (where it now is) above the head.
+    pp_image_info i{};
+    pp_image_get_info(m, &i);
+    auto* px = static_cast<uint8_t*>(pp_image_pixels(m));
+    const int y0 = (clip.h / 3 + clip.jolt) / 2, y1 = (clip.h / 3 + 16 + clip.jolt) / 2;
+    for (int y = y0; y < y1; ++y)
+      for (int x = sx0 / 2; x < sx1 / 2; ++x) px[static_cast<size_t>(y) * i.stride + x] = 255;
+    ASSERT_OK(pp_video_shape_check(shape, f, m, nullptr, nullptr));
+    worst = std::max(worst, RoomClip::meanIn(m, sx0, y0 * 2 + 2, sx1, y1 * 2 - 2));
+    pp_image* truth = clip.mask(false, false);
+    EXPECT_TRUE(RoomClip::meanIn(truth, sx0, y0 * 2 + 2, sx1, y1 * 2 - 2) < 1);  // the strip really is room
+    pp_image_destroy(truth);
+    pp_image_destroy(f);
+    pp_image_destroy(m);
+  }
+  std::printf("    dark strip taken during a jolt: at most %.0f\n", worst);
+  EXPECT_TRUE(worst < 70);
+  pp_video_shape_destroy(shape);
+}
+
+TEST(video_shape_checks_input) {
+  pp_video_shape* shape = nullptr;
+  EXPECT_EQ(pp_video_shape_create(nullptr), PP_ERROR_INVALID_ARGUMENT);
+  ASSERT_OK(pp_video_shape_create(&shape));
+  ShapeClip clip;
+  pp_image* f = clip.frame(1);
+  pp_image* m = clip.mask(false, false);
+  EXPECT_EQ(pp_video_shape_check(nullptr, f, m, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_video_shape_check(shape, nullptr, m, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_video_shape_check(shape, m, m, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);  // a mask is not a frame
+  EXPECT_EQ(pp_video_shape_check(shape, f, f, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);  // nor a frame a mask
+  // A new mask size starts again (the first frame is taken as it is).
+  float changed = -1;
+  ASSERT_OK(pp_video_shape_check(shape, f, m, nullptr, &changed));
+  EXPECT_EQ(changed, 0.0f);
+  pp_image* other = nullptr;
+  pp_image_create(120, 150, PP_FORMAT_GRAY8, &other);
+  std::fill_n(static_cast<uint8_t*>(pp_image_pixels(other)), 120 * 150, uint8_t{255});
+  ASSERT_OK(pp_video_shape_check(shape, f, other, nullptr, &changed));
+  EXPECT_EQ(changed, 0.0f);
+  EXPECT_EQ(static_cast<uint8_t*>(pp_image_pixels(other))[0], 255);
+  pp_image_destroy(other);
+  pp_image_destroy(f);
+  pp_image_destroy(m);
+  pp_video_shape_destroy(shape);
+}

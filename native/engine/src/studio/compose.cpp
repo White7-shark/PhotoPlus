@@ -223,7 +223,12 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
   cut.img = k > 1 ? &reduced : &cutout;
   cut.o = offsets(cutout);
   const float invK = 1.0f / static_cast<float>(k);
-  // Frame point (x, y) (pixel centres) → cut-out coordinates; false if outside the box.
+  // What is drawn: the person's box, or with a fixed box (video) the whole
+  // cut-out: the box only sets their size and place, and a head that rises
+  // above where it usually is must not be cut off along the box's edge.
+  const int32_t dl = placement.fixedBox ? 0 : bl, dr = placement.fixedBox ? cw - 1 : br;
+  const int32_t dt = placement.fixedBox ? 0 : bt, db = placement.fixedBox ? ch - 1 : bb;
+  // Frame point (x, y) (pixel centres) → cut-out coordinates; false if outside what is drawn.
   auto toCut = [&](float x, float y, float& cx, float& cy) {
     const float dx = x - ancX, dy = y - ancY;
     const float qx = cs * dx + sn * dy, qy = -sn * dx + cs * dy;  // undo the rotation
@@ -232,8 +237,8 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
     float ux = qx / (s * widen);
     if (placement.flip) ux = -ux;
     cx = ancCx + ux, cy = ancCy + qy / s;
-    return cx >= static_cast<float>(bl) - 2 && cx <= static_cast<float>(br) + 3 && cy >= static_cast<float>(bt) - 2 &&
-           cy <= static_cast<float>(bb) + 3;
+    return cx >= static_cast<float>(dl) - 2 && cx <= static_cast<float>(dr) + 3 && cy >= static_cast<float>(dt) - 2 &&
+           cy <= static_cast<float>(db) + 3;
   };
   // The person's box in the frame (forward map of the corners).
   float fl = 1e9f, fr = -1e9f, ft = 1e9f, fb = -1e9f;
@@ -247,10 +252,28 @@ Error compose(ImageBuffer& background, const ImageBuffer& cutout, const Placemen
     const float x = ancX + cs * qx - sn * qy, y = ancY + sn * qx + cs * qy;
     fl = std::min(fl, x), fr = std::max(fr, x), ft = std::min(ft, y), fb = std::max(fb, y);
   }
-  const int32_t px0 = std::clamp(static_cast<int32_t>(std::floor(fl)) - 2, 0, W);
-  const int32_t px1 = std::clamp(static_cast<int32_t>(std::ceil(fr)) + 2, 0, W);
-  const int32_t py0 = std::clamp(static_cast<int32_t>(std::floor(ft)) - 2, 0, H);
-  const int32_t py1 = std::clamp(static_cast<int32_t>(std::ceil(fb)) + 2, 0, H);
+  // The pixels that can show the person (the drawn area's corners, mapped).
+  float gl = fl, gr = fr, gt = ft, gb = fb;
+  if (placement.fixedBox) {
+    gl = gt = 1e9f, gr = gb = -1e9f;
+    for (int corner = 0; corner < 4; ++corner) {
+      const float ux = (corner & 1 ? static_cast<float>(dr + 1) : static_cast<float>(dl)) - ancCx;
+      const float uy = (corner & 2 ? static_cast<float>(db + 1) : static_cast<float>(dt)) - ancCy;
+      const float v = std::clamp(-uy / boxH, 0.0f, 1.2f);
+      float qx = ux * s * (1.0f + (topScale - 1.0f) * v);
+      if (placement.flip) qx = -qx;
+      const float qy = uy * s;
+      const float x = ancX + cs * qx - sn * qy, y = ancY + sn * qx + cs * qy;
+      gl = std::min(gl, x), gr = std::max(gr, x), gt = std::min(gt, y), gb = std::max(gb, y);
+    }
+    // Tilt widens the top of the drawn area beyond its corners' mapping.
+    const float extra = std::fabs(topScale - 1.0f) * (gr - gl);
+    gl -= extra, gr += extra;
+  }
+  const int32_t px0 = std::clamp(static_cast<int32_t>(std::floor(gl)) - 2, 0, W);
+  const int32_t px1 = std::clamp(static_cast<int32_t>(std::ceil(gr)) + 2, 0, W);
+  const int32_t py0 = std::clamp(static_cast<int32_t>(std::floor(gt)) - 2, 0, H);
+  const int32_t py1 = std::clamp(static_cast<int32_t>(std::ceil(gb)) + 2, 0, H);
 
   // 3. Background grid (linear).
   const int32_t f = std::max<int32_t>(1, (std::max(W, H) + kGrid - 1) / kGrid);

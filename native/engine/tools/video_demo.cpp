@@ -117,6 +117,7 @@ int main(int argc, char** argv) {
   int backdrop = -1;  // pp_backdrop_design, applied after stabilising so painted backgrounds stay still
   float backdropStrength = 1.0f;
   bool room = true;  // the room memory corrects the subject masks (--no-room to compare)
+  bool shapeMem = true;  // the shape memory keeps the head steady (--no-shape to compare)
   bool skinTone = false;
   pp_skin_tone_params sp{};
   sp.strength = 1.0f;
@@ -143,6 +144,7 @@ int main(int argc, char** argv) {
     else if (k == "--backdrop") backdrop = static_cast<int>(next());
     else if (k == "--backdrop-strength") backdropStrength = next();
     else if (k == "--no-room") room = false;
+    else if (k == "--no-shape") shapeMem = false;
     else if (k == "--skin-tone") {
       skinTone = true;
       sp.gain_r = next(), sp.gain_g = next(), sp.gain_b = next(), sp.glow = next();
@@ -242,6 +244,8 @@ int main(int argc, char** argv) {
   pp_image* steady = nullptr;  // the steadied subject mask, carried frame to frame
   pp_video_room* roomMemory = nullptr;
   if (room) pp_video_room_create(&roomMemory);
+  pp_video_shape* shapeMemory = nullptr;
+  if (shapeMem) pp_video_shape_create(&shapeMemory);
   double reclaimedSum = 0;
   double enhanceMs = 0, portraitMs = 0;
   for (int k = 0; k < n; ++k) {
@@ -283,6 +287,8 @@ int main(int argc, char** argv) {
         }
         if (prevM) pp_image_destroy(prevM);
         if (nextM) pp_image_destroy(nextM);
+        // The person's shape remembered: no piece of the head flickering away.
+        if (shapeMemory != nullptr) pp_video_shape_check(shapeMemory, frame(k), subj, nullptr, nullptr);
         if (steady == nullptr) {
           steady = subj;
           subj = nullptr;
@@ -344,6 +350,7 @@ int main(int argc, char** argv) {
   for (auto& [i, img] : cache) pp_image_destroy(img);
   pp_image_destroy(steady);
   pp_video_room_destroy(roomMemory);
+  pp_video_shape_destroy(shapeMemory);
   std::fprintf(stderr, "room: %.4f of the person area given back per frame on average\n", reclaimedSum / std::max(n, 1));
   const double total = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   std::printf(

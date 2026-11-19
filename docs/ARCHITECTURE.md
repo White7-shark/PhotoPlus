@@ -204,7 +204,8 @@ Camera (Glide mode) ── configure({ video: true, aspectRatio: '16:9' }) ─�
    startVideo ≤ 10 s free / 30 s Premium (the plan is read natively) → captures/glide/*_raw.mp4
 EngineModule.glide → GlideProcessor   (frames capped by the plan; free clips always marked)
    motion (pp_video_estimate_motion) → plan (pp_video_stabilize) → per frame:
-   pp_video_enhance_frame → person mask (made as pass 2 reaches it: ≤ 3 masks held) →
+   pp_video_enhance_frame → person mask (made as pass 2 reaches it: ≤ 3 masks held;
+     vote of three → room memory → shape memory → steadied) →
      Spotlight / Glow: pp_portrait / pp_face_adjust → pp_video_warp
      or a new scene (Premium): pp_studio_cutout → pp_video_warp of the cut-out → pp_studio_compose
        (fixed box, colour match kept from frame 1)
@@ -263,6 +264,7 @@ PortraitProcessor.applyBeauty(recipe?, backdrop?, skinTone?): one set of masks (
 | `native/engine/src/skintone/skintone.cpp` | Skin weight (colour, brightness, texture, feathered region); the shade as gains on the skin's own colour in linear light (the scene's light stays), natural-hue guard, headroom for fair skin, even tone |
 | `pp_video_consensus_mask` | Three-frame median of subject masks: one-frame segmentation mistakes never reach a clip |
 | `pp_video_room_*` (`video::RoomMemory`) | The room remembered behind the person (follows the camera, corrects exposure drift): pieces of room the model swallows for many frames are given back; the person's long-held outline and dark close calls are kept. Used by Glide (with `MaskVote`) before steadying |
+| `pp_video_shape_*` (`video::ShapeMemory`) | The person's shape remembered through a clip, so the head never flickers where the model hesitates. It tracks the person's own motion (a coarse match of their whole area, then distinctive blocks) and the room's motion separately. A change the model asks for is taken only as fast as the frame supports it: a new piece must look like the person nearby **and** something must have arrived there (judged against where the room came from); a lost piece goes at once if it looks like the room or no longer looks like the person did there. Used by Glide after room memory, before steadying |
 | `scripts/backdrop-demo.py`, `scripts/backdrop-video-demo.py` | Sheets and clips on real photos and video |
 | `scripts/skintone-demo.py`, `scripts/skintone-video-demo.py` | Sheets, per-region measurements (face, body, hair, clothes, background) and clips |
 

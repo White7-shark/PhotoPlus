@@ -184,12 +184,46 @@ In the Glide preview, **Put me in a new scene** works like this:
 2. The app finds where the person usually is in the clip: the median box over a dozen frames, and the edges that cut them off.
 3. It frames them with the same auto framing as photos, in the clip's own shape.
 4. Every frame is then processed:
-   - the person's mask: a three-frame vote, room memory, steadied;
+   - the person's mask: a three-frame vote, room memory, shape memory (below), steadied;
    - a studio cut-out at 960 px;
    - the steadying warp applied to the cut-out, so the person is steady and the scene never moves;
    - a studio compose at a **fixed box** (one size and place for the whole clip, even when an arm goes up or the person leaves the frame), with the **colour match measured on the first frame and kept** (no flicker). Grain changes every frame, as a camera's does.
 
 The engine tests cover the fixed box (the body is unchanged when an arm goes up, against a large change with the frame's own box), an empty frame, and the kept colour match.
+
+### The head no longer cuts off or flickers in Glide
+
+**Report:** in a Glide clip, part of the head kept disappearing, coming back after a movement, then disappearing again.
+
+**Investigation:** I built a desktop replica of the phone's per-frame chain (`tools/scene_video_demo.cpp`: vote, room memory, steadying, cut-out, compose) and ran it on the reported clip, a hand-held selfie under a ceiling beam. There were three separate causes.
+
+1. **The scene video clipped the person to their usual box** (the main cause of "cut off, back after moving"). The fixed box that keeps the person one size also limited what was drawn. Whenever the head rose above its usual place, everything above the box line was cut off flat.
+   - **Fix:** the fixed box now sets only size and place; the whole cut-out is drawn.
+   - **Test:** a raised arm above the box is drawn.
+2. **The person model hesitates at the top of the head.** Dark hair against the dark underside of the beam is hard for it:
+   - a piece of ceiling becomes a grey cap on the head for a few frames;
+   - a piece of hair goes missing for up to 25 frames;
+   - during a camera jolt, a column up the ceiling is taken for the head.
+
+   The three-frame vote outvotes only one-frame mistakes, and room memory only takes back pieces of room it has already seen.
+   - **Fix: shape memory** (`video::ShapeMemory`, `pp_video_shape_*`), after room memory. It remembers the person's outline and moves it with the person: a coarse match of their whole area (blurred, so stripes or tiles cannot fool it), then distinctive blocks.
+     - It tracks the room's motion separately (in a selfie the two differ), from distinctive blocks only, because plain walls and ceilings match anywhere.
+     - A change the model asks for is accepted only as fast as the frame supports it.
+     - **Growth** (the model adds something): it needs to look like the person nearby, and something must actually have arrived there, judged against where the room came from. Ceiling, or a dark strip of room that merely looks like hair, is let in only if the model insists for many frames.
+     - **Loss** (the model drops something): it goes at once if it now looks like the room, or no longer looks like the person did there a moment ago (they moved away or left). Hair the model missed still looks like hair, so it stays.
+     - Real changes go through: a raised hand shows at about 65% on its first frame and over 80% by the third, and a person who walks out is gone in two frames.
+   - **Engine tests (synthetic clip with known truth):**
+     - a swallowed beam stays out (21/255, the model says 235);
+     - bitten hair stays (129, against 144 true);
+     - outline agreement 99.99%;
+     - a dark strip of room grabbed during a camera jolt stays out (36/255);
+     - a moving person is followed (99.6%);
+     - the hand and the person leaving behave as above.
+3. **The cut-out's edge snapping flattened hair against a dark beam.** Where the person and the room beside them are the same colour, colour can't separate them, and the fit cut along the beam's straight edge.
+   - **Fix:** the cut-out now checks how much of the mask colour explains nearby, and keeps the model's edge where it can't.
+   - **Check:** the 600-photo ground-truth benchmark is unchanged or slightly better (SAD 20.3 → 20.2, edge SAD 8.80 → 8.71).
+
+**Result on the reported clip:** big jumps in the head outline (over 2% of the frame between frames) went from 13 to 5, and the largest from 6.2% to 3% of the frame. The average movement is unchanged, so the head still moves freely. The grey cap, the bites, the flat-topped hair and the lid on the head are gone. Glide with Spotlight or Glow uses the same mask chain, so it benefits too.
 
 ### Glide length by plan
 

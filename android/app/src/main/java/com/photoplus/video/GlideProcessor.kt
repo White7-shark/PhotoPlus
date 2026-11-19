@@ -32,8 +32,8 @@ import kotlin.math.roundToInt
  *           pipeline's automatic white balance and levels, fitted as curves),
  *           and the steadying plan
  *   pass 2  every frame: temporal denoise + lens deblur + tone; the person's
- *           mask (on-device model, three frames' vote, room memory,
- *           steadied); Spotlight and Glow; the steadying warp; or, in a new
+ *           mask (on-device model, three frames' vote, room memory, shape
+ *           memory, steadied); Spotlight and Glow; the steadying warp; or, in a new
  *           scene (Premium), the person cut out, steadied and composed into
  *           the scene at a fixed size and place; then H.264 with the
  *           original sound
@@ -167,6 +167,9 @@ class GlideProcessor {
         // swallows for many frames are given back (no shadow growing from the
         // person and shrinking back).
         val room = if (options.subject) NativeEngine.nativeVideoRoomCreate() else 0L
+        // The person's shape remembered through the clip: no piece of the head
+        // missing one moment and back the next where the model hesitates.
+        val shape = if (options.subject) NativeEngine.nativeVideoShapeCreate() else 0L
         // Person masks, made as pass 2 reaches them (frame i needs i-1, i, i+1).
         val masks = HashMap<Int, ByteArray?>()
         fun maskOf(j: Int, frame: Bitmap): ByteArray? {
@@ -212,6 +215,7 @@ class GlideProcessor {
               val voted = MaskVote.median(masks[i - 1], mask, masks[i + 1])
               val subject = PortraitProcessor.alphaBitmap(voted, aw, ah)
               if (room != 0L) NativeEngine.nativeVideoRoomCheck(room, cur, subject, if (prev != null) fromPrev else null, token)
+              if (shape != 0L) NativeEngine.nativeVideoShapeCheck(shape, cur, subject, token)
               val held = steady
               if (held == null) {
                 steady = subject
@@ -255,6 +259,7 @@ class GlideProcessor {
           steady?.recycle()
           composer?.release()
           if (room != 0L) NativeEngine.nativeVideoRoomDestroy(room)
+          if (shape != 0L) NativeEngine.nativeVideoShapeDestroy(shape)
           source.releaseAll()
         }
         encoder.finish(GlideOptions.frameTimeUs(n, fps))

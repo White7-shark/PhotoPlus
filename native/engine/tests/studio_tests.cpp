@@ -586,6 +586,15 @@ TEST(studio_compose_fixed_box_keeps_the_person_steady) {
   std::printf("    body change when an arm goes up: own box %.0f, fixed box %.0f\n", bodyDiff(ma, mb), bodyDiff(fa, fb));
   EXPECT_TRUE(bodyDiff(fa, fb) < 1.0);
   EXPECT_TRUE(bodyDiff(ma, mb) > 1000.0);
+  // The raised arm, above the fixed box, is drawn too: the box sets the size
+  // and place only, it does not cut off what rises above it (a head moving up).
+  // Box top at y = 0.3 of 300 px, 1.5 frame px per cut-out px: the arm (cut-out
+  // x 44..49, y 0..9) lands at x 221..230, y 75..90.
+  const uint8_t* arm = at(fb, 225, 82);
+  const uint8_t* none = at(fa, 225, 82);
+  std::printf("    above the box: with the arm %d %d %d, without %d %d %d\n", arm[0], arm[1], arm[2], none[0], none[1], none[2]);
+  EXPECT_TRUE(arm[0] > 150 && arm[1] < 90);
+  EXPECT_TRUE(none[0] < 120);
   // Someone who left the frame: a fixed box composes just the scene.
   pp_image* empty = rgba(60, 140);
   std::memset(pp_image_pixels(empty), 0, static_cast<size_t>(strideOf(empty)) * 140);

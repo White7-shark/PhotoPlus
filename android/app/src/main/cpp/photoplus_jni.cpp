@@ -1431,6 +1431,41 @@ JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoRoomC
   return reclaimed;
 }
 
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoShapeCreate(JNIEnv* env, jobject) {
+  pp_video_shape* shape = nullptr;
+  const pp_status st = pp_video_shape_create(&shape);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(shape);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoShapeDestroy(JNIEnv*, jobject, jlong shape) {
+  pp_video_shape_destroy(reinterpret_cast<pp_video_shape*>(shape));
+}
+
+// Corrects `mask` (ALPHA_8) for `frame` (ARGB_8888) in place with the
+// person's remembered shape (no head flickering where the model hesitates).
+// Returns the mean change made.
+JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeVideoShapeCheck(JNIEnv* env, jobject, jlong shape,
+                                                                                    jobject frame, jobject mask, jlong token) {
+  if (shape == 0) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad shape arguments");
+    return 0.0f;
+  }
+  WrappedBitmap img, m;
+  if (!img.open(env, frame, false) || !m.open(env, mask, true)) return 0.0f;
+  float changed = 0.0f;
+  const pp_status st = pp_video_shape_check(reinterpret_cast<pp_video_shape*>(shape), img.image, m.image,
+                                            reinterpret_cast<const pp_cancel_token*>(token), &changed);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0.0f;
+  }
+  return changed;
+}
+
 // RGBA bitmap → the encoder's YUV 4:2:0 planes (BT.601 limited range, as
 // video players expect), written through direct buffers with the plane strides.
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeRgbaToYuv420(

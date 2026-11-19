@@ -356,6 +356,19 @@ object NativeEngine {
    * Returns the share of the person area given back.
    */
   external fun nativeVideoRoomCheck(room: Long, frame: Bitmap, mask: Bitmap, motion: FloatArray?, token: Long): Float
+
+  /**
+   * The person's shape remembered through one clip: [nativeVideoShapeCheck]
+   * once per frame, in order, after [nativeVideoRoomCheck] and before
+   * steadying, corrects the mask (ALPHA_8) in place so the head does not
+   * flicker where the model hesitates (a piece of it missing one moment and
+   * back the next, or a piece of the room taken for it). Real changes (a head
+   * turning, a hand coming up, the person leaving) go through at once.
+   * Returns the mean change made. Free the shape with [nativeVideoShapeDestroy].
+   */
+  external fun nativeVideoShapeCreate(): Long
+  external fun nativeVideoShapeDestroy(shape: Long)
+  external fun nativeVideoShapeCheck(shape: Long, frame: Bitmap, mask: Bitmap, token: Long): Float
   /** ARGB_8888 frame → encoder YUV 4:2:0 planes (direct buffers, with their strides). */
   external fun nativeRgbaToYuv420(
     bitmap: Bitmap, y: java.nio.ByteBuffer, u: java.nio.ByteBuffer, v: java.nio.ByteBuffer,

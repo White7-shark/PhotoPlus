@@ -942,6 +942,31 @@ pp_status pp_video_room_check(pp_video_room* room, const pp_image* frame, pp_ima
   });
 }
 
+struct pp_video_shape {
+  photoplus::video::ShapeMemory memory;
+};
+
+pp_status pp_video_shape_create(pp_video_shape** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = new (std::nothrow) pp_video_shape();
+    return *out != nullptr ? succeed() : fail(PP_ERROR_OUT_OF_MEMORY, "Unable to allocate the shape memory");
+  });
+}
+
+void pp_video_shape_destroy(pp_video_shape* shape) { delete shape; }
+
+pp_status pp_video_shape_check(pp_video_shape* shape, const pp_image* frame, pp_image* mask, const pp_cancel_token* token,
+                               float* changed_out) {
+  return guarded([&]() -> pp_status {
+    if (shape == nullptr || frame == nullptr || mask == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "Null argument");
+    auto r = shape->memory.check(frame->buffer, mask->buffer, token ? &token->token : nullptr);
+    if (!r) return fail(r.error());
+    if (changed_out != nullptr) *changed_out = *r;
+    return succeed();
+  });
+}
+
 void pp_face_default_params(pp_face_params* out) {
   if (out == nullptr) return;
   *out = pp_face_params{};

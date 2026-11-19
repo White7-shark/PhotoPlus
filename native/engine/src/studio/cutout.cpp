@@ -245,9 +245,30 @@ Error cutout(const ImageBuffer& image, const ImageBuffer& subject, const ImageBu
     if (!sB) return sB.error();
     const int32_t r1 = std::max<int32_t>(2, static_cast<int32_t>(std::lround(0.015f * shortSide)));
     if (Error e = guidedCoefficientsColor({&gam.r, &gam.g, &gam.b}, mask, r1, 4e-3f, sA, *sB, token); e.status != PP_OK) return e;
+    // How well the photo's colours explain the mask nearby: where the person
+    // and the room beside them are the same colour (dark hair against a dark
+    // beam), the fit cannot tell them apart and would cut along whatever edge
+    // the room has (a beam's straight line across the top of the head). There
+    // the model's own edge is kept.
+    auto fit = Plane::allocate(lw, lh), err = Plane::allocate(lw, lh), sq = Plane::allocate(lw, lh);
+    if (!fit || !err || !sq) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
     for (size_t i = 0; i < mask.size(); ++i) {
       const float v = sA[0].data()[i] * gam.r.data()[i] + sA[1].data()[i] * gam.g.data()[i] + sA[2].data()[i] * gam.b.data()[i] + sB->data()[i];
-      float m = smoothstep(0.2f, 0.8f, v);
+      fit->data()[i] = v;
+      const float d = v - mask.data()[i];
+      err->data()[i] = d * d;
+      sq->data()[i] = mask.data()[i] * mask.data()[i];
+    }
+    const float rs = static_cast<float>(r1);
+    auto errB = blurred(*err, rs, token), meanB = blurred(mask, rs, token), sqB = blurred(*sq, rs, token);
+    if (!errB || !meanB || !sqB) return makeError(PP_ERROR_BUDGET_EXCEEDED, "Not enough memory for the cut-out");
+    for (size_t i = 0; i < mask.size(); ++i) {
+      const float mean = meanB->data()[i];
+      const float var = std::max(sqB->data()[i] - mean * mean, 0.0f);
+      // Share of the mask's variation nearby the colours leave unexplained.
+      const float unexplained = var > 1e-3f ? errB->data()[i] / var : 0.0f;
+      const float trust = 1.0f - smoothstep(0.25f, 0.6f, unexplained);
+      float m = mask.data()[i] + (smoothstep(0.2f, 0.8f, fit->data()[i]) - mask.data()[i]) * trust;
       if (sp.any) m = std::min(std::max(m, sp.keep.data()[i]), 1.0f - sp.remove.data()[i]);
       mask.data()[i] = m;
     }

@@ -103,6 +103,36 @@ class RoomMemory {
   std::vector<float> held_;    // where the person has been lately (slow average of the corrected mask)
 };
 
+// The person's shape remembered through a clip, so the outline does not
+// flicker where the person model hesitates (dark hair against a dark beam: a
+// piece of the head missing one moment and back the next, or a piece of the
+// room taken for the head). Each frame:
+//  - the person's own motion is measured on their texture (inside the
+//    remembered shape; in a selfie the person moves with the phone while the
+//    room slides behind them), and the remembered shape follows it;
+//  - where the model now disagrees with that shape, the change is taken only
+//    as fast as the frame's colours support it: a new piece that looks like
+//    the person beside it (a head turning, a hand coming up) is taken at
+//    once; one that looks like the room around it (a piece of ceiling) only
+//    if the model insists for many frames; a lost piece that looks like the
+//    room (they moved away) goes at once, one that still looks like them
+//    (hair the model missed) stays.
+// Call check() once per frame, in order, after RoomMemory and before
+// steadying, on same-sized frames and masks.
+class ShapeMemory {
+ public:
+  // `frame`: RGBA/BGRA; `mask`: GRAY8 (any size, the frame's aspect),
+  // corrected in place. Returns the share of the frame changed.
+  Result<float> check(const ImageBuffer& frame, ImageBuffer& mask, const CancellationToken* token);
+  void reset();
+
+ private:
+  int32_t w_ = 0, h_ = 0;
+  std::vector<float> shape_;  // the remembered shape, 0..1, at the mask's size (capped)
+  std::vector<float> luma_;   // the previous frame's luma at that size
+  std::vector<float> colour_; // the previous frame's colour at that size (3 per cell)
+};
+
 // Consensus of three neighbouring frames' subject masks (GRAY8, same size):
 // the per-pixel median. A segmentation mistake in a single frame (a patch
 // of wall taken for the person, a bite out of the hair) is outvoted by its
