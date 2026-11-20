@@ -422,7 +422,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
   }
 
   /**
-   * The cut-out with pink lips: a copy (with hair already on it, if any).
+   * The cut-out with natural pink lips or lipstick: a copy (with hair already on it, if any).
    * The lips are found once per session on the photo (ML Kit face outlines);
    * previews keep the last result, so moving the person doesn't repaint.
    */
@@ -439,7 +439,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
     val flat = FloatArray(marks.size * FaceLandmarks.FLOATS)
     marks.forEachIndexed { i, m -> m.copyInto(flat, i * FaceLandmarks.FLOATS) }
     val c = lips.color
-    NativeEngine.nativeStudioLips(out, flat, marks.size, c shr 16 and 0xFF, c shr 8 and 0xFF, c and 0xFF, lips.strength, token, null)
+    NativeEngine.nativeStudioLips(out, flat, marks.size, c shr 16 and 0xFF, c shr 8 and 0xFF, c and 0xFF, lips.strength, lips.natural, token, null)
     if (!full) {
       synchronized(s) {
         if (s.lipsPreview !== out) s.lipsPreview?.recycle()

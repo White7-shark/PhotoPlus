@@ -203,6 +203,7 @@ class SceneStudioTest {
   @Test fun lipsAreCheckedAndOffWhenNotAsked() {
     assertNull(LipsSpec.fromMap(null))
     assertEquals(LipsSpec(0xE8508A, 0.85f), LipsSpec.fromMap(mapOf("color" to "#E8508A")))
+    assertEquals(LipsSpec(0xF4A6B8, 0.85f, natural = true), LipsSpec.fromMap(mapOf("color" to "#F4A6B8", "natural" to true)))
     assertEquals(LipsSpec(0xF4A6B8, 1f), LipsSpec.fromMap(mapOf("color" to "#f4a6b8", "strength" to 3)))
     assertNull(LipsSpec.fromMap(mapOf("color" to "#F4A6B8", "strength" to 0)))
     for (bad in listOf(mapOf("color" to "pink"), mapOf("strength" to 0.5), mapOf("color" to "#12345"))) {

@@ -107,6 +107,15 @@ struct LivelyReport {
   float colourRoom = 0;  // how much colour the photo had room for, 0.25..1
 };
 Error lively(ImageBuffer& image, float strength, const CancellationToken* token, LivelyReport* report);
+// With the person's mask (Gray8, any size, 255 = the person): the person
+// gets the full finish and the surroundings a gentle one (walls keep their
+// own colour, the far background is not deepened).
+struct PersonMask {
+  const uint8_t* data = nullptr;
+  int32_t width = 0, height = 0;
+};
+Error lively(ImageBuffer& image, float strength, const PersonMask* mask, const CancellationToken* token,
+             LivelyReport* report);
 
 // Mean absolute Laplacian on a sparse grid: fine texture (and noise).
 float fineTexture(const Plane& p);

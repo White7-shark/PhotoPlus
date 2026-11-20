@@ -1478,7 +1478,7 @@ pp_status pp_style_analyze(const pp_image* image, pp_style* out) {
 }
 
 pp_status pp_studio_lips(pp_image* image, const float* landmarks, int32_t face_count, int32_t r, int32_t g, int32_t b,
-                         float strength, const pp_cancel_token* token, float* report_out) {
+                         float strength, int32_t natural, const pp_cancel_token* token, float* report_out) {
   return guarded([&]() -> pp_status {
     if (image == nullptr || face_count < 0 || face_count > 64 || (face_count > 0 && landmarks == nullptr) ||
         !std::isfinite(strength) || r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
@@ -1494,25 +1494,36 @@ pp_status pp_studio_lips(pp_image* image, const float* landmarks, int32_t face_c
     photoplus::studio::LipsReport rep;
     photoplus::Error e = photoplus::studio::colourLips(
         image->buffer, faces, {static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b)}, strength,
-        token ? &token->token : nullptr, &rep);
+        natural != 0, token ? &token->token : nullptr, &rep);
     if (e.status != PP_OK) return fail(e);
     if (report_out) {
       report_out[0] = static_cast<float>(rep.lips);
       report_out[1] = rep.lipLuma;
+      report_out[2] = rep.applied;
     }
     return succeed();
   });
 }
 
 pp_status pp_lively(pp_image* image, float strength, const pp_cancel_token* token, float* report_out) {
+  return pp_lively_masked(image, strength, nullptr, 0, 0, token, report_out);
+}
+
+pp_status pp_lively_masked(pp_image* image, float strength, const uint8_t* mask, int32_t mask_w, int32_t mask_h,
+                           const pp_cancel_token* token, float* report_out) {
   return guarded([&]() -> pp_status {
     if (image == nullptr || !std::isfinite(strength)) return fail(PP_ERROR_INVALID_ARGUMENT, "image and strength are required");
+    if (mask != nullptr && (mask_w <= 0 || mask_h <= 0 || mask_w > 8192 || mask_h > 8192)) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Bad person mask size");
+    }
     const auto fmt = image->buffer.format();
     if (fmt != photoplus::PixelFormat::RGBA8 && fmt != photoplus::PixelFormat::BGRA8) {
       return fail(PP_ERROR_INVALID_ARGUMENT, "Lively needs an RGBA or BGRA image");
     }
+    photoplus::enhance::PersonMask pm{mask, mask_w, mask_h};
     photoplus::enhance::LivelyReport r;
-    photoplus::Error e = photoplus::enhance::lively(image->buffer, strength, token ? &token->token : nullptr, &r);
+    photoplus::Error e =
+        photoplus::enhance::lively(image->buffer, strength, mask ? &pm : nullptr, token ? &token->token : nullptr, &r);
     if (e.status != PP_OK) return fail(e);
     if (report_out) {
       report_out[0] = r.skinBoost;

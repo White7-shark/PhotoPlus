@@ -684,3 +684,48 @@ TEST(lively_skin_comes_out_smooth_and_even_and_a_red_hat_stays_red) {
   EXPECT_TRUE(hat1.chroma > hat0.chroma * 0.9f);
   pp_image_destroy(img);
 }
+
+TEST(lively_with_a_person_mask_keeps_the_surroundings_natural) {
+  // Left: a person (flat greyish skin and a dark shirt). Right: a cream wall
+  // (a skin-like hue) and, below it, a dim far corner.
+  const int w = 400, h = 400;
+  pp_image* img = nullptr;
+  EXPECT_EQ(pp_image_create(w, h, PP_FORMAT_RGBA8, &img), PP_OK);
+  auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+  std::vector<uint8_t> mask(static_cast<size_t>(w) * h, 0);
+  const auto set = [&](int x, int y, float Y, float cb, float cr) {
+    const float r = Y + 1.402f * cr, g = Y - 0.344136f * cb - 0.714136f * cr, b = Y + 1.772f * cb;
+    uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+    const auto to8 = [](float v) { return static_cast<uint8_t>(std::lround(std::fmin(1.0f, std::fmax(0.0f, v)) * 255.0f)); };
+    q[0] = to8(r), q[1] = to8(g), q[2] = to8(b), q[3] = 255;
+  };
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x) {
+      if (x < w / 2) {
+        mask[static_cast<size_t>(y) * w + x] = 255;
+        if (y < h * 6 / 10) set(x, y, 0.45f, -0.015f, 0.026f);  // skin
+        else set(x, y, 0.24f, 0.004f, -0.002f);                 // shirt
+      } else if (y < h * 7 / 10) {
+        set(x, y, 0.76f, -0.03f, 0.022f);  // cream wall
+      } else {
+        set(x, y, 0.13f, -0.01f, 0.0f);  // dim far corner
+      }
+    }
+  set(5, 5, 0.97f, 0.0f, 0.0f);  // a highlight
+  const Patch wall0 = patch(img, w * 6 / 10, 20, w - 20, h / 2, false);
+  const Patch corner0 = patch(img, w * 6 / 10, h * 8 / 10, w - 20, h - 10, false);
+  const Patch skin0 = patch(img, 40, 40, w / 2 - 40, h / 2, false);
+  float rep[4] = {};
+  EXPECT_EQ(pp_lively_masked(img, 1.0f, mask.data(), w, h, nullptr, rep), PP_OK);
+  const Patch wall1 = patch(img, w * 6 / 10, 20, w - 20, h / 2, false);
+  const Patch corner1 = patch(img, w * 6 / 10, h * 8 / 10, w - 20, h - 10, false);
+  const Patch skin1 = patch(img, 40, 40, w / 2 - 40, h / 2, false);
+  std::printf("    wall chroma %.3f -> %.3f hue %.0f -> %.0f; corner %.3f -> %.3f; skin chroma %.3f -> %.3f\n", wall0.chroma,
+              wall1.chroma, wall0.hue, wall1.hue, corner0.y, corner1.y, skin0.chroma, skin1.chroma);
+  EXPECT_TRUE(wall1.chroma < wall0.chroma * 1.25f);    // the wall keeps its own colour (no skin warmth)
+  EXPECT_TRUE(std::fabs(wall1.hue - wall0.hue) < 12.0f);  // white balance may neutralise it a little
+  EXPECT_TRUE(corner1.y > corner0.y - 0.005f);         // the far corner is not deepened
+  EXPECT_TRUE(skin1.chroma > skin0.chroma * 1.3f);     // the person still gets the full finish
+  EXPECT_EQ(pp_lively_masked(img, 1.0f, mask.data(), 0, h, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(img);
+}

@@ -5,7 +5,7 @@
 //   light_demo burst DIR COUNT OUT_PREFIX [night] [capture_bias]
 //        DIR/frame_%04d.ppm; writes OUT_PREFIXmerged.ppm (the burst merge alone,
 //        as Moonlight did before) and OUT_PREFIXtoned.ppm (merge + tone)
-//   light_demo lively IN.ppm OUT.ppm [strength]   the camera's default finish
+//   light_demo lively IN.ppm OUT.ppm [strength] [PERSON_MASK.pgm]   the camera's default finish
 //   light_demo fuse AMBIENT.ppm FLASH.ppm OUT.ppm [fill]
 #include <chrono>
 #include <cstdio>
@@ -112,7 +112,20 @@ int main(int argc, char** argv) {
     if (!img) return 1;
     float rep[4] = {};
     const auto t0 = std::chrono::steady_clock::now();
-    if (pp_lively(img, arg(4, 1.0f), nullptr, rep) != PP_OK) return 1;
+    // Optional person mask (binary PGM, any size).
+    std::vector<unsigned char> mask;
+    int mw = 0, mh = 0;
+    if (argc > 5) {
+      std::ifstream in(argv[5], std::ios::binary);
+      std::string magic;
+      int maxv = 0;
+      in >> magic >> mw >> mh >> maxv;
+      in.get();
+      if (!in || magic != "P5" || mw <= 0 || mh <= 0) return 1;
+      mask.resize(static_cast<size_t>(mw) * mh);
+      in.read(reinterpret_cast<char*>(mask.data()), static_cast<std::streamsize>(mask.size()));
+    }
+    if (pp_lively_masked(img, arg(4, 1.0f), mask.empty() ? nullptr : mask.data(), mw, mh, nullptr, rep) != PP_OK) return 1;
     std::printf("{\"ms\":%.0f,\"skin_boost\":%.3f,\"lift\":%.3f,\"warmth\":%.3f,\"colour_room\":%.3f}\n", msSince(t0), rep[0],
                 rep[1], rep[2], rep[3]);
     writePpm(argv[3], img);

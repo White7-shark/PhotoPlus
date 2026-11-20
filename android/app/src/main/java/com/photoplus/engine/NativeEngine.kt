@@ -459,13 +459,15 @@ object NativeEngine {
   external fun nativeStyleApply(bitmap: Bitmap, style: FloatArray, strength: Float, token: Long)
 
   /**
-   * Pink lips (Photoshoot Studio): the lips of [faceCount] faces in [bitmap]
-   * repainted in ([r], [g], [b]), in place. [landmarks]: faceCount x 262
-   * floats (131 x,y pairs normalised to the image). [reportOut] (2, may be
-   * null): lips coloured, the lips' own brightness.
+   * Lips (Photoshoot Studio): the lips of [faceCount] faces in [bitmap]
+   * repainted in ([r], [g], [b]), in place. [natural]: pink lips that adapt
+   * to the person; else lipstick at [strength]. [landmarks]: faceCount x 262
+   * floats (131 x,y pairs normalised to the image). [reportOut] (3, may be
+   * null): lips coloured, the lips' own brightness, the strength applied.
    */
   external fun nativeStudioLips(
-    bitmap: Bitmap, landmarks: FloatArray, faceCount: Int, r: Int, g: Int, b: Int, strength: Float, token: Long, reportOut: FloatArray?,
+    bitmap: Bitmap, landmarks: FloatArray, faceCount: Int, r: Int, g: Int, b: Int, strength: Float, natural: Boolean, token: Long,
+    reportOut: FloatArray?,
   )
 
   /**
@@ -475,6 +477,15 @@ object NativeEngine {
    * lift, warmth added, colour room.
    */
   external fun nativeLively(bitmap: Bitmap, strength: Float, token: Long, reportOut: FloatArray?)
+
+  /**
+   * As [nativeLively], with the person's mask ([mask] maskW x maskH bytes, 255
+   * the person, any size): the person gets the full finish, the surroundings
+   * a gentle one (walls keep their colour, the far background isn't deepened).
+   */
+  external fun nativeLivelyMasked(
+    bitmap: Bitmap, strength: Float, mask: ByteArray, maskW: Int, maskH: Int, token: Long, reportOut: FloatArray?,
+  )
 
   const val STYLE_FLOATS = 20
 }

@@ -1,4 +1,4 @@
-// Pink lips: the lips found from the face's outline (upper and lower lip
+// Lips: natural pink, or lipstick. The lips found from the face's outline (upper and lower lip
 // contours; the open mouth and teeth left out) and repainted in a chosen pink.
 //
 // The lips keep their own light: shading, creases and gloss are carried over
@@ -7,6 +7,12 @@
 // (pink shows on deep skin, as in the looks people share), the edge is
 // feathered into the skin, and bright, colourless pixels inside the mouth
 // (teeth) are left alone.
+//
+// Natural pink adapts to the person: lips that are already pink (as most
+// fair people's are) get almost nothing, a fair face only a faint touch, and
+// brown or greyish lips (common on deep skin) the full soft pink, so it looks
+// like their own lips, never like make-up. Lipstick is the chosen colour at
+// the chosen strength.
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -69,7 +75,8 @@ void fill(Plane& m, const std::vector<P>& poly, float ox, float oy, float value)
 }  // namespace
 
 Error colourLips(ImageBuffer& image, const std::vector<std::array<float, kLipLandmarkFloats>>& faces,
-                 const std::array<uint8_t, 3>& rgb, float strength, const CancellationToken* token, LipsReport* report) {
+                 const std::array<uint8_t, 3>& rgb, float strength, bool natural, const CancellationToken* token,
+                 LipsReport* report) {
   ScopedTimer timer("studio.lips");
   if (report) *report = LipsReport{};
   const float st = std::isfinite(strength) ? std::clamp(strength, 0.0f, 1.0f) : 0.0f;
@@ -115,28 +122,57 @@ Error colourLips(ImageBuffer& image, const std::vector<std::array<float, kLipLan
     if (!m) return m.error();
     if (Error e = gaussianBlur(*raw, *m, std::max(0.8f, 0.02f * width), token); e.status != PP_OK) return e;
 
-    // The lips' own brightness (teeth and blown highlights left out).
-    double sum = 0, wsum = 0;
+    // The lips' own brightness and colour (teeth and blown highlights left
+    // out), and the skin around them (the margin outside the lips).
+    double sum = 0, wsum = 0, sumCb = 0, sumCr = 0;
+    std::vector<float> around;
     for (int32_t y = 0; y < m->height(); ++y)
       for (int32_t x = 0; x < m->width(); ++x) {
         const float w = m->row(y)[x];
-        if (w < 0.6f) continue;
         const uint8_t* px = image.row(cy0 + y) + (cx0 + x) * 4;
         float Y, cb, cr;
         rgbToYcc(px[o.r] / 255.0f, px[o.g] / 255.0f, px[o.b] / 255.0f, Y, cb, cr);
-        if (Y > 0.92f) continue;
+        if (w < 0.02f) {
+          around.push_back(Y);
+          continue;
+        }
+        if (w < 0.6f || Y > 0.92f) continue;
         sum += Y * w;
+        sumCb += cb * w;
+        sumCr += cr * w;
         wsum += w;
       }
     if (wsum < 4.0) continue;
     const float Lm = std::max(static_cast<float>(sum / wsum), 0.03f);
+    float use = st;
+    if (natural) {
+      // Measured on the lips and the skin around them:
+      //  * fair: the skin's brightness (deep skin ~0.4-0.5, fair 0.6-0.8);
+      //  * rosy: lips already pink or red (hue toward red, not brown), when
+      //    they carry enough colour for the hue to mean something;
+      //  * coloured: strongly coloured lips (lipstick) need no pink.
+      const auto lcb = static_cast<float>(sumCb / wsum), lcr = static_cast<float>(sumCr / wsum);
+      const float hue = std::atan2(lcr, lcb) * 57.29578f;
+      const float chromaL = std::hypot(lcb, lcr) / Lm;
+      float skinLuma = Lm;
+      if (around.size() > 16) {
+        auto mid = around.begin() + static_cast<std::ptrdiff_t>(around.size() / 2);
+        std::nth_element(around.begin(), mid, around.end());
+        skinLuma = *mid;
+      }
+      const float fair = std::clamp((skinLuma - 0.48f) / 0.2f, 0.0f, 1.0f);
+      const float rosy = std::clamp((114.0f - hue) / 10.0f, 0.0f, 1.0f) * std::clamp((chromaL - 0.1f) / 0.15f, 0.0f, 1.0f);
+      const float coloured = std::clamp((chromaL - 0.42f) / 0.15f, 0.0f, 1.0f);
+      use = st * std::max(0.06f, (1.0f - 0.85f * fair) * (1.0f - 0.6f * rosy) * (1.0f - 0.7f * coloured));
+    }
+    if (use <= 0.005f) continue;
     // Dark lips are lifted most of the way to the pink (it must show on deep skin).
     const float target = Lm + (Yp - Lm) * 0.8f;
 
     for (int32_t y = 0; y < m->height(); ++y) {
       uint8_t* row = image.row(cy0 + y);
       for (int32_t x = 0; x < m->width(); ++x) {
-        float w = m->row(y)[x] * st;
+        float w = m->row(y)[x] * use;
         if (w <= 0.002f) continue;
         uint8_t* px = row + (cx0 + x) * 4;
         float Y, cb, cr;
@@ -164,6 +200,7 @@ Error colourLips(ImageBuffer& image, const std::vector<std::array<float, kLipLan
     if (report) {
       report->lips += 1;
       report->lipLuma = Lm;
+      report->applied = use;
     }
   }
   return Error{PP_OK, {}};

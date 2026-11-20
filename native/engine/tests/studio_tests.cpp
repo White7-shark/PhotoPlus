@@ -1205,20 +1205,21 @@ std::vector<float> lipMarks(float gap) {
   return v;
 }
 
-// Deep skin with dark lips and white teeth in the open mouth.
-pp_image* lipFace(int w, int h, float gap) {
+// Deep skin with dark lips and white teeth in the open mouth (or other skin and lip colours).
+pp_image* lipFace(int w, int h, float gap, std::array<uint8_t, 3> skin = {110, 70, 50},
+                  std::array<uint8_t, 3> upperLip = {80, 42, 40}, std::array<uint8_t, 3> lowerLip = {90, 50, 48}) {
   pp_image* img = nullptr;
   if (pp_image_create(w, h, PP_FORMAT_RGBA8, &img) != PP_OK) return nullptr;
   auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
   for (int y = 0; y < h; ++y)
     for (int x = 0; x < w; ++x) {
       const float fx = (x + 0.5f) / w, fy = (y + 0.5f) / h;
-      uint8_t r = 110, g = 70, b = 50;  // deep skin
+      uint8_t r = skin[0], g = skin[1], b = skin[2];
       const float dx = (fx - 0.5f) / 0.15f;
       if (std::fabs(dx) < 0.95f) {
         const float half = std::sqrt(1.0f - dx * dx);
-        if (fy > 0.6f - gap / 2 - 0.04f * half && fy < 0.6f - gap / 2) r = 80, g = 42, b = 40;     // upper lip
-        if (fy > 0.6f + gap / 2 && fy < 0.6f + gap / 2 + 0.05f * half) r = 90, g = 50, b = 48;     // lower lip
+        if (fy > 0.6f - gap / 2 - 0.04f * half && fy < 0.6f - gap / 2) r = upperLip[0], g = upperLip[1], b = upperLip[2];
+        if (fy > 0.6f + gap / 2 && fy < 0.6f + gap / 2 + 0.05f * half) r = lowerLip[0], g = lowerLip[1], b = lowerLip[2];
         if (fy >= 0.6f - gap / 2 + 0.003f && fy <= 0.6f + gap / 2 - 0.003f) r = 235, g = 232, b = 225;  // teeth
       }
       uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
@@ -1252,8 +1253,8 @@ TEST(studio_lips_turn_dark_lips_pink_and_leave_skin_and_teeth) {
   const Rgbf lip0 = meanRgb(img, w, 0.45f, 0.62f, 0.55f, 0.64f, h);
   const Rgbf teeth0 = meanRgb(img, w, 0.45f, 0.597f, 0.55f, 0.603f, h);
   const Rgbf skin0 = meanRgb(img, w, 0.1f, 0.3f, 0.25f, 0.45f, h);
-  float rep[2] = {};
-  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, 0.9f, nullptr, rep), PP_OK);
+  float rep[3] = {};
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, 0.9f, 0, nullptr, rep), PP_OK);
   const Rgbf lip1 = meanRgb(img, w, 0.45f, 0.62f, 0.55f, 0.64f, h);
   const Rgbf teeth1 = meanRgb(img, w, 0.45f, 0.597f, 0.55f, 0.603f, h);
   const Rgbf skin1 = meanRgb(img, w, 0.1f, 0.3f, 0.25f, 0.45f, h);
@@ -1275,17 +1276,47 @@ TEST(studio_lips_check_their_input) {
   const auto marks = lipMarks(0.0f);
   std::vector<uint8_t> before(static_cast<const uint8_t*>(pp_image_pixels(img)),
                               static_cast<const uint8_t*>(pp_image_pixels(img)) + 120 * 120 * 4);
-  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, 0.0f, nullptr, nullptr), PP_OK);  // strength 0
-  EXPECT_EQ(pp_studio_lips(img, marks.data(), 0, 244, 166, 184, 1.0f, nullptr, nullptr), PP_OK);  // no faces
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, 0.0f, 0, nullptr, nullptr), PP_OK);  // strength 0
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 0, 244, 166, 184, 1.0f, 0, nullptr, nullptr), PP_OK);  // no faces
   EXPECT_TRUE(std::memcmp(before.data(), pp_image_pixels(img), before.size()) == 0);
-  EXPECT_EQ(pp_studio_lips(nullptr, marks.data(), 1, 244, 166, 184, 1.0f, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_studio_lips(img, nullptr, 1, 244, 166, 184, 1.0f, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 300, 166, 184, 1.0f, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, std::nanf(""), nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_lips(nullptr, marks.data(), 1, 244, 166, 184, 1.0f, 0, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_lips(img, nullptr, 1, 244, 166, 184, 1.0f, 0, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 300, 166, 184, 1.0f, 0, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, std::nanf(""), 0, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   std::vector<float> bad = marks;
   bad[2 * 90] = std::nanf("");
-  float rep[2] = {};
-  EXPECT_EQ(pp_studio_lips(img, bad.data(), 1, 244, 166, 184, 1.0f, nullptr, rep), PP_OK);  // a broken face is skipped
+  float rep[3] = {};
+  EXPECT_EQ(pp_studio_lips(img, bad.data(), 1, 244, 166, 184, 1.0f, 0, nullptr, rep), PP_OK);  // a broken face is skipped
   EXPECT_NEAR(rep[0], 0.0f, 1e-6f);
   pp_image_destroy(img);
+}
+
+TEST(studio_natural_pink_lips_adapt_to_the_person) {
+  const int w = 400, h = 400;
+  const auto marks = lipMarks(0.0f);
+  // Deep skin, brown lips: most of the soft pink.
+  pp_image* deep = lipFace(w, h, 0.0f);
+  float rep[3] = {};
+  EXPECT_EQ(pp_studio_lips(deep, marks.data(), 1, 244, 166, 184, 0.85f, 1, nullptr, rep), PP_OK);
+  const float deepUse = rep[2];
+  // Fair skin, lips already naturally pink: barely anything.
+  pp_image* fair = lipFace(w, h, 0.0f, {232, 196, 178}, {205, 128, 136}, {214, 136, 144});
+  const Rgbf before = meanRgb(fair, w, 0.45f, 0.61f, 0.55f, 0.64f, h);
+  EXPECT_EQ(pp_studio_lips(fair, marks.data(), 1, 244, 166, 184, 0.85f, 1, nullptr, rep), PP_OK);
+  const float fairUse = rep[2];
+  const Rgbf after = meanRgb(fair, w, 0.45f, 0.61f, 0.55f, 0.64f, h);
+  std::printf("    natural pink: deep skin %.2f, fair skin %.2f (lip change %.1f)\n", deepUse, fairUse,
+              std::fabs(after.r - before.r) + std::fabs(after.g - before.g) + std::fabs(after.b - before.b));
+  EXPECT_TRUE(deepUse > 0.6f);
+  EXPECT_TRUE(fairUse < 0.15f);
+  EXPECT_TRUE(std::fabs(after.r - before.r) + std::fabs(after.g - before.g) + std::fabs(after.b - before.b) < 25.0f);
+  // Lipstick is applied as asked, whoever wears it.
+  pp_image* fair2 = lipFace(w, h, 0.0f, {232, 196, 178}, {205, 128, 136}, {214, 136, 144});
+  EXPECT_EQ(pp_studio_lips(fair2, marks.data(), 1, 194, 30, 47, 0.9f, 0, nullptr, rep), PP_OK);
+  EXPECT_NEAR(rep[2], 0.9f, 1e-5f);
+  const Rgbf red = meanRgb(fair2, w, 0.45f, 0.61f, 0.55f, 0.64f, h);
+  EXPECT_TRUE(red.r > red.g + 80.0f);
+  pp_image_destroy(deep);
+  pp_image_destroy(fair);
+  pp_image_destroy(fair2);
 }

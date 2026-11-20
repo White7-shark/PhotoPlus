@@ -143,14 +143,19 @@ describe('Scene Swap', () => {
     await step(() => fireEvent.press(screen.getByTestId('scene-save')));
     expect(mockStudio.renderScene.mock.calls.some(c => (c[1] as unknown as { quality: string }).quality === 'full')).toBe(true);
 
-    // Pink lips: a shade is sent with every drawing of the person.
+    // Pink lips, then a lipstick: sent with every drawing of the person.
+    const lastLips = () =>
+      (
+        mockStudio.renderScene.mock.calls[mockStudio.renderScene.mock.calls.length - 2][1] as unknown as {
+          lips?: { color: string; strength: number; natural: boolean };
+        }
+      ).lips;
     await step(() => fireEvent.press(screen.getByText('Pink lips')));
-    await step(() => fireEvent.press(screen.getByTestId('lips-hot')));
-    const last = mockStudio.renderScene.mock.calls[mockStudio.renderScene.mock.calls.length - 2][1] as unknown as {
-      lips?: { color: string; strength: number };
-      hidePerson: boolean;
-    };
-    expect(last.lips).toEqual({ color: '#E8508A', strength: 0.85 });
+    await step(() => fireEvent.press(screen.getByTestId('pink-lips-on')));
+    expect(lastLips()).toEqual({ color: '#F4A6B8', strength: 0.85, natural: true });
+    await step(() => fireEvent.press(screen.getByText('Lipstick')));
+    await step(() => fireEvent.press(screen.getByTestId('lipstick-red')));
+    expect(lastLips()).toEqual({ color: '#C21E2F', strength: 0.9, natural: false });
     expect(mockStudio.saveToGallery).toHaveBeenCalledWith('/files/studio/Studio_1.jpg');
     expect(images.add).toHaveBeenCalledWith(expect.objectContaining({ path: '/files/studio/Studio_1.jpg', source: 'export', projectId: 'inbox' }));
     expect(navigation.navigate).toHaveBeenCalledWith('PhotoPreview', { imageId: 'img1' });

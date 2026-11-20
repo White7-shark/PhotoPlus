@@ -223,11 +223,12 @@ data class HairSpec(
 }
 
 /**
- * Pink lips in the Photoshoot Studio: the person's lips repainted in [color]
- * (0xRRGGBB, a pink shade), [strength] 0..1. The lips keep their own light,
- * creases and gloss; dark lips are lifted so the pink shows on deep skin.
+ * Lips in the Photoshoot Studio, in [color] (0xRRGGBB) at [strength] 0..1.
+ * [natural] (pink lips): the strength adapts to the person, so naturally pink
+ * lips and fair faces get very little and brown or greyish lips the most;
+ * otherwise lipstick, applied as asked. Lips keep their own light and gloss.
  */
-data class LipsSpec(val color: Int, val strength: Float = 0.85f) {
+data class LipsSpec(val color: Int, val strength: Float = 0.85f, val natural: Boolean = false) {
   companion object {
     private val HEX = Regex("^#[0-9a-fA-F]{6}$")
 
@@ -237,7 +238,7 @@ data class LipsSpec(val color: Int, val strength: Float = 0.85f) {
       val c = m["color"] as? String ?: throw EngineException(EngineException.INVALID_ARGUMENT, "A lip colour is needed")
       if (!HEX.matches(c)) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad lip colour")
       val strength = ((m["strength"] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: 0.85f).coerceIn(0f, 1f)
-      return LipsSpec(c.substring(1).toInt(16), strength).takeIf { strength > 0f }
+      return LipsSpec(c.substring(1).toInt(16), strength, m["natural"] == true).takeIf { strength > 0f }
     }
   }
 }

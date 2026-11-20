@@ -3,32 +3,90 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Button } from '../../components';
 import { ValueSlider } from '../../components/ValueSlider';
-import { DEFAULT_LIPS, LIP_SHADES, type LipsChoice } from '../../services/studio/lips';
+import { DEFAULT_LIPSTICK_STRENGTH, DEFAULT_NATURAL, LIPSTICKS, type LipsChoice } from '../../services/studio/lips';
 import { useTheme } from '../../theme';
 
 const pct = (v: number) => `${Math.round(v * 100)}`;
 
 /**
- * Pink lips: a pink shade for the person's lips and how strong it is. The
- * lips are found from the face, keep their own light and gloss, and dark
- * lips are lifted so the pink shows on every skin tone.
+ * Pink lips: a natural soft pink that adapts to the person (lips that are
+ * already pink and fair faces get very little; brown or greyish lips the
+ * most). On or off, and how strong.
  */
-export function LipsPanel({ value, onChange }: { value: LipsChoice | null; onChange: (c: LipsChoice | null) => void }) {
-  const theme = useTheme();
+export function PinkLipsPanel({
+  value,
+  onChange,
+}: {
+  value: LipsChoice | null;
+  onChange: (c: LipsChoice | null) => void;
+}) {
+  const on = value?.kind === 'natural';
   return (
-    <View style={{ gap: 10 }} testID="lips-panel">
+    <View style={{ gap: 10 }} testID="pink-lips-panel">
       <AppText variant="bodyStrong">Pink lips</AppText>
+      <AppText variant="caption" tone="secondary">
+        A natural soft pink, made for each face: darker lips get the most, lips that are already pink barely change.
+        {value?.kind === 'lipstick' ? ' This replaces the lipstick.' : ''}
+      </AppText>
+      {on ? (
+        <>
+          <ValueSlider
+            label="Strength"
+            value={value.strength}
+            min={0.1}
+            max={1}
+            step={0.05}
+            onChange={v => onChange({ kind: 'natural', strength: v })}
+            format={pct}
+            testID="pink-lips-strength"
+          />
+          <Button
+            label="Natural lips"
+            variant="ghost"
+            icon="refresh"
+            onPress={() => onChange(null)}
+            testID="pink-lips-off"
+          />
+        </>
+      ) : (
+        <Button
+          label="Add pink lips"
+          icon="sparkles"
+          variant="glass"
+          onPress={() => onChange(DEFAULT_NATURAL)}
+          testID="pink-lips-on"
+        />
+      )}
+    </View>
+  );
+}
+
+/** Lipstick: the shades people wear most, and how strong. */
+export function LipstickPanel({
+  value,
+  onChange,
+}: {
+  value: LipsChoice | null;
+  onChange: (c: LipsChoice | null) => void;
+}) {
+  const theme = useTheme();
+  const current = value?.kind === 'lipstick' ? value : null;
+  return (
+    <View style={{ gap: 10 }} testID="lipstick-panel">
+      <AppText variant="bodyStrong">Lipstick</AppText>
       <View style={styles.wrap} accessibilityRole="radiogroup">
-        {LIP_SHADES.map(s => {
-          const selected = value?.shade === s.id;
+        {LIPSTICKS.map(s => {
+          const selected = current?.shade === s.id;
           return (
             <Pressable
               key={s.id}
-              onPress={() => onChange({ ...(value ?? DEFAULT_LIPS), shade: s.id })}
+              onPress={() =>
+                onChange({ kind: 'lipstick', shade: s.id, strength: current?.strength ?? DEFAULT_LIPSTICK_STRENGTH })
+              }
               accessibilityRole="radio"
               accessibilityLabel={s.name}
               accessibilityState={{ selected }}
-              testID={`lips-${s.id}`}
+              testID={`lipstick-${s.id}`}
               style={[styles.chip, { borderColor: selected ? theme.colors.accent : 'rgba(255,255,255,0.14)' }]}
             >
               <View style={[styles.dot, { backgroundColor: s.color }]} />
@@ -39,29 +97,29 @@ export function LipsPanel({ value, onChange }: { value: LipsChoice | null; onCha
           );
         })}
       </View>
-      {value ? (
+      {current ? (
         <>
           <ValueSlider
             label="Strength"
-            value={value.strength}
+            value={current.strength}
             min={0.1}
             max={1}
             step={0.05}
-            onChange={v => onChange({ ...value, strength: v })}
+            onChange={v => onChange({ ...current, strength: v })}
             format={pct}
-            testID="lips-strength"
+            testID="lipstick-strength"
           />
           <Button
-            label="Natural lips"
+            label="No lipstick"
             variant="ghost"
             icon="refresh"
             onPress={() => onChange(null)}
-            testID="lips-off"
+            testID="lipstick-off"
           />
         </>
       ) : (
         <AppText variant="caption" tone="secondary">
-          Choose a shade. The lips keep their own shine and lines, and the pink shows on every skin tone.
+          Choose a shade. It keeps the lips’ own shine and lines.
         </AppText>
       )}
     </View>

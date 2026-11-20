@@ -1,7 +1,13 @@
 /**
- * Pink lips (Photoshoot Studio): the person's lips repainted in a pink shade.
- * The lips keep their own light, creases and gloss; dark lips are lifted so
- * the pink shows on deep skin, as in the looks people share.
+ * Lips in the Photoshoot Studio.
+ *
+ * Pink lips: a natural soft pink that adapts to the person. Lips that are
+ * already pink (as most fair people's are) get almost nothing and fair faces
+ * only a faint touch, while brown or greyish lips get the full soft pink, so
+ * it reads as their own lips, not make-up.
+ *
+ * Lipstick: a chosen colour, applied as asked. The lips keep their own light,
+ * lines and shine either way.
  */
 export interface LipShade {
   id: string;
@@ -10,30 +16,42 @@ export interface LipShade {
   color: string;
 }
 
-export const LIP_SHADES: LipShade[] = [
-  { id: 'soft', name: 'Soft pink', color: '#F4A6B8' },
-  { id: 'baby', name: 'Baby pink', color: '#F8BBD0' },
-  { id: 'nude', name: 'Nude pink', color: '#D99A9E' },
-  { id: 'rose', name: 'Rose', color: '#E37B9A' },
-  { id: 'hot', name: 'Hot pink', color: '#E8508A' },
-  { id: 'berry', name: 'Berry', color: '#C2477A' },
+/** The soft pink natural pink lips are drawn toward. */
+export const NATURAL_PINK = '#F4A6B8';
+
+/** Lipstick shades people wear most. */
+export const LIPSTICKS: LipShade[] = [
+  { id: 'red', name: 'Classic red', color: '#C21E2F' },
+  { id: 'ruby', name: 'Ruby', color: '#9B111E' },
+  { id: 'wine', name: 'Wine', color: '#722F37' },
+  { id: 'berry', name: 'Berry', color: '#8E2A4F' },
+  { id: 'plum', name: 'Plum', color: '#6E2A4A' },
+  { id: 'mauve', name: 'Mauve', color: '#B07384' },
+  { id: 'nude', name: 'Nude', color: '#C48A76' },
+  { id: 'brown', name: 'Brown nude', color: '#8D5A4A' },
+  { id: 'coral', name: 'Coral', color: '#E8614D' },
+  { id: 'rose', name: 'Rose pink', color: '#D9668A' },
+  { id: 'hot', name: 'Hot pink', color: '#E0408A' },
+  { id: 'orange', name: 'Orange red', color: '#D9381E' },
 ];
 
-/** The person's lips: a shade and how strongly it is applied (0..1), or none. */
-export interface LipsChoice {
-  shade: string;
-  strength: number;
-}
+/** The person's lips: natural pink, or a lipstick shade, and how strong (0..1). */
+export type LipsChoice = { kind: 'natural'; strength: number } | { kind: 'lipstick'; shade: string; strength: number };
 
-export const DEFAULT_LIPS: LipsChoice = { shade: 'soft', strength: 0.85 };
+export const DEFAULT_NATURAL: LipsChoice = { kind: 'natural', strength: 0.85 };
+export const DEFAULT_LIPSTICK_STRENGTH = 0.9;
 
-export const lipShade = (id: string): LipShade | undefined => LIP_SHADES.find(s => s.id === id);
+export const lipstick = (id: string): LipShade | undefined => LIPSTICKS.find(s => s.id === id);
 
-/** What the device is asked for: a colour and strength, or nothing. */
-export function lipsRequest(choice: LipsChoice | null | undefined): { color: string; strength: number } | undefined {
+/** What the device is asked for, or nothing. */
+export function lipsRequest(
+  choice: LipsChoice | null | undefined,
+): { color: string; strength: number; natural: boolean } | undefined {
   if (!choice) return undefined;
-  const shade = lipShade(choice.shade);
   const strength = Number.isFinite(choice.strength) ? Math.min(1, Math.max(0, choice.strength)) : 0;
-  if (!shade || strength <= 0) return undefined;
-  return { color: shade.color, strength: Math.round(strength * 100) / 100 };
+  if (strength <= 0) return undefined;
+  const rounded = Math.round(strength * 100) / 100;
+  if (choice.kind === 'natural') return { color: NATURAL_PINK, strength: rounded, natural: true };
+  const shade = lipstick(choice.shade);
+  return shade ? { color: shade.color, strength: rounded, natural: false } : undefined;
 }

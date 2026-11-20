@@ -135,11 +135,65 @@ The user preferred the first version's warmer, richer skin colour over the secon
 | Shirt brightness (median) | 0.34 | 0.23 | 0.23 |
 | Shirt colour cast (cr) | −0.039 | −0.022 | −0.028 |
 
-# Pink lips (Photoshoot Studio)
+## The person's surroundings stay natural (person mask)
 
-A **Pink lips** panel in the studio has six shades: Soft pink, Baby pink, Nude pink, Rose, Hot pink and Berry. A Strength slider sets how strong the colour is, and Natural lips turns it off.
+In the third version the ceiling of the user's photo turned orange and the far background went nearly black. A cream wall has the same hue as skin, so it took skin's colouring. The far background is neutral and dark, so it took the deepening meant for black clothes.
 
-**How it works** (`native/engine/src/studio/lips.cpp`, `pp_studio_lips`)
+The camera now finds the person first, using the on-device person segmenter on a copy of at most 512 px (`LivelyPerson`). The engine (`pp_lively_masked`) gives:
+
+- **The person:** the full finish, unchanged. Skin colour, shine and evenness are measured on the person only.
+- **The surroundings:**
+  - the same exposure, with half the black point and a quarter of the contrast;
+  - shadows opened a little;
+  - a lighter touch of colour;
+  - grain smoothing only;
+  - no skin colouring, fabric evening or deepening.
+
+If no person is found, the whole photo gets one finish, as before.
+
+Measured on the user's photo:
+
+| | Android | Lively (third version) | Lively with person mask |
+|---|---|---|---|
+| Ceiling colour (cr) | 0.026 | 0.034 (orange) | 0.031 (cream) |
+| Far background brightness | 0.130 | 0.056 (nearly black) | 0.141 |
+| Face skin colour / hue | 0.064 / 120 | 0.102 / 122 | 0.105 / 120 (same look) |
+
+Test `lively_with_a_person_mask_keeps_the_surroundings_natural`:
+
+- the cream wall keeps its colour (0.038 becomes 0.032, white balance only);
+- the dim corner is not deepened (0.13 becomes 0.20);
+- the person still gets the full finish (skin colour ×1.77).
+
+# Pink lips and Lipstick (Photoshoot Studio)
+
+**Pink lips** is a natural soft pink, not make-up. Its strength adapts to the person:
+
+- Brown or greyish lips (common on deep skin) get the full soft pink.
+- Lips that are already pink (as most fair people's are) and fair faces get barely anything.
+- Lips already wearing lipstick get almost nothing.
+
+The engine measures three things:
+
+- the surrounding skin's brightness (fair);
+- the lips' hue toward red rather than brown, when they carry enough colour for the hue to mean something (rosy);
+- how strongly coloured the lips already are (lipstick).
+
+| Face | Applied strength (of 0.85) |
+|---|---|
+| Deep skin, brown or pale lips (4 photos) | 0.71-0.85 |
+| Fair skin, natural pink lips (4 photos) | 0.05-0.13 |
+| Fair skin wearing red lipstick | 0.34 |
+
+**Lipstick** is a separate tab with twelve shades people wear most:
+
+- Classic red, Ruby, Wine, Berry, Plum and Mauve;
+- Nude and Brown nude;
+- Coral, Rose pink, Hot pink and Orange red.
+
+Lipstick is applied as chosen at the Strength set, whoever wears it. The lips keep their own shine and lines. Pink lips and lipstick replace each other.
+
+**How it works** (`native/engine/src/studio/lips.cpp`, `pp_studio_lips`; `natural` 1 for pink lips, 0 for lipstick)
 
 1. The lips are found from the face outline: ML Kit's upper and lower lip contours on the phone, in the engine's landmark layout. The mouth opening is cut out, so teeth stay white.
 2. The edge is feathered into the skin.

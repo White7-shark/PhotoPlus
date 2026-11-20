@@ -17,6 +17,11 @@
 //    edge-aware map (never from one noisy pixel), colour noise is evened
 //    out, and the skin's fine texture is softened while edges stay sharp.
 //
+// With a person mask (the camera's person segmenter), the person gets all of
+// this and the surroundings a gentle version: brighter and a little livelier,
+// but walls stay their own colour (a cream ceiling never takes skin's warmth)
+// and the far background is not deepened.
+//
 // Every step measures first and does little when the photo already has it:
 // a well-exposed, colourful photo changes only slightly. Large-scale
 // measurements run on a small grid (at most 1024 px), so full-resolution
@@ -43,7 +48,7 @@ constexpr int32_t kGridEdge = 1024;
 constexpr int32_t kFineEdge = 1600;
 // Healthy skin carries about this much colour for its brightness (chroma /
 // luma, measured on flagship-phone portraits across skin tones).
-constexpr float kSkinRatio = 0.3f;
+constexpr float kSkinRatio = 0.27f;
 
 /**
  * How skin-like a colour is (0..1): hues from yellow-orange to red, with some
@@ -71,6 +76,7 @@ struct Look {
   bool cooling = false;
   float warmB = 0, warmR = 0;  // added warmth
   std::array<float, 1025> curve{};
+  std::array<float, 1025> curveBg{};  // the surroundings' gentler curve (with a person mask)
   float clarity = 0;
   float skinBoost = 1;  // most a skin pixel's colour may grow
   float skinCb = 0, skinCr = 0;  // the person's skin colour, per unit of brightness (after the boost)
@@ -91,17 +97,32 @@ float toneAt(float y, float black, float gain, float lift, float contrast) {
   return std::clamp(v, 0.0f, 1.0f);
 }
 
-inline float curveAt(const Look& L, float y) {
+inline float curveOf(const std::array<float, 1025>& c, float y) {
   const float f = std::clamp(y, 0.0f, 1.0f) * 1024.0f;
   const auto i = std::min<size_t>(static_cast<size_t>(f), 1023);
   const float t = f - static_cast<float>(i);
-  return L.curve[i] + (L.curve[i + 1] - L.curve[i]) * t;
+  return c[i] + (c[i + 1] - c[i]) * t;
 }
+inline float curveAt(const Look& L, float y) { return curveOf(L.curve, y); }
 
 /** Colour follows brightness, but a lifted pixel gains colour more slowly (no orange glare). */
 inline float chromaFor(float lumaRatio) {
   const float k = std::clamp(lumaRatio, 0.5f, 2.0f);
   return k > 1.0f ? 1.0f + 0.6f * (k - 1.0f) : k;
+}
+
+/** The person mask at (u, v) in 0..1 (bilinear); 1 everywhere without a mask. */
+inline float personAt(const PersonMask* m, float u, float v) {
+  if (m == nullptr) return 1.0f;
+  const float x = std::clamp(u * static_cast<float>(m->width) - 0.5f, 0.0f, static_cast<float>(m->width - 1));
+  const float y = std::clamp(v * static_cast<float>(m->height) - 0.5f, 0.0f, static_cast<float>(m->height - 1));
+  const auto x0 = static_cast<int32_t>(x), y0 = static_cast<int32_t>(y);
+  const int32_t x1 = std::min(x0 + 1, m->width - 1), y1 = std::min(y0 + 1, m->height - 1);
+  const float tx = x - static_cast<float>(x0), ty = y - static_cast<float>(y0);
+  const auto at = [&](int32_t xx, int32_t yy) { return static_cast<float>(m->data[static_cast<size_t>(yy) * static_cast<size_t>(m->width) + static_cast<size_t>(xx)]); };
+  const float top = at(x0, y0) + (at(x1, y0) - at(x0, y0)) * tx;
+  const float bottom = at(x0, y1) + (at(x1, y1) - at(x0, y1)) * tx;
+  return (top + (bottom - top) * ty) / 255.0f;
 }
 
 inline void whiteBalance(const Look& L, float y, float& cb, float& cr, float skin) {
@@ -114,6 +135,12 @@ inline void whiteBalance(const Look& L, float y, float& cb, float& cr, float ski
 }  // namespace
 
 Error lively(ImageBuffer& image, float strength, const CancellationToken* token, LivelyReport* report) {
+  return lively(image, strength, nullptr, token, report);
+}
+
+Error lively(ImageBuffer& image, float strength, const PersonMask* mask, const CancellationToken* token,
+             LivelyReport* report) {
+  if (mask != nullptr && (mask->data == nullptr || mask->width <= 0 || mask->height <= 0)) mask = nullptr;
   ScopedTimer timer("enh.lively");
   const float s = std::isfinite(strength) ? std::clamp(strength, 0.0f, 1.0f) : 0.0f;
   if (report) *report = LivelyReport{};
@@ -225,7 +252,15 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
   const float lift =
       m < kTarget ? s * headroom * std::clamp((kTarget - m) / (m * (1.0f - kTarget)), 0.0f, 1.2f) : 0.0f;
   const float contrast = 0.22f * s;
-  for (size_t i = 0; i <= 1024; ++i) L.curve[i] = toneAt(static_cast<float>(i) / 1024.0f, black, gain, lift, contrast);
+  for (size_t i = 0; i <= 1024; ++i) {
+    const float y = static_cast<float>(i) / 1024.0f;
+    L.curve[i] = toneAt(y, black, gain, lift, contrast);
+    // Surroundings: the same exposure, half the black point, little contrast,
+    // and shadows opened a little (a dim far wall stays readable, not black).
+    float b = toneAt(y, 0.25f * black, gain, lift, 0.25f * contrast);
+    if (b < 0.5f) b += 0.4f * s * b * (0.5f - b) * 2.0f;
+    L.curveBg[i] = std::clamp(b, 0.0f, 1.0f);
+  }
   L.clarity = 0.3f * s;
   L.toe = 0.6f * s;
   L.shine = s;
@@ -240,7 +275,10 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
     const float v = curveAt(L, Y[i]);
     const float kL = chromaFor(v / std::max(Y[i], 1e-4f));
     const float cb = CB[i] * kL, cr = CR[i] * kL;
-    const float w = skinWeight(v, cb, cr);
+    const size_t gxi = i % static_cast<size_t>(gw), gyi = i / static_cast<size_t>(gw);
+    const float person = personAt(mask, (static_cast<float>(gxi) + 0.5f) / static_cast<float>(gw),
+                                  (static_cast<float>(gyi) + 0.5f) / static_cast<float>(gh));
+    const float w = skinWeight(v, cb, cr) * person;  // skin is the person's (a cream wall shares skin's hue)
     const float c = std::hypot(cb, cr);
     Y[i] = v;
     gw8->data()[i] = w;
@@ -264,7 +302,7 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
     // the skin move toward it, so the colour lies evenly over the face.
     // A touch warmer and rosier than the median (as flagship phones render
     // skin): toward red, the opposite of the brownish median of flat photos.
-    const float hue = quantile(skinHues, 0.5f) - (3.0f + 7.0f * depth) / 57.29578f;
+    const float hue = quantile(skinHues, 0.5f) + (2.5f * depth) / 57.29578f;
     const float target = std::min(std::max(ratio, healthy), ratio * L.skinBoost);
     L.skinCb = target * std::cos(hue);
     L.skinCr = target * std::sin(hue);
@@ -327,7 +365,9 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
           fv->row(gyi)[gx] = v;
           fcb->row(gyi)[gx] = cb;
           fcr->row(gyi)[gx] = cr;
-          fsk->row(gyi)[gx] = skinWeight(v, cb * kL, cr * kL);
+          fsk->row(gyi)[gx] = skinWeight(v, cb * kL, cr * kL) *
+                              personAt(mask, (static_cast<float>(gx) + 0.5f) / static_cast<float>(fw2),
+                                       (static_cast<float>(gyi) + 0.5f) / static_cast<float>(fh2));
         }
       }
     });
@@ -348,6 +388,7 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
   // ---- every pixel
   const float inv = 1.0f / static_cast<float>(f);
   const float inv2 = 1.0f / static_cast<float>(f2);
+  const float invW = 1.0f / static_cast<float>(W), invH = 1.0f / static_cast<float>(H);
   const float smoothSkin = 0.75f * s;   // share of the skin's fine texture smoothed away
   const float smoothAll = 0.25f * s;   // grain everywhere (only small differences)
   const float smoothColour = 0.9f * s;
@@ -363,13 +404,16 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
         const float sx2 = (static_cast<float>(x) + 0.5f) * inv2 - 0.5f;
         float yv, cb, cr;
         rgbToYcc(px[o.r] / 255.0f, px[o.g] / 255.0f, px[o.b] / 255.0f, yv, cb, cr);
+        // The person (1) or their surroundings (0).
+        const float person = personAt(mask, (static_cast<float>(x) + 0.5f) * invW, (static_cast<float>(y) + 0.5f) * invH);
         // Skin, and inside the face (well surrounded by skin) also its grey
         // shine and pale patches, which have too little colour to look like skin.
         // (Deep skin only: on fair skin a highlight is naturally pale.)
-        const float around = L.depth * std::clamp((gc->sample(sx, sy) - 0.55f) / 0.3f, 0.0f, 1.0f);
+        const float around = person * L.depth * std::clamp((gc->sample(sx, sy) - 0.55f) / 0.3f, 0.0f, 1.0f);
         const float skin = std::max(std::clamp(fsk->sample(sx2, sy2), 0.0f, 1.0f), around);
         whiteBalance(L, yv, cb, cr, skin);
-        const float toned = curveAt(L, yv);
+        const float tonedPerson = curveAt(L, yv);
+        const float toned = person >= 1.0f ? tonedPerson : curveOf(L.curveBg, yv) + (tonedPerson - curveOf(L.curveBg, yv)) * person;
         float v = toned;
         // Smooth surface: fine texture eased toward its surroundings. The
         // range weight keeps edges (eyes, lips, hair, a beard's outline).
@@ -380,11 +424,11 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
         // Fabric and dark areas, where a phone's noise shows most, are smoothed more.
         const float dark = std::clamp((0.45f - vS) / 0.25f, 0.0f, 1.0f);
         const float fabric = std::exp(-(dd * dd) / (0.05f * 0.05f));
-        v -= (smoothSkin * skin * edge + (1.0f - skin) * (smoothAll * grain + smoothDark * dark * fabric)) * dd;
+        v -= (smoothSkin * skin * edge + (1.0f - skin) * (smoothAll * grain + smoothDark * person * dark * fabric)) * dd;
         // Dark clothes look even and elegant: folds, creases and sweat marks
         // are eased toward the fabric around them (edges such as a collar stay).
         {
-          const float darkCloth = (1.0f - skin) * std::clamp((0.5f - vS) / 0.2f, 0.0f, 1.0f) * std::clamp((0.11f - std::hypot(fcb->sample(sx2, sy2), fcr->sample(sx2, sy2))) / 0.04f, 0.0f, 1.0f) * s;
+          const float darkCloth = person * (1.0f - skin) * std::clamp((0.5f - vS) / 0.2f, 0.0f, 1.0f) * std::clamp((0.11f - std::hypot(fcb->sample(sx2, sy2), fcr->sample(sx2, sy2))) / 0.04f, 0.0f, 1.0f) * s;
           if (darkCloth > 0.0f) {
             const float wide = near->sample(sx, sy);
             const float dw = v - wide;
@@ -405,7 +449,8 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
         cr *= kL;
         // Gains from the smooth colour, so neighbours get the same gain.
         const float cS = std::max(std::hypot(cbS, crS) * kL, 1e-3f);
-        float k = 1.0f + L.vibrance * std::clamp(1.0f - cS / 0.3f, 0.0f, 1.0f);
+        // The surroundings get a lighter touch of colour: walls keep their own.
+        float k = 1.0f + L.vibrance * (0.35f + 0.65f * person) * std::clamp(1.0f - cS / 0.3f, 0.0f, 1.0f);
         if (skin > 0.0f) {
           // Shine: skin brighter than its surroundings, grey from the
           // light's reflection; a little dimmer, coloured like the skin around it.
@@ -433,7 +478,7 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
         // Clothes: whites clean (no grey or yellow cast), blacks rich (a
         // hint of their own colour, navy or charcoal, instead of dull grey).
         if (skin < 1.0f) {
-          const float notSkin = (1.0f - skin) * s;
+          const float notSkin = person * (1.0f - skin) * s;
           const float white = std::clamp((vS - 0.6f) / 0.15f, 0.0f, 1.0f) * std::clamp(1.0f - cS / 0.035f, 0.0f, 1.0f);
           const float inky = std::clamp((0.45f - vS) / 0.2f, 0.0f, 1.0f) * std::clamp((0.1f - cS) / 0.04f, 0.0f, 1.0f);
           // A phone's grey-green cast on black fabric goes; the black is clean and deep.
@@ -443,7 +488,7 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
         }
         // Neutral shadows (not skin) settle deeper: black looks black.
         if (v < 0.45f && L.toe > 0.0f) {
-          const float t = L.toe * (1.0f - skin) * std::clamp((0.11f - cS) / 0.05f, 0.0f, 1.0f);
+          const float t = L.toe * person * (1.0f - skin) * std::clamp((0.11f - cS) / 0.05f, 0.0f, 1.0f);
           const float v2 = std::max(0.0f, v - t * v * (0.45f - v) / 0.45f);
           const float kk = std::clamp(v2 / std::max(v, 1e-4f), 0.5f, 1.0f);
           cb *= kk;

@@ -501,7 +501,7 @@ class CaptureProcessor(
       val lightReport = burst.light?.takeIf { enhance }?.let { applyLight(it, burst, frames.size, work, token, listener) }
       // Lively: the default finish, on good light, before beauty and looks.
       val livelyReport = request.lively.takeIf { it > 0f }?.let { strength ->
-        FloatArray(4).also { r -> NativeEngine.nativeLively(work, strength, token, r) }
+        FloatArray(4).also { r -> applyLively(work, strength, token, r) }
       }
       val reference = frames[report[2].toInt().coerceIn(0, frames.lastIndex)]
       val (ow, oh) = CaptureGeometry.displaySize(reference.width, reference.height, geometry.remainingRotation)
@@ -661,7 +661,7 @@ class CaptureProcessor(
       val bmp = if (decoded.bitmap.isMutable) decoded.bitmap else decoded.bitmap.copy(Bitmap.Config.ARGB_8888, true).also { decoded.bitmap.recycle() }
       try {
         val report = FloatArray(4)
-        NativeEngine.nativeLively(bmp, request.lively, 0L, report)
+        applyLively(bmp, request.lively, 0L, report)
         ImageCodec.encode(bmp, file, OutputFormat.JPEG, OUTPUT_QUALITY)
         PhotoWatermark.copyExif(original, file)
         mapOf("originalPath" to original.absolutePath, "lively" to livelyMap(request.lively, report))
@@ -679,6 +679,13 @@ class CaptureProcessor(
       original.delete()
       emptyMap()
     }
+  }
+
+  /** Lively with the person found (full finish on them, a gentle one around them); without, one finish. */
+  private fun applyLively(bitmap: Bitmap, strength: Float, token: Long, report: FloatArray) {
+    val person = LivelyPerson.find(bitmap)
+    if (person != null) NativeEngine.nativeLivelyMasked(bitmap, strength, person.bytes, person.width, person.height, token, report)
+    else NativeEngine.nativeLively(bitmap, strength, token, report)
   }
 
   private fun livelyMap(strength: Float, r: FloatArray): Map<String, Any?> = mapOf(

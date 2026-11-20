@@ -260,16 +260,20 @@ struct GradientParams {
 Error paintGradient(ImageBuffer& out, const std::array<uint8_t, 3>& from, const std::array<uint8_t, 3>& to, const GradientParams& params,
                     const CancellationToken* token);
 
-// Pink lips: the lips of each face (landmarks, see face.hpp: 131 x,y pairs
+// Lips: the lips of each face (landmarks, see face.hpp: 131 x,y pairs
 // normalised to the image) repainted in `rgb`, keeping their own shading,
 // creases and gloss; dark lips are lifted so the colour shows on deep skin.
+// `natural` (pink lips): the strength adapts to the person (already-pink lips
+// and fair faces get very little); otherwise lipstick at `strength`.
 // RGBA8/BGRA8 in place; strength 0..1.
 constexpr size_t kLipLandmarkFloats = 262;
 struct LipsReport {
   int32_t lips = 0;    // faces whose lips were coloured
   float lipLuma = 0;   // the last lips' own brightness
+  float applied = 0;   // the last lips' strength as applied (natural: after adapting)
 };
 Error colourLips(ImageBuffer& image, const std::vector<std::array<float, kLipLandmarkFloats>>& faces,
-                 const std::array<uint8_t, 3>& rgb, float strength, const CancellationToken* token, LipsReport* report);
+                 const std::array<uint8_t, 3>& rgb, float strength, bool natural, const CancellationToken* token,
+                 LipsReport* report);
 
 }  // namespace photoplus::studio

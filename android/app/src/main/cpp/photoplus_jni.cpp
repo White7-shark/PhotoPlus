@@ -1019,9 +1019,9 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStyleApply(J
 
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioLips(
     JNIEnv* env, jobject, jobject bitmap, jfloatArray landmarks, jint faceCount, jint r, jint g, jint b, jfloat strength,
-    jlong token, jfloatArray reportOut) {
+    jboolean natural, jlong token, jfloatArray reportOut) {
   if (faceCount < 0 || faceCount > 64 || env->GetArrayLength(landmarks) < faceCount * 262 ||
-      (reportOut != nullptr && env->GetArrayLength(reportOut) < 2)) {
+      (reportOut != nullptr && env->GetArrayLength(reportOut) < 3)) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad face landmarks");
     return;
   }
@@ -1029,14 +1029,37 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioLips(
   if (!marks.empty()) env->GetFloatArrayRegion(landmarks, 0, static_cast<jsize>(marks.size()), marks.data());
   WrappedBitmap img;
   if (!img.open(env, bitmap, false)) return;
-  float rep[2] = {};
-  const pp_status st = pp_studio_lips(img.image, marks.data(), faceCount, r, g, b, strength,
+  float rep[3] = {};
+  const pp_status st = pp_studio_lips(img.image, marks.data(), faceCount, r, g, b, strength, natural ? 1 : 0,
                                       reinterpret_cast<const pp_cancel_token*>(token), rep);
   if (st != PP_OK) {
     throwStatus(env, st);
     return;
   }
-  if (reportOut != nullptr) env->SetFloatArrayRegion(reportOut, 0, 2, rep);
+  if (reportOut != nullptr) env->SetFloatArrayRegion(reportOut, 0, 3, rep);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLivelyMasked(
+    JNIEnv* env, jobject, jobject bitmap, jfloat strength, jbyteArray mask, jint maskW, jint maskH, jlong token,
+    jfloatArray reportOut) {
+  if (maskW <= 0 || maskH <= 0 || maskW > 8192 || maskH > 8192 ||
+      env->GetArrayLength(mask) < static_cast<jsize>(maskW) * maskH ||
+      (reportOut != nullptr && env->GetArrayLength(reportOut) < 4)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad person mask");
+    return;
+  }
+  std::vector<uint8_t> m(static_cast<size_t>(maskW) * static_cast<size_t>(maskH));
+  env->GetByteArrayRegion(mask, 0, static_cast<jsize>(m.size()), reinterpret_cast<jbyte*>(m.data()));
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  float rep[4] = {};
+  const pp_status st =
+      pp_lively_masked(img.image, strength, m.data(), maskW, maskH, reinterpret_cast<const pp_cancel_token*>(token), rep);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  if (reportOut != nullptr) env->SetFloatArrayRegion(reportOut, 0, 4, rep);
 }
 
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLively(JNIEnv* env, jobject, jobject bitmap,

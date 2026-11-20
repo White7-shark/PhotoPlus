@@ -955,15 +955,18 @@ typedef struct pp_style {
 pp_status pp_style_analyze(const pp_image* image, pp_style* out);
 pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token);
 
-/* Pink lips (Photoshoot Studio): the lips of `face_count` faces repainted in
+/* Lips (Photoshoot Studio): the lips of `face_count` faces repainted in
  * (r, g, b), keeping their own shading, creases and gloss; dark lips are
- * lifted so the colour shows on deep skin; teeth are left alone. `landmarks`
- * holds face_count x 262 floats (131 x,y pairs normalised to the image, the
- * layout of pp_portrait's face landmarks). RGBA8/BGRA8 in place; strength
- * 0..1. report_out (may be NULL) receives 2 floats: lips coloured, the lips'
- * own brightness. */
+ * lifted so the colour shows on deep skin; teeth are left alone.
+ * `natural` 1 (pink lips): the strength adapts to the person, so lips that
+ * are already pink and fair faces get very little, brown or greyish lips the
+ * most; 0 (lipstick): the colour at `strength`. `landmarks` holds
+ * face_count x 262 floats (131 x,y pairs normalised to the image, the layout
+ * of pp_portrait's face landmarks). RGBA8/BGRA8 in place; strength 0..1.
+ * report_out (may be NULL) receives 3 floats: lips coloured, the lips' own
+ * brightness, the strength applied. */
 pp_status pp_studio_lips(pp_image* image, const float* landmarks, int32_t face_count, int32_t r, int32_t g, int32_t b,
-                         float strength, const pp_cancel_token* token, float* report_out);
+                         float strength, int32_t natural, const pp_cancel_token* token, float* report_out);
 
 /* Lively: the camera's default finish. Warm, rich colour, bright mid-tones,
  * deep blacks and skin with healthy colour (every skin tone keeps its hue).
@@ -972,6 +975,12 @@ pp_status pp_studio_lips(pp_image* image, const float* landmarks, int32_t face_c
  * report_out (may be NULL) receives 4 floats: skin colour boost, mid-tone
  * lift, warmth added, colour room. */
 pp_status pp_lively(pp_image* image, float strength, const pp_cancel_token* token, float* report_out);
+/* As pp_lively, with the person's mask (mask_w x mask_h bytes, 255 = the
+ * person, any size: it is stretched over the photo; NULL = none): the person
+ * gets the full finish and the surroundings a gentle one, so walls keep their
+ * own colour and the far background is not deepened. */
+pp_status pp_lively_masked(pp_image* image, float strength, const uint8_t* mask, int32_t mask_w, int32_t mask_h,
+                           const pp_cancel_token* token, float* report_out);
 
 /* ---- Video: "Glide" (Phase 6) ------------------------------------------------
  * A short handheld clip made steady and clean, one frame at a time:

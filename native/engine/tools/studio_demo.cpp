@@ -345,7 +345,7 @@ int studio(int argc, char** argv) {
 
 }  // namespace
 
-// lips IN.ppm OUT.ppm LANDMARKS.txt R G B [STRENGTH]: pink lips. LANDMARKS.txt
+// lips IN.ppm OUT.ppm LANDMARKS.txt R G B [STRENGTH] [NATURAL 0|1]: lipstick, or natural pink lips. LANDMARKS.txt
 // holds 262 numbers per face (131 x,y pairs normalised to the photo).
 int lips(int argc, char** argv) {
   if (argc < 7) return 2;
@@ -355,11 +355,11 @@ int lips(int argc, char** argv) {
   std::vector<float> marks;
   for (float v; in >> v;) marks.push_back(v);
   const auto faces = static_cast<int32_t>(marks.size() / 262);
-  float rep[2] = {};
+  float rep[3] = {};
   const int rc = pp_studio_lips(img, marks.data(), faces, std::atoi(argv[5]), std::atoi(argv[6]), std::atoi(argv[7]),
-                                argc > 8 ? std::strtof(argv[8], nullptr) : 0.85f, nullptr, rep);
+                                argc > 8 ? std::strtof(argv[8], nullptr) : 0.85f, argc > 9 ? std::atoi(argv[9]) : 0, nullptr, rep);
   if (rc != PP_OK) return 1;
-  std::printf("{\"lips\":%.0f,\"lip_luma\":%.3f}\n", rep[0], rep[1]);
+  std::printf("{\"lips\":%.0f,\"lip_luma\":%.3f,\"applied\":%.3f}\n", rep[0], rep[1], rep[2]);
   write(argv[3], img, -1);
   pp_image_destroy(img);
   return 0;
@@ -379,7 +379,7 @@ int main(int argc, char** argv) {
                  "usage: studio_demo backdrop OUT.ppm W H R G B [light cx cy]\n"
                  "       studio_demo hair IN.ppm MASK.pgm ZONES.pgm OUT_PREFIX STYLE|- [R G B [strength]]\n"
                  "       studio_demo styles\n"
-                 "       studio_demo lips IN.ppm OUT.ppm LANDMARKS.txt R G B [strength]\n"
+                 "       studio_demo lips IN.ppm OUT.ppm LANDMARKS.txt R G B [strength] [natural]\n"
                  "       studio_demo studio IN.ppm MASK.pgm ZONES.pgm OUT.ppm [key=value ...] (light, backdrop, finish)\n"
                  "       studio_demo cutout IN.ppm MASK.pgm ZONES.pgm|- OUT_PREFIX [softness shift hair clean] [STROKES.txt]\n"
                  "       studio_demo compose BG.ppm FG.ppm ALPHA.pgm OUT.ppm x y height [tilt angle flip colorMatch wrap "
