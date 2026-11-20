@@ -570,7 +570,7 @@ TEST(lively_lifts_a_dark_photo_and_leaves_a_lively_one_nearly_alone) {
   pp_image_destroy(dark);
 
   // Skin that already has healthy colour gains (almost) none.
-  pp_image* rich = flatPortrait(w, h, 0.1f, 1.0f, false);
+  pp_image* rich = flatPortrait(w, h, 0.14f, 1.0f, false);  // deep skin already rich (copper)
   const Patch r0 = patch(rich, w / 2 - 20, h * 42 / 100 - 20, w / 2 + 20, h * 42 / 100 + 20, false);
   EXPECT_TRUE(pp_lively(rich, 1.0f, nullptr, rep) == PP_OK);
   const Patch r1 = patch(rich, w / 2 - 20, h * 42 / 100 - 20, w / 2 + 20, h * 42 / 100 + 20, false);

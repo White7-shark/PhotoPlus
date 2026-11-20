@@ -4,6 +4,7 @@ import com.photoplus.engine.EngineException
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -197,5 +198,16 @@ class SceneStudioTest {
     assertTrue(g.radial)
     assertEquals(90f, g.angle)
     assertThrows<EngineException> { SceneBackground.fromMap(mapOf("kind" to "gradient", "from" to "peach", "to" to "#000000")) }
+  }
+
+  @Test fun lipsAreCheckedAndOffWhenNotAsked() {
+    assertNull(LipsSpec.fromMap(null))
+    assertEquals(LipsSpec(0xE8508A, 0.85f), LipsSpec.fromMap(mapOf("color" to "#E8508A")))
+    assertEquals(LipsSpec(0xF4A6B8, 1f), LipsSpec.fromMap(mapOf("color" to "#f4a6b8", "strength" to 3)))
+    assertNull(LipsSpec.fromMap(mapOf("color" to "#F4A6B8", "strength" to 0)))
+    for (bad in listOf(mapOf("color" to "pink"), mapOf("strength" to 0.5), mapOf("color" to "#12345"))) {
+      val e = assertThrows<EngineException> { LipsSpec.fromMap(bad) }
+      assertEquals(EngineException.INVALID_ARGUMENT, e.code)
+    }
   }
 }

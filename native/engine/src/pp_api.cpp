@@ -1477,6 +1477,33 @@ pp_status pp_style_analyze(const pp_image* image, pp_style* out) {
   });
 }
 
+pp_status pp_studio_lips(pp_image* image, const float* landmarks, int32_t face_count, int32_t r, int32_t g, int32_t b,
+                         float strength, const pp_cancel_token* token, float* report_out) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || face_count < 0 || face_count > 64 || (face_count > 0 && landmarks == nullptr) ||
+        !std::isfinite(strength) || r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "image, faces and a colour are required");
+    }
+    const auto fmt = image->buffer.format();
+    if (fmt != photoplus::PixelFormat::RGBA8 && fmt != photoplus::PixelFormat::BGRA8) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Lips need an RGBA or BGRA image");
+    }
+    std::vector<std::array<float, photoplus::studio::kLipLandmarkFloats>> faces(static_cast<size_t>(face_count));
+    for (size_t i = 0; i < faces.size(); ++i)
+      std::copy_n(landmarks + i * photoplus::studio::kLipLandmarkFloats, photoplus::studio::kLipLandmarkFloats, faces[i].begin());
+    photoplus::studio::LipsReport rep;
+    photoplus::Error e = photoplus::studio::colourLips(
+        image->buffer, faces, {static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b)}, strength,
+        token ? &token->token : nullptr, &rep);
+    if (e.status != PP_OK) return fail(e);
+    if (report_out) {
+      report_out[0] = static_cast<float>(rep.lips);
+      report_out[1] = rep.lipLuma;
+    }
+    return succeed();
+  });
+}
+
 pp_status pp_lively(pp_image* image, float strength, const pp_cancel_token* token, float* report_out) {
   return guarded([&]() -> pp_status {
     if (image == nullptr || !std::isfinite(strength)) return fail(PP_ERROR_INVALID_ARGUMENT, "image and strength are required");

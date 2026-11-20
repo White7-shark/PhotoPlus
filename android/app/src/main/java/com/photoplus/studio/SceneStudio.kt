@@ -223,6 +223,26 @@ data class HairSpec(
 }
 
 /**
+ * Pink lips in the Photoshoot Studio: the person's lips repainted in [color]
+ * (0xRRGGBB, a pink shade), [strength] 0..1. The lips keep their own light,
+ * creases and gloss; dark lips are lifted so the pink shows on deep skin.
+ */
+data class LipsSpec(val color: Int, val strength: Float = 0.85f) {
+  companion object {
+    private val HEX = Regex("^#[0-9a-fA-F]{6}$")
+
+    /** Null when nothing is asked (no map, or strength 0). */
+    fun fromMap(m: Map<String, Any?>?): LipsSpec? {
+      if (m == null) return null
+      val c = m["color"] as? String ?: throw EngineException(EngineException.INVALID_ARGUMENT, "A lip colour is needed")
+      if (!HEX.matches(c)) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad lip colour")
+      val strength = ((m["strength"] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: 0.85f).coerceIn(0f, 1f)
+      return LipsSpec(c.substring(1).toInt(16), strength).takeIf { strength > 0f }
+    }
+  }
+}
+
+/**
  * Studio light on the person (Phase 11): a key light from [angle] degrees
  * around them (0 from the camera, -90 the frame's left, 90 its right) at
  * [height] degrees, [softness] 0 hard .. 1 soft, a [fill] from the other

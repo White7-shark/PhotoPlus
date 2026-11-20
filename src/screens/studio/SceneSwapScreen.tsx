@@ -24,6 +24,7 @@ import { isOutfit } from '../../services/studio/colors';
 import type { HairBrush } from '../../services/studio/hair';
 import { BackgroundPicker } from './BackgroundPicker';
 import { HAIR_BRUSH_COLOURS } from './HairEditor';
+import { LipsPanel } from './LipsPanel';
 import { HairPicker } from './HairPicker';
 import { FinishPanel, LightPanel, TemplateRow } from './StudioLightPanel';
 import { BrushCanvas, type Backing } from './BrushCanvas';
@@ -49,12 +50,13 @@ const BACKINGS: { value: Backing; label: string }[] = [
   { value: 'black', label: 'Black' },
 ];
 
-type Panel = 'backgrounds' | 'light' | 'finish' | 'hair' | 'adjust' | 'frame';
+type Panel = 'backgrounds' | 'light' | 'finish' | 'hair' | 'lips' | 'adjust' | 'frame';
 const PANELS: { value: Panel; label: string }[] = [
   { value: 'backgrounds', label: 'Backgrounds' },
   { value: 'light', label: 'Light' },
   { value: 'finish', label: 'Finish' },
   { value: 'hair', label: 'Hair' },
+  { value: 'lips', label: 'Pink lips' },
   { value: 'adjust', label: 'Adjust' },
   { value: 'frame', label: 'Frame' },
 ];
@@ -411,6 +413,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
                 }}
               />
             ) : null}
+            {panel === 'lips' ? <LipsPanel value={s.lips} onChange={s.setLips} /> : null}
             {panel === 'adjust' ? (
               <GlassSurface radius={18} style={{ padding: 14, gap: 10 }}>
                 <ValueSlider

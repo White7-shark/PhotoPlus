@@ -45,6 +45,20 @@ object FaceFinder {
     return faces.mapNotNull { geometry(it) }
   }
 
+  /**
+   * Each face's landmarks (the engine's layout, normalised to [bitmap]) for
+   * the face-precise tools such as pink lips; faces without lip outlines are
+   * left out. Empty when no face is found.
+   */
+  fun lipLandmarks(bitmap: Bitmap): List<FloatArray> {
+    val faces = runCatching { Tasks.await(detector.process(InputImage.fromBitmap(bitmap, 0)), 10, TimeUnit.SECONDS) }.getOrNull()
+      ?: return emptyList()
+    val w = bitmap.width.toFloat()
+    val h = bitmap.height.toFloat()
+    return faces.filter { it.getContour(FaceContour.UPPER_LIP_TOP) != null && it.getContour(FaceContour.LOWER_LIP_BOTTOM) != null }
+      .mapNotNull { PortraitProcessor.landmarksOf(it, w, h)?.points }
+  }
+
   private fun centroid(points: List<PointF>?): PointF? {
     if (points.isNullOrEmpty()) return null
     return PointF(points.map { it.x }.average().toFloat(), points.map { it.y }.average().toFloat())

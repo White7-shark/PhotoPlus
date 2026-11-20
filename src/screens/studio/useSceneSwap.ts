@@ -28,6 +28,7 @@ import {
 } from '../../services/studio/StudioService';
 import { friendlyMessage } from '../../services/errors';
 import type { HairChoice } from '../../services/studio/hair';
+import type { LipsChoice } from '../../services/studio/lips';
 import {
   GRADIENTS,
   isPremiumFinish,
@@ -87,6 +88,7 @@ export function useSceneSwap(studio: StudioService) {
   const [background, setBackground] = useState<Background>({ kind: 'plate', plate: PLATES[0] });
   // Hair (Premium): the person's own, recoloured, or a new style.
   const [hair, setHair] = useState<HairChoice>({});
+  const [lips, setLips] = useState<LipsChoice | null>(null);
   // Hair brushes (Premium): while painting, the person with their hair in the
   // photo's own frame, redrawn after each stroke.
   const [hairBrushing, setHairBrushing] = useState(false);
@@ -256,11 +258,11 @@ export function useSceneSwap(studio: StudioService) {
     [sizeReference],
   );
 
-  const render = useLatest(async ({ id, bg, c, p, l, aspect, h, li, fi }: { id: string; bg: Background; c: Crop; p: Placement; l: SceneLook; aspect: number; h: HairChoice; li: LightChoice | null; fi: FinishChoice }) => {
+  const render = useLatest(async ({ id, bg, c, p, l, aspect, h, lp, li, fi }: { id: string; bg: Background; c: Crop; p: Placement; l: SceneLook; aspect: number; h: HairChoice; lp: LipsChoice | null; li: LightChoice | null; fi: FinishChoice }) => {
     setBusy('render');
     try {
       const [withPerson, without] = await Promise.all([
-        studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect, hair: h, light: li, finish: fi }, 'preview'),
+        studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect, hair: h, lips: lp, light: li, finish: fi }, 'preview'),
         // The scene alone takes the same finish (it is under the person while they are moved).
         bg.kind === 'transparent' ? Promise.resolve(null) : studio.render(id, { background: bg, crop: c, placement: p, look: l, aspect, light: li, finish: fi }, 'preview', true),
       ]);
@@ -276,8 +278,8 @@ export function useSceneSwap(studio: StudioService) {
 
   useEffect(() => {
     if (step !== 'scene' || !session || !placement) return;
-    render({ id: session.sessionId, bg: background, c: crop, p: placement, l: look, aspect: frameAspect, h: hair, li: light, fi: finish });
-  }, [step, session, background, crop, placement, look, frameAspect, render, cut, hair, light, finish]);
+    render({ id: session.sessionId, bg: background, c: crop, p: placement, l: look, aspect: frameAspect, h: hair, lp: lips, li: light, fi: finish });
+  }, [step, session, background, crop, placement, look, frameAspect, render, cut, hair, lips, light, finish]);
 
   const drawHairCanvas = useLatest(async ({ id, h, l }: { id: string; h: HairChoice; l: SceneLook }) => {
     try {
@@ -351,7 +353,7 @@ export function useSceneSwap(studio: StudioService) {
     setBusy('save');
     setError(null);
     try {
-      return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect, hair, light, finish }, 'full');
+      return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect, hair, lips, light, finish }, 'full');
     } catch (err) {
       if (err instanceof StudioError && err.code === 'PREMIUM_REQUIRED') throw err;
       setError('Your photo couldn’t be saved. Please try again.');
@@ -359,7 +361,7 @@ export function useSceneSwap(studio: StudioService) {
     } finally {
       setBusy(null);
     }
-  }, [session, placement, background, crop, look, frameAspect, studio, hair, light, finish]);
+  }, [session, placement, background, crop, look, frameAspect, studio, hair, lips, light, finish]);
 
   const saveCutout = useCallback(async (): Promise<SceneResult | null> => {
     if (!session) return null;
@@ -368,7 +370,7 @@ export function useSceneSwap(studio: StudioService) {
     try {
       return await studio.render(
         session.sessionId,
-        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: placement ?? { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look, hair, light },
+        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: placement ?? { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look, hair, lips, light },
         'full',
       );
     } catch (err) {
@@ -378,7 +380,7 @@ export function useSceneSwap(studio: StudioService) {
     } finally {
       setBusy(null);
     }
-  }, [session, placement, look, studio, hair, light]);
+  }, [session, placement, look, studio, hair, lips, light]);
 
   useEffect(() => () => {
     if (session) studio.end(session.sessionId);
@@ -390,6 +392,8 @@ export function useSceneSwap(studio: StudioService) {
     hair,
     setHair,
     hairChosen: Boolean(hair.style || hair.color),
+    lips,
+    setLips,
     hairBrushing,
     setHairBrushing,
     /** The person with their hair, in the photo's frame (while brushing). */

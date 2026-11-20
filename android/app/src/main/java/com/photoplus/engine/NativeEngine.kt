@@ -459,6 +459,16 @@ object NativeEngine {
   external fun nativeStyleApply(bitmap: Bitmap, style: FloatArray, strength: Float, token: Long)
 
   /**
+   * Pink lips (Photoshoot Studio): the lips of [faceCount] faces in [bitmap]
+   * repainted in ([r], [g], [b]), in place. [landmarks]: faceCount x 262
+   * floats (131 x,y pairs normalised to the image). [reportOut] (2, may be
+   * null): lips coloured, the lips' own brightness.
+   */
+  external fun nativeStudioLips(
+    bitmap: Bitmap, landmarks: FloatArray, faceCount: Int, r: Int, g: Int, b: Int, strength: Float, token: Long, reportOut: FloatArray?,
+  )
+
+  /**
    * Lively: the camera's default finish (warm, rich colour, bright mid-tones,
    * deep blacks, skin with healthy colour), in place. Adapts to the photo.
    * [strength] 0..1. [reportOut] (4, may be null): skin colour boost, mid-tone

@@ -7,6 +7,7 @@ import { errorCode, errorMessage, nativeModules, requireNative, type StudioSpec 
 import { createId } from '../database/ids';
 import type { OutfitColour } from './colors';
 import { hairRequest, type HairChoice } from './hair';
+import { lipsRequest, type LipsChoice } from './lips';
 import { finishRequest, lightPreset, lightRequest, NO_FINISH, type FinishChoice, type LightChoice } from './light';
 import { backgroundRequest, type Background, type Crop, type Placement, type SceneLook } from './scene';
 
@@ -165,6 +166,8 @@ export class StudioService {
       look: SceneLook;
       aspect?: number;
       hair?: HairChoice | null;
+      /** Pink lips, or null for the person's own. */
+      lips?: LipsChoice | null;
       /** Studio light on the person (Phase 11), or null for the photo's own. */
       light?: LightChoice | null;
       /** The finished photo's grade: the person's choice over the light look's own. */
@@ -187,6 +190,7 @@ export class StudioService {
           quality,
           hidePerson,
           ...(hairRequest(scene.hair) ? { hair: hairRequest(scene.hair) } : {}),
+          ...(lipsRequest(scene.lips) ? { lips: lipsRequest(scene.lips) } : {}),
           ...studioLightRequest(scene.light ?? null, scene.finish ?? null, scene.background.kind === 'transparent'),
           ...(scene.aligned ? { aligned: true } : {}),
         }),

@@ -84,6 +84,11 @@ class StudioModule(reactContext: ReactApplicationContext) :
     /** The last preview cut-out with hair, by what made it. */
     var hairPreview: Bitmap? = null
     var hairKey: Any? = null
+    /** The faces' lip outlines (normalised, 262 floats each), found once per session. */
+    @Volatile var lipMarks: List<FloatArray>? = null
+    /** The last preview cut-out with pink lips, by what made it. */
+    var lipsPreview: Bitmap? = null
+    var lipsKey: Any? = null
     /** The last preview cut-out with studio light, by what made it. */
     var lightPreview: Bitmap? = null
     var lightKey: Any? = null
@@ -96,6 +101,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       previewCutout?.recycle()
       fullCutout?.recycle()
       hairPreview?.recycle()
+      lipsPreview?.recycle()
       lightPreview?.recycle()
       mask.recycle()
       zones?.recycle()
@@ -289,6 +295,13 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     @Suppress("UNCHECKED_CAST")
+    val lips = try {
+      LipsSpec.fromMap(map["lips"] as? Map<String, Any?>)
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    @Suppress("UNCHECKED_CAST")
     val lightAndFinish = try {
       SceneLight.fromMap(map["light"] as? Map<String, Any?>) to SceneFinish.fromMap(map["finish"] as? Map<String, Any?>)
     } catch (e: EngineException) {
@@ -305,7 +318,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
       val base = if (full) fullCutout(s, token) else synchronized(s) { s.previewCutout } ?: throw EngineException(NO_PERSON, "Nobody was found in this photo")
       val hidden = !full && map["hidePerson"] == true
       val haired = if (hair != null && !hidden) withHair(s, base, hair, full, token) else base
-      val cutout = if (light != null && !hidden) withLight(s, haired, light, full, token) else haired
+      val lipped = if (lips != null && !hidden) withLips(s, haired, lips, full, token) else haired
+      val cutout = if (light != null && !hidden) withLight(s, lipped, light, full, token) else lipped
       if (background is SceneBackground.Transparent) {
         // `aligned`: the whole photo's frame (for painting hair brushes over the photo), not trimmed.
         return@submit transparent(s, cutout, full, aligned = !full && map["aligned"] == true)
@@ -402,6 +416,35 @@ class StudioModule(reactContext: ReactApplicationContext) :
         if (s.hairPreview !== out) s.hairPreview?.recycle()
         s.hairPreview = out
         s.hairKey = key
+      }
+    }
+    return out
+  }
+
+  /**
+   * The cut-out with pink lips: a copy (with hair already on it, if any).
+   * The lips are found once per session on the photo (ML Kit face outlines);
+   * previews keep the last result, so moving the person doesn't repaint.
+   */
+  private fun withLips(s: Session, base: Bitmap, lips: LipsSpec, full: Boolean, token: Long): Bitmap {
+    val marks = s.lipMarks ?: FaceFinder.lipLandmarks(s.preview).also { s.lipMarks = it }
+    if (marks.isEmpty()) throw EngineException(NO_FACE, "Lips need a face in the photo")
+    val key = Triple(lips, s.serial, base.generationId)
+    if (!full) synchronized(s) { s.lipsPreview?.let { if (s.lipsKey == key) return it } }
+    val out = createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
+    val raw = java.nio.ByteBuffer.allocateDirect(base.byteCount)
+    base.copyPixelsToBuffer(raw)
+    raw.rewind()
+    out.copyPixelsFromBuffer(raw)
+    val flat = FloatArray(marks.size * FaceLandmarks.FLOATS)
+    marks.forEachIndexed { i, m -> m.copyInto(flat, i * FaceLandmarks.FLOATS) }
+    val c = lips.color
+    NativeEngine.nativeStudioLips(out, flat, marks.size, c shr 16 and 0xFF, c shr 8 and 0xFF, c and 0xFF, lips.strength, token, null)
+    if (!full) {
+      synchronized(s) {
+        if (s.lipsPreview !== out) s.lipsPreview?.recycle()
+        s.lipsPreview = out
+        s.lipsKey = key
       }
     }
     return out

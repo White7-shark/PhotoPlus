@@ -1182,3 +1182,110 @@ TEST(studio_gradient_backdrops_blend_without_bands) {
   EXPECT_EQ(pp_studio_gradient(img, a, b, 7, 0.0f, 0.5f, 0.5f, 0.5f), PP_ERROR_INVALID_ARGUMENT);
   pp_image_destroy(img);
 }
+
+// ---- Pink lips ---------------------------------------------------------------
+
+namespace {
+// Lip outlines in the engine's layout: a mouth centred at (0.5, 0.6), 0.3 wide,
+// open by `gap` (teeth show between the lips).
+std::vector<float> lipMarks(float gap) {
+  std::vector<float> v(262, 0.0f);
+  const float pi = 3.14159265f;
+  auto put = [&](int start, int count, float y0, float bulge, bool ends) {
+    for (int k = 0; k < count; ++k) {
+      const float t = ends ? static_cast<float>(k) / (count - 1) : static_cast<float>(k + 1) / (count + 1);
+      v[static_cast<size_t>(2 * (start + k))] = 0.35f + 0.3f * t;
+      v[static_cast<size_t>(2 * (start + k) + 1)] = y0 + bulge * std::sin(pi * t);
+    }
+  };
+  put(88, 11, 0.6f - gap / 2, -0.045f, true);   // upper lip top
+  put(99, 9, 0.6f - gap / 2, 0.0f, false);      // upper lip bottom
+  put(108, 9, 0.6f + gap / 2, 0.0f, false);     // lower lip top
+  put(117, 9, 0.6f + gap / 2, 0.055f, false);   // lower lip bottom
+  return v;
+}
+
+// Deep skin with dark lips and white teeth in the open mouth.
+pp_image* lipFace(int w, int h, float gap) {
+  pp_image* img = nullptr;
+  if (pp_image_create(w, h, PP_FORMAT_RGBA8, &img) != PP_OK) return nullptr;
+  auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x) {
+      const float fx = (x + 0.5f) / w, fy = (y + 0.5f) / h;
+      uint8_t r = 110, g = 70, b = 50;  // deep skin
+      const float dx = (fx - 0.5f) / 0.15f;
+      if (std::fabs(dx) < 0.95f) {
+        const float half = std::sqrt(1.0f - dx * dx);
+        if (fy > 0.6f - gap / 2 - 0.04f * half && fy < 0.6f - gap / 2) r = 80, g = 42, b = 40;     // upper lip
+        if (fy > 0.6f + gap / 2 && fy < 0.6f + gap / 2 + 0.05f * half) r = 90, g = 50, b = 48;     // lower lip
+        if (fy >= 0.6f - gap / 2 + 0.003f && fy <= 0.6f + gap / 2 - 0.003f) r = 235, g = 232, b = 225;  // teeth
+      }
+      uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+      q[0] = r, q[1] = g, q[2] = b, q[3] = 255;
+    }
+  return img;
+}
+
+struct Rgbf {
+  float r, g, b;
+};
+Rgbf meanRgb(pp_image* img, int w, float fx0, float fy0, float fx1, float fy1, int h) {
+  const auto* px = static_cast<const uint8_t*>(pp_image_pixels(img));
+  double r = 0, g = 0, b = 0;
+  int n = 0;
+  for (int y = static_cast<int>(fy0 * h); y < static_cast<int>(fy1 * h); ++y)
+    for (int x = static_cast<int>(fx0 * w); x < static_cast<int>(fx1 * w); ++x) {
+      const uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+      r += q[0], g += q[1], b += q[2];
+      ++n;
+    }
+  return {static_cast<float>(r / n), static_cast<float>(g / n), static_cast<float>(b / n)};
+}
+}  // namespace
+
+TEST(studio_lips_turn_dark_lips_pink_and_leave_skin_and_teeth) {
+  const int w = 400, h = 400;
+  const float gap = 0.02f;
+  pp_image* img = lipFace(w, h, gap);
+  const auto marks = lipMarks(gap);
+  const Rgbf lip0 = meanRgb(img, w, 0.45f, 0.62f, 0.55f, 0.64f, h);
+  const Rgbf teeth0 = meanRgb(img, w, 0.45f, 0.597f, 0.55f, 0.603f, h);
+  const Rgbf skin0 = meanRgb(img, w, 0.1f, 0.3f, 0.25f, 0.45f, h);
+  float rep[2] = {};
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, 0.9f, nullptr, rep), PP_OK);
+  const Rgbf lip1 = meanRgb(img, w, 0.45f, 0.62f, 0.55f, 0.64f, h);
+  const Rgbf teeth1 = meanRgb(img, w, 0.45f, 0.597f, 0.55f, 0.603f, h);
+  const Rgbf skin1 = meanRgb(img, w, 0.1f, 0.3f, 0.25f, 0.45f, h);
+  std::printf("    lip %.0f,%.0f,%.0f -> %.0f,%.0f,%.0f; teeth %.0f -> %.0f; lips %.0f, own brightness %.2f\n", lip0.r, lip0.g,
+              lip0.b, lip1.r, lip1.g, lip1.b, teeth0.g, teeth1.g, rep[0], rep[1]);
+  EXPECT_NEAR(rep[0], 1.0f, 1e-6f);
+  // Pink: lifted (the colour shows on dark lips), red above green, blue above green.
+  EXPECT_TRUE(lip1.r > lip0.r + 60.0f);
+  EXPECT_TRUE(lip1.r > lip1.g + 40.0f && lip1.b > lip1.g + 5.0f);
+  // Skin away from the mouth and the teeth stay as they were.
+  EXPECT_NEAR(skin1.r, skin0.r, 0.5f);
+  EXPECT_NEAR(skin1.g, skin0.g, 0.5f);
+  EXPECT_TRUE(std::fabs(teeth1.g - teeth0.g) < 25.0f);
+  pp_image_destroy(img);
+}
+
+TEST(studio_lips_check_their_input) {
+  pp_image* img = lipFace(120, 120, 0.0f);
+  const auto marks = lipMarks(0.0f);
+  std::vector<uint8_t> before(static_cast<const uint8_t*>(pp_image_pixels(img)),
+                              static_cast<const uint8_t*>(pp_image_pixels(img)) + 120 * 120 * 4);
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, 0.0f, nullptr, nullptr), PP_OK);  // strength 0
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 0, 244, 166, 184, 1.0f, nullptr, nullptr), PP_OK);  // no faces
+  EXPECT_TRUE(std::memcmp(before.data(), pp_image_pixels(img), before.size()) == 0);
+  EXPECT_EQ(pp_studio_lips(nullptr, marks.data(), 1, 244, 166, 184, 1.0f, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_lips(img, nullptr, 1, 244, 166, 184, 1.0f, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 300, 166, 184, 1.0f, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_lips(img, marks.data(), 1, 244, 166, 184, std::nanf(""), nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  std::vector<float> bad = marks;
+  bad[2 * 90] = std::nanf("");
+  float rep[2] = {};
+  EXPECT_EQ(pp_studio_lips(img, bad.data(), 1, 244, 166, 184, 1.0f, nullptr, rep), PP_OK);  // a broken face is skipped
+  EXPECT_NEAR(rep[0], 0.0f, 1e-6f);
+  pp_image_destroy(img);
+}

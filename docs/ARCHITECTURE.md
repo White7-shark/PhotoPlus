@@ -91,6 +91,10 @@ Clarity…:   burst ─▶ pp_enhance ─▶ Auto Light ─▶ pp_lively ─▶ 
 
 `native/engine/src/enhance/lively.cpp`: grey-pixel white balance (skin keeps its warmth), warmth only for a cool scene, a tone curve (black point, gain, mid-tone lift held back for low-key photos, S-curve, highlight shoulder), clarity, skin brought toward a healthy colour-for-brightness (every skin tone keeps its own hue), grey shine coloured like the skin around it, vibrance scaled by how colourful the photo already is, neutral shadows deepened. Large-scale measurements run on a ≤ 1024 px grid; every per-pixel change (colour gains, skin smoothing, colour evening, shadows) is decided from a smooth ≤ 1600 px map, so the result is smooth and even rather than noisy. Setting: *Lively colour* (on by default; off keeps the phone camera's own look). See `docs/LIVELY_CAMERA_REPORT.md`.
 
+## Pink lips (Photoshoot Studio)
+
+ML Kit face contours (once per studio session) ▸ engine landmarks ▸ `pp_studio_lips` on the cut-out (after hair, before studio light). Lips keep their own shading and gloss; dark lips are lifted so the pink shows on deep skin; the open mouth (teeth) is left out. UI: `src/screens/studio/LipsPanel.tsx`, shades in `src/services/studio/lips.ts`.
+
 ## Spotlight, Glow and Vibe Match
 
 ```

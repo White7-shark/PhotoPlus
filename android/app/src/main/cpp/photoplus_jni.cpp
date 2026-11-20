@@ -1017,6 +1017,28 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStyleApply(J
   if (st != PP_OK) throwStatus(env, st);
 }
 
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioLips(
+    JNIEnv* env, jobject, jobject bitmap, jfloatArray landmarks, jint faceCount, jint r, jint g, jint b, jfloat strength,
+    jlong token, jfloatArray reportOut) {
+  if (faceCount < 0 || faceCount > 64 || env->GetArrayLength(landmarks) < faceCount * 262 ||
+      (reportOut != nullptr && env->GetArrayLength(reportOut) < 2)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad face landmarks");
+    return;
+  }
+  std::vector<float> marks(static_cast<size_t>(faceCount) * 262);
+  if (!marks.empty()) env->GetFloatArrayRegion(landmarks, 0, static_cast<jsize>(marks.size()), marks.data());
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  float rep[2] = {};
+  const pp_status st = pp_studio_lips(img.image, marks.data(), faceCount, r, g, b, strength,
+                                      reinterpret_cast<const pp_cancel_token*>(token), rep);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  if (reportOut != nullptr) env->SetFloatArrayRegion(reportOut, 0, 2, rep);
+}
+
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLively(JNIEnv* env, jobject, jobject bitmap,
                                                                           jfloat strength, jlong token,
                                                                           jfloatArray reportOut) {

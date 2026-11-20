@@ -108,3 +108,61 @@ Tests:
 
 - `__tests__/sceneSwap.test.tsx`: the button opens the camera, and a photo that comes back starts the studio once.
 - `__tests__/cameraUi.test.tsx`: Lively is sent with every shot and is off when turned off; a shot for the studio goes back with its path; closing goes back to the studio.
+
+## Third version: the first version's colour, smooth, with livelier clothes
+
+The user preferred the first version's warmer, richer skin colour over the second version's brownish median, and wanted the clothes to look like the iPhone's: deep, clean and even.
+
+**Skin**
+
+- Skin is drawn toward a richer target than the person's median colour: deep skin is copper, and the hue is turned a little toward red.
+- The target depends on the skin's depth. Deep skin gets the richest colour (up to 2.1× its original colour). Fair skin gets less, so it never turns red or orange.
+- Inside the face, grey shine and pale patches take the skin's colour too, but on deep skin only. On fair skin a highlight is naturally pale.
+- Bug fixed: skin detection now rejects colours that are strongly saturated for their brightness. Before, a red hat counted as skin and pulled the skin target toward red.
+
+**Clothes**
+
+- Dark fabric is evened: folds, creases and sweat marks ease toward the fabric around them, while edges such as a collar stay crisp.
+- Dark fabric settles deeper, and its grey-green cast is cleaned away.
+- Whites are cleaned of grey or yellow casts.
+- Other colours get more vibrance.
+
+**Measured on the user's photo**
+
+| | Android | iPhone 17 Pro | Lively now |
+|---|---|---|---|
+| Skin colour (face, median chroma) | 0.064 | 0.109 | 0.10 |
+| Shirt brightness (median) | 0.34 | 0.23 | 0.23 |
+| Shirt colour cast (cr) | −0.039 | −0.022 | −0.028 |
+
+# Pink lips (Photoshoot Studio)
+
+A **Pink lips** panel in the studio has six shades: Soft pink, Baby pink, Nude pink, Rose, Hot pink and Berry. A Strength slider sets how strong the colour is, and Natural lips turns it off.
+
+**How it works** (`native/engine/src/studio/lips.cpp`, `pp_studio_lips`)
+
+1. The lips are found from the face outline: ML Kit's upper and lower lip contours on the phone, in the engine's landmark layout. The mouth opening is cut out, so teeth stay white.
+2. The edge is feathered into the skin.
+3. The lips keep their own light: shading, creases and gloss carry over as a ratio to the lips' mean brightness.
+4. Dark lips are lifted 80% of the way to the pink's brightness, so the colour shows on deep skin.
+5. A shaded part, such as the upper lip, is evened a little and keeps its colour, so the mouth reads as one pink rather than grey-mauve.
+6. Gloss stays light.
+
+**In the app**
+
+- The lip outlines are found once per studio session, on the photo.
+- The cut-out gets the lips after hair and before studio light.
+- A photo with no face shows a clear message.
+
+**Tests**
+
+- Engine:
+  - dark lips turn pink and are lifted;
+  - skin away from the mouth and the teeth stay unchanged;
+  - input is checked;
+  - a broken face is skipped.
+- Kotlin: the request is checked.
+- App:
+  - the request shape;
+  - the panel (choose a shade, strength, natural lips);
+  - the studio sends the lips with every drawing of the person.

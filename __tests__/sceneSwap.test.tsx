@@ -142,6 +142,15 @@ describe('Scene Swap', () => {
     // Save: full quality, into the gallery and the library, then opened.
     await step(() => fireEvent.press(screen.getByTestId('scene-save')));
     expect(mockStudio.renderScene.mock.calls.some(c => (c[1] as unknown as { quality: string }).quality === 'full')).toBe(true);
+
+    // Pink lips: a shade is sent with every drawing of the person.
+    await step(() => fireEvent.press(screen.getByText('Pink lips')));
+    await step(() => fireEvent.press(screen.getByTestId('lips-hot')));
+    const last = mockStudio.renderScene.mock.calls[mockStudio.renderScene.mock.calls.length - 2][1] as unknown as {
+      lips?: { color: string; strength: number };
+      hidePerson: boolean;
+    };
+    expect(last.lips).toEqual({ color: '#E8508A', strength: 0.85 });
     expect(mockStudio.saveToGallery).toHaveBeenCalledWith('/files/studio/Studio_1.jpg');
     expect(images.add).toHaveBeenCalledWith(expect.objectContaining({ path: '/files/studio/Studio_1.jpg', source: 'export', projectId: 'inbox' }));
     expect(navigation.navigate).toHaveBeenCalledWith('PhotoPreview', { imageId: 'img1' });

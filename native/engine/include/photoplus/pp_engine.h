@@ -955,6 +955,16 @@ typedef struct pp_style {
 pp_status pp_style_analyze(const pp_image* image, pp_style* out);
 pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token);
 
+/* Pink lips (Photoshoot Studio): the lips of `face_count` faces repainted in
+ * (r, g, b), keeping their own shading, creases and gloss; dark lips are
+ * lifted so the colour shows on deep skin; teeth are left alone. `landmarks`
+ * holds face_count x 262 floats (131 x,y pairs normalised to the image, the
+ * layout of pp_portrait's face landmarks). RGBA8/BGRA8 in place; strength
+ * 0..1. report_out (may be NULL) receives 2 floats: lips coloured, the lips'
+ * own brightness. */
+pp_status pp_studio_lips(pp_image* image, const float* landmarks, int32_t face_count, int32_t r, int32_t g, int32_t b,
+                         float strength, const pp_cancel_token* token, float* report_out);
+
 /* Lively: the camera's default finish. Warm, rich colour, bright mid-tones,
  * deep blacks and skin with healthy colour (every skin tone keeps its hue).
  * Adapts to the photo: one that already looks this way changes little.
