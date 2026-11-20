@@ -95,6 +95,13 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
           onChange={v => save('cameraGrid', v)}
         />
         <ToggleRow
+          icon="sparkles"
+          title="Lively colour"
+          subtitle="Warm, rich colour and bright light in every photo, like a flagship phone. Off keeps your phone camera's own look"
+          value={settings.livelyColour}
+          onChange={v => save('livelyColour', v)}
+        />
+        <ToggleRow
           icon="flip"
           title="Mirror selfies"
           subtitle="Save front-camera photos as the preview shows them"

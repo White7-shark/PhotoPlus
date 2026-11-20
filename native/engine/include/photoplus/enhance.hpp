@@ -97,6 +97,17 @@ struct ToneParams {
 };
 Error tone(YccImage& image, const ToneParams& params, const CancellationToken* token);
 
+// Lively: the camera's default finish (warm, rich, bright; deep blacks; skin
+// with healthy colour). Adapts to the photo: one that already has it changes
+// little. RGBA8 or BGRA8, in place. strength 0..1 (0 = untouched).
+struct LivelyReport {
+  float skinBoost = 1;   // most a skin pixel's colour grew
+  float lift = 0;        // mid-tone lift (0 = none)
+  float warmth = 0;      // warmth added, 0..1
+  float colourRoom = 0;  // how much colour the photo had room for, 0.25..1
+};
+Error lively(ImageBuffer& image, float strength, const CancellationToken* token, LivelyReport* report);
+
 // Mean absolute Laplacian on a sparse grid: fine texture (and noise).
 float fineTexture(const Plane& p);
 // Keeps restoration natural: if `after` holds more than `budget` times the

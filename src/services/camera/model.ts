@@ -40,7 +40,7 @@ export const MODES: readonly ModeDefinition[] = [
     feature: 'spotlight',
   },
   { id: 'enhance', label: 'Clarity', description: 'Sharper, cleaner, brighter in one tap', feature: 'clarity' },
-  { id: 'photo', label: 'Photo', description: 'Just the shot, untouched', feature: 'cameraCapture' },
+  { id: 'photo', label: 'Photo', description: 'Bright, lively colour in one tap', feature: 'cameraCapture' },
   {
     id: 'superres',
     label: 'Ultra Detail',

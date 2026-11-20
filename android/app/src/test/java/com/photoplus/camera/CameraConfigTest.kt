@@ -38,6 +38,20 @@ class CameraConfigTest {
     assertTrue(CaptureOptions.fromMap(emptyMap()).captureId.startsWith("capture-"))
   }
 
+  @Test fun livelyIsOnByDefaultAndCanBeTurnedOff() {
+    val plain = CaptureOptions.fromMap(mapOf("mode" to "standard"))
+    assertEquals(1f, plain.lively)
+    // A plain photo is still saved straight from the camera, then finished in place.
+    assertFalse(plain.needsProcessing)
+    assertEquals(0f, CaptureOptions.fromMap(mapOf("lively" to 0)).lively)
+    assertEquals(0.5f, CaptureOptions.fromMap(mapOf("lively" to 0.5)).lively)
+    assertEquals(1f, CaptureOptions.fromMap(mapOf("lively" to 7)).lively)
+    assertEquals(0f, CaptureOptions.fromMap(mapOf("lively" to -2)).lively)
+    // Big sensors are finished at a size each kind of phone can hold.
+    assertTrue(CapturePolicy.livelyMaxDimension(DeviceTier.ENTRY) < CapturePolicy.livelyMaxDimension(DeviceTier.PERFORMANCE))
+    assertTrue(CapturePolicy.livelyMaxDimension(DeviceTier.ENTRY) >= 4096)
+  }
+
   @Test fun burstsNeverFireTheFlash() {
     assertEquals(FlashSetting.OFF, CaptureOptions("a", CaptureMode.NIGHT, FlashSetting.ON).effectiveFlash)
     assertEquals(FlashSetting.OFF, CaptureOptions("a", CaptureMode.SUPER_RES, FlashSetting.AUTO).effectiveFlash)

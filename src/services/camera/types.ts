@@ -104,6 +104,8 @@ export interface CaptureOptions {
   mode: CaptureModeId;
   flash: FlashMode;
   mirrorFront?: boolean;
+  /** Lively colour, 0..1 (default 1): the camera's warm, rich, bright finish. 0 keeps the phone's own look. */
+  lively?: number;
   denoise?: number;
   sharpen?: number;
   detail?: number;

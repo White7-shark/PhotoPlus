@@ -5,6 +5,7 @@
 //   light_demo burst DIR COUNT OUT_PREFIX [night] [capture_bias]
 //        DIR/frame_%04d.ppm; writes OUT_PREFIXmerged.ppm (the burst merge alone,
 //        as Moonlight did before) and OUT_PREFIXtoned.ppm (merge + tone)
+//   light_demo lively IN.ppm OUT.ppm [strength]   the camera's default finish
 //   light_demo fuse AMBIENT.ppm FLASH.ppm OUT.ppm [fill]
 #include <chrono>
 #include <cstdio>
@@ -103,6 +104,18 @@ int main(int argc, char** argv) {
                 "\"plan\":%d,\"frames\":%d,\"bias\":%.2f,\"night\":%.2f,\"screen\":[%d,%d,%d]}\n",
                 m.ev100, m.lux, m.key, m.highlights, m.shadows, m.range_stops, m.backlit, m.plan, m.frames, m.exposure_bias,
                 m.night, m.screen_flash[0], m.screen_flash[1], m.screen_flash[2]);
+    pp_image_destroy(img);
+    return 0;
+  }
+  if (cmd == "lively" && argc >= 4) {
+    pp_image* img = readPpm(argv[2]);
+    if (!img) return 1;
+    float rep[4] = {};
+    const auto t0 = std::chrono::steady_clock::now();
+    if (pp_lively(img, arg(4, 1.0f), nullptr, rep) != PP_OK) return 1;
+    std::printf("{\"ms\":%.0f,\"skin_boost\":%.3f,\"lift\":%.3f,\"warmth\":%.3f,\"colour_room\":%.3f}\n", msSince(t0), rep[0],
+                rep[1], rep[2], rep[3]);
+    writePpm(argv[3], img);
     pp_image_destroy(img);
     return 0;
   }

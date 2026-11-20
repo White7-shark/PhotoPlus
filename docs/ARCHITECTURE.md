@@ -82,6 +82,15 @@ CameraScreen (JS) ── configure / setManual / capturePhoto ──► CameraMo
 - **Recovery:** `CameraState` critical errors → rebind with backoff (0.5 s, 1 s, 2 s) → `CAMERA_UNAVAILABLE`.
 - **Orientation:** the UI is portrait-locked; the photo's rotation follows the device (±10° hysteresis), analysis keeps the display rotation so overlays line up.
 
+## Lively colour (the camera's default finish)
+
+```
+Photo:      CameraX JPEG ─▶ copy kept as *_original.jpg ─▶ decode (≤ 4096/6144/8192 by tier) ─▶ pp_lively ─▶ JPEG + EXIF ─▶ props ─▶ watermark
+Clarity…:   burst ─▶ pp_enhance ─▶ Auto Light ─▶ pp_lively ─▶ beauty / Spotlight / look ─▶ JPEG + EXIF
+```
+
+`native/engine/src/enhance/lively.cpp`: grey-pixel white balance (skin keeps its warmth), warmth only for a cool scene, a tone curve (black point, gain, mid-tone lift held back for low-key photos, S-curve, highlight shoulder), clarity, skin brought toward a healthy colour-for-brightness (every skin tone keeps its own hue), grey shine coloured like the skin around it, vibrance scaled by how colourful the photo already is, neutral shadows deepened. Large-scale measurements run on a ≤ 1024 px grid. Setting: *Lively colour* (on by default; off keeps the phone camera's own look). See `docs/LIVELY_CAMERA_REPORT.md`.
+
 ## Spotlight, Glow and Vibe Match
 
 ```

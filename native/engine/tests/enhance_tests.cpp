@@ -475,3 +475,125 @@ TEST(auto_levels_brighten_a_dim_photo_without_lifting_its_blacks) {
   pp_image_destroy(img);
   pp_image_destroy(out);
 }
+
+// ---- Lively: the camera's default finish -----------------------------------
+
+namespace {
+// A portrait-like scene: a grey wall, a dark shirt and a face whose skin is
+// rendered greyish (low colour for its brightness), as flat phone photos are.
+pp_image* flatPortrait(int w, int h, float skinChroma, float exposure, bool bgra) {
+  pp_image* img = nullptr;
+  if (pp_image_create(w, h, bgra ? PP_FORMAT_BGRA8 : PP_FORMAT_RGBA8, &img) != PP_OK) return nullptr;
+  auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x) {
+      float Y = 0.62f, cb = -0.006f, cr = 0.004f;  // wall
+      const float dx = (x - w * 0.5f) / (w * 0.18f), dy = (y - h * 0.42f) / (h * 0.2f);
+      if (dx * dx + dy * dy < 1.0f) {
+        // Skin: hue ~120° (orange-brown), brightness shaded across the face.
+        Y = 0.45f + 0.1f * dx;
+        cb = -skinChroma * 0.5f * Y / 0.45f;
+        cr = skinChroma * 0.866f * Y / 0.45f;
+      } else if (y < h * 0.08f) {
+        Y = 0.93f;  // a bright window: the photo has highlights
+        cb = cr = 0.0f;
+      } else if (y > h * 0.72f) {
+        Y = 0.24f;  // dark, slightly grey shirt
+        cb = 0.004f;
+        cr = -0.002f;
+      }
+      Y *= exposure;
+      const float r = Y + 1.402f * cr, g = Y - 0.344136f * cb - 0.714136f * cr, b = Y + 1.772f * cb;
+      uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+      const auto to8 = [](float v) { return static_cast<uint8_t>(std::lround(std::fmin(1.0f, std::fmax(0.0f, v)) * 255.0f)); };
+      q[bgra ? 2 : 0] = to8(r);
+      q[1] = to8(g);
+      q[bgra ? 0 : 2] = to8(b);
+      q[3] = 255;
+    }
+  return img;
+}
+
+struct Patch {
+  float y, chroma, hue;
+};
+Patch patch(pp_image* img, int x0, int y0, int x1, int y1, bool bgra) {
+  pp_image_info info{};
+  pp_image_get_info(img, &info);
+  const int w = info.width;
+  const auto* px = static_cast<const uint8_t*>(pp_image_pixels(img));
+  double sy = 0, sb = 0, sr = 0;
+  int n = 0;
+  for (int y = y0; y < y1; ++y)
+    for (int x = x0; x < x1; ++x) {
+      const uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+      const float r = q[bgra ? 2 : 0] / 255.0f, g = q[1] / 255.0f, b = q[bgra ? 0 : 2] / 255.0f;
+      sy += 0.299f * r + 0.587f * g + 0.114f * b;
+      sb += -0.168736f * r - 0.331264f * g + 0.5f * b;
+      sr += 0.5f * r - 0.418688f * g - 0.081312f * b;
+      ++n;
+    }
+  const auto Y = static_cast<float>(sy / n), cb = static_cast<float>(sb / n), cr = static_cast<float>(sr / n);
+  return {Y, std::hypot(cb, cr), std::atan2(cr, cb) * 57.29578f};
+}
+}  // namespace
+
+TEST(lively_gives_flat_skin_healthy_colour_and_deepens_blacks) {
+  const int w = 360, h = 480;
+  pp_image* img = flatPortrait(w, h, 0.03f, 1.0f, false);
+  EXPECT_TRUE(img != nullptr);
+  const Patch skin0 = patch(img, w / 2 - 20, h * 42 / 100 - 20, w / 2 + 20, h * 42 / 100 + 20, false);
+  const Patch shirt0 = patch(img, 20, h - 60, w - 20, h - 10, false);
+  float rep[4] = {};
+  EXPECT_TRUE(pp_lively(img, 1.0f, nullptr, rep) == PP_OK);
+  const Patch skin1 = patch(img, w / 2 - 20, h * 42 / 100 - 20, w / 2 + 20, h * 42 / 100 + 20, false);
+  const Patch shirt1 = patch(img, 20, h - 60, w - 20, h - 10, false);
+  std::printf("    skin chroma %.3f -> %.3f, hue %.0f -> %.0f, shirt %.3f -> %.3f, boost %.2f\n", skin0.chroma, skin1.chroma,
+              skin0.hue, skin1.hue, shirt0.y, shirt1.y, rep[0]);
+  EXPECT_TRUE(rep[0] > 1.2f);                          // grey skin was found and given colour
+  EXPECT_TRUE(skin1.chroma > skin0.chroma * 1.3f);     // richer
+  EXPECT_TRUE(std::fabs(skin1.hue - skin0.hue) < 8.0f);  // the person's own skin tone, not a filter's
+  EXPECT_TRUE(shirt1.y < shirt0.y - 0.01f);            // black looks blacker
+  pp_image_destroy(img);
+}
+
+TEST(lively_lifts_a_dark_photo_and_leaves_a_lively_one_nearly_alone) {
+  const int w = 300, h = 400;
+  pp_image* dark = flatPortrait(w, h, 0.03f, 0.45f, false);
+  const Patch d0 = patch(dark, 10, h / 5, 50, h / 2, false);  // the wall
+  float rep[4] = {};
+  EXPECT_TRUE(pp_lively(dark, 1.0f, nullptr, rep) == PP_OK);
+  const Patch d1 = patch(dark, 10, h / 5, 50, h / 2, false);
+  std::printf("    dark wall %.3f -> %.3f (lift %.2f)\n", d0.y, d1.y, rep[1]);
+  EXPECT_TRUE(rep[1] > 0.2f);
+  EXPECT_TRUE(d1.y > d0.y + 0.1f);
+  pp_image_destroy(dark);
+
+  // Skin that already has healthy colour gains (almost) none.
+  pp_image* rich = flatPortrait(w, h, 0.1f, 1.0f, false);
+  const Patch r0 = patch(rich, w / 2 - 20, h * 42 / 100 - 20, w / 2 + 20, h * 42 / 100 + 20, false);
+  EXPECT_TRUE(pp_lively(rich, 1.0f, nullptr, rep) == PP_OK);
+  const Patch r1 = patch(rich, w / 2 - 20, h * 42 / 100 - 20, w / 2 + 20, h * 42 / 100 + 20, false);
+  std::printf("    rich skin chroma %.3f -> %.3f (boost %.2f)\n", r0.chroma, r1.chroma, rep[0]);
+  EXPECT_TRUE(rep[0] < 1.1f);
+  EXPECT_TRUE(r1.chroma < r0.chroma * 1.2f);
+  pp_image_destroy(rich);
+}
+
+TEST(lively_strength_zero_is_untouched_and_bgra_matches_rgba) {
+  const int w = 200, h = 260;
+  pp_image* a = flatPortrait(w, h, 0.03f, 1.0f, false);
+  pp_image* b = flatPortrait(w, h, 0.03f, 1.0f, false);
+  EXPECT_TRUE(pp_lively(a, 0.0f, nullptr, nullptr) == PP_OK);
+  EXPECT_TRUE(std::memcmp(pp_image_pixels(a), pp_image_pixels(b), static_cast<size_t>(w) * h * 4) == 0);
+  EXPECT_TRUE(pp_lively(a, std::nanf(""), nullptr, nullptr) == PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_TRUE(pp_lively(nullptr, 1.0f, nullptr, nullptr) == PP_ERROR_INVALID_ARGUMENT);
+  pp_image* c = flatPortrait(w, h, 0.03f, 1.0f, true);
+  EXPECT_TRUE(pp_lively(a, 0.7f, nullptr, nullptr) == PP_OK);
+  EXPECT_TRUE(pp_lively(c, 0.7f, nullptr, nullptr) == PP_OK);
+  const Patch pa = patch(a, 0, 0, w, h, false), pc = patch(c, 0, 0, w, h, true);
+  EXPECT_TRUE(std::fabs(pa.y - pc.y) < 1e-3f && std::fabs(pa.chroma - pc.chroma) < 1e-3f);
+  pp_image_destroy(a);
+  pp_image_destroy(b);
+  pp_image_destroy(c);
+}

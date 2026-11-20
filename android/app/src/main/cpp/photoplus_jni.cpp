@@ -1017,6 +1017,24 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStyleApply(J
   if (st != PP_OK) throwStatus(env, st);
 }
 
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLively(JNIEnv* env, jobject, jobject bitmap,
+                                                                          jfloat strength, jlong token,
+                                                                          jfloatArray reportOut) {
+  if (reportOut != nullptr && env->GetArrayLength(reportOut) < 4) {
+    throwEngineException(env, "INVALID_ARGUMENT", "report needs 4 values");
+    return;
+  }
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  float rep[4] = {};
+  const pp_status st = pp_lively(img.image, strength, reinterpret_cast<const pp_cancel_token*>(token), rep);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  if (reportOut != nullptr) env->SetFloatArrayRegion(reportOut, 0, 4, rep);
+}
+
 // pp_process_ex: maxEdge > 0 marks a preview (reduced if larger; the engine
 // may use the verified GPU); backend is a pp_backend value.
 JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeProcessEx(

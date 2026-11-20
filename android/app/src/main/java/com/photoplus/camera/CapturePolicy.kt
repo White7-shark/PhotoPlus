@@ -41,6 +41,17 @@ object CapturePolicy {
     }
   }
 
+  /**
+   * The longest edge a plain Photo is finished at (Lively). The camera's own
+   * shot is kept untouched beside it; very large sensors are finished at a
+   * size the device can hold in memory.
+   */
+  fun livelyMaxDimension(tier: DeviceTier): Int = when (tier) {
+    DeviceTier.ENTRY -> 4096
+    DeviceTier.STANDARD -> 6144
+    DeviceTier.PERFORMANCE -> 8192
+  }
+
   /** A smaller plan to retry with when the engine runs out of budget, or null if already minimal. */
   fun reduced(plan: ModePlan): ModePlan? {
     val next = (plan.decodeDimension * 0.7).roundToInt()

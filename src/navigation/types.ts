@@ -7,7 +7,8 @@ import type { GlideClip } from '../services/camera/glide';
 export type TabParamList = {
   Studio: undefined;
   Projects: undefined;
-  Camera: undefined;
+  /** returnTo: a screen the photo goes straight to (the Photoshoot Studio). */
+  Camera: { returnTo?: 'SceneSwap' } | undefined;
   Packs: undefined;
   Settings: undefined;
 };
@@ -25,7 +26,8 @@ export type RootStackParamList = {
   /** The photoshoot studio's tools. */
   PhotoshootStudio: undefined;
   /** Scene Swap: a person cut out and placed in another scene. */
-  SceneSwap: undefined;
+  /** photo: a photo just taken in the app's camera, opened straight away. */
+  SceneSwap: { photo?: string } | undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

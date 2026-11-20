@@ -139,9 +139,10 @@ class CaptureProcessor(
     capture.takePicture(fileOptions(file, mirror), captureExecutor, object : ImageCapture.OnImageSavedCallback {
       override fun onCaptureStarted() = listener.onShutter(request.captureId)
       override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+        val lively = finishLively(file, request)
         applyProps(file, request, propFrame)
         val clean = markForPlan(file, request)
-        listener.onSuccess(request.captureId, photoResult(file, request.mode, started) + mapOf("cleanPath" to clean))
+        listener.onSuccess(request.captureId, photoResult(file, request.mode, started) + mapOf("cleanPath" to clean) + lively)
       }
       override fun onError(exception: ImageCaptureException) {
         file.delete()
@@ -498,6 +499,10 @@ class CaptureProcessor(
       // Auto Light: the flash frame fused in (Natural Flash), then tone for the
       // light the scene had, before any beauty or look (they see good light).
       val lightReport = burst.light?.takeIf { enhance }?.let { applyLight(it, burst, frames.size, work, token, listener) }
+      // Lively: the default finish, on good light, before beauty and looks.
+      val livelyReport = request.lively.takeIf { it > 0f }?.let { strength ->
+        FloatArray(4).also { r -> NativeEngine.nativeLively(work, strength, token, r) }
+      }
       val reference = frames[report[2].toInt().coerceIn(0, frames.lastIndex)]
       val (ow, oh) = CaptureGeometry.displaySize(reference.width, reference.height, geometry.remainingRotation)
       if (!enhance) {
@@ -548,6 +553,7 @@ class CaptureProcessor(
         "originalHeight" to oh,
         "look" to (request.look != null),
         "light" to lightReport,
+        "lively" to livelyReport?.let { livelyMap(request.lively, it) },
         "report" to if (enhance) mapOf(
           "framesInput" to report[0].toInt(),
           "framesUsed" to report[1].toInt(),
@@ -640,6 +646,47 @@ class CaptureProcessor(
       "keyAfter" to tone?.get(1)?.toDouble(),
     )
   }
+
+  /**
+   * Lively on a plain Photo: the saved shot gets the default finish in place,
+   * and the camera's own rendering is kept beside it to compare. A failure
+   * (or no engine) keeps the photo exactly as captured.
+   */
+  private fun finishLively(file: File, request: CaptureOptions): Map<String, Any?> {
+    if (request.lively <= 0f || !NativeEngine.ensureLoaded()) return emptyMap()
+    val original = File(file.parentFile, file.nameWithoutExtension + "_original.jpg")
+    return try {
+      file.copyTo(original, overwrite = true)
+      val decoded = ImageCodec.decode(original, CapturePolicy.livelyMaxDimension(tier))
+      val bmp = if (decoded.bitmap.isMutable) decoded.bitmap else decoded.bitmap.copy(Bitmap.Config.ARGB_8888, true).also { decoded.bitmap.recycle() }
+      try {
+        val report = FloatArray(4)
+        NativeEngine.nativeLively(bmp, request.lively, 0L, report)
+        ImageCodec.encode(bmp, file, OutputFormat.JPEG, OUTPUT_QUALITY)
+        PhotoWatermark.copyExif(original, file)
+        mapOf("originalPath" to original.absolutePath, "lively" to livelyMap(request.lively, report))
+      } finally {
+        bmp.recycle()
+      }
+    } catch (e: Exception) {
+      android.util.Log.w("PhotoPlusCapture", "lively failed; photo kept as captured", e)
+      if (original.exists()) original.copyTo(file, overwrite = true)
+      original.delete()
+      emptyMap()
+    } catch (e: OutOfMemoryError) {
+      android.util.Log.w("PhotoPlusCapture", "lively out of memory; photo kept as captured", e)
+      if (original.exists()) original.copyTo(file, overwrite = true)
+      original.delete()
+      emptyMap()
+    }
+  }
+
+  private fun livelyMap(strength: Float, r: FloatArray): Map<String, Any?> = mapOf(
+    "strength" to strength.toDouble(),
+    "skinBoost" to r[0].toDouble(),
+    "lift" to r[1].toDouble(),
+    "warmth" to r[2].toDouble(),
+  )
 
   private fun applyProps(file: File, request: CaptureOptions, frame: PropFrame) {
     val art = propArt ?: return

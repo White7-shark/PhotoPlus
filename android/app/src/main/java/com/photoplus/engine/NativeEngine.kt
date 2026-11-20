@@ -458,5 +458,13 @@ object NativeEngine {
   external fun nativeStyleAnalyze(bitmap: Bitmap): FloatArray
   external fun nativeStyleApply(bitmap: Bitmap, style: FloatArray, strength: Float, token: Long)
 
+  /**
+   * Lively: the camera's default finish (warm, rich colour, bright mid-tones,
+   * deep blacks, skin with healthy colour), in place. Adapts to the photo.
+   * [strength] 0..1. [reportOut] (4, may be null): skin colour boost, mid-tone
+   * lift, warmth added, colour room.
+   */
+  external fun nativeLively(bitmap: Bitmap, strength: Float, token: Long, reportOut: FloatArray?)
+
   const val STYLE_FLOATS = 20
 }

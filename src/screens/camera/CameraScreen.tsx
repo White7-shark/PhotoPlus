@@ -110,7 +110,7 @@ export function CameraScreen(props: TabScreenProps<'Camera'>) {
   );
 }
 
-function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
+function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
@@ -150,6 +150,16 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
   const [capturing, setCapturing] = useState(false);
   const [processing, setProcessing] = useState<Processing | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  // Opened from the Photoshoot Studio: the photo goes straight back into it.
+  const forStudio = route.params?.returnTo === 'SceneSwap';
+  const leave = useCallback(() => {
+    if (forStudio) {
+      navigation.setParams({ returnTo: undefined });
+      navigation.navigate('SceneSwap', {});
+    } else {
+      navigation.navigate('Studio');
+    }
+  }, [forStudio, navigation]);
   const [lastShot, setLastShot] = useState<{ path: string; imageId: string | null } | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: 'success' | 'danger' } | null>(null);
   const [flashKey, setFlashKey] = useState(0);
@@ -450,6 +460,7 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
           mode: captureMode,
           flash,
           mirrorFront: settings.mirrorFrontCamera,
+          lively: settings.livelyColour ? 1 : 0,
           autoLight: autoLightOn,
           autoLightMultiShot: multiShot,
           ...(processed ? tuning : {}),
@@ -478,6 +489,12 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
       );
       const imageId = await saveRecord(shot, shot.look && look ? { look: look.look, strength: look.strength } : null);
       setLastShot({ path: shot.path, imageId });
+      if (forStudio) {
+        // Straight into the studio: the photo without the free-plan mark (exports add it).
+        navigation.setParams({ returnTo: undefined });
+        navigation.navigate('SceneSwap', { photo: shot.cleanPath ?? shot.path });
+        return;
+      }
       setToast({
         text: shot.rawPath
           ? 'Saved with RAW'
@@ -508,6 +525,9 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
     caps,
     flash,
     settings.mirrorFrontCamera,
+    settings.livelyColour,
+    forStudio,
+    navigation,
     settings.watermark,
     light,
     lens,
@@ -816,12 +836,25 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
         </View>
       ) : null}
 
+      {forStudio ? (
+        <View
+          pointerEvents="none"
+          style={[styles.studioBanner, { top: insets.top + 60 }]}
+          accessibilityLiveRegion="polite"
+          testID="camera-for-studio"
+        >
+          <AppText variant="caption" style={{ fontWeight: '600' }}>
+            Photoshoot Studio · your photo opens there next
+          </AppText>
+        </View>
+      ) : null}
+
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <Chip
           icon="close"
-          accessibilityLabel="Close camera"
-          onPress={() => navigation.navigate('Studio')}
+          accessibilityLabel={forStudio ? 'Back to the Photoshoot Studio' : 'Close camera'}
+          onPress={leave}
           rotation={rotation}
         />
         <View style={styles.topGroup}>
@@ -1274,6 +1307,15 @@ function CameraStudio({ navigation }: TabScreenProps<'Camera'>) {
 }
 
 const styles = StyleSheet.create({
+  studioBanner: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
   root: { flex: 1, backgroundColor: '#000' },
   permissionIcon: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
   topBar: {

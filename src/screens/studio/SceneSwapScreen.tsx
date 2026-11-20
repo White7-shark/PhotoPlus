@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, View } from 'react-native';
 
 import { AppText, Button, GlassSurface, IconButton, Screen, SegmentedControl, ToggleRow } from '../../components';
@@ -68,7 +68,7 @@ const signed = (v: number) => (Math.abs(v) < 0.005 ? '0' : `${v > 0 ? '+' : '−
  * and size yourself in it; the light, colour and shadows are matched; save
  * the photo, or the cut-out on its own with a transparent background.
  */
-export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
+export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwap'>) {
   const theme = useTheme();
   const studio = useMemo(() => getStudioService(), []);
   const s = useSceneSwap(studio);
@@ -100,6 +100,21 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
     const path = await getStorageService().pickImage('imports');
     if (path) await s.start(path);
   };
+
+  /** Take the photo with the app's camera; it comes straight back here. */
+  const shoot = () => navigation.navigate('Main', { screen: 'Camera', params: { returnTo: 'SceneSwap' } });
+
+  // A photo just taken in the camera opens straight away (once).
+  const shot = route.params?.photo;
+  const startRef = useRef(s.start);
+  useEffect(() => {
+    startRef.current = s.start;
+  });
+  useEffect(() => {
+    if (!shot) return;
+    navigation.setParams({ photo: undefined });
+    void startRef.current(shot);
+  }, [shot, navigation]);
 
   const addBackground = async () => {
     const path = await getStorageService().pickImage('backgrounds');
@@ -209,8 +224,8 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
           <GlassSurface radius={22} style={{ padding: 20, gap: 12 }}>
             <AppText variant="title2">Put yourself in a new place</AppText>
             <AppText variant="body" tone="secondary">
-              Choose a photo of a person. They are cut out on this phone — hair and all — and you choose where they go:
-              a studio, a park at golden hour, a café, a plain colour, or a photo of your own.
+              Choose a photo of a person, or take one now. They are cut out on this phone — hair and all — and you
+              choose where they go: a studio, a park at golden hour, a café, a plain colour, or a photo of your own.
             </AppText>
             <AppText variant="caption" tone="secondary">
               Works best with one person, head and shoulders or head to toe, in a sharp photo.
@@ -222,6 +237,15 @@ export function SceneSwapScreen({ navigation }: RootScreenProps<'SceneSwap'>) {
               loading={s.busy === 'start'}
               onPress={() => void pick()}
               testID="scene-pick"
+            />
+            <Button
+              label="Take a photo"
+              icon="camera"
+              size="lg"
+              variant="glass"
+              disabled={s.busy === 'start'}
+              onPress={shoot}
+              testID="scene-shoot"
             />
           </GlassSurface>
         ) : null}

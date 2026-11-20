@@ -1477,6 +1477,26 @@ pp_status pp_style_analyze(const pp_image* image, pp_style* out) {
   });
 }
 
+pp_status pp_lively(pp_image* image, float strength, const pp_cancel_token* token, float* report_out) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || !std::isfinite(strength)) return fail(PP_ERROR_INVALID_ARGUMENT, "image and strength are required");
+    const auto fmt = image->buffer.format();
+    if (fmt != photoplus::PixelFormat::RGBA8 && fmt != photoplus::PixelFormat::BGRA8) {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Lively needs an RGBA or BGRA image");
+    }
+    photoplus::enhance::LivelyReport r;
+    photoplus::Error e = photoplus::enhance::lively(image->buffer, strength, token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (report_out) {
+      report_out[0] = r.skinBoost;
+      report_out[1] = r.lift;
+      report_out[2] = r.warmth;
+      report_out[3] = r.colourRoom;
+    }
+    return succeed();
+  });
+}
+
 pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
     if (image == nullptr || target == nullptr || !std::isfinite(strength)) {

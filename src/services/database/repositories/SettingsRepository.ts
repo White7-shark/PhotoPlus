@@ -53,6 +53,8 @@ export interface AppSettings {
   cameraResolution: 'max' | '12mp' | '8mp' | '5mp' | '2mp';
   /** Save selfies mirrored, as the preview shows them. */
   mirrorFrontCamera: boolean;
+  /** Lively colour: photos get warm, rich colour and bright light (off: the phone camera's own look). */
+  livelyColour: boolean;
   /** Auto Light: dark rooms, night and harsh light handled automatically. */
   autoLight: boolean;
   /** Camera beauty (Glow) for photos outside Spotlight. Superseded by cameraBeauty; kept for saved settings. */
@@ -87,6 +89,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cameraAspectRatio: '4:3',
   cameraResolution: 'max',
   mirrorFrontCamera: true,
+  livelyColour: true,
   autoLight: true,
   cameraGlow: 'off',
   cameraBeauty: DEFAULT_CAMERA_BEAUTY,
@@ -122,6 +125,7 @@ const VALIDATORS: Validators = {
   cameraAspectRatio: oneOf('4:3', '16:9', '1:1'),
   cameraResolution: oneOf('max', '12mp', '8mp', '5mp', '2mp'),
   mirrorFrontCamera: isBool,
+  livelyColour: isBool,
   autoLight: isBool,
   cameraGlow: oneOf('off', 'natural', 'smooth', 'flawless'),
   cameraBeauty: isCameraBeauty,

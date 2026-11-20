@@ -96,6 +96,13 @@ data class CaptureOptions(
   val detail: Float = 0.35f,
   val vibrance: Float = 0.25f,
   val autoTone: Boolean = true,
+  /**
+   * Lively, 0..1: the default finish every photo gets (warm, rich colour,
+   * bright mid-tones, deep blacks, healthy skin colour), so a shot looks like
+   * a flagship phone's instead of flat and grey. 0 keeps the camera's own
+   * rendering ("Natural"). RAW is never touched.
+   */
+  val lively: Float = 1f,
   /** Save front-camera photos as the preview shows them (mirrored), like a mirror. */
   val mirrorFront: Boolean = true,
   /** Spotlight settings (PORTRAIT mode). */
@@ -152,6 +159,7 @@ data class CaptureOptions(
         detail = unit("detail", 0.35f),
         vibrance = unit("vibrance", 0.25f),
         autoTone = map["autoTone"] as? Boolean ?: true,
+        lively = unit("lively", 1f),
         mirrorFront = map["mirrorFront"] as? Boolean ?: true,
         portrait = com.photoplus.studio.PortraitParams.fromMap(map),
         previewPoints = com.photoplus.studio.PortraitParams.points(map["points"]),

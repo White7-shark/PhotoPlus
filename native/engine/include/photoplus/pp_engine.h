@@ -955,6 +955,14 @@ typedef struct pp_style {
 pp_status pp_style_analyze(const pp_image* image, pp_style* out);
 pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token);
 
+/* Lively: the camera's default finish. Warm, rich colour, bright mid-tones,
+ * deep blacks and skin with healthy colour (every skin tone keeps its hue).
+ * Adapts to the photo: one that already looks this way changes little.
+ * RGBA8/BGRA8, in place; strength 0..1 (0 leaves the photo untouched).
+ * report_out (may be NULL) receives 4 floats: skin colour boost, mid-tone
+ * lift, warmth added, colour room. */
+pp_status pp_lively(pp_image* image, float strength, const pp_cancel_token* token, float* report_out);
+
 /* ---- Video: "Glide" (Phase 6) ------------------------------------------------
  * A short handheld clip made steady and clean, one frame at a time:
  *   pass 1: pp_video_estimate_motion(previous, current) for every frame;

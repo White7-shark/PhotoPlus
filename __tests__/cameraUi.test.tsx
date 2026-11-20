@@ -83,9 +83,9 @@ async function readyAgain() {
   });
 }
 
-async function renderReadyCamera() {
-  const navigation = { navigate: jest.fn(), goBack: jest.fn() };
-  await render(<CameraScreen navigation={navigation as never} route={{ key: 'c', name: 'Camera' } as never} />);
+async function renderReadyCamera(params?: { returnTo?: 'SceneSwap' }) {
+  const navigation = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn() };
+  await render(<CameraScreen navigation={navigation as never} route={{ key: 'c', name: 'Camera', params } as never} />);
   // The codegen component renders as a host element; fire its ready event.
   const host = await screen.findByTestId('camera-preview');
   await act(async () => {
@@ -130,6 +130,37 @@ describe('camera screen', () => {
     await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(2));
     expect(mockCamera.capturePhoto.mock.calls[1][0]).toMatchObject({ mode: 'night' });
     await screen.findByText('Moonlight photo saved');
+  });
+
+  it('sends Lively colour with every shot, and off when turned off in settings', async () => {
+    await renderReadyCamera();
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(1));
+    expect(mockCamera.capturePhoto.mock.calls[0][0]).toMatchObject({ lively: 1 });
+    await act(async () => {
+      useAppStore.setState({ settings: { ...DEFAULT_SETTINGS, livelyColour: false } });
+    });
+    await readyAgain();
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(mockCamera.capturePhoto).toHaveBeenCalledTimes(2));
+    expect(mockCamera.capturePhoto.mock.calls[1][0]).toMatchObject({ lively: 0 });
+  });
+
+  it('takes a photo for the Photoshoot Studio and goes straight back with it', async () => {
+    const { navigation } = await renderReadyCamera({ returnTo: 'SceneSwap' });
+    expect(screen.getByTestId('camera-for-studio')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('shutter'));
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('SceneSwap', expect.anything()));
+    const [, params] = navigation.navigate.mock.calls.find(c => c[0] === 'SceneSwap') as [string, { photo: string }];
+    expect(typeof params.photo).toBe('string');
+    expect(params.photo.length).toBeGreaterThan(0);
+    expect(navigation.setParams).toHaveBeenCalledWith({ returnTo: undefined });
+  });
+
+  it('leaving the camera opened from the studio goes back to the studio', async () => {
+    const { navigation } = await renderReadyCamera({ returnTo: 'SceneSwap' });
+    await fireEvent.press(screen.getByLabelText('Back to the Photoshoot Studio'));
+    expect(navigation.navigate).toHaveBeenCalledWith('SceneSwap', {});
   });
 
   it('shows the Pro panel and applies manual controls only in Pro', async () => {

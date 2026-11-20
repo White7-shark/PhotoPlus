@@ -167,3 +167,34 @@ describe('Scene Swap', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('SceneSwap');
   });
 });
+
+describe('Scene Swap with the camera', () => {
+  const tick = () => new Promise<void>(r => setTimeout(() => r(), 0));
+
+  it('opens the camera, which brings the photo back here', async () => {
+    await open();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('scene-shoot'));
+    });
+    expect(navigation.navigate).toHaveBeenCalledWith('Main', { screen: 'Camera', params: { returnTo: 'SceneSwap' } });
+  });
+
+  it('starts straight away with a photo just taken, once', async () => {
+    const nav = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn() };
+    await render(
+      <ThemeProvider preference="dark">
+        <SceneSwapScreen
+          navigation={nav as never}
+          route={{ key: 's', name: 'SceneSwap', params: { photo: '/files/captures/shot.jpg' } } as never}
+        />
+      </ThemeProvider>,
+    );
+    await act(async () => {
+      for (let i = 0; i < 6; i++) await tick();
+    });
+    expect(nav.setParams).toHaveBeenCalledWith({ photo: undefined });
+    expect(mockStudio.startSession).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(mockStudio.startSession.mock.calls[0])).toContain('/files/captures/shot.jpg');
+    expect(mockStorage.pickImage).not.toHaveBeenCalled();
+  });
+});

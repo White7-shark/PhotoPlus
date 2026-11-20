@@ -29,6 +29,7 @@ add_library(photoplus_engine STATIC
   src/enhance/superres.cpp
   src/enhance/restore.cpp
   src/enhance/tone.cpp
+  src/enhance/lively.cpp
   src/enhance/enhance.cpp
   src/portrait/face.cpp
   src/beauty/beauty.cpp
