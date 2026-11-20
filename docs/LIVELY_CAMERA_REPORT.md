@@ -29,6 +29,43 @@ Each step measures first, so a photo that already looks right changes little.
 
 When a pixel is brightened, its colour grows more slowly than its brightness, so lifted skin does not turn orange.
 
+## Smooth and even (second version)
+
+The first version looked rough and patchy up close. Measured on the user's face:
+
+- fine texture rose from 0.031 to 0.041;
+- colour blotchiness rose from 0.0033 to 0.0088.
+
+There were four causes:
+
+1. Clarity boosted every fine detail, including grain.
+2. The skin colour gain was worked out from each pixel's own noisy colour, so low-colour noise got the largest boost.
+3. Skin was detected one pixel at a time.
+4. The shadow deepening also decided one pixel at a time.
+
+Now every decision comes from a smooth map of the photo (at most 1600 px; luma, colour and skin weight):
+
+- **Even colour gains:** neighbouring pixels get the same gain, so noise is not boosted into blotches.
+- **Clarity on shapes only:** it works from the smooth map against the wide base, so grain is not boosted.
+- **Smooth skin surface:** 75% of the skin's fine texture is eased toward its surroundings. A range weight keeps edges sharp (eyes, lips, hair, a beard's outline). Elsewhere, only small grain-sized differences are softened (25%).
+- **Colour noise evened out:** each pixel's colour is drawn toward the smooth colour (up to 90%), except across real colour edges.
+- **One even skin colour:** skin is drawn 55% toward the person's own median skin hue at the boosted strength. Redder, greyer or purple patches blend into one warm, even tone, and grey shine is dimmed more.
+- **Saturated colours protected:** strongly saturated colours with skin-like hues (a red hat, orange clothes, wood) are left alone.
+
+| User's face | Android | First Lively | Smooth and even |
+|---|---|---|---|
+| Fine texture | 0.031 | 0.041 | 0.034 |
+| Colour blotchiness | 0.0033 | 0.0088 | 0.0050 |
+| Skin colour | 0.078 | 0.094 | 0.090 |
+
+The remaining texture and blotchiness above the Android original come from the added contrast and the 1.6× richer skin colour. Relative to how strong the colour is, the new version is smoother than the original.
+
+New test `lively_skin_comes_out_smooth_and_even_and_a_red_hat_stays_red`, on a blotchy, grainy face:
+
+- skin hue spread drops from 12.5° to 8.3°;
+- roughness drops from 0.0099 to 0.0075, despite the added contrast;
+- a saturated red hat keeps its hue and colour.
+
 ## Results (engine, `light_demo lively`)
 
 | Photo | Skin boost | Lift | Warmth | Colour room |

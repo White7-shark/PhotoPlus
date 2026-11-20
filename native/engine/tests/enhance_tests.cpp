@@ -597,3 +597,90 @@ TEST(lively_strength_zero_is_untouched_and_bgra_matches_rgba) {
   pp_image_destroy(b);
   pp_image_destroy(c);
 }
+
+namespace {
+// A face whose skin is blotchy (patches redder and greyer than the rest) and
+// grainy, next to a saturated red hat.
+pp_image* blotchyFace(int w, int h) {
+  pp_image* img = nullptr;
+  if (pp_image_create(w, h, PP_FORMAT_RGBA8, &img) != PP_OK) return nullptr;
+  auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+  uint32_t seed = 12345;
+  const auto rnd = [&]() {
+    seed = seed * 1664525u + 1013904223u;
+    return static_cast<float>((seed >> 8) & 0xFFFF) / 65535.0f - 0.5f;
+  };
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x) {
+      float Y = 0.6f, cb = -0.004f, cr = 0.003f;
+      const float dx = (x - w * 0.5f) / (w * 0.3f), dy = (y - h * 0.55f) / (h * 0.3f);
+      if (y < h * 0.15f) {
+        Y = 0.35f;  // red hat (a skin-like hue, strongly saturated)
+        cb = -0.06f;
+        cr = 0.2f;
+      } else if (dx * dx + dy * dy < 1.0f) {
+        Y = 0.42f + 0.03f * rnd();  // grainy skin
+        const bool red = ((x / 24) + (y / 24)) % 2 == 0;  // patches
+        const float c = red ? 0.06f : 0.03f, hue = (red ? 105.0f : 130.0f) / 57.29578f;
+        cb = c * std::cos(hue);
+        cr = c * std::sin(hue);
+      } else if (y < h * 0.2f) {
+        Y = 0.93f;
+        cb = cr = 0.0f;
+      }
+      const float r = Y + 1.402f * cr, g = Y - 0.344136f * cb - 0.714136f * cr, b = Y + 1.772f * cb;
+      uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+      const auto to8 = [](float v) { return static_cast<uint8_t>(std::lround(std::fmin(1.0f, std::fmax(0.0f, v)) * 255.0f)); };
+      q[0] = to8(r);
+      q[1] = to8(g);
+      q[2] = to8(b);
+      q[3] = 255;
+    }
+  return img;
+}
+
+struct Spread {
+  float hueSd, lumaRough;
+};
+// Hue spread and pixel-to-pixel luma roughness over the skin.
+Spread skinSpread(pp_image* img, int w, int h) {
+  const auto* px = static_cast<const uint8_t*>(pp_image_pixels(img));
+  double sh = 0, sh2 = 0, rough = 0;
+  int n = 0;
+  const auto lum = [&](int x, int y) {
+    const uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+    return (0.299f * q[0] + 0.587f * q[1] + 0.114f * q[2]) / 255.0f;
+  };
+  for (int y = h * 45 / 100; y < h * 65 / 100; ++y)
+    for (int x = w * 35 / 100; x < w * 65 / 100; ++x) {
+      const uint8_t* q = px + (static_cast<size_t>(y) * w + x) * 4;
+      const float r = q[0] / 255.0f, g = q[1] / 255.0f, b = q[2] / 255.0f;
+      const float cb = -0.168736f * r - 0.331264f * g + 0.5f * b, cr = 0.5f * r - 0.418688f * g - 0.081312f * b;
+      const float hue = std::atan2(cr, cb) * 57.29578f;
+      sh += hue;
+      sh2 += hue * hue;
+      rough += std::fabs(lum(x, y) - lum(x + 1, y));
+      ++n;
+    }
+  const double mean = sh / n;
+  return {static_cast<float>(std::sqrt(std::max(0.0, sh2 / n - mean * mean))), static_cast<float>(rough / n)};
+}
+}  // namespace
+
+TEST(lively_skin_comes_out_smooth_and_even_and_a_red_hat_stays_red) {
+  const int w = 400, h = 520;
+  pp_image* img = blotchyFace(w, h);
+  EXPECT_TRUE(img != nullptr);
+  const Spread before = skinSpread(img, w, h);
+  const Patch hat0 = patch(img, 20, 10, w - 20, h * 12 / 100, false);
+  EXPECT_TRUE(pp_lively(img, 1.0f, nullptr, nullptr) == PP_OK);
+  const Spread after = skinSpread(img, w, h);
+  const Patch hat1 = patch(img, 20, 10, w - 20, h * 12 / 100, false);
+  std::printf("    skin hue spread %.1f -> %.1f deg, roughness %.4f -> %.4f; hat hue %.0f -> %.0f, chroma %.3f -> %.3f\n",
+              before.hueSd, after.hueSd, before.lumaRough, after.lumaRough, hat0.hue, hat1.hue, hat0.chroma, hat1.chroma);
+  EXPECT_TRUE(after.hueSd < before.hueSd * 0.7f);       // one even skin colour
+  EXPECT_TRUE(after.lumaRough < before.lumaRough * 0.9f);  // smoother surface, despite the added contrast
+  EXPECT_TRUE(std::fabs(hat1.hue - hat0.hue) < 6.0f);  // the hat keeps its red
+  EXPECT_TRUE(hat1.chroma > hat0.chroma * 0.9f);
+  pp_image_destroy(img);
+}

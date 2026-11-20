@@ -89,7 +89,7 @@ Photo:      CameraX JPEG ─▶ copy kept as *_original.jpg ─▶ decode (≤ 4
 Clarity…:   burst ─▶ pp_enhance ─▶ Auto Light ─▶ pp_lively ─▶ beauty / Spotlight / look ─▶ JPEG + EXIF
 ```
 
-`native/engine/src/enhance/lively.cpp`: grey-pixel white balance (skin keeps its warmth), warmth only for a cool scene, a tone curve (black point, gain, mid-tone lift held back for low-key photos, S-curve, highlight shoulder), clarity, skin brought toward a healthy colour-for-brightness (every skin tone keeps its own hue), grey shine coloured like the skin around it, vibrance scaled by how colourful the photo already is, neutral shadows deepened. Large-scale measurements run on a ≤ 1024 px grid. Setting: *Lively colour* (on by default; off keeps the phone camera's own look). See `docs/LIVELY_CAMERA_REPORT.md`.
+`native/engine/src/enhance/lively.cpp`: grey-pixel white balance (skin keeps its warmth), warmth only for a cool scene, a tone curve (black point, gain, mid-tone lift held back for low-key photos, S-curve, highlight shoulder), clarity, skin brought toward a healthy colour-for-brightness (every skin tone keeps its own hue), grey shine coloured like the skin around it, vibrance scaled by how colourful the photo already is, neutral shadows deepened. Large-scale measurements run on a ≤ 1024 px grid; every per-pixel change (colour gains, skin smoothing, colour evening, shadows) is decided from a smooth ≤ 1600 px map, so the result is smooth and even rather than noisy. Setting: *Lively colour* (on by default; off keeps the phone camera's own look). See `docs/LIVELY_CAMERA_REPORT.md`.
 
 ## Spotlight, Glow and Vibe Match
 
