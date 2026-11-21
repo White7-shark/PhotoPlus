@@ -17,6 +17,7 @@ import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { ProjectsScreen } from '../screens/ProjectsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { PhotoshootStudioScreen } from '../screens/studio/PhotoshootStudioScreen';
+import { FilmCollageScreen } from '../screens/studio/FilmCollageScreen';
 import { SceneSwapScreen } from '../screens/studio/SceneSwapScreen';
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
@@ -51,6 +52,7 @@ const CreateProp = guarded(CreatePropScreen, 'Make a prop');
 const GlidePreview = guarded(GlidePreviewScreen, 'Glide');
 const PhotoshootStudio = guarded(PhotoshootStudioScreen, 'Photoshoot Studio');
 const SceneSwap = guarded(SceneSwapScreen, 'Scene Swap');
+const FilmCollage = guarded(FilmCollageScreen, 'Film & Collage');
 
 const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 
@@ -107,6 +109,7 @@ export function RootNavigator() {
         <Stack.Screen name="GlidePreview" component={GlidePreview} options={{ animation: 'fade' }} />
         <Stack.Screen name="PhotoshootStudio" component={PhotoshootStudio} />
         <Stack.Screen name="SceneSwap" component={SceneSwap} />
+        <Stack.Screen name="FilmCollage" component={FilmCollage} />
       </Stack.Navigator>
     </NavigationContainer>
   );

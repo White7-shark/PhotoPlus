@@ -151,15 +151,16 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
   const [processing, setProcessing] = useState<Processing | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   // Opened from the Photoshoot Studio: the photo goes straight back into it.
-  const forStudio = route.params?.returnTo === 'SceneSwap';
+  const returnTo = route.params?.returnTo;
+  const forStudio = returnTo === 'SceneSwap' || returnTo === 'FilmCollage';
   const leave = useCallback(() => {
     if (forStudio) {
       navigation.setParams({ returnTo: undefined });
-      navigation.navigate('SceneSwap', {});
+      navigation.navigate(returnTo ?? 'SceneSwap', {});
     } else {
       navigation.navigate('Studio');
     }
-  }, [forStudio, navigation]);
+  }, [forStudio, returnTo, navigation]);
   const [lastShot, setLastShot] = useState<{ path: string; imageId: string | null } | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: 'success' | 'danger' } | null>(null);
   const [flashKey, setFlashKey] = useState(0);
@@ -492,7 +493,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
       if (forStudio) {
         // Straight into the studio: the photo without the free-plan mark (exports add it).
         navigation.setParams({ returnTo: undefined });
-        navigation.navigate('SceneSwap', { photo: shot.cleanPath ?? shot.path });
+        navigation.navigate(returnTo ?? 'SceneSwap', { photo: shot.cleanPath ?? shot.path });
         return;
       }
       setToast({
@@ -527,6 +528,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
     settings.mirrorFrontCamera,
     settings.livelyColour,
     forStudio,
+    returnTo,
     navigation,
     settings.watermark,
     light,

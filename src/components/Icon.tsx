@@ -60,6 +60,11 @@ export const ICONS = {
   chevronLeft: <Path d="M14.5 6 8.5 12 14.5 18" />,
   close: <Path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" />,
   plus: <Path d="M12 5v14M5 12h14" />,
+  minus: <Path d="M5 12h14" />,
+  download: <Path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" />,
+  film: (
+    <Path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8 3v18M16 3v18M4 8h4M4 12h4M4 16h4M16 8h4M16 12h4M16 16h4" />
+  ),
   check: <Path d="M5 12.5 10 17.5 19 7" />,
   alert: (
     <>

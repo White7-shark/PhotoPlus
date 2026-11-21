@@ -955,6 +955,70 @@ typedef struct pp_style {
 pp_status pp_style_analyze(const pp_image* image, pp_style* out);
 pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token);
 
+/* ---- Film & Collage (Photoshoot Studio) ----------------------------------
+ * One frame (or collage cell): which photo (index into `photos`), its look
+ * (pp_frame_look), a zoom (1..4), a pan (-1..1 each way, from the focus) and
+ * a mirror. Photos are cover-fitted into the frame, centred on the focus
+ * (the face) when given. */
+typedef enum pp_frame_look {
+  PP_LOOK_ORIGINAL = 0,
+  PP_LOOK_BLACK_WHITE = 1,
+  PP_LOOK_SEPIA = 2,
+  PP_LOOK_VINTAGE = 3,
+  PP_LOOK_COOL = 4,
+  PP_LOOK_PUNCH = 5,
+  PP_LOOK_CROSS_PROCESS = 6,
+  PP_LOOK_FADED = 7,
+  PP_LOOK_GOLDEN = 8,
+  PP_LOOK_NOIR = 9
+} pp_frame_look;
+
+typedef struct pp_film_frame {
+  int32_t photo;
+  int32_t look;
+  float zoom;
+  float pan_x;
+  float pan_y;
+  int32_t flip;
+  float focus_x; /* what crops and zooms centre on (the face), 0..1 of the photo; negative = unknown */
+  float focus_y;
+} pp_film_frame;
+
+typedef enum pp_film_style { PP_FILM_CLASSIC = 0, PP_FILM_AMBER = 1, PP_FILM_PHOTO_BOOTH = 2, PP_FILM_CINEMA = 3 } pp_film_style;
+
+typedef struct pp_film_params {
+  int32_t style;           /* pp_film_style */
+  int32_t vertical;        /* 1: frames top to bottom; 0: left to right */
+  int32_t portrait_frames; /* 1: frames taller than wide */
+  int32_t frame_size;      /* a frame's short edge, px (64..2048) */
+  int32_t markings;        /* 1: the stock name and frame numbers on the edges */
+  uint32_t seed;           /* film grain */
+} pp_film_params;
+
+/* Photos as frames on a strip of film: the base, sprocket holes and edge
+ * markings of the style, each frame with its own transformation. 1..12
+ * photos and frames. A new RGBA8 image in *out. */
+pp_status pp_studio_filmstrip(const pp_image* const* photos, int32_t photo_count, const pp_film_frame* frames, int32_t frame_count,
+                              const pp_film_params* params, const pp_cancel_token* token, pp_image** out);
+
+typedef struct pp_collage_cell {
+  float x, y, w, h; /* 0..1 of the area inside the margin */
+  pp_film_frame frame;
+} pp_collage_cell;
+
+typedef struct pp_collage_params {
+  int32_t width, height; /* 64..8192 */
+  float gap;             /* between cells, share of the short side (0..0.1) */
+  float margin;          /* around the edge, share of the short side (0..0.2) */
+  float radius;          /* cell corners, share of the cell's short side (0..0.5) */
+  uint8_t background[4]; /* r, g, b, unused */
+} pp_collage_params;
+
+/* Photos in a collage: each cell cover-filled with its photo and
+ * transformation. 1..12 photos and cells. A new RGBA8 image in *out. */
+pp_status pp_studio_collage(const pp_image* const* photos, int32_t photo_count, const pp_collage_cell* cells, int32_t cell_count,
+                            const pp_collage_params* params, const pp_cancel_token* token, pp_image** out);
+
 /* Lips (Photoshoot Studio): the lips of `face_count` faces repainted in
  * (r, g, b), keeping their own shading, creases and gloss; dark lips are
  * lifted so the colour shows on deep skin; teeth are left alone.

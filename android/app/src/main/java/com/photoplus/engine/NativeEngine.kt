@@ -471,6 +471,22 @@ object NativeEngine {
   )
 
   /**
+   * Film strip (Photoshoot Studio): [photos] as frames, returns a result
+   * handle (see [nativeResultWidth], [nativeCopyResultToBitmap],
+   * [nativeReleaseResult]). [frames]: 8 floats per frame (photo, look, zoom,
+   * panX, panY, flip, focusX, focusY). [params]: style, vertical, portrait,
+   * frameSize, markings, seed.
+   */
+  external fun nativeStudioFilm(photos: Array<Bitmap>, frames: FloatArray, params: IntArray, token: Long): Long
+
+  /**
+   * Collage (Photoshoot Studio): returns a result handle. [cells]: 12 floats
+   * per cell (x, y, w, h, then a frame's 8). [params]: width, height, gap,
+   * margin, radius, r, g, b.
+   */
+  external fun nativeStudioCollage(photos: Array<Bitmap>, cells: FloatArray, params: FloatArray, token: Long): Long
+
+  /**
    * Lively: the camera's default finish (warm, rich colour, bright mid-tones,
    * deep blacks, skin with healthy colour), in place. Adapts to the photo.
    * [strength] 0..1. [reportOut] (4, may be null): skin colour boost, mid-tone

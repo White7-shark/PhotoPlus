@@ -8,7 +8,7 @@ export type TabParamList = {
   Studio: undefined;
   Projects: undefined;
   /** returnTo: a screen the photo goes straight to (the Photoshoot Studio). */
-  Camera: { returnTo?: 'SceneSwap' } | undefined;
+  Camera: { returnTo?: 'SceneSwap' | 'FilmCollage' } | undefined;
   Packs: undefined;
   Settings: undefined;
 };
@@ -28,6 +28,8 @@ export type RootStackParamList = {
   /** Scene Swap: a person cut out and placed in another scene. */
   /** photo: a photo just taken in the app's camera, opened straight away. */
   SceneSwap: { photo?: string } | undefined;
+  /** Film & Collage: photos as a film strip or a collage; photo: one just taken in the camera. */
+  FilmCollage: { photo?: string } | undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

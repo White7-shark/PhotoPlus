@@ -95,6 +95,10 @@ Clarity…:   burst ─▶ pp_enhance ─▶ Auto Light ─▶ person mask ─�
 
 ML Kit face contours (once per studio session) ▸ engine landmarks ▸ `pp_studio_lips` on the cut-out (after hair, before studio light). Natural pink adapts to the person (fair faces and already-pink lips get very little); lipstick is applied as chosen. Lips keep their own shading and gloss; the open mouth (teeth) is left out. UI: `src/screens/studio/LipsPanel.tsx` (Pink lips, Lipstick), shades in `src/services/studio/lips.ts`.
 
+## Film & Collage (Photoshoot Studio)
+
+Photos (decoded within budget; faces found once, the focus for crops) ▸ `pp_studio_filmstrip` (classic 35mm, photo booth, amber negative, cinema; sprocket holes and edge markings) or `pp_studio_collage` (ten layouts, gap, corners, background), each frame with one of ten looks, a zoom, a pan and a mirror. UI: `src/screens/studio/FilmCollageScreen.tsx`, catalogues in `src/services/studio/film.ts`. See `docs/FILM_COLLAGE_REPORT.md`.
+
 ## Spotlight, Glow and Vibe Match
 
 ```

@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <map>
@@ -365,8 +366,97 @@ int lips(int argc, char** argv) {
   return 0;
 }
 
+std::vector<float> floatList(const char* s) {
+  std::vector<float> out;
+  std::string cur;
+  for (const char* c = s;; ++c) {
+    if (*c == ',' || *c == 0) {
+      if (!cur.empty()) out.push_back(std::strtof(cur.c_str(), nullptr));
+      cur.clear();
+      if (*c == 0) break;
+    } else {
+      cur += *c;
+    }
+  }
+  return out;
+}
+
+// film OUT.ppm STYLE VERTICAL PORTRAIT LOOKS ZOOMS PHOTO.ppm...: a film
+// strip. LOOKS and ZOOMS are comma lists, one per frame (frame i uses photo
+// i mod count; a negative zoom mirrors the frame).
+int film(int argc, char** argv) {
+  if (argc < 9) return 2;
+  std::vector<pp_image*> photos;
+  for (int i = 8; i < argc; ++i) {
+    pp_image* p = readPpm(argv[i]);
+    if (!p) return 1;
+    photos.push_back(p);
+  }
+  const auto looks = floatList(argv[6]);
+  const auto zooms = floatList(argv[7]);
+  std::vector<pp_film_frame> frames;
+  for (size_t i = 0; i < looks.size(); ++i) {
+    const float z = i < zooms.size() ? zooms[i] : 1.0f;
+    pp_film_frame f{};
+    f.photo = static_cast<int32_t>(i % photos.size());
+    f.look = static_cast<int32_t>(looks[i]);
+    f.zoom = std::fabs(z);
+    f.flip = z < 0.0f ? 1 : 0;
+    f.focus_x = f.focus_y = -1.0f;
+    if (const char* fx = std::getenv("PP_FOCUS")) {  // "x,y" for every photo (the face)
+      const auto v = floatList(fx);
+      if (v.size() >= 2) f.focus_x = v[0], f.focus_y = v[1];
+    }
+    frames.push_back(f);
+  }
+  // STYLE VERTICAL PORTRAIT; frames 360 px on their short edge, markings on.
+  const pp_film_params p{std::atoi(argv[3]), std::atoi(argv[4]), std::atoi(argv[5]), 360, 1, 7};
+  pp_image* out = nullptr;
+  std::vector<const pp_image*> in(photos.begin(), photos.end());
+  const int rc = pp_studio_filmstrip(in.data(), static_cast<int32_t>(in.size()), frames.data(), static_cast<int32_t>(frames.size()), &p,
+                                     nullptr, &out);
+  if (rc != PP_OK) return 1;
+  write(argv[2], out, -1);
+  for (auto* ph : photos) pp_image_destroy(ph);
+  pp_image_destroy(out);
+  return 0;
+}
+
+// collage OUT.ppm W H CELLS GAP MARGIN RADIUS R G B LOOKS PHOTO.ppm...: CELLS
+// is a comma list of x,y,w,h per cell; LOOKS one look per cell.
+int collageCmd(int argc, char** argv) {
+  if (argc < 14) return 2;
+  std::vector<pp_image*> photos;
+  for (int i = 13; i < argc; ++i) {
+    pp_image* p = readPpm(argv[i]);
+    if (!p) return 1;
+    photos.push_back(p);
+  }
+  const auto rects = floatList(argv[5]);
+  const auto looks = floatList(argv[12]);
+  std::vector<pp_collage_cell> cells;
+  for (size_t i = 0; i + 3 < rects.size(); i += 4) {
+    const size_t k = i / 4;
+    cells.push_back({rects[i], rects[i + 1], rects[i + 2], rects[i + 3],
+                     {static_cast<int32_t>(k % photos.size()), k < looks.size() ? static_cast<int32_t>(looks[k]) : 0, 1.0f, 0.0f, 0.0f, 0, -1.0f, -1.0f}});
+  }
+  pp_collage_params p{std::atoi(argv[3]), std::atoi(argv[4]), std::strtof(argv[6], nullptr), std::strtof(argv[7], nullptr),
+                      std::strtof(argv[8], nullptr),
+                      {static_cast<uint8_t>(std::atoi(argv[9])), static_cast<uint8_t>(std::atoi(argv[10])), static_cast<uint8_t>(std::atoi(argv[11])), 0}};
+  pp_image* out = nullptr;
+  std::vector<const pp_image*> in(photos.begin(), photos.end());
+  const int rc = pp_studio_collage(in.data(), static_cast<int32_t>(in.size()), cells.data(), static_cast<int32_t>(cells.size()), &p, nullptr, &out);
+  if (rc != PP_OK) return 1;
+  write(argv[2], out, -1);
+  for (auto* ph : photos) pp_image_destroy(ph);
+  pp_image_destroy(out);
+  return 0;
+}
+
 int main(int argc, char** argv) {
   int rc = 2;
+  if (argc > 1 && std::strcmp(argv[1], "film") == 0) rc = film(argc, argv);
+  if (argc > 1 && std::strcmp(argv[1], "collage") == 0) rc = collageCmd(argc, argv);
   if (argc > 1 && std::strcmp(argv[1], "lips") == 0) rc = lips(argc, argv);
   if (argc > 1 && std::strcmp(argv[1], "cutout") == 0) rc = cutout(argc, argv);
   else if (argc > 1 && std::strcmp(argv[1], "compose") == 0) rc = compose(argc, argv);
@@ -379,6 +469,8 @@ int main(int argc, char** argv) {
                  "usage: studio_demo backdrop OUT.ppm W H R G B [light cx cy]\n"
                  "       studio_demo hair IN.ppm MASK.pgm ZONES.pgm OUT_PREFIX STYLE|- [R G B [strength]]\n"
                  "       studio_demo styles\n"
+                 "       studio_demo film OUT.ppm STYLE VERTICAL PORTRAIT LOOKS ZOOMS PHOTO.ppm...\n"
+                 "       studio_demo collage OUT.ppm W H CELLS GAP MARGIN RADIUS R G B LOOKS PHOTO.ppm...\n"
                  "       studio_demo lips IN.ppm OUT.ppm LANDMARKS.txt R G B [strength] [natural]\n"
                  "       studio_demo studio IN.ppm MASK.pgm ZONES.pgm OUT.ppm [key=value ...] (light, backdrop, finish)\n"
                  "       studio_demo cutout IN.ppm MASK.pgm ZONES.pgm|- OUT_PREFIX [softness shift hair clean] [STROKES.txt]\n"

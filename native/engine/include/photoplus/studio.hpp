@@ -276,4 +276,55 @@ Error colourLips(ImageBuffer& image, const std::vector<std::array<float, kLipLan
                  const std::array<uint8_t, 3>& rgb, float strength, bool natural, const CancellationToken* token,
                  LipsReport* report);
 
+// ---- Film & Collage ----
+// Ten looks a frame (or collage cell) can take.
+enum class FrameLook : int32_t {
+  Original = 0, BlackWhite = 1, Sepia = 2, Vintage = 3, Cool = 4, Punch = 5, CrossProcess = 6, Faded = 7, Golden = 8, Noir = 9
+};
+constexpr int32_t kFrameLooks = 10;
+constexpr size_t kMaxFilmPhotos = 12;
+constexpr size_t kMaxFilmFrames = 12;
+
+// One frame: which photo, its look, a zoom (1..4), a pan (-1..1 each way,
+// from the focus) and a mirror. The focus (0..1 of the photo, e.g. the face;
+// negative = unknown) is what crops and zooms centre on.
+struct FrameSpec {
+  int32_t photo = 0;
+  FrameLook look = FrameLook::Original;
+  float zoom = 1.0f, panX = 0.0f, panY = 0.0f;
+  bool flip = false;
+  float focusX = -1.0f, focusY = -1.0f;
+};
+
+enum class FilmStyle : int32_t { Classic = 0, Amber = 1, PhotoBooth = 2, Cinema = 3 };
+
+struct FilmParams {
+  FilmStyle style = FilmStyle::Classic;
+  bool vertical = true;
+  bool portraitFrames = false;  // frames taller than wide
+  int32_t frameSize = 720;      // a frame's short edge, px (64..2048)
+  bool markings = true;         // stock name and frame numbers on the edges
+  uint32_t seed = 1;            // film grain
+};
+
+// Photos as frames on a strip of film (RGBA8 out).
+Result<ImageBuffer> filmStrip(const std::vector<const ImageBuffer*>& photos, const std::vector<FrameSpec>& frames,
+                              const FilmParams& params, const CancellationToken* token);
+
+// A collage cell: a normalised rectangle (0..1 of the area inside the
+// margin) and the frame drawn in it.
+struct CollageCell {
+  float x = 0, y = 0, w = 1, h = 1;
+  FrameSpec frame;
+};
+struct CollageParams {
+  int32_t width = 1080, height = 1350;
+  float gap = 0.015f;     // between cells, share of the short side (0..0.1)
+  float margin = 0.02f;   // around the edge, share of the short side (0..0.2)
+  float radius = 0.0f;    // cell corners, share of the cell's short side (0..0.5)
+  std::array<uint8_t, 3> background{255, 255, 255};
+};
+Result<ImageBuffer> collage(const std::vector<const ImageBuffer*>& photos, const std::vector<CollageCell>& cells,
+                            const CollageParams& params, const CancellationToken* token);
+
 }  // namespace photoplus::studio

@@ -240,6 +240,8 @@ describe('studio service', () => {
     startSession: jest.fn(),
     refineCutout: jest.fn(),
     renderScene: jest.fn(),
+    renderFilm: jest.fn(),
+    renderCollage: jest.fn(),
     saveToGallery: jest.fn(),
     endSession: jest.fn(),
     cancel: jest.fn(),

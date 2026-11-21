@@ -13,17 +13,28 @@ interface Tool {
   tagline: string;
   icon: IconName;
   available: boolean;
+  premium: boolean;
+  route?: 'SceneSwap' | 'FilmCollage';
 }
 
 const TOOLS: Tool[] = [
-  { id: 'scene-swap', title: 'Scene Swap', tagline: 'You, in a new place: studios, parks, golden hour, your own backgrounds', icon: 'layers', available: true },
-  { id: 'recreate', title: 'Recreate a shoot', tagline: 'Follow a pack’s scenes, poses and light, shot by shot', icon: 'sparkles', available: false },
-  { id: 'relight', title: 'Relight', tagline: 'Studio lighting on any photo', icon: 'sun', available: false },
+  { id: 'scene-swap', title: 'Scene Swap', tagline: 'You, in a new place: studios, parks, golden hour, your own backgrounds', icon: 'layers', available: true, premium: true, route: 'SceneSwap' },
+  {
+    id: 'film-collage',
+    title: 'Film & Collage',
+    tagline: 'Turn photos into a film strip or a collage, every frame with its own look',
+    icon: 'film',
+    available: true,
+    premium: false,
+    route: 'FilmCollage',
+  },
+  { id: 'recreate', title: 'Recreate a shoot', tagline: 'Follow a pack’s scenes, poses and light, shot by shot', icon: 'sparkles', available: false, premium: true },
+  { id: 'relight', title: 'Relight', tagline: 'Studio lighting on any photo', icon: 'sun', available: false, premium: true },
 ];
 
 /**
  * The photoshoot studio: tools that recreate a professional shoot from the
- * person's own photos. Scene Swap is the first; the others come with packs.
+ * person's own photos: Scene Swap, and Film & Collage; more come with packs.
  */
 export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'PhotoshootStudio'>) {
   const theme = useTheme();
@@ -41,8 +52,8 @@ export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'Photosho
         {TOOLS.map(t => (
           <PressableCard
             key={t.id}
-            label={`${t.title}. ${t.tagline}. Premium. ${t.available ? 'Available now' : 'Coming soon'}.`}
-            onPress={() => (t.available ? navigation.navigate('SceneSwap') : undefined)}
+            label={`${t.title}. ${t.tagline}.${t.premium ? ' Premium.' : ''} ${t.available ? 'Available now' : 'Coming soon'}.`}
+            onPress={() => (t.available && t.route ? navigation.navigate(t.route) : undefined)}
             radius={theme.radii.lg}
             testID={`studio-${t.id}`}
           >
@@ -53,7 +64,7 @@ export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'Photosho
               <View style={{ flex: 1, gap: 2 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <AppText variant="bodyStrong">{t.title}</AppText>
-                  <PremiumBadge />
+                  {t.premium ? <PremiumBadge /> : null}
                 </View>
                 <AppText variant="caption" tone="secondary">
                   {t.tagline}

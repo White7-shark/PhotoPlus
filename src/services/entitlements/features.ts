@@ -45,6 +45,7 @@ export const FEATURES = {
   props: f('editing.props', 'Props: hats, glasses and outfit pieces', 'editing', 'free'),
   studioBasics: f('replication.studioBasics', 'Studio basics: soft and bright light, gradient backdrops, vignette, warmth and simple grades', 'replication', 'free'),
   frames: f('editing.frames', 'Photo frames', 'editing', 'free'),
+  filmCollage: f('replication.filmCollage', 'Film & Collage: classic and photo-booth film strips, ten looks for every frame, ten collage layouts', 'replication', 'free'),
   marketplaceBrowse: f('marketplace.browse', 'Browse photoshoot packs', 'marketplace', 'free'),
   packPreview: f('marketplace.preview', 'Pack previews & descriptions', 'marketplace', 'free'),
   premiumDemos: f('marketplace.premiumDemos', 'Premium feature demonstrations', 'marketplace', 'free'),
@@ -61,6 +62,7 @@ export const FEATURES = {
     'replication',
     'premium',
   ),
+  filmPremium: f('replication.filmPremium', 'Amber negative and cinema film strips in Film & Collage', 'replication', 'premium'),
   studioHair: f('replication.hair', 'Hair in the Photoshoot Studio: 18 colours, 23 women’s styles, and dreadlocks, rasta, afro or bald', 'replication', 'premium'),
   backgroundReplace: f(
     'replication.background',

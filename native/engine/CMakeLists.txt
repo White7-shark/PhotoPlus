@@ -40,6 +40,7 @@ add_library(photoplus_engine STATIC
   src/studio/hair.cpp
   src/studio/light.cpp
   src/studio/lips.cpp
+  src/studio/film.cpp
   src/skintone/skintone.cpp
   src/light/light.cpp
   src/pose/pose.cpp

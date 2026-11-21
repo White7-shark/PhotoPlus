@@ -558,6 +558,89 @@ class StudioModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  // ------------------------------------------------------------ Film & Collage
+
+  /** Faces found in Film & Collage photos, by path (crops and zooms centre on them). */
+  private val filmFocus = object : LinkedHashMap<String, Pair<Float, Float>?>(16, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Float, Float>?>?) = size > 48
+  }
+
+  override fun renderFilm(jobId: String, request: ReadableMap, promise: Promise) {
+    val map = request.toHashMap()
+    val spec = try {
+      FilmCollage.filmFromMap(map)
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    if (spec.style.premium && Entitlements.plan != Plan.PREMIUM) {
+      promise.reject("PREMIUM_REQUIRED", "This film is part of Premium")
+      return
+    }
+    val full = map["quality"] == "full"
+    jobs.submit(jobId, listener(promise)) { token ->
+      val files = spec.photos.map { paths.resolve(it) }
+      // Preview frames are small; a saved strip keeps each frame sharp, within the memory budget.
+      val frameSize = if (full) min(FILM_FRAME_FULL, budget.maxDecodeDimension / 3) else FILM_FRAME_PREVIEW
+      FilmCollage.decode(files, if (full) min(budget.maxDecodeDimension, FILM_DECODE_FULL) else FILM_DECODE_PREVIEW, filmFocus).use { photos ->
+        val out = FilmCollage.renderFilm(spec, photos, frameSize, token)
+        try {
+          finishFilmCollage(out, full, "Film")
+        } finally {
+          out.recycle()
+        }
+      }
+    }
+  }
+
+  override fun renderCollage(jobId: String, request: ReadableMap, promise: Promise) {
+    val map = request.toHashMap()
+    val spec = try {
+      FilmCollage.collageFromMap(map)
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    val full = map["quality"] == "full"
+    jobs.submit(jobId, listener(promise)) { token ->
+      val files = spec.photos.map { paths.resolve(it) }
+      val edge = if (full) min(budget.maxDecodeDimension, COLLAGE_EDGE_FULL) else COLLAGE_EDGE_PREVIEW
+      FilmCollage.decode(files, if (full) min(budget.maxDecodeDimension, FILM_DECODE_FULL) else FILM_DECODE_PREVIEW, filmFocus).use { photos ->
+        val out = FilmCollage.renderCollage(spec, photos, edge, token)
+        try {
+          finishFilmCollage(out, full, "Collage")
+        } finally {
+          out.recycle()
+        }
+      }
+    }
+  }
+
+  /**
+   * A preview goes to the cache; a saved one to the studio folder, with the
+   * Photo Plus mark on the free plan (the clean copy is kept beside it).
+   */
+  private fun finishFilmCollage(out: Bitmap, full: Boolean, name: String): Map<String, Any?> {
+    val target = if (full) {
+      paths.studio.mkdirs()
+      File(paths.studio, "${name}_${stamp()}.jpg")
+    } else {
+      val dir = File(paths.processingCache, "film").apply { mkdirs() }
+      dir.listFiles()?.forEach { it.delete() }
+      File(dir, "${name.lowercase()}_${System.nanoTime()}.jpg")
+    }
+    ImageCodec.encode(out, target, OutputFormat.JPEG, if (full) 95 else 88)
+    val clean = if (full) com.photoplus.edit.PhotoWatermark.applyToFile(target, com.photoplus.edit.WatermarkSpec(), Entitlements.plan) else null
+    return mapOf(
+      "outputPath" to target.absolutePath,
+      "cleanPath" to clean,
+      "width" to out.width,
+      "height" to out.height,
+      "sizeBytes" to target.length().toDouble(),
+      "format" to "jpeg",
+    )
+  }
+
   override fun endSession(sessionId: String) {
     sessions.remove(sessionId)?.let { s -> synchronized(s) { s.release() } }
   }
@@ -576,6 +659,12 @@ class StudioModule(reactContext: ReactApplicationContext) :
     private const val ANALYSIS_EDGE = 2048
     /** Exports: up to 4096 px on the long edge (~12 MP at 4:3). */
     private const val MAX_EXPORT_EDGE = 4096
+    private const val FILM_FRAME_PREVIEW = 300
+    private const val FILM_FRAME_FULL = 1080
+    private const val FILM_DECODE_PREVIEW = 900
+    private const val FILM_DECODE_FULL = 2400
+    private const val COLLAGE_EDGE_PREVIEW = 1100
+    private const val COLLAGE_EDGE_FULL = 3200
 
     fun plateAsset(id: String) = "studio/plates/$id.jpg"
   }

@@ -1320,3 +1320,139 @@ TEST(studio_natural_pink_lips_adapt_to_the_person) {
   pp_image_destroy(fair);
   pp_image_destroy(fair2);
 }
+
+// ---- Film & Collage ------------------------------------------------------------
+
+namespace {
+pp_image* solid(int w, int h, uint8_t r, uint8_t g, uint8_t b) {
+  pp_image* img = nullptr;
+  if (pp_image_create(w, h, PP_FORMAT_RGBA8, &img) != PP_OK) return nullptr;
+  auto* px = static_cast<uint8_t*>(pp_image_pixels(img));
+  for (int i = 0; i < w * h; ++i) px[i * 4] = r, px[i * 4 + 1] = g, px[i * 4 + 2] = b, px[i * 4 + 3] = 255;
+  return img;
+}
+std::array<int, 3> pixelAt(pp_image* img, int x, int y) {
+  pp_image_info info{};
+  pp_image_get_info(img, &info);
+  const auto* p = static_cast<const uint8_t*>(pp_image_pixels(img)) + static_cast<size_t>(y) * info.stride + x * 4;
+  return {p[0], p[1], p[2]};
+}
+pp_film_frame frameOf(int photo, int look) {
+  pp_film_frame f{};
+  f.photo = photo;
+  f.look = look;
+  f.zoom = 1.0f;
+  f.focus_x = f.focus_y = -1.0f;
+  return f;
+}
+}  // namespace
+
+TEST(studio_film_strip_lays_out_frames_holes_and_looks) {
+  pp_image* red = solid(300, 200, 220, 40, 40);
+  pp_image* blue = solid(200, 300, 30, 60, 210);
+  const pp_image* photos[] = {red, blue};
+  const pp_film_frame frames[] = {frameOf(0, PP_LOOK_ORIGINAL), frameOf(0, PP_LOOK_BLACK_WHITE), frameOf(1, PP_LOOK_ORIGINAL)};
+  pp_film_params p{PP_FILM_CLASSIC, 0, 0, 200, 1, 3};
+  pp_image* out = nullptr;
+  EXPECT_EQ(pp_studio_filmstrip(photos, 2, frames, 3, &p, nullptr, &out), PP_OK);
+  pp_image_info info{};
+  pp_image_get_info(out, &info);
+  // Horizontal 35 mm: frames 300 x 200 (3:2), a gap of 16 between and around, a 48 px band each side.
+  EXPECT_EQ(info.width, 3 * 300 + 4 * 16);
+  EXPECT_EQ(info.height, 200 + 2 * 48);
+  const int fy = 48 + 100;
+  const auto f1 = pixelAt(out, 16 + 150, fy), f2 = pixelAt(out, 16 + 300 + 16 + 150, fy), f3 = pixelAt(out, 16 + 2 * 316 + 150, fy);
+  std::printf("    frames %d,%d,%d | %d,%d,%d | %d,%d,%d; size %dx%d\n", f1[0], f1[1], f1[2], f2[0], f2[1], f2[2], f3[0], f3[1], f3[2],
+              info.width, info.height);
+  EXPECT_TRUE(f1[0] > 180 && f1[1] < 90);                                    // red, as shot (film grain aside)
+  EXPECT_TRUE(std::abs(f2[0] - f2[1]) < 6 && std::abs(f2[1] - f2[2]) < 6);  // black and white
+  EXPECT_TRUE(f3[2] > 170 && f3[0] < 80);                                    // the second photo
+  // The film base between frames is dark; a sprocket hole on the edge is light.
+  const auto base = pixelAt(out, 16 + 300 + 8, fy);
+  EXPECT_TRUE(base[0] < 40);
+  bool hole = false;
+  for (int x = 0; x < info.width && !hole; ++x) hole = pixelAt(out, x, 9)[0] > 200;
+  EXPECT_TRUE(hole);
+  pp_image_destroy(out);
+
+  // Vertical photo booth: portrait frames on white paper, no holes, a deeper foot.
+  pp_film_params booth{PP_FILM_PHOTO_BOOTH, 1, 1, 160, 1, 3};
+  EXPECT_EQ(pp_studio_filmstrip(photos, 2, frames, 3, &booth, nullptr, &out), PP_OK);
+  pp_image_get_info(out, &info);
+  EXPECT_EQ(info.width, static_cast<int>(std::lround(160 + 2 * 0.09f * 160)));
+  EXPECT_TRUE(info.height > 3 * 200);
+  const auto paper = pixelAt(out, 2, 2);
+  EXPECT_TRUE(paper[0] > 230 && paper[1] > 230);
+  pp_image_destroy(out);
+
+  // Bad input.
+  pp_film_frame bad = frameOf(5, 0);
+  EXPECT_EQ(pp_studio_filmstrip(photos, 2, &bad, 1, &p, nullptr, &out), PP_ERROR_INVALID_ARGUMENT);
+  bad = frameOf(0, 42);
+  EXPECT_EQ(pp_studio_filmstrip(photos, 2, &bad, 1, &p, nullptr, &out), PP_ERROR_INVALID_ARGUMENT);
+  pp_film_params tiny = p;
+  tiny.frame_size = 8;
+  EXPECT_EQ(pp_studio_filmstrip(photos, 2, frames, 3, &tiny, nullptr, &out), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_studio_filmstrip(photos, 0, frames, 3, &p, nullptr, &out), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_TRUE(out == nullptr);
+  pp_image_destroy(red);
+  pp_image_destroy(blue);
+}
+
+TEST(studio_film_frames_zoom_on_the_focus_and_mirror) {
+  // Left half black, right half white: a mirrored frame shows white on the left.
+  pp_image* half = nullptr;
+  EXPECT_EQ(pp_image_create(200, 200, PP_FORMAT_RGBA8, &half), PP_OK);
+  auto* px = static_cast<uint8_t*>(pp_image_pixels(half));
+  for (int y = 0; y < 200; ++y)
+    for (int x = 0; x < 200; ++x) {
+      const uint8_t v = x < 100 ? 10 : 245;
+      uint8_t* q = px + (y * 200 + x) * 4;
+      q[0] = q[1] = q[2] = v, q[3] = 255;
+    }
+  const pp_image* photos[] = {half};
+  pp_film_frame f = frameOf(0, PP_LOOK_ORIGINAL);
+  f.flip = 1;
+  pp_film_params p{PP_FILM_PHOTO_BOOTH, 1, 1, 100, 0, 3};
+  pp_image* out = nullptr;
+  EXPECT_EQ(pp_studio_filmstrip(photos, 1, &f, 1, &p, nullptr, &out), PP_OK);
+  const int left = 9 + 15, right = 9 + 85;
+  EXPECT_TRUE(pixelAt(out, left, 30)[0] > 200 && pixelAt(out, right, 30)[0] < 50);
+  pp_image_destroy(out);
+  // Zoomed 3x on a focus inside the black half: the whole frame is black.
+  f.flip = 0;
+  f.zoom = 3.0f;
+  f.focus_x = 0.2f;
+  f.focus_y = 0.5f;
+  EXPECT_EQ(pp_studio_filmstrip(photos, 1, &f, 1, &p, nullptr, &out), PP_OK);
+  EXPECT_TRUE(pixelAt(out, left, 30)[0] < 50 && pixelAt(out, right, 30)[0] < 50);
+  pp_image_destroy(out);
+  pp_image_destroy(half);
+}
+
+TEST(studio_collage_fills_cells_with_gaps_and_rounded_corners) {
+  pp_image* red = solid(120, 90, 220, 40, 40);
+  pp_image* green = solid(90, 120, 40, 200, 60);
+  const pp_image* photos[] = {red, green};
+  const pp_collage_cell cells[] = {{0.0f, 0.0f, 0.5f, 1.0f, frameOf(0, PP_LOOK_ORIGINAL)},
+                                   {0.5f, 0.0f, 0.5f, 1.0f, frameOf(1, PP_LOOK_SEPIA)}};
+  pp_collage_params p{400, 300, 0.05f, 0.0f, 0.2f, {250, 250, 250, 0}};
+  pp_image* out = nullptr;
+  EXPECT_EQ(pp_studio_collage(photos, 2, cells, 2, &p, nullptr, &out), PP_OK);
+  const auto leftC = pixelAt(out, 100, 150), rightC = pixelAt(out, 300, 150), gap = pixelAt(out, 200, 150), corner = pixelAt(out, 9, 9);
+  std::printf("    left %d,%d,%d right %d,%d,%d gap %d corner %d\n", leftC[0], leftC[1], leftC[2], rightC[0], rightC[1], rightC[2], gap[0],
+              corner[0]);
+  EXPECT_TRUE(leftC[0] > 200 && leftC[1] < 60);           // the red photo
+  EXPECT_TRUE(rightC[0] > rightC[2] && rightC[1] > rightC[2]);  // the green photo, in sepia
+  EXPECT_TRUE(gap[0] > 245 && gap[1] > 245);              // the gap shows the background
+  EXPECT_TRUE(corner[0] > 240);                           // the rounded corner too
+  pp_image_destroy(out);
+  pp_collage_cell outside = cells[0];
+  outside.w = 1.5f;
+  EXPECT_EQ(pp_studio_collage(photos, 2, &outside, 1, &p, nullptr, &out), PP_ERROR_INVALID_ARGUMENT);
+  pp_collage_params big = p;
+  big.width = 20000;
+  EXPECT_EQ(pp_studio_collage(photos, 2, cells, 2, &big, nullptr, &out), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(red);
+  pp_image_destroy(green);
+}

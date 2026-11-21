@@ -7,6 +7,7 @@ import { errorCode, errorMessage, nativeModules, requireNative, type StudioSpec 
 import { createId } from '../database/ids';
 import type { OutfitColour } from './colors';
 import { hairRequest, type HairChoice } from './hair';
+import { collageRequest, filmRequest, type CollageChoice, type FilmChoice } from './film';
 import { lipsRequest, type LipsChoice } from './lips';
 import { finishRequest, lightPreset, lightRequest, NO_FINISH, type FinishChoice, type LightChoice } from './light';
 import { backgroundRequest, type Background, type Crop, type Placement, type SceneLook } from './scene';
@@ -196,6 +197,16 @@ export class StudioService {
         }),
       isScene,
     );
+  }
+
+  /** Film & Collage: the film strip (a preview, or the saved photo). */
+  renderFilm(photos: string[], film: FilmChoice, quality: 'preview' | 'full'): Promise<SceneResult> {
+    return this.call(() => this.native.renderFilm(createId('film'), filmRequest(photos, film, quality)), isScene);
+  }
+
+  /** Film & Collage: the collage (a preview, or the saved photo). */
+  renderCollage(photos: string[], collage: CollageChoice, quality: 'preview' | 'full'): Promise<SceneResult> {
+    return this.call(() => this.native.renderCollage(createId('collage'), collageRequest(photos, collage, quality)), isScene);
   }
 
   async saveToGallery(path: string): Promise<string> {

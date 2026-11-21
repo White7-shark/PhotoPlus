@@ -1017,6 +1017,107 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStyleApply(J
   if (st != PP_OK) throwStatus(env, st);
 }
 
+namespace {
+// Locks every bitmap of `photos` and wraps it (released with the struct). False with an exception pending.
+bool lockPhotos(JNIEnv* env, jobjectArray photos, LockedBurst& burst) {
+  const jsize count = env->GetArrayLength(photos);
+  if (count <= 0 || count > 12) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Choose 1 to 12 photos");
+    return false;
+  }
+  for (jsize i = 0; i < count; ++i) {
+    jobject bmp = env->GetObjectArrayElement(photos, i);
+    auto lock = std::make_unique<BitmapLock>(env, bmp);
+    if (!lock->ok()) {
+      throwEngineException(env, "UNSUPPORTED_FORMAT", lock->error());
+      return false;
+    }
+    pp_image* img = nullptr;
+    const pp_status st = lock->wrap(&img);
+    if (st != PP_OK) {
+      throwStatus(env, st);
+      return false;
+    }
+    burst.locks.push_back(std::move(lock));
+    burst.images.push_back(img);
+  }
+  return true;
+}
+
+pp_film_frame frameFrom(const float* f) {
+  pp_film_frame out{};
+  out.photo = static_cast<int32_t>(f[0]);
+  out.look = static_cast<int32_t>(f[1]);
+  out.zoom = f[2];
+  out.pan_x = f[3];
+  out.pan_y = f[4];
+  out.flip = f[5] > 0.5f ? 1 : 0;
+  out.focus_x = f[6];
+  out.focus_y = f[7];
+  return out;
+}
+}  // namespace
+
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioFilm(JNIEnv* env, jobject, jobjectArray photos,
+                                                                              jfloatArray frames, jintArray params, jlong token) {
+  constexpr jsize kFrame = 8;
+  const jsize nf = env->GetArrayLength(frames);
+  if (nf <= 0 || nf % kFrame != 0 || nf / kFrame > 12 || env->GetArrayLength(params) < 6) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad film strip");
+    return 0;
+  }
+  LockedBurst burst;
+  if (!lockPhotos(env, photos, burst)) return 0;
+  std::vector<float> fv(static_cast<size_t>(nf));
+  env->GetFloatArrayRegion(frames, 0, nf, fv.data());
+  std::vector<pp_film_frame> fr;
+  for (jsize i = 0; i < nf / kFrame; ++i) fr.push_back(frameFrom(fv.data() + i * kFrame));
+  jint p[6];
+  env->GetIntArrayRegion(params, 0, 6, p);
+  const pp_film_params fp{p[0], p[1], p[2], p[3], p[4], static_cast<uint32_t>(p[5])};
+  std::vector<const pp_image*> in(burst.images.begin(), burst.images.end());
+  pp_image* out = nullptr;
+  const pp_status st = pp_studio_filmstrip(in.data(), static_cast<int32_t>(in.size()), fr.data(), static_cast<int32_t>(fr.size()), &fp,
+                                           reinterpret_cast<const pp_cancel_token*>(token), &out);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(out);
+}
+
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCollage(JNIEnv* env, jobject, jobjectArray photos,
+                                                                                 jfloatArray cells, jfloatArray params, jlong token) {
+  constexpr jsize kCell = 12;
+  const jsize nc = env->GetArrayLength(cells);
+  if (nc <= 0 || nc % kCell != 0 || nc / kCell > 12 || env->GetArrayLength(params) < 8) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad collage");
+    return 0;
+  }
+  LockedBurst burst;
+  if (!lockPhotos(env, photos, burst)) return 0;
+  std::vector<float> cv(static_cast<size_t>(nc));
+  env->GetFloatArrayRegion(cells, 0, nc, cv.data());
+  std::vector<pp_collage_cell> cs;
+  for (jsize i = 0; i < nc / kCell; ++i) {
+    const float* c = cv.data() + i * kCell;
+    cs.push_back({c[0], c[1], c[2], c[3], frameFrom(c + 4)});
+  }
+  jfloat p[8];
+  env->GetFloatArrayRegion(params, 0, 8, p);
+  const auto byte = [](float v) { return static_cast<uint8_t>(std::clamp(v, 0.0f, 255.0f)); };
+  const pp_collage_params cp{static_cast<int32_t>(p[0]), static_cast<int32_t>(p[1]), p[2], p[3], p[4], {byte(p[5]), byte(p[6]), byte(p[7]), 0}};
+  std::vector<const pp_image*> in(burst.images.begin(), burst.images.end());
+  pp_image* out = nullptr;
+  const pp_status st = pp_studio_collage(in.data(), static_cast<int32_t>(in.size()), cs.data(), static_cast<int32_t>(cs.size()), &cp,
+                                         reinterpret_cast<const pp_cancel_token*>(token), &out);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(out);
+}
+
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioLips(
     JNIEnv* env, jobject, jobject bitmap, jfloatArray landmarks, jint faceCount, jint r, jint g, jint b, jfloat strength,
     jboolean natural, jlong token, jfloatArray reportOut) {

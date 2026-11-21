@@ -1477,6 +1477,89 @@ pp_status pp_style_analyze(const pp_image* image, pp_style* out) {
   });
 }
 
+namespace {
+bool toFrame(const pp_film_frame& in, photoplus::studio::FrameSpec& out) {
+  if (in.look < 0 || in.look >= photoplus::studio::kFrameLooks || !std::isfinite(in.zoom) || !std::isfinite(in.pan_x) ||
+      !std::isfinite(in.pan_y) || !std::isfinite(in.focus_x) || !std::isfinite(in.focus_y))
+    return false;
+  out.focusX = in.focus_x;
+  out.focusY = in.focus_y;
+  out.photo = in.photo;
+  out.look = static_cast<photoplus::studio::FrameLook>(in.look);
+  out.zoom = in.zoom;
+  out.panX = in.pan_x;
+  out.panY = in.pan_y;
+  out.flip = in.flip != 0;
+  return true;
+}
+
+bool toPhotos(const pp_image* const* photos, int32_t count, std::vector<const photoplus::ImageBuffer*>& out) {
+  if (photos == nullptr || count <= 0 || count > static_cast<int32_t>(photoplus::studio::kMaxFilmPhotos)) return false;
+  for (int32_t i = 0; i < count; ++i) {
+    if (photos[i] == nullptr) return false;
+    out.push_back(&photos[i]->buffer);
+  }
+  return true;
+}
+}  // namespace
+
+pp_status pp_studio_filmstrip(const pp_image* const* photos, int32_t photo_count, const pp_film_frame* frames, int32_t frame_count,
+                              const pp_film_params* params, const pp_cancel_token* token, pp_image** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is required");
+    *out = nullptr;
+    std::vector<const photoplus::ImageBuffer*> ph;
+    if (!toPhotos(photos, photo_count, ph) || frames == nullptr || params == nullptr || frame_count <= 0 ||
+        frame_count > static_cast<int32_t>(photoplus::studio::kMaxFilmFrames) || params->style < 0 || params->style > 3)
+      return fail(PP_ERROR_INVALID_ARGUMENT, "A film strip needs 1 to 12 photos and frames");
+    std::vector<photoplus::studio::FrameSpec> fr(static_cast<size_t>(frame_count));
+    for (int32_t i = 0; i < frame_count; ++i)
+      if (!toFrame(frames[i], fr[static_cast<size_t>(i)])) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad frame");
+    photoplus::studio::FilmParams p;
+    p.style = static_cast<photoplus::studio::FilmStyle>(params->style);
+    p.vertical = params->vertical != 0;
+    p.portraitFrames = params->portrait_frames != 0;
+    p.frameSize = params->frame_size;
+    p.markings = params->markings != 0;
+    p.seed = params->seed;
+    auto result = photoplus::studio::filmStrip(ph, fr, p, token ? &token->token : nullptr);
+    if (!result) return fail(result.error());
+    *out = new pp_image{std::move(result).value()};
+    return succeed();
+  });
+}
+
+pp_status pp_studio_collage(const pp_image* const* photos, int32_t photo_count, const pp_collage_cell* cells, int32_t cell_count,
+                            const pp_collage_params* params, const pp_cancel_token* token, pp_image** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is required");
+    *out = nullptr;
+    std::vector<const photoplus::ImageBuffer*> ph;
+    if (!toPhotos(photos, photo_count, ph) || cells == nullptr || params == nullptr || cell_count <= 0 ||
+        cell_count > static_cast<int32_t>(photoplus::studio::kMaxFilmFrames))
+      return fail(PP_ERROR_INVALID_ARGUMENT, "A collage needs 1 to 12 photos and cells");
+    std::vector<photoplus::studio::CollageCell> cs(static_cast<size_t>(cell_count));
+    for (int32_t i = 0; i < cell_count; ++i) {
+      const auto& c = cells[i];
+      auto& o = cs[static_cast<size_t>(i)];
+      if (!std::isfinite(c.x) || !std::isfinite(c.y) || !std::isfinite(c.w) || !std::isfinite(c.h) || !toFrame(c.frame, o.frame))
+        return fail(PP_ERROR_INVALID_ARGUMENT, "Bad collage cell");
+      o.x = c.x, o.y = c.y, o.w = c.w, o.h = c.h;
+    }
+    photoplus::studio::CollageParams p;
+    p.width = params->width;
+    p.height = params->height;
+    p.gap = params->gap;
+    p.margin = params->margin;
+    p.radius = params->radius;
+    p.background = {params->background[0], params->background[1], params->background[2]};
+    auto result = photoplus::studio::collage(ph, cs, p, token ? &token->token : nullptr);
+    if (!result) return fail(result.error());
+    *out = new pp_image{std::move(result).value()};
+    return succeed();
+  });
+}
+
 pp_status pp_studio_lips(pp_image* image, const float* landmarks, int32_t face_count, int32_t r, int32_t g, int32_t b,
                          float strength, int32_t natural, const pp_cancel_token* token, float* report_out) {
   return guarded([&]() -> pp_status {
