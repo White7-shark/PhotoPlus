@@ -207,7 +207,11 @@ Error relight(ImageBuffer& cutout, const LightParams& p, const CancellationToken
         // Highlights roll off instead of clipping.
         const float mx = std::max({c.r, c.g, c.b});
         if (mx > 0.85f) c = c * ((0.85f + (1.0f - std::exp(-(mx - 0.85f) * 4.0f)) * 0.15f) / mx);
-        const V3 rim{Rr->sample(gx, gy), Rg->sample(gx, gy), Rb->sample(gx, gy)};
+        // The rim stays on the person: none on the matte's soft outer edge,
+        // which would otherwise show as a light outline over a darker
+        // background.
+        const float inside = smoothstep(0.75f, 0.98f, q[3] / 255.0f);
+        const V3 rim = V3{Rr->sample(gx, gy), Rg->sample(gx, gy), Rb->sample(gx, gy)} * inside;
         if (rim.r + rim.g + rim.b > 1e-4f) c = screen(c, V3{std::min(rim.r, 1.0f), std::min(rim.g, 1.0f), std::min(rim.b, 1.0f)});
         q[o.r] = toByte(toGamma(c.r)), q[o.g] = toByte(toGamma(c.g)), q[o.b] = toByte(toGamma(c.b));
       }

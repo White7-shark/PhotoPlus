@@ -279,7 +279,8 @@ int backdrop(int argc, char** argv) {
 // cut-out, studio light, a gradient backdrop, compose, finish. Keys: light
 // (strength) angle height soft key fill keyc fillc rimL rimR rimc (r,g,b
 // gains); from to (backdrop hex colours) radial (0/1) gangle; vig vigsize
-// warm tint contrast sat fade sh hi tone grain gsize mono; size (person's
+// warm tint contrast sat fade sh hi tone grain gsize mono; relight=1 (with
+// bgb bgc bgblur: the lit person back in their own photo); size (person's
 // height in the frame) fw fh (frame size).
 int studio(int argc, char** argv) {
   if (argc < 6) return 2;
@@ -320,6 +321,13 @@ int studio(int argc, char** argv) {
     return 1;
   }
   const double tLight = ms(t0);
+  if (kv.count("relight")) {
+    // Relight: the lit person back in their own photo (bgb brightness, bgc colour, bgblur).
+    if (pp_studio_relight_compose(img, cut, num("bgb", 0.0f), num("bgc", 0.0f), num("bgblur", 0.0f), nullptr) != PP_OK) return 1;
+    write(argv[5], img, -1);
+    std::printf("{\"light_ms\":%.0f}\n", tLight);
+    return 0;
+  }
   const auto fw = static_cast<int32_t>(num("fw", static_cast<float>(info.width))), fh = static_cast<int32_t>(num("fh", static_cast<float>(info.height)));
   pp_image* frame = rgba(fw, fh);
   uint8_t from[3], to[3];
@@ -407,10 +415,19 @@ int film(int argc, char** argv) {
       const auto v = floatList(fx);
       if (v.size() >= 2) f.focus_x = v[0], f.focus_y = v[1];
     }
+    // PP_BRIGHT / PP_WARM: per-frame comma lists of the frame's own adjustments.
+    for (auto [env, dst] : {std::pair{"PP_BRIGHT", &f.brightness}, std::pair{"PP_WARM", &f.warmth}})
+      if (const char* v = std::getenv(env)) {
+        const auto l = floatList(v);
+        if (i < l.size()) *dst = l[i];
+      }
     frames.push_back(f);
   }
   // STYLE VERTICAL PORTRAIT; frames 360 px on their short edge, markings on.
-  const pp_film_params p{std::atoi(argv[3]), std::atoi(argv[4]), std::atoi(argv[5]), 360, 1, 7};
+  // PP_LABEL (edge text) and PP_FILMCOLOR (RRGGBB hex) set the film's own options.
+  pp_film_params p{std::atoi(argv[3]), std::atoi(argv[4]), std::atoi(argv[5]), 360, 1, 7};
+  if (const char* l = std::getenv("PP_LABEL")) std::snprintf(p.label, sizeof p.label, "%s", l);
+  if (const char* c = std::getenv("PP_FILMCOLOR")) p.base_color = static_cast<int32_t>(0x01000000u | (std::strtoul(c, nullptr, 16) & 0xFFFFFFu));
   pp_image* out = nullptr;
   std::vector<const pp_image*> in(photos.begin(), photos.end());
   const int rc = pp_studio_filmstrip(in.data(), static_cast<int32_t>(in.size()), frames.data(), static_cast<int32_t>(frames.size()), &p,
