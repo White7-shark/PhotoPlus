@@ -159,7 +159,10 @@ describe('Glide logic', () => {
       blur: 0,
       pop: 0,
       beauty: null,
+      lively: 1,
     });
+    // Lively colour, as the camera's photos: off only when turned off in Settings.
+    expect(glideRequest({ inputPath: '/a.mp4', outputPath: '/b.mp4', spotlight: 'off', recipe: null, lively: false }).lively).toBe(0);
     // Spotlight alone (no recipe): the clip's own blur.
     expect(glideRequest({ inputPath: '/a.mp4', outputPath: '/b.mp4', spotlight: 'strong', recipe: null }).blur).toBe(
       0.9,

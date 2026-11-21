@@ -64,6 +64,8 @@ export interface GlideRequest {
   scene?: GlideSceneRequest;
   /** Fast or slow (normal when absent). Fast and slow clips are silent. */
   speed?: GlideSpeed;
+  /** Lively colour 0..1 (as the camera's photos; steady across the clip). 0 = the camera's own look. */
+  lively: number;
 }
 
 /** The person in a new scene: the background, its crop, where and how big the person is, the look, and their usual box in the clip. */
@@ -127,6 +129,8 @@ export function glideRequest(args: {
   watermark?: WatermarkSpec;
   scene?: GlideSceneRequest;
   speed?: GlideSpeed;
+  /** Lively colour (the camera's setting); on unless turned off. */
+  lively?: boolean;
 }): GlideRequest {
   const recipe = args.recipe && isActive(args.recipe) ? args.recipe : null;
   const blur = recipe ? 0 : glideBlur(args.spotlight);
@@ -144,6 +148,7 @@ export function glideRequest(args: {
     ...(args.watermark ? { watermark: args.watermark } : {}),
     ...(args.scene ? { scene: args.scene } : {}),
     ...(args.speed && args.speed !== 'normal' ? { speed: args.speed } : {}),
+    lively: args.lively === false ? 0 : 1,
   };
 }
 

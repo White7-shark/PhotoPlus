@@ -242,6 +242,7 @@ describe('studio service', () => {
     renderScene: jest.fn(),
     renderFilm: jest.fn(),
     renderCollage: jest.fn(),
+    renderRelight: jest.fn(),
     saveToGallery: jest.fn(),
     endSession: jest.fn(),
     cancel: jest.fn(),

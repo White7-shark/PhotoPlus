@@ -62,6 +62,8 @@ export const FEATURES = {
     'replication',
     'premium',
   ),
+  exportHd: f('studio.exportHd', 'Downloads at 720p, 1080p, HD and 4K', 'replication', 'premium'),
+  relight: f('replication.relight', 'Relight: studio light on your own photo, with the background darkened, softened or coloured', 'replication', 'premium'),
   filmPremium: f('replication.filmPremium', 'Amber negative and cinema film strips in Film & Collage', 'replication', 'premium'),
   studioHair: f('replication.hair', 'Hair in the Photoshoot Studio: 18 colours, 23 women’s styles, and dreadlocks, rasta, afro or bald', 'replication', 'premium'),
   backgroundReplace: f(

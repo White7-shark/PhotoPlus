@@ -14,6 +14,8 @@ export interface Spec extends TurboModule {
   refineCutout(jobId: string, request: Object): Promise<Object>;
   /** The person in a scene: a preview, or the full-quality photo (Premium). */
   renderScene(jobId: string, request: Object): Promise<Object>;
+  /** Relight: the person, relit, back in their own photo (a preview, or the saved photo). */
+  renderRelight(jobId: string, request: Object): Promise<Object>;
   /** Film & Collage: photos as frames on a film strip (a preview, or the saved photo). */
   renderFilm(jobId: string, request: Object): Promise<Object>;
   /** Film & Collage: photos in a collage (a preview, or the saved photo). */

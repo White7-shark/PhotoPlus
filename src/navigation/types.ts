@@ -8,7 +8,7 @@ export type TabParamList = {
   Studio: undefined;
   Projects: undefined;
   /** returnTo: a screen the photo goes straight to (the Photoshoot Studio). */
-  Camera: { returnTo?: 'SceneSwap' | 'FilmCollage' } | undefined;
+  Camera: { returnTo?: 'SceneSwap' | 'FilmCollage' | 'Relight' } | undefined;
   Packs: undefined;
   Settings: undefined;
 };
@@ -29,6 +29,8 @@ export type RootStackParamList = {
   /** photo: a photo just taken in the app's camera, opened straight away. */
   SceneSwap: { photo?: string } | undefined;
   /** Film & Collage: photos as a film strip or a collage; photo: one just taken in the camera. */
+  /** Relight: studio light on the person in their own photo; photo: one just taken in the camera. */
+  Relight: { photo?: string } | undefined;
   FilmCollage: { photo?: string } | undefined;
 };
 

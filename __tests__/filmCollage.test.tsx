@@ -8,6 +8,7 @@ import {
   collageRequest,
   filmRequest,
   framesAfterRemoving,
+  NO_ADJUST,
   mixedFrames,
   plainFrame,
   type FilmChoice,
@@ -74,25 +75,63 @@ describe('film and collage requests', () => {
       vertical: true,
       portrait: true,
       markings: false,
-      frames: [{ photo: 0, look: 'noir', zoom: 9, panX: -4, panY: 0.5, flip: true }],
+      frames: [
+        {
+          photo: 0,
+          look: 'noir',
+          zoom: 9,
+          panX: -4,
+          panY: 0.5,
+          flip: true,
+          ...NO_ADJUST,
+          lookStrength: 0.5,
+          warmth: 3,
+        },
+      ],
+      grain: 9,
+      spacing: 2,
+      filmColor: '#FFFFFF',
+      label: 'anna & tom * 2026 <>',
     };
     expect(filmRequest(['/a.jpg'], film, 'preview')).toEqual({
       photos: ['/a.jpg'],
-      frames: [{ photo: 0, look: 9, zoom: 4, panX: -1, panY: 0.5, flip: true }],
+      frames: [
+        {
+          photo: 0,
+          look: 9,
+          zoom: 4,
+          panX: -1,
+          panY: 0.5,
+          flip: true,
+          lookStrength: 0.5,
+          brightness: 0,
+          contrast: 0,
+          saturation: 0,
+          warmth: 1,
+        },
+      ],
       style: 'booth',
       vertical: true,
       portrait: true,
       markings: false,
+      grain: 3,
+      spacing: 2,
+      filmColor: '#FFFFFF',
+      // Capitals and the characters the film's font has.
+      label: 'ANNA & TOM * 2026',
       quality: 'preview',
     });
+    // A saved strip carries its download size; a preview doesn't.
+    expect(filmRequest(['/a.jpg'], film, 'full', 2160)).toMatchObject({ quality: 'full', resolution: 2160 });
+    expect(filmRequest(['/a.jpg'], film, 'preview', 2160)).not.toHaveProperty('resolution');
     const c = collageRequest(
       ['/a.jpg', '/b.jpg'],
-      { layout: 'hero3', aspect: 'square', gap: 0.5, radius: 0.1, background: '#111114', frames: [] },
+      { layout: 'hero3', aspect: 'square', gap: 0.5, margin: 0.05, radius: 0.1, background: '#111114', frames: [] },
       'full',
     );
     expect(c.cells).toHaveLength(3);
     expect(c.cells.map(x => x.photo)).toEqual([0, 1, 0]);
-    expect(c).toMatchObject({ aspect: 1, gap: 0.1, radius: 0.1, background: '#111114', quality: 'full' });
+    expect(c).toMatchObject({ aspect: 1, gap: 0.1, margin: 0.05, radius: 0.1, background: '#111114', quality: 'full' });
     for (const l of COLLAGE_LAYOUTS)
       for (const [x, y, w, h] of l.cells) expect(x >= 0 && y >= 0 && x + w <= 1.0001 && y + h <= 1.0001).toBe(true);
   });
@@ -146,6 +185,10 @@ describe('Film & Collage screen', () => {
     await step(() => fireEvent.press(screen.getByTestId('frame-1')));
     await step(() => fireEvent.press(screen.getByTestId('look-sepia')));
     await step(() => fireEvent.press(screen.getByTestId('frame-flip')));
+    await step(() =>
+      fireEvent(screen.getByLabelText('Warmth'), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } }),
+    );
+    await step(() => fireEvent.changeText(screen.getByTestId('film-label'), 'our day!'));
     const film = mockStudio.renderFilm.mock.calls.at(-1)![1] as unknown as {
       photos: string[];
       style: string;
@@ -154,7 +197,8 @@ describe('Film & Collage screen', () => {
     };
     expect(film.photos).toEqual(['/files/imports/a.jpg', '/files/imports/b.jpg']);
     expect(film).toMatchObject({ style: 'booth', portrait: true });
-    expect(film.frames[1]).toMatchObject({ look: 2, flip: true });
+    expect(film.frames[1]).toMatchObject({ look: 2, flip: true, warmth: 0.05 });
+    expect((film as unknown as { label: string }).label).toBe('OUR DAY!');
 
     // Collage: a layout of four, then Save.
     await step(() => fireEvent.press(screen.getByTestId('mode-collage')));
@@ -165,7 +209,8 @@ describe('Film & Collage screen', () => {
     };
     expect(col.cells.map(c => c.photo)).toEqual([0, 1, 0, 1]);
     await step(() => fireEvent.press(screen.getByTestId('film-save')));
-    expect(mockStudio.renderCollage.mock.calls.at(-1)![1]).toMatchObject({ quality: 'full' });
+    // Premium checks are off until billing ships, so the save starts at 1080p.
+    expect(mockStudio.renderCollage.mock.calls.at(-1)![1]).toMatchObject({ quality: 'full', resolution: 1080 });
     expect(mockStudio.saveToGallery).toHaveBeenCalledWith('/files/studio/Collage_1.jpg');
     expect(images.add).toHaveBeenCalledWith(
       expect.objectContaining({ path: '/files/studio/Collage_1.jpg', source: 'export' }),

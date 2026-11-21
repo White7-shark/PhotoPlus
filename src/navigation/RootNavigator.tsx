@@ -18,6 +18,7 @@ import { ProjectsScreen } from '../screens/ProjectsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { PhotoshootStudioScreen } from '../screens/studio/PhotoshootStudioScreen';
 import { FilmCollageScreen } from '../screens/studio/FilmCollageScreen';
+import { RelightScreen } from '../screens/studio/RelightScreen';
 import { SceneSwapScreen } from '../screens/studio/SceneSwapScreen';
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
@@ -53,6 +54,7 @@ const GlidePreview = guarded(GlidePreviewScreen, 'Glide');
 const PhotoshootStudio = guarded(PhotoshootStudioScreen, 'Photoshoot Studio');
 const SceneSwap = guarded(SceneSwapScreen, 'Scene Swap');
 const FilmCollage = guarded(FilmCollageScreen, 'Film & Collage');
+const Relight = guarded(RelightScreen, 'Relight');
 
 const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 
@@ -110,6 +112,7 @@ export function RootNavigator() {
         <Stack.Screen name="PhotoshootStudio" component={PhotoshootStudio} />
         <Stack.Screen name="SceneSwap" component={SceneSwap} />
         <Stack.Screen name="FilmCollage" component={FilmCollage} />
+        <Stack.Screen name="Relight" component={Relight} />
       </Stack.Navigator>
     </NavigationContainer>
   );

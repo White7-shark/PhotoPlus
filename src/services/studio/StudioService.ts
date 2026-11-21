@@ -129,6 +129,14 @@ export function strokeRequest(strokes: readonly Stroke[]) {
   return strokes.map(s => ({ brush: BRUSH_ID[s.brush], radius: s.radius, points: s.points }));
 }
 
+/** Relight's background: brighter or darker and more or less colourful (-1..1), softened (0..1). */
+export interface RelightBackground {
+  brightness: number;
+  colour: number;
+  blur: number;
+}
+export const PLAIN_BACKGROUND: RelightBackground = { brightness: 0, colour: 0, blur: 0 };
+
 export class StudioService {
   constructor(private readonly native: StudioSpec) {}
 
@@ -175,6 +183,8 @@ export class StudioService {
       finish?: FinishChoice | null;
       /** A transparent preview in the photo's own frame (not trimmed): to paint hair brushes over. */
       aligned?: boolean;
+      /** A saved photo's download size (its short edge, px); the size it was made at when absent. */
+      resolution?: number;
     },
     quality: 'preview' | 'full',
     hidePerson = false,
@@ -194,19 +204,46 @@ export class StudioService {
           ...(lipsRequest(scene.lips) ? { lips: lipsRequest(scene.lips) } : {}),
           ...studioLightRequest(scene.light ?? null, scene.finish ?? null, scene.background.kind === 'transparent'),
           ...(scene.aligned ? { aligned: true } : {}),
+          ...(quality === 'full' && scene.resolution ? { resolution: scene.resolution } : {}),
         }),
       isScene,
     );
   }
 
-  /** Film & Collage: the film strip (a preview, or the saved photo). */
-  renderFilm(photos: string[], film: FilmChoice, quality: 'preview' | 'full'): Promise<SceneResult> {
-    return this.call(() => this.native.renderFilm(createId('film'), filmRequest(photos, film, quality)), isScene);
+  /** Film & Collage: the film strip (a preview, or the saved photo at `resolution`, its short edge in px). */
+  renderFilm(photos: string[], film: FilmChoice, quality: 'preview' | 'full', resolution?: number): Promise<SceneResult> {
+    return this.call(() => this.native.renderFilm(createId('film'), filmRequest(photos, film, quality, resolution)), isScene);
   }
 
-  /** Film & Collage: the collage (a preview, or the saved photo). */
-  renderCollage(photos: string[], collage: CollageChoice, quality: 'preview' | 'full'): Promise<SceneResult> {
-    return this.call(() => this.native.renderCollage(createId('collage'), collageRequest(photos, collage, quality)), isScene);
+  /** Film & Collage: the collage (a preview, or the saved photo at `resolution`). */
+  renderCollage(photos: string[], collage: CollageChoice, quality: 'preview' | 'full', resolution?: number): Promise<SceneResult> {
+    return this.call(() => this.native.renderCollage(createId('collage'), collageRequest(photos, collage, quality, resolution)), isScene);
+  }
+
+  /**
+   * Relight: the person, lit with studio light (and pink lips or a lipstick),
+   * back in their own photo, with the background darkened or brightened,
+   * softened and made more or less colourful, and the whole photo finished.
+   */
+  renderRelight(
+    sessionId: string,
+    r: { light: LightChoice | null; finish: FinishChoice | null; lips?: LipsChoice | null; background: RelightBackground },
+    quality: 'preview' | 'full',
+    resolution?: number,
+  ): Promise<SceneResult> {
+    const clamp = (v: number, lo: number) => (Number.isFinite(v) ? Math.min(1, Math.max(lo, v)) : 0);
+    return this.call(
+      () =>
+        this.native.renderRelight(createId('relight'), {
+          sessionId,
+          quality,
+          background: { brightness: clamp(r.background.brightness, -1), colour: clamp(r.background.colour, -1), blur: clamp(r.background.blur, 0) },
+          ...studioLightRequest(r.light, r.finish, false),
+          ...(lipsRequest(r.lips) ? { lips: lipsRequest(r.lips) } : {}),
+          ...(quality === 'full' && resolution ? { resolution } : {}),
+        }),
+      isScene,
+    );
   }
 
   async saveToGallery(path: string): Promise<string> {

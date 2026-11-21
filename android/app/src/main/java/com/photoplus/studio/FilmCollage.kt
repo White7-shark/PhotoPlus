@@ -17,13 +17,32 @@ object FilmCollage {
   const val MAX_FRAMES = 12
   /** Engine frame looks: 0 original .. 9 noir (pp_frame_look). */
   const val LOOKS = 10
-  /** Floats per frame for the engine: photo, look, zoom, panX, panY, flip, focusX, focusY. */
-  const val FRAME_FLOATS = 8
+  /**
+   * Floats per frame for the engine: photo, look, zoom, panX, panY, flip,
+   * focusX, focusY, lookFade, brightness, contrast, saturation, warmth.
+   */
+  const val FRAME_FLOATS = 13
+  private val LABEL = Regex("^[A-Za-z0-9 .&'!*-]{0,23}$")
   private val HEX = Regex("^#[0-9a-fA-F]{6}$")
 
-  data class Frame(val photo: Int, val look: Int = 0, val zoom: Float = 1f, val panX: Float = 0f, val panY: Float = 0f, val flip: Boolean = false) {
+  data class Frame(
+    val photo: Int,
+    val look: Int = 0,
+    val zoom: Float = 1f,
+    val panX: Float = 0f,
+    val panY: Float = 0f,
+    val flip: Boolean = false,
+    /** How much of the look shows, 0..1. */
+    val lookStrength: Float = 1f,
+    /** The frame's own adjustments, -1..1 (0 = as shot). */
+    val brightness: Float = 0f,
+    val contrast: Float = 0f,
+    val saturation: Float = 0f,
+    val warmth: Float = 0f,
+  ) {
     fun floats(focus: Pair<Float, Float>?): FloatArray = floatArrayOf(
       photo.toFloat(), look.toFloat(), zoom, panX, panY, if (flip) 1f else 0f, focus?.first ?: -1f, focus?.second ?: -1f,
+      1f - lookStrength, brightness, contrast, saturation, warmth,
     )
 
     companion object {
@@ -33,7 +52,11 @@ object FilmCollage {
         val look = (m["look"] as? Number)?.toInt() ?: 0
         if (look !in 0 until LOOKS) throw EngineException(EngineException.INVALID_ARGUMENT, "Unknown look")
         fun f(k: String, d: Float, lo: Float, hi: Float) = ((m[k] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: d).coerceIn(lo, hi)
-        return Frame(photo, look, f("zoom", 1f, 1f, 4f), f("panX", 0f, -1f, 1f), f("panY", 0f, -1f, 1f), m["flip"] == true)
+        return Frame(
+          photo, look, f("zoom", 1f, 1f, 4f), f("panX", 0f, -1f, 1f), f("panY", 0f, -1f, 1f), m["flip"] == true,
+          f("lookStrength", 1f, 0f, 1f), f("brightness", 0f, -1f, 1f), f("contrast", 0f, -1f, 1f), f("saturation", 0f, -1f, 1f),
+          f("warmth", 0f, -1f, 1f),
+        )
       }
     }
   }
@@ -46,7 +69,22 @@ object FilmCollage {
     }
   }
 
-  data class FilmSpec(val photos: List<String>, val frames: List<Frame>, val style: Style, val vertical: Boolean, val portrait: Boolean, val markings: Boolean)
+  data class FilmSpec(
+    val photos: List<String>,
+    val frames: List<Frame>,
+    val style: Style,
+    val vertical: Boolean,
+    val portrait: Boolean,
+    val markings: Boolean,
+    /** The style's grain x 0..3 (0 = none). */
+    val grain: Float = 1f,
+    /** The style's gap between frames x 0.3..4. */
+    val spacing: Float = 1f,
+    /** The film's colour 0xRRGGBB, or null for the style's own. */
+    val baseColor: Int? = null,
+    /** Edge text in place of the stock name. */
+    val label: String = "",
+  )
 
   data class Cell(val x: Float, val y: Float, val w: Float, val h: Float, val frame: Frame)
 
@@ -66,7 +104,17 @@ object FilmCollage {
     val photos = photosOf(m)
     val frames = (m["frames"] as? List<*>)?.map { Frame.fromMap(it as? Map<*, *> ?: emptyMap<String, Any?>(), photos.size) }.orEmpty()
     if (frames.isEmpty() || frames.size > MAX_FRAMES) throw EngineException(EngineException.INVALID_ARGUMENT, "A strip has 1 to $MAX_FRAMES frames")
-    return FilmSpec(photos, frames, Style.parse(m["style"] ?: "classic"), m["vertical"] != false, m["portrait"] == true, m["markings"] != false)
+    fun f(k: String, d: Float, lo: Float, hi: Float) = ((m[k] as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: d).coerceIn(lo, hi)
+    val base = (m["filmColor"] as? String)?.let {
+      if (!HEX.matches(it)) throw EngineException(EngineException.INVALID_ARGUMENT, "Bad film colour")
+      it.substring(1).toInt(16)
+    }
+    val label = (m["label"] as? String)?.trim().orEmpty()
+    if (!LABEL.matches(label)) throw EngineException(EngineException.INVALID_ARGUMENT, "The film's text can use letters, numbers and - . & ' ! *")
+    return FilmSpec(
+      photos, frames, Style.parse(m["style"] ?: "classic"), m["vertical"] != false, m["portrait"] == true, m["markings"] != false,
+      f("grain", 1f, 0f, 3f), f("spacing", 1f, 0.3f, 4f), base, label.uppercase(),
+    )
   }
 
   fun collageFromMap(m: Map<String, Any?>): CollageSpec {
@@ -132,8 +180,13 @@ object FilmCollage {
   fun renderFilm(spec: FilmSpec, photos: Decoded, frameSize: Int, token: Long): Bitmap {
     val frames = FloatArray(spec.frames.size * FRAME_FLOATS)
     spec.frames.forEachIndexed { i, f -> f.floats(photos.focus[f.photo]).copyInto(frames, i * FRAME_FLOATS) }
-    val params = intArrayOf(spec.style.engine, if (spec.vertical) 1 else 0, if (spec.portrait) 1 else 0, frameSize, if (spec.markings) 1 else 0, 7)
-    return fromHandle(NativeEngine.nativeStudioFilm(photos.bitmaps.toTypedArray(), frames, params, token))
+    val params = intArrayOf(
+      spec.style.engine, if (spec.vertical) 1 else 0, if (spec.portrait) 1 else 0, frameSize, if (spec.markings) 1 else 0, 7,
+      spec.baseColor?.let { 0x01000000 or it } ?: 0,
+    )
+    // The engine reads grain and spacing as multiples (0 = the style's own; a negative grain = none).
+    val options = floatArrayOf(if (spec.grain <= 0f) -1f else spec.grain, spec.spacing)
+    return fromHandle(NativeEngine.nativeStudioFilm(photos.bitmaps.toTypedArray(), frames, params, options, spec.label, token))
   }
 
   /** The collage, [longEdge] pixels on its long side. */

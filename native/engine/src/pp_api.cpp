@@ -1477,6 +1477,21 @@ pp_status pp_style_analyze(const pp_image* image, pp_style* out) {
   });
 }
 
+pp_status pp_studio_relight_compose(pp_image* photo, const pp_image* lit_cutout, float bg_brightness, float bg_colour, float bg_blur,
+                                    const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (photo == nullptr || lit_cutout == nullptr || !std::isfinite(bg_brightness) || !std::isfinite(bg_colour) || !std::isfinite(bg_blur))
+      return fail(PP_ERROR_INVALID_ARGUMENT, "photo, cut-out and settings are required");
+    for (const photoplus::ImageBuffer* im : {static_cast<const photoplus::ImageBuffer*>(&photo->buffer), &lit_cutout->buffer})
+      if (im->format() != photoplus::PixelFormat::RGBA8 && im->format() != photoplus::PixelFormat::BGRA8)
+        return fail(PP_ERROR_INVALID_ARGUMENT, "Relight needs RGBA or BGRA images");
+    photoplus::Error e = photoplus::studio::relightCompose(photo->buffer, lit_cutout->buffer, {bg_brightness, bg_colour, bg_blur},
+                                                           token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
+    return succeed();
+  });
+}
+
 namespace {
 bool toFrame(const pp_film_frame& in, photoplus::studio::FrameSpec& out) {
   if (in.look < 0 || in.look >= photoplus::studio::kFrameLooks || !std::isfinite(in.zoom) || !std::isfinite(in.pan_x) ||
@@ -1484,6 +1499,13 @@ bool toFrame(const pp_film_frame& in, photoplus::studio::FrameSpec& out) {
     return false;
   out.focusX = in.focus_x;
   out.focusY = in.focus_y;
+  for (float v : {in.look_fade, in.brightness, in.contrast, in.saturation, in.warmth})
+    if (!std::isfinite(v)) return false;
+  out.lookStrength = 1.0f - std::clamp(in.look_fade, 0.0f, 1.0f);
+  out.brightness = std::clamp(in.brightness, -1.0f, 1.0f);
+  out.contrast = std::clamp(in.contrast, -1.0f, 1.0f);
+  out.saturation = std::clamp(in.saturation, -1.0f, 1.0f);
+  out.warmth = std::clamp(in.warmth, -1.0f, 1.0f);
   out.photo = in.photo;
   out.look = static_cast<photoplus::studio::FrameLook>(in.look);
   out.zoom = in.zoom;
@@ -1522,6 +1544,11 @@ pp_status pp_studio_filmstrip(const pp_image* const* photos, int32_t photo_count
     p.frameSize = params->frame_size;
     p.markings = params->markings != 0;
     p.seed = params->seed;
+    if (!std::isfinite(params->grain) || !std::isfinite(params->spacing)) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad film options");
+    p.grain = params->grain == 0.0f ? 1.0f : params->grain < 0.0f ? 0.0f : params->grain;
+    p.spacing = params->spacing == 0.0f ? 1.0f : params->spacing;
+    p.baseColor = (params->base_color & 0x01000000) != 0 ? (params->base_color & 0xFFFFFF) : -1;
+    p.label.assign(params->label, strnlen(params->label, sizeof(params->label)));
     auto result = photoplus::studio::filmStrip(ph, fr, p, token ? &token->token : nullptr);
     if (!result) return fail(result.error());
     *out = new pp_image{std::move(result).value()};
@@ -1592,8 +1619,27 @@ pp_status pp_lively(pp_image* image, float strength, const pp_cancel_token* toke
   return pp_lively_masked(image, strength, nullptr, 0, 0, token, report_out);
 }
 
+struct pp_lively_state {
+  photoplus::enhance::LivelyState state;
+};
+
+pp_status pp_lively_state_create(pp_lively_state** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is required");
+    *out = new pp_lively_state{};
+    return succeed();
+  });
+}
+
+void pp_lively_state_destroy(pp_lively_state* state) { delete state; }
+
 pp_status pp_lively_masked(pp_image* image, float strength, const uint8_t* mask, int32_t mask_w, int32_t mask_h,
                            const pp_cancel_token* token, float* report_out) {
+  return pp_lively_frame(image, strength, mask, mask_w, mask_h, nullptr, token, report_out);
+}
+
+pp_status pp_lively_frame(pp_image* image, float strength, const uint8_t* mask, int32_t mask_w, int32_t mask_h,
+                          pp_lively_state* state, const pp_cancel_token* token, float* report_out) {
   return guarded([&]() -> pp_status {
     if (image == nullptr || !std::isfinite(strength)) return fail(PP_ERROR_INVALID_ARGUMENT, "image and strength are required");
     if (mask != nullptr && (mask_w <= 0 || mask_h <= 0 || mask_w > 8192 || mask_h > 8192)) {
@@ -1606,7 +1652,8 @@ pp_status pp_lively_masked(pp_image* image, float strength, const uint8_t* mask,
     photoplus::enhance::PersonMask pm{mask, mask_w, mask_h};
     photoplus::enhance::LivelyReport r;
     photoplus::Error e =
-        photoplus::enhance::lively(image->buffer, strength, mask ? &pm : nullptr, token ? &token->token : nullptr, &r);
+        photoplus::enhance::lively(image->buffer, strength, mask ? &pm : nullptr, state ? &state->state : nullptr,
+                                   token ? &token->token : nullptr, &r);
     if (e.status != PP_OK) return fail(e);
     if (report_out) {
       report_out[0] = r.skinBoost;

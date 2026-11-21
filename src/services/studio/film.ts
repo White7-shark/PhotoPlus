@@ -30,7 +30,16 @@ export interface FilmFrame {
   panX: number;
   panY: number;
   flip: boolean;
+  /** How much of the look shows, 0..1. */
+  lookStrength: number;
+  /** The frame's own adjustments, -1..1 (0 = as shot), before its look. */
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  warmth: number;
 }
+
+export const NO_ADJUST = { lookStrength: 1, brightness: 0, contrast: 0, saturation: 0, warmth: 0 } as const;
 
 export const plainFrame = (photo: number): FilmFrame => ({
   photo,
@@ -39,6 +48,7 @@ export const plainFrame = (photo: number): FilmFrame => ({
   panX: 0,
   panY: 0,
   flip: false,
+  ...NO_ADJUST,
 });
 
 export const FILM_STYLES = [
@@ -69,7 +79,24 @@ export interface FilmChoice {
   portrait: boolean;
   markings: boolean;
   frames: FilmFrame[];
+  /** The style's grain x 0..3 (0 = none). */
+  grain: number;
+  /** The style's spacing between frames x 0.3..4. */
+  spacing: number;
+  /** The film's own colour (#RRGGBB), or null for the style's. */
+  filmColor: string | null;
+  /** Edge text in place of the stock name (letters, numbers and - . & ' ! *, at most 23). */
+  label: string;
 }
+
+export const FILM_COLORS = ['#141416', '#FFFFFF', '#F3E6CF', '#6B4A2E', '#9C2F3B', '#1F3B5C'] as const;
+export const FILM_LABEL_MAX = 23;
+/** The film's text as the device draws it: capitals, and only the characters its font has. */
+export const cleanLabel = (text: string) =>
+  text
+    .toUpperCase()
+    .replace(/[^A-Z0-9 .&'!*-]/g, '')
+    .slice(0, FILM_LABEL_MAX);
 
 export const MAX_PHOTOS = 12;
 export const MAX_FRAMES = 12;
@@ -97,7 +124,7 @@ export function mixedFrames(photos: number, count: number): FilmFrame[] {
     // With several photos, each first appears as shot; variations come after.
     const pass = p > 1 ? Math.floor(i / p) : i;
     const m = MIX[pass % MIX.length];
-    return { photo: i % p, look: m.look, zoom: m.zoom, panX: 0, panY: 0, flip: m.flip };
+    return { photo: i % p, look: m.look, zoom: m.zoom, panX: 0, panY: 0, flip: m.flip, ...NO_ADJUST };
   });
 }
 
@@ -188,6 +215,8 @@ export interface CollageChoice {
   aspect: CollageAspect;
   /** 0..0.1 of the short side */
   gap: number;
+  /** Around the edge, 0..0.2 of the short side */
+  margin: number;
   /** 0..0.5 of a cell's short side */
   radius: number;
   background: string;
@@ -204,9 +233,15 @@ const frameRequest = (f: FilmFrame) => ({
   panX: clamp(f.panX, -1, 1),
   panY: clamp(f.panY, -1, 1),
   flip: f.flip,
+  lookStrength: clamp(f.lookStrength ?? 1, 0, 1),
+  brightness: clamp(f.brightness ?? 0, -1, 1),
+  contrast: clamp(f.contrast ?? 0, -1, 1),
+  saturation: clamp(f.saturation ?? 0, -1, 1),
+  warmth: clamp(f.warmth ?? 0, -1, 1),
 });
 
-export function filmRequest(photos: string[], film: FilmChoice, quality: 'preview' | 'full') {
+export function filmRequest(photos: string[], film: FilmChoice, quality: 'preview' | 'full', resolution?: number) {
+  const label = cleanLabel(film.label ?? '').trim();
   return {
     photos,
     frames: film.frames.slice(0, MAX_FRAMES).map(frameRequest),
@@ -214,11 +249,16 @@ export function filmRequest(photos: string[], film: FilmChoice, quality: 'previe
     vertical: film.vertical,
     portrait: film.portrait,
     markings: film.markings,
+    grain: clamp(film.grain ?? 1, 0, 3),
+    spacing: clamp(film.spacing ?? 1, 0.3, 4),
+    ...(film.filmColor ? { filmColor: film.filmColor } : {}),
+    ...(label ? { label } : {}),
     quality,
+    ...(quality === 'full' && resolution ? { resolution } : {}),
   };
 }
 
-export function collageRequest(photos: string[], c: CollageChoice, quality: 'preview' | 'full') {
+export function collageRequest(photos: string[], c: CollageChoice, quality: 'preview' | 'full', resolution?: number) {
   const layout = collageLayout(c.layout);
   return {
     photos,
@@ -231,9 +271,10 @@ export function collageRequest(photos: string[], c: CollageChoice, quality: 'pre
     })),
     aspect: COLLAGE_ASPECTS.find(a => a.id === c.aspect)?.value ?? 0.8,
     gap: clamp(c.gap, 0, 0.1),
-    margin: clamp(c.gap, 0, 0.1),
+    margin: clamp(c.margin ?? c.gap, 0, 0.2),
     radius: clamp(c.radius, 0, 0.5),
     background: c.background,
     quality,
+    ...(quality === 'full' && resolution ? { resolution } : {}),
   };
 }

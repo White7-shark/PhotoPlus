@@ -1054,15 +1054,33 @@ pp_film_frame frameFrom(const float* f) {
   out.flip = f[5] > 0.5f ? 1 : 0;
   out.focus_x = f[6];
   out.focus_y = f[7];
+  out.look_fade = f[8];
+  out.brightness = f[9];
+  out.contrast = f[10];
+  out.saturation = f[11];
+  out.warmth = f[12];
   return out;
 }
+// Floats per frame from Kotlin (FilmCollage.FRAME_FLOATS).
+constexpr jsize kFrameFloats = 13;
 }  // namespace
 
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioRelightCompose(JNIEnv* env, jobject, jobject photo,
+                                                                                        jobject lit, jfloat brightness, jfloat colour,
+                                                                                        jfloat blur, jlong token) {
+  WrappedBitmap p, l;
+  if (!p.open(env, photo, false) || !l.open(env, lit, false)) return;
+  const pp_status st =
+      pp_studio_relight_compose(p.image, l.image, brightness, colour, blur, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
 JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioFilm(JNIEnv* env, jobject, jobjectArray photos,
-                                                                              jfloatArray frames, jintArray params, jlong token) {
-  constexpr jsize kFrame = 8;
+                                                                              jfloatArray frames, jintArray params, jfloatArray options,
+                                                                              jstring label, jlong token) {
+  constexpr jsize kFrame = kFrameFloats;
   const jsize nf = env->GetArrayLength(frames);
-  if (nf <= 0 || nf % kFrame != 0 || nf / kFrame > 12 || env->GetArrayLength(params) < 6) {
+  if (nf <= 0 || nf % kFrame != 0 || nf / kFrame > 12 || env->GetArrayLength(params) < 7 || env->GetArrayLength(options) < 2) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad film strip");
     return 0;
   }
@@ -1072,9 +1090,18 @@ JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioFilm(
   env->GetFloatArrayRegion(frames, 0, nf, fv.data());
   std::vector<pp_film_frame> fr;
   for (jsize i = 0; i < nf / kFrame; ++i) fr.push_back(frameFrom(fv.data() + i * kFrame));
-  jint p[6];
-  env->GetIntArrayRegion(params, 0, 6, p);
-  const pp_film_params fp{p[0], p[1], p[2], p[3], p[4], static_cast<uint32_t>(p[5])};
+  jint p[7];
+  env->GetIntArrayRegion(params, 0, 7, p);
+  jfloat o[2];
+  env->GetFloatArrayRegion(options, 0, 2, o);
+  pp_film_params fp{p[0], p[1], p[2], p[3], p[4], static_cast<uint32_t>(p[5]), o[0], o[1], p[6], {}};
+  if (label != nullptr) {
+    const char* chars = env->GetStringUTFChars(label, nullptr);
+    if (chars != nullptr) {
+      std::strncpy(fp.label, chars, sizeof(fp.label) - 1);
+      env->ReleaseStringUTFChars(label, chars);
+    }
+  }
   std::vector<const pp_image*> in(burst.images.begin(), burst.images.end());
   pp_image* out = nullptr;
   const pp_status st = pp_studio_filmstrip(in.data(), static_cast<int32_t>(in.size()), fr.data(), static_cast<int32_t>(fr.size()), &fp,
@@ -1088,7 +1115,7 @@ JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioFilm(
 
 JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCollage(JNIEnv* env, jobject, jobjectArray photos,
                                                                                  jfloatArray cells, jfloatArray params, jlong token) {
-  constexpr jsize kCell = 12;
+  constexpr jsize kCell = 4 + kFrameFloats;
   const jsize nc = env->GetArrayLength(cells);
   if (nc <= 0 || nc % kCell != 0 || nc / kCell > 12 || env->GetArrayLength(params) < 8) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad collage");
@@ -1138,6 +1165,39 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioLips(
     return;
   }
   if (reportOut != nullptr) env->SetFloatArrayRegion(reportOut, 0, 3, rep);
+}
+
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeLivelyStateCreate(JNIEnv* env, jobject) {
+  pp_lively_state* state = nullptr;
+  const pp_status st = pp_lively_state_create(&state);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(state);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLivelyStateDestroy(JNIEnv*, jobject, jlong state) {
+  pp_lively_state_destroy(reinterpret_cast<pp_lively_state*>(state));
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLivelyFrame(JNIEnv* env, jobject, jobject bitmap, jfloat strength,
+                                                                              jbyteArray mask, jint maskW, jint maskH, jlong state,
+                                                                              jlong token) {
+  std::vector<uint8_t> m;
+  if (mask != nullptr) {
+    if (maskW <= 0 || maskH <= 0 || maskW > 8192 || maskH > 8192 || env->GetArrayLength(mask) < static_cast<jsize>(maskW) * maskH) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad person mask");
+      return;
+    }
+    m.resize(static_cast<size_t>(maskW) * static_cast<size_t>(maskH));
+    env->GetByteArrayRegion(mask, 0, static_cast<jsize>(m.size()), reinterpret_cast<jbyte*>(m.data()));
+  }
+  WrappedBitmap img;
+  if (!img.open(env, bitmap, false)) return;
+  const pp_status st = pp_lively_frame(img.image, strength, m.empty() ? nullptr : m.data(), maskW, maskH,
+                                       reinterpret_cast<pp_lively_state*>(state), reinterpret_cast<const pp_cancel_token*>(token), nullptr);
+  if (st != PP_OK) throwStatus(env, st);
 }
 
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeLivelyMasked(

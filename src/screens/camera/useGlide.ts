@@ -33,6 +33,8 @@ export interface GlideSettings {
   maxMs: number;
   /** Normal, fast (2×) or slow motion. */
   speed?: GlideSpeed;
+  /** Lively colour (Settings): on unless turned off. */
+  lively?: boolean;
 }
 
 /**
@@ -111,6 +113,7 @@ export function useGlide({
           recipe: s.recipe,
           watermark: s.watermark,
           speed: s.speed,
+          lively: s.lively,
         }),
         { signal: controller.signal, onProgress: setFraction, onStage: setStage },
       );

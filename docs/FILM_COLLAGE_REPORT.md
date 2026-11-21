@@ -65,3 +65,20 @@ Crops and zooms centre on the photo's face, found with ML Kit on the phone. With
   - Mix it up variety and keeping frames valid when photos are removed;
   - the request shapes;
   - the whole screen: add photos, change style, transform a frame, collage layout, save, and the camera round trip.
+
+## More control (second version)
+
+Each frame or cell now also has:
+
+- **Look strength** (0-100%), to fade any look.
+- **Brightness, contrast, colour and warmth**, each -100 to +100, applied before the look.
+- **Reset this frame.**
+
+The strip now also has:
+
+- **Grain**, from none to 3×.
+- **Spacing between frames**, from 0.3× to 4×.
+- **Film colour**: the film's own, or black, white, cream, brown, wine or navy. Markings turn dark on light film.
+- **Your own text on the film edge**, such as "ANNA * 2026", in place of the stock name. The built-in font now has A-Z, 0-9, `- . & ' !` and `*`, which draws a heart.
+
+Collages now have a **border** setting that is separate from the spacing between cells.

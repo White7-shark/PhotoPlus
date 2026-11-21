@@ -100,6 +100,30 @@ Rgbf applyLook(FrameLook look, Rgbf c, float vignette) {
   return {clamp01(c.r), clamp01(c.g), clamp01(c.b)};
 }
 
+/**
+ * A frame's own adjustments (each -1..1, 0 = as shot): brightness, contrast,
+ * colour (saturation) and warmth, applied before its look.
+ */
+Rgbf adjust(Rgbf c, const FrameSpec& f) {
+  const auto val = [](float v) { return std::isfinite(v) ? std::clamp(v, -1.0f, 1.0f) : 0.0f; };
+  const float br = val(f.brightness), ct = val(f.contrast), sat = val(f.saturation), wm = val(f.warmth);
+  if (br == 0.0f && ct == 0.0f && sat == 0.0f && wm == 0.0f) return c;
+  if (br != 0.0f) {
+    // Brighter lifts mid-tones (whites stay white); darker deepens them.
+    // v(1+a)/(1+av): black and white stay put, mid-tones move.
+    const float k = br > 0.0f ? 1.5f * br : 0.6f * br;
+    const auto lift = [&](float v) { return v * (1.0f + k) / (1.0f + k * v); };
+    c = {clamp01(lift(c.r)), clamp01(lift(c.g)), clamp01(lift(c.b))};
+  }
+  if (ct != 0.0f) {
+    if (ct > 0.0f) c = {sCurve(c.r, 0.45f * ct), sCurve(c.g, 0.45f * ct), sCurve(c.b, 0.45f * ct)};
+    else c = {0.5f + (c.r - 0.5f) * (1.0f + 0.5f * ct), 0.5f + (c.g - 0.5f) * (1.0f + 0.5f * ct), 0.5f + (c.b - 0.5f) * (1.0f + 0.5f * ct)};
+  }
+  if (sat != 0.0f) c = saturate(c, 1.0f + sat);
+  if (wm != 0.0f) c = {c.r + 0.06f * wm, c.g + 0.01f * wm, c.b - 0.07f * wm};
+  return {clamp01(c.r), clamp01(c.g), clamp01(c.b)};
+}
+
 /** Bilinear sample of a photo in pixel coordinates (edge-clamped), gamma RGB 0..1. */
 Rgbf sample(const ImageBuffer& img, float x, float y) {
   const int32_t w = img.width(), h = img.height();
@@ -153,7 +177,7 @@ struct Canvas {
   }
 };
 
-// ---- a small 5x7 font for the film's edge markings ----
+// ---- a small 5x7 font for the film's edge markings and labels ----
 // Each glyph: 7 rows of 5 bits (most significant bit = left).
 const std::array<uint8_t, 7>* glyph(char ch) {
   static const std::array<uint8_t, 7> kDigits[10] = {
@@ -162,26 +186,52 @@ const std::array<uint8_t, 7>* glyph(char ch) {
       {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}, {0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E},
       {0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E}, {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08},
       {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}, {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C}};
-  static const std::array<uint8_t, 7> kA{0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11};
-  static const std::array<uint8_t, 7> kH{0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11};
-  static const std::array<uint8_t, 7> kL{0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F};
-  static const std::array<uint8_t, 7> kO{0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E};
-  static const std::array<uint8_t, 7> kP{0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10};
-  static const std::array<uint8_t, 7> kS{0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E};
-  static const std::array<uint8_t, 7> kT{0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
-  static const std::array<uint8_t, 7> kU{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E};
+  static const std::array<uint8_t, 7> kLetters[26] = {
+      {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11},  // A
+      {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E},  // B
+      {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E},  // C
+      {0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C},  // D
+      {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F},  // E
+      {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10},  // F
+      {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F},  // G
+      {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11},  // H
+      {0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E},  // I
+      {0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C},  // J
+      {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11},  // K
+      {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F},  // L
+      {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11},  // M
+      {0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11},  // N
+      {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},  // O
+      {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10},  // P
+      {0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D},  // Q
+      {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11},  // R
+      {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E},  // S
+      {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04},  // T
+      {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},  // U
+      {0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04},  // V
+      {0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A},  // W
+      {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11},  // X
+      {0x11, 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04},  // Y
+      {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F},  // Z
+  };
   static const std::array<uint8_t, 7> kArrow{0x10, 0x18, 0x1C, 0x1E, 0x1C, 0x18, 0x10};  // '>' as a filled triangle
+  static const std::array<uint8_t, 7> kDash{0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00};
+  static const std::array<uint8_t, 7> kDot{0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C};
+  static const std::array<uint8_t, 7> kAmp{0x0C, 0x12, 0x14, 0x08, 0x15, 0x12, 0x0D};
+  static const std::array<uint8_t, 7> kApos{0x0C, 0x04, 0x08, 0x00, 0x00, 0x00, 0x00};
+  static const std::array<uint8_t, 7> kExcl{0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04};
+  static const std::array<uint8_t, 7> kHeart{0x00, 0x0A, 0x1F, 0x1F, 0x0E, 0x04, 0x00};
   if (ch >= '0' && ch <= '9') return &kDigits[ch - '0'];
+  if (ch >= 'A' && ch <= 'Z') return &kLetters[ch - 'A'];
+  if (ch >= 'a' && ch <= 'z') return &kLetters[ch - 'a'];
   switch (ch) {
-    case 'A': return &kA;
-    case 'H': return &kH;
-    case 'L': return &kL;
-    case 'O': return &kO;
-    case 'P': return &kP;
-    case 'S': return &kS;
-    case 'T': return &kT;
-    case 'U': return &kU;
     case '>': return &kArrow;
+    case '-': return &kDash;
+    case '.': return &kDot;
+    case '&': return &kAmp;
+    case '\'': return &kApos;
+    case '!': return &kExcl;
+    case '*': return &kHeart;  // a heart, for labels like "ANNA * 2026"
     default: return nullptr;  // space and anything else
   }
 }
@@ -256,7 +306,10 @@ Error drawFrame(Canvas& cv, const ImageBuffer& photo, const Box& box, const Fram
         if (f.flip) u = 1.0f - u;
         const Rgbf src = sample(photo, cx + (u - 0.5f) * viewW - 0.5f, cy + (v - 0.5f) * viewH - 0.5f);
         const float du = u - 0.5f, dv = v - 0.5f;
-        Rgbf c = applyLook(f.look, src, clamp01((du * du + dv * dv) * 2.0f));
+        const Rgbf adj = adjust(src, f);
+        const Rgbf looked = applyLook(f.look, adj, clamp01((du * du + dv * dv) * 2.0f));
+        const float ls = f.lookStrength;
+        Rgbf c{adj.r + (looked.r - adj.r) * ls, adj.g + (looked.g - adj.g) * ls, adj.b + (looked.b - adj.b) * ls};
         if (grain > 0.0f) {
           const float g = grain * grainAt(xx, yy, seed);
           c = {clamp01(c.r + g), clamp01(c.g + g), clamp01(c.b + g)};
@@ -312,7 +365,18 @@ Result<ImageBuffer> filmStrip(const std::vector<const ImageBuffer*>& photos, con
   for (const auto& f : frames)
     if (f.photo < 0 || static_cast<size_t>(f.photo) >= photos.size())
       return failure(Error{PP_ERROR_INVALID_ARGUMENT, "A frame names a photo that isn't there"});
-  const Style st = styleOf(params.style);
+  Style st = styleOf(params.style);
+  if (params.baseColor >= 0) {
+    // A film colour of the person's choosing (e.g. white film, a brand colour);
+    // markings switch to dark on light film.
+    const Rgbf b{static_cast<float>((params.baseColor >> 16) & 0xFF) / 255.0f, static_cast<float>((params.baseColor >> 8) & 0xFF) / 255.0f,
+                 static_cast<float>(params.baseColor & 0xFF) / 255.0f};
+    st.base = b;
+    if (luma(b) > 0.6f) st.marking = {0.25f, 0.23f, 0.22f};
+    if (!st.holes) st.hole = b;
+  }
+  st.grain *= std::clamp(std::isfinite(params.grain) ? params.grain : 1.0f, 0.0f, 3.0f);
+  st.gap *= std::clamp(std::isfinite(params.spacing) ? params.spacing : 1.0f, 0.3f, 4.0f);
   // A frame's size: its short edge is frameSize; portrait frames are taller than wide.
   const float shortE = static_cast<float>(params.frameSize);
   const float wide = std::max(st.aspect, 1.0f / st.aspect);
@@ -362,7 +426,7 @@ Result<ImageBuffer> filmStrip(const std::vector<const ImageBuffer*>& photos, con
   // (between the holes and the frame), as real film carries them.
   if (params.markings) {
     if (st.holes) {
-      const std::string name = params.style == FilmStyle::Cinema ? "PHOTO PLUS" : "PHOTO PLUS 400";
+      const std::string name = !params.label.empty() ? params.label : params.style == FilmStyle::Cinema ? "PHOTO PLUS" : "PHOTO PLUS 400";
       // One font pixel: the text sits in the band between the holes and the
       // frame, and is never longer than a frame.
       const float px = std::max(1.0f, std::min(0.045f * border, 0.85f * along / textLength(name)));
@@ -383,7 +447,7 @@ Result<ImageBuffer> filmStrip(const std::vector<const ImageBuffer*>& photos, con
       }
     } else {
       // A booth strip carries its name in the deeper foot.
-      const std::string name = "PHOTO PLUS";
+      const std::string name = params.label.empty() ? std::string("PHOTO PLUS") : params.label;
       const float p2 = std::max(1.0f, 0.09f * border);
       const float a = lenAlong - 0.5f * (border + gap) - 3.5f * p2;
       if (vertical) drawText(cv, name, 0.5f * (lenAcross - textLength(name) * p2), a, p2, false, st.marking);

@@ -348,12 +348,12 @@ export function useSceneSwap(studio: StudioService) {
   );
 
   // ---- saving
-  const save = useCallback(async (): Promise<SceneResult | null> => {
+  const save = useCallback(async (resolution?: number): Promise<SceneResult | null> => {
     if (!session || !placement) return null;
     setBusy('save');
     setError(null);
     try {
-      return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect, hair, lips, light, finish }, 'full');
+      return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect, hair, lips, light, finish, resolution }, 'full');
     } catch (err) {
       if (err instanceof StudioError && err.code === 'PREMIUM_REQUIRED') throw err;
       setError('Your photo couldn’t be saved. Please try again.');
@@ -363,14 +363,14 @@ export function useSceneSwap(studio: StudioService) {
     }
   }, [session, placement, background, crop, look, frameAspect, studio, hair, lips, light, finish]);
 
-  const saveCutout = useCallback(async (): Promise<SceneResult | null> => {
+  const saveCutout = useCallback(async (resolution?: number): Promise<SceneResult | null> => {
     if (!session) return null;
     setBusy('save');
     setError(null);
     try {
       return await studio.render(
         session.sessionId,
-        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: placement ?? { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look, hair, lips, light },
+        { background: { kind: 'transparent' }, crop: { x: 0, y: 0, w: 1, h: 1 }, placement: placement ?? { x: 0.5, y: 1, height: 1, flip: false, tilt: 0, angle: 0 }, look, hair, lips, light, resolution },
         'full',
       );
     } catch (err) {

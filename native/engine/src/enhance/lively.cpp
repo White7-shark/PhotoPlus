@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <memory>
 #include <vector>
 
 #include "../portrait/common.hpp"
@@ -88,6 +89,38 @@ struct Look {
   float shine = 0;
 };
 
+/**
+ * Video: the look's global settings move toward each new frame's gradually
+ * (an exponential average), so the tone, colour and skin target of a clip
+ * stay steady from frame to frame instead of flickering.
+ */
+void blendTone(Look& held, const Look& now, float k) {
+  const auto mix = [k](float& a, float b) { a += (b - a) * k; };
+  mix(held.shiftB, now.shiftB);
+  mix(held.shiftR, now.shiftR);
+  mix(held.invGrey, now.invGrey);
+  held.cooling = held.shiftB > 0.0f || held.shiftR < 0.0f;
+  mix(held.warmB, now.warmB);
+  mix(held.warmR, now.warmR);
+  for (size_t i = 0; i < held.curve.size(); ++i) {
+    mix(held.curve[i], now.curve[i]);
+    mix(held.curveBg[i], now.curveBg[i]);
+  }
+  mix(held.clarity, now.clarity);
+  mix(held.vibrance, now.vibrance);
+  mix(held.toe, now.toe);
+  mix(held.shine, now.shine);
+}
+void blendSkin(Look& held, const Look& now, float k) {
+  const auto mix = [k](float& a, float b) { a += (b - a) * k; };
+  mix(held.skinBoost, now.skinBoost);
+  mix(held.skinCb, now.skinCb);
+  mix(held.skinCr, now.skinCr);
+  mix(held.evenSkin, now.evenSkin);
+  mix(held.healthy, now.healthy);
+  mix(held.depth, now.depth);
+}
+
 /** Luma tone curve: black point, gain, lift, S-curve and highlight shoulder. */
 float toneAt(float y, float black, float gain, float lift, float contrast) {
   float v = std::clamp((y - black) * gain, 0.0f, 1.0f);
@@ -140,6 +173,20 @@ Error lively(ImageBuffer& image, float strength, const CancellationToken* token,
 
 Error lively(ImageBuffer& image, float strength, const PersonMask* mask, const CancellationToken* token,
              LivelyReport* report) {
+  return lively(image, strength, mask, nullptr, token, report);
+}
+
+struct LivelyState::Impl {
+  Look look;
+  bool tone = false, skin = false;
+};
+LivelyState::LivelyState() : impl(std::make_unique<Impl>()) {}
+LivelyState::~LivelyState() = default;
+
+Error lively(ImageBuffer& image, float strength, const PersonMask* mask, LivelyState* state, const CancellationToken* token,
+             LivelyReport* report) {
+  // How fast a clip's look follows new frames (per frame): about a second to settle at 30 fps.
+  constexpr float kFollow = 0.08f;
   if (mask != nullptr && (mask->data == nullptr || mask->width <= 0 || mask->height <= 0)) mask = nullptr;
   ScopedTimer timer("enh.lively");
   const float s = std::isfinite(strength) ? std::clamp(strength, 0.0f, 1.0f) : 0.0f;
@@ -264,6 +311,19 @@ Error lively(ImageBuffer& image, float strength, const PersonMask* mask, const C
   L.clarity = 0.3f * s;
   L.toe = 0.6f * s;
   L.shine = s;
+  if (state) {
+    Look& held = state->impl->look;
+    if (!state->impl->tone) {
+      held = L;
+      state->impl->tone = true;
+    } else {
+      blendTone(held, L, kFollow);
+    }
+    // The held tone, with this frame's own skin settings until they too are held below.
+    const Look skinNow = L;
+    L = held;
+    blendSkin(L, skinNow, 1.0f);
+  }
 
   // ---- on the grid: toned luma, skin, colour; then the large-scale planes
   auto gw8 = Plane::allocate(gw, gh);  // skin weight
@@ -309,6 +369,16 @@ Error lively(ImageBuffer& image, float strength, const PersonMask* mask, const C
     L.evenSkin = (0.4f + 0.3f * depth) * s;
     L.depth = depth;
     L.healthy = healthy;
+  }
+  if (state) {
+    Look& held = state->impl->look;
+    if (!state->impl->skin) {
+      blendSkin(held, L, 1.0f);
+      state->impl->skin = L.evenSkin > 0.0f;  // held once skin is seen
+    } else {
+      blendSkin(held, L, L.evenSkin > 0.0f ? kFollow : 0.0f);  // a frame without skin keeps the held skin
+    }
+    blendSkin(L, held, 1.0f);
   }
   const float scale = static_cast<float>(std::max(gw, gh)) / 1100.0f;
   auto base = Plane::allocate(gw, gh);  // clarity base

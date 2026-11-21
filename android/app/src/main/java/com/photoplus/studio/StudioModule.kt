@@ -269,6 +269,12 @@ class StudioModule(reactContext: ReactApplicationContext) :
       promise.reject("PREMIUM_REQUIRED", "Saving studio photos is part of Premium")
       return
     }
+    val resolution = try {
+      ExportSize.parse(map["resolution"])
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
     @Suppress("UNCHECKED_CAST")
     val parsed = try {
       Triple(
@@ -322,7 +328,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       val cutout = if (light != null && !hidden) withLight(s, lipped, light, full, token) else lipped
       if (background is SceneBackground.Transparent) {
         // `aligned`: the whole photo's frame (for painting hair brushes over the photo), not trimmed.
-        return@submit transparent(s, cutout, full, aligned = !full && map["aligned"] == true)
+        return@submit transparent(s, cutout, full, aligned = !full && map["aligned"] == true, resolution = resolution)
       }
       val maxEdge = min(budget.maxDecodeDimension, MAX_EXPORT_EDGE)
       // Frame size: preview long edge, or as large as keeps the person's own detail.
@@ -372,10 +378,17 @@ class StudioModule(reactContext: ReactApplicationContext) :
           File(s.dir, "$prefix${System.nanoTime()}.jpg")
         }
         ImageCodec.encode(frame, target, OutputFormat.JPEG, if (full) 95 else 88)
+        // The download size asked for (a saved photo only).
+        val (ow, oh) = if (full && resolution != null) {
+          ExportSize.applyToFile(target, resolution)
+          ExportSize.target(frame.width, frame.height, resolution)
+        } else {
+          frame.width to frame.height
+        }
         mapOf(
           "outputPath" to target.absolutePath,
-          "width" to frame.width,
-          "height" to frame.height,
+          "width" to ow,
+          "height" to oh,
           "sizeBytes" to target.length().toDouble(),
           "box" to listOf(report[0].toDouble(), report[1].toDouble(), report[2].toDouble(), report[3].toDouble()),
           "exposure" to report[4].toDouble(),
@@ -473,7 +486,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
     return out
   }
 
-  private fun transparent(s: Session, cutout: Bitmap, full: Boolean, aligned: Boolean = false): Map<String, Any?> {
+  private fun transparent(s: Session, cutout: Bitmap, full: Boolean, aligned: Boolean = false, resolution: Int? = null): Map<String, Any?> {
     val trimmed = if (aligned) cutout.copy(Bitmap.Config.ARGB_8888, false) else SceneStudio.trimmed(cutout)
     try {
       val target = if (full) {
@@ -484,10 +497,16 @@ class StudioModule(reactContext: ReactApplicationContext) :
         File(s.dir, "transparent_${System.nanoTime()}.png")
       }
       ImageCodec.encode(trimmed, target, OutputFormat.PNG, 100)
+      val (ow, oh) = if (full && resolution != null) {
+        ExportSize.applyToFile(target, resolution)
+        ExportSize.target(trimmed.width, trimmed.height, resolution)
+      } else {
+        trimmed.width to trimmed.height
+      }
       return mapOf(
         "outputPath" to target.absolutePath,
-        "width" to trimmed.width,
-        "height" to trimmed.height,
+        "width" to ow,
+        "height" to oh,
         "sizeBytes" to target.length().toDouble(),
         "format" to "png",
       )
@@ -558,6 +577,69 @@ class StudioModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  // ------------------------------------------------------------------ Relight
+
+  /**
+   * Relight: the person, lit with studio light (and natural pink lips or a
+   * lipstick, if chosen), back in their own photo; the background can be
+   * darkened or brightened, softened and made more or less colourful, and the
+   * whole photo finished with a grade, vignette, warmth and tint.
+   */
+  override fun renderRelight(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val full = map["quality"] == "full"
+    @Suppress("UNCHECKED_CAST")
+    val parsed = try {
+      Triple(
+        SceneLight.fromMap(map["light"] as? Map<String, Any?>),
+        SceneFinish.fromMap(map["finish"] as? Map<String, Any?>),
+        LipsSpec.fromMap(map["lips"] as? Map<String, Any?>),
+      )
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    val (light, finish, lips) = parsed
+    if (full && Entitlements.plan != Plan.PREMIUM) {
+      promise.reject("PREMIUM_REQUIRED", "Saving relit photos is part of Premium")
+      return
+    }
+    if (Entitlements.plan != Plan.PREMIUM && (light?.premium == true || finish?.premium == true)) {
+      promise.reject("PREMIUM_REQUIRED", "This light or film look is part of Premium")
+      return
+    }
+    val resolution = resolutionFor(map, full, promise) ?: return
+    val bg = map["background"] as? Map<*, *>
+    fun bgValue(k: String, lo: Float) = ((bg?.get(k) as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: 0f).coerceIn(lo, 1f)
+    val brightness = bgValue("brightness", -1f)
+    val colour = bgValue("colour", -1f)
+    val blur = bgValue("blur", 0f)
+    jobs.submit(jobId, listener(promise)) { token ->
+      val s = session(map)
+      val base = if (full) fullCutout(s, token) else synchronized(s) { s.previewCutout } ?: throw EngineException(NO_PERSON, "Nobody was found in this photo")
+      val lipped = if (lips != null) withLips(s, base, lips, full, token) else base
+      val lit = if (light != null) withLight(s, lipped, light, full, token) else lipped
+      // The photo itself, at the cut-out's size (they share one frame).
+      val photo = if (full) ImageCodec.decode(s.file, max(base.width, base.height)).bitmap else s.preview
+      val frame = createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888).apply { isPremultiplied = false }
+      try {
+        val sized = if (photo.width == base.width && photo.height == base.height) photo else photo.scale(base.width, base.height, true)
+        try {
+          android.graphics.Canvas(frame).drawBitmap(sized, 0f, 0f, null)
+        } finally {
+          if (sized !== photo) sized.recycle()
+        }
+        NativeEngine.nativeStudioRelightCompose(frame, lit, brightness, colour, blur, token)
+        if (finish != null) NativeEngine.nativeStudioFinish(frame, finish.toArray(), 3, token)
+        finishFilmCollage(frame, full, "Relight", resolution.px)
+      } finally {
+        frame.recycle()
+        if (full) photo.recycle()
+      }
+    }
+  }
+
   // ------------------------------------------------------------ Film & Collage
 
   /** Faces found in Film & Collage photos, by path (crops and zooms centre on them). */
@@ -578,6 +660,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     val full = map["quality"] == "full"
+    val resolution = resolutionFor(map, full, promise) ?: return
     jobs.submit(jobId, listener(promise)) { token ->
       val files = spec.photos.map { paths.resolve(it) }
       // Preview frames are small; a saved strip keeps each frame sharp, within the memory budget.
@@ -585,7 +668,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       FilmCollage.decode(files, if (full) min(budget.maxDecodeDimension, FILM_DECODE_FULL) else FILM_DECODE_PREVIEW, filmFocus).use { photos ->
         val out = FilmCollage.renderFilm(spec, photos, frameSize, token)
         try {
-          finishFilmCollage(out, full, "Film")
+          finishFilmCollage(out, full, "Film", resolution.px)
         } finally {
           out.recycle()
         }
@@ -602,13 +685,14 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     val full = map["quality"] == "full"
+    val resolution = resolutionFor(map, full, promise) ?: return
     jobs.submit(jobId, listener(promise)) { token ->
       val files = spec.photos.map { paths.resolve(it) }
       val edge = if (full) min(budget.maxDecodeDimension, COLLAGE_EDGE_FULL) else COLLAGE_EDGE_PREVIEW
       FilmCollage.decode(files, if (full) min(budget.maxDecodeDimension, FILM_DECODE_FULL) else FILM_DECODE_PREVIEW, filmFocus).use { photos ->
         val out = FilmCollage.renderCollage(spec, photos, edge, token)
         try {
-          finishFilmCollage(out, full, "Collage")
+          finishFilmCollage(out, full, "Collage", resolution.px)
         } finally {
           out.recycle()
         }
@@ -620,12 +704,38 @@ class StudioModule(reactContext: ReactApplicationContext) :
    * A preview goes to the cache; a saved one to the studio folder, with the
    * Photo Plus mark on the free plan (the clean copy is kept beside it).
    */
-  private fun finishFilmCollage(out: Bitmap, full: Boolean, name: String): Map<String, Any?> {
+  /** The download size asked for (wrapped, so "as made" is not mistaken for a rejected request); null when rejected. */
+  private class Resolution(val px: Int?)
+
+  private fun resolutionFor(map: Map<String, Any?>, full: Boolean, promise: Promise): Resolution? {
+    val px = try {
+      if (full) ExportSize.parse(map["resolution"]) else null
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return null
+    }
+    if (ExportSize.needsPremium(px) && Entitlements.plan != Plan.PREMIUM) {
+      promise.reject("PREMIUM_REQUIRED", "720p, 1080p, HD and 4K downloads are part of Premium")
+      return null
+    }
+    return Resolution(px)
+  }
+
+  private fun finishFilmCollage(source: Bitmap, full: Boolean, name: String, resolution: Int? = null): Map<String, Any?> {
+    val out = if (full) ExportSize.scaled(source, resolution) else source
+    try {
+      return encodeStudio(out, full, name)
+    } finally {
+      if (out !== source) out.recycle()
+    }
+  }
+
+  private fun encodeStudio(out: Bitmap, full: Boolean, name: String): Map<String, Any?> {
     val target = if (full) {
       paths.studio.mkdirs()
       File(paths.studio, "${name}_${stamp()}.jpg")
     } else {
-      val dir = File(paths.processingCache, "film").apply { mkdirs() }
+      val dir = File(paths.processingCache, "studio-${name.lowercase()}").apply { mkdirs() }
       dir.listFiles()?.forEach { it.delete() }
       File(dir, "${name.lowercase()}_${System.nanoTime()}.jpg")
     }

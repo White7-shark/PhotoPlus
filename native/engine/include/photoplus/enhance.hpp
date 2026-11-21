@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "photoplus/cancellation.hpp"
@@ -115,6 +116,20 @@ struct PersonMask {
   int32_t width = 0, height = 0;
 };
 Error lively(ImageBuffer& image, float strength, const PersonMask* mask, const CancellationToken* token,
+             LivelyReport* report);
+
+// Video: a clip's look kept across frames. Its tone, colour and skin target
+// follow each new frame gradually, so the clip doesn't flicker; the spatial
+// detail (smoothing, clarity, the person) follows every frame.
+struct LivelyState {
+  LivelyState();
+  ~LivelyState();
+  LivelyState(const LivelyState&) = delete;
+  LivelyState& operator=(const LivelyState&) = delete;
+  struct Impl;
+  std::unique_ptr<Impl> impl;
+};
+Error lively(ImageBuffer& image, float strength, const PersonMask* mask, LivelyState* state, const CancellationToken* token,
              LivelyReport* report);
 
 // Mean absolute Laplacian on a sparse grid: fine texture (and noise).

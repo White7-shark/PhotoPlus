@@ -19,11 +19,13 @@ import {
 } from '../../services/studio/scene';
 import { getStudioService, StudioError, type Brush, type SceneResult } from '../../services/studio/StudioService';
 import { useAppStore } from '../../state/store';
+import { defaultExportSize, exportPx, type ExportSizeId } from '../../services/studio/exportSize';
 import { useTheme } from '../../theme';
 import { isOutfit } from '../../services/studio/colors';
 import type { HairBrush } from '../../services/studio/hair';
 import { BackgroundPicker } from './BackgroundPicker';
 import { HAIR_BRUSH_COLOURS } from './HairEditor';
+import { DownloadSize } from './DownloadSize';
 import { LipstickPanel, PinkLipsPanel } from './LipsPanel';
 import { HairPicker } from './HairPicker';
 import { FinishPanel, LightPanel, TemplateRow } from './StudioLightPanel';
@@ -86,7 +88,11 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
   const [backing, setBacking] = useState<Backing>('dim');
   const [tapMode, setTapMode] = useState(false);
   const [panel, setPanel] = useState<Panel>('backgrounds');
-  const [premiumOpen, setPremiumOpen] = useState<null | 'backgroundReplace' | 'studioHair' | 'studioLight'>(null);
+  const [premiumOpen, setPremiumOpen] = useState<
+    null | 'backgroundReplace' | 'studioHair' | 'studioLight' | 'exportHd'
+  >(null);
+  const sizesAllowed = can('exportHd').allowed;
+  const [size, setSize] = useState<ExportSizeId>(defaultExportSize(sizesAllowed));
   const hairAllowed = can('studioHair').allowed;
   const lightAllowed = can('studioLight').allowed;
   // Hair brushes (painted on the photo while editing the hair).
@@ -178,7 +184,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
       return;
     }
     try {
-      const r = cutoutOnly ? await s.saveCutout() : await s.save();
+      const r = cutoutOnly ? await s.saveCutout(exportPx(size)) : await s.save(exportPx(size));
       if (r) await keep(r);
     } catch (e) {
       if (e instanceof StudioError && e.code === 'PREMIUM_REQUIRED') setPremiumOpen('backgroundReplace');
@@ -532,6 +538,12 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
                 Scene: {s.background.plate.credit.source} ({s.background.plate.credit.authors.join(', ')}), free to use.
               </AppText>
             ) : null}
+            <DownloadSize
+              value={size}
+              onChange={setSize}
+              premium={sizesAllowed}
+              onLocked={() => setPremiumOpen('exportHd')}
+            />
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
                 <Button

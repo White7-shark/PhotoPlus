@@ -729,3 +729,31 @@ TEST(lively_with_a_person_mask_keeps_the_surroundings_natural) {
   EXPECT_EQ(pp_lively_masked(img, 1.0f, mask.data(), 0, h, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image_destroy(img);
 }
+
+TEST(lively_video_state_keeps_a_clip_steady) {
+  const int w = 240, h = 320;
+  pp_lively_state* state = nullptr;
+  EXPECT_EQ(pp_lively_state_create(&state), PP_OK);
+  // The same frame twice: the same result (the held look equals its own).
+  pp_image* a1 = flatPortrait(w, h, 0.03f, 1.0f, false);
+  pp_image* a2 = flatPortrait(w, h, 0.03f, 1.0f, false);
+  EXPECT_EQ(pp_lively_frame(a1, 1.0f, nullptr, 0, 0, state, nullptr, nullptr), PP_OK);
+  EXPECT_EQ(pp_lively_frame(a2, 1.0f, nullptr, 0, 0, state, nullptr, nullptr), PP_OK);
+  EXPECT_TRUE(std::memcmp(pp_image_pixels(a1), pp_image_pixels(a2), static_cast<size_t>(w) * h * 4) == 0);
+  // A frame that suddenly darkens (the camera re-exposes): on its own it would
+  // be lifted hard; in the clip the lift follows gradually.
+  pp_image* dimFresh = flatPortrait(w, h, 0.03f, 0.5f, false);
+  pp_image* dimClip = flatPortrait(w, h, 0.03f, 0.5f, false);
+  float rep[4] = {};
+  EXPECT_EQ(pp_lively_frame(dimFresh, 1.0f, nullptr, 0, 0, nullptr, nullptr, rep), PP_OK);
+  EXPECT_EQ(pp_lively_frame(dimClip, 1.0f, nullptr, 0, 0, state, nullptr, nullptr), PP_OK);
+  const Patch fresh = patch(dimFresh, 10, h / 5, 50, h / 2, false);
+  const Patch clip = patch(dimClip, 10, h / 5, 50, h / 2, false);
+  const Patch steady = patch(a2, 10, h / 5, 50, h / 2, false);
+  std::printf("    wall: steady clip %.3f, dim frame alone %.3f, dim frame in the clip %.3f (lift alone %.2f)\n", steady.y, fresh.y, clip.y,
+              rep[1]);
+  EXPECT_TRUE(rep[1] > 0.1f);           // alone, the dim frame is lifted
+  EXPECT_TRUE(clip.y < fresh.y - 0.01f);  // in the clip, not yet: no jump in brightness
+  pp_lively_state_destroy(state);
+  for (pp_image* i : {a1, a2, dimFresh, dimClip}) pp_image_destroy(i);
+}

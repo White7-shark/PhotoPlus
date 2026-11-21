@@ -152,7 +152,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
   const [countdown, setCountdown] = useState<number | null>(null);
   // Opened from the Photoshoot Studio: the photo goes straight back into it.
   const returnTo = route.params?.returnTo;
-  const forStudio = returnTo === 'SceneSwap' || returnTo === 'FilmCollage';
+  const forStudio = returnTo === 'SceneSwap' || returnTo === 'FilmCollage' || returnTo === 'Relight';
   const leave = useCallback(() => {
     if (forStudio) {
       navigation.setParams({ returnTo: undefined });
@@ -570,6 +570,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
       watermark: settings.watermark,
       maxMs: glideMaxMs(plan),
       speed: glideSpeed,
+      lively: settings.livelyColour,
     },
     onDone: clip => {
       setLastClip(clip);

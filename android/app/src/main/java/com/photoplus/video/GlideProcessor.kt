@@ -213,6 +213,16 @@ class GlideProcessor {
         } else {
           null
         }
+        // Lively's clip state: one look for the whole clip, following new frames gradually.
+        val lively = if (options.lively > 0f) NativeEngine.nativeLivelyStateCreate() else 0L
+        fun livelyMask(frame: Bitmap): Triple<ByteArray?, Int, Int> {
+          val small = frame.scale(aw, ah)
+          return try {
+            Triple(subjectMask(small), aw, ah)
+          } finally {
+            small.recycle()
+          }
+        }
         val fromPrev = FloatArray(5)
         val toNext = FloatArray(5)
         val report = FloatArray(NativeEngine.PORTRAIT_REPORT_SIZE)
@@ -235,6 +245,13 @@ class GlideProcessor {
             if (options.subject) {
               if (next != null) maskOf(i + 1, next)
               masks.keys.filter { it < i - 1 }.forEach { masks.remove(it) }
+            }
+            if (lively != 0L) {
+              // Lively, as the camera's photos: the person gets the full finish,
+              // the surroundings a gentle one; the clip's look stays steady.
+              val (lm, lw, lh) = if (mask != null) Triple(mask, maskW, maskH) else livelyMask(cur)
+              if (lm != null) NativeEngine.nativeLivelyFrame(work, options.lively, lm, lw, lh, lively, token)
+              else NativeEngine.nativeLivelyFrame(work, options.lively, null, 0, 0, lively, token)
             }
             if (options.subject && mask != null) {
               // Three frames' vote first (a one-frame mistake never shows),
@@ -307,6 +324,7 @@ class GlideProcessor {
           steady?.recycle()
           composer?.release()
           if (room != 0L) NativeEngine.nativeVideoRoomDestroy(room)
+          if (lively != 0L) NativeEngine.nativeLivelyStateDestroy(lively)
           source.releaseAll()
         }
         encoder.finish(GlideOptions.frameTimeUs(written, fps))

@@ -471,17 +471,27 @@ object NativeEngine {
   )
 
   /**
-   * Film strip (Photoshoot Studio): [photos] as frames, returns a result
-   * handle (see [nativeResultWidth], [nativeCopyResultToBitmap],
-   * [nativeReleaseResult]). [frames]: 8 floats per frame (photo, look, zoom,
-   * panX, panY, flip, focusX, focusY). [params]: style, vertical, portrait,
-   * frameSize, markings, seed.
+   * Relight (Photoshoot Studio): [lit] (the relit cut-out, straight alpha,
+   * [photo]'s size) put back over [photo], whose background is brightened or
+   * darkened, made more or less colourful (each -1..1) and softened (0..1,
+   * leaving the person out). In place on [photo].
    */
-  external fun nativeStudioFilm(photos: Array<Bitmap>, frames: FloatArray, params: IntArray, token: Long): Long
+  external fun nativeStudioRelightCompose(photo: Bitmap, lit: Bitmap, brightness: Float, colour: Float, blur: Float, token: Long)
 
   /**
-   * Collage (Photoshoot Studio): returns a result handle. [cells]: 12 floats
-   * per cell (x, y, w, h, then a frame's 8). [params]: width, height, gap,
+   * Film strip (Photoshoot Studio): [photos] as frames, returns a result
+   * handle (see [nativeResultWidth], [nativeCopyResultToBitmap],
+   * [nativeReleaseResult]). [frames]: 13 floats per frame (photo, look, zoom,
+   * panX, panY, flip, focusX, focusY, lookFade, brightness, contrast,
+   * saturation, warmth). [params]: style, vertical, portrait, frameSize,
+   * markings, seed, film colour (0x01RRGGBB, 0 = the style's). [options]:
+   * grain, spacing (multiples; 0 = the style's own). [label]: edge text.
+   */
+  external fun nativeStudioFilm(photos: Array<Bitmap>, frames: FloatArray, params: IntArray, options: FloatArray, label: String, token: Long): Long
+
+  /**
+   * Collage (Photoshoot Studio): returns a result handle. [cells]: 17 floats
+   * per cell (x, y, w, h, then a frame's 13). [params]: width, height, gap,
    * margin, radius, r, g, b.
    */
   external fun nativeStudioCollage(photos: Array<Bitmap>, cells: FloatArray, params: FloatArray, token: Long): Long
@@ -493,6 +503,17 @@ object NativeEngine {
    * lift, warmth added, colour room.
    */
   external fun nativeLively(bitmap: Bitmap, strength: Float, token: Long, reportOut: FloatArray?)
+
+  /** Lively for video: a state per clip (see [nativeLivelyFrame]); destroy it when the clip is done. */
+  external fun nativeLivelyStateCreate(): Long
+  external fun nativeLivelyStateDestroy(state: Long)
+
+  /**
+   * Lively on one video frame, in place: the person ([mask] maskW x maskH,
+   * 255 the person; null = none) gets the full finish, the surroundings a
+   * gentle one, and the clip's look ([state]) follows new frames gradually.
+   */
+  external fun nativeLivelyFrame(bitmap: Bitmap, strength: Float, mask: ByteArray?, maskW: Int, maskH: Int, state: Long, token: Long)
 
   /**
    * As [nativeLively], with the person's mask ([mask] maskW x maskH bytes, 255

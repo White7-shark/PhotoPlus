@@ -1456,3 +1456,85 @@ TEST(studio_collage_fills_cells_with_gaps_and_rounded_corners) {
   pp_image_destroy(red);
   pp_image_destroy(green);
 }
+
+TEST(studio_film_frames_take_their_own_adjustments_and_the_film_its_options) {
+  pp_image* grey = solid(200, 200, 120, 110, 100);
+  const pp_image* photos[] = {grey};
+  pp_film_params p{PP_FILM_PHOTO_BOOTH, 1, 1, 100, 0, 3, 0.0f, 0.0f, 0, {}};
+  const auto centreOf = [&](const pp_film_frame& f) {
+    pp_image* out = nullptr;
+    EXPECT_EQ(pp_studio_filmstrip(photos, 1, &f, 1, &p, nullptr, &out), PP_OK);
+    const auto c = pixelAt(out, 9 + 50, 9 + 62);
+    pp_image_destroy(out);
+    return c;
+  };
+  pp_film_frame f = frameOf(0, PP_LOOK_ORIGINAL);
+  const auto plain = centreOf(f);
+  f.brightness = 1.0f;
+  const auto bright = centreOf(f);
+  f.brightness = 0.0f;
+  f.warmth = 1.0f;
+  const auto warm = centreOf(f);
+  f.warmth = 0.0f;
+  f.saturation = -1.0f;
+  const auto flat = centreOf(f);
+  f.saturation = 0.0f;
+  f.look = PP_LOOK_SEPIA;
+  f.look_fade = 1.0f;  // a look faded right out: the photo as shot
+  const auto faded = centreOf(f);
+  std::printf("    plain %d,%d,%d bright %d warm %d/%d flat %d,%d,%d faded %d\n", plain[0], plain[1], plain[2], bright[0], warm[0], warm[2],
+              flat[0], flat[1], flat[2], faded[0]);
+  EXPECT_TRUE(bright[0] > plain[0] + 30);
+  EXPECT_TRUE(warm[0] > plain[0] + 8 && warm[2] < plain[2] - 8);
+  EXPECT_TRUE(std::abs(flat[0] - flat[2]) < 3);
+  EXPECT_TRUE(std::abs(faded[0] - plain[0]) < 2);
+
+  // White film with a label; dark markings on it.
+  pp_film_params white{PP_FILM_CLASSIC, 0, 0, 120, 1, 3, -1.0f, 2.0f, 0x01FFFFFF, "ANNA * 2026"};
+  pp_image* out = nullptr;
+  EXPECT_EQ(pp_studio_filmstrip(photos, 1, &f, 1, &white, nullptr, &out), PP_OK);
+  pp_image_info info{};
+  pp_image_get_info(out, &info);
+  EXPECT_TRUE(pixelAt(out, 1, info.height / 2)[0] > 240);  // white film
+  // Wider spacing: 2x the classic gap on both sides of the frame.
+  EXPECT_EQ(info.width, static_cast<int>(std::lround(180 + 2 * 2 * 0.08f * 120)));
+  int dark = 0;
+  for (int y = 0; y < 28; ++y)
+    for (int x = 0; x < info.width; ++x) dark += pixelAt(out, x, y)[0] < 120 ? 1 : 0;
+  EXPECT_TRUE(dark > 30);  // the label is drawn in dark ink
+  pp_image_destroy(out);
+  pp_image_destroy(grey);
+}
+
+TEST(studio_relight_puts_the_person_back_with_the_background_changed_around_them) {
+  // A photo: left half white, right half black; the "person" a red square in the middle.
+  const int w = 200, h = 200;
+  pp_image* photo = nullptr;
+  pp_image* lit = nullptr;
+  EXPECT_EQ(pp_image_create(w, h, PP_FORMAT_RGBA8, &photo), PP_OK);
+  EXPECT_EQ(pp_image_create(w, h, PP_FORMAT_RGBA8, &lit), PP_OK);
+  auto* p = static_cast<uint8_t*>(pp_image_pixels(photo));
+  auto* l = static_cast<uint8_t*>(pp_image_pixels(lit));
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x) {
+      uint8_t* q = p + (y * w + x) * 4;
+      uint8_t* c = l + (y * w + x) * 4;
+      const bool person = x >= 80 && x < 120 && y >= 60 && y < 140;
+      const uint8_t v = x < 100 ? 200 : 60;
+      q[0] = person ? 200 : v, q[1] = person ? 40 : v, q[2] = person ? 40 : v, q[3] = 255;
+      // The relit person: brighter red; transparent elsewhere.
+      c[0] = 250, c[1] = 70, c[2] = 60, c[3] = person ? 255 : 0;
+    }
+  EXPECT_EQ(pp_studio_relight_compose(photo, lit, -0.6f, 0.0f, 0.6f, nullptr), PP_OK);
+  const auto person = pixelAt(photo, 100, 100), farLeft = pixelAt(photo, 10, 100), nearPerson = pixelAt(photo, 76, 100);
+  std::printf("    person %d,%d,%d far left %d near the person %d,%d,%d\n", person[0], person[1], person[2], farLeft[0], nearPerson[0],
+              nearPerson[1], nearPerson[2]);
+  EXPECT_TRUE(person[0] == 250 && person[1] == 70);  // the relit person, exactly
+  EXPECT_TRUE(farLeft[0] < 190);                     // the background darker
+  // Softened without the person: no red halo beside them.
+  EXPECT_TRUE(std::abs(nearPerson[0] - nearPerson[1]) < 6);
+  pp_image* small = nullptr;
+  EXPECT_EQ(pp_image_create(50, 50, PP_FORMAT_RGBA8, &small), PP_OK);
+  EXPECT_EQ(pp_studio_relight_compose(photo, small, 0.0f, 0.0f, 0.0f, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  for (pp_image* i : {photo, lit, small}) pp_image_destroy(i);
+}

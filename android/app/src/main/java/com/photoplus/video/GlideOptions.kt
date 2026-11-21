@@ -28,6 +28,8 @@ data class GlideOptions(
   val scene: GlideScene? = null,
   /** Normal, fast (2x: frame pairs merged) or slow (0.5x: frames made in between). */
   val speed: GlideSpeed = GlideSpeed.NORMAL,
+  /** Lively colour, 0..1 (as the camera's photos): warm, rich and bright, steady across the clip. 0 = off. */
+  val lively: Float = 1f,
 ) {
   val beautyLook: Boolean get() = recipe?.active == true
   val spotlight: Boolean get() = blur > 0f
@@ -75,6 +77,7 @@ data class GlideOptions(
         recipe = com.photoplus.beauty.BeautyRecipe.fromMap(map["beautyRecipe"] as? Map<*, *>),
         scene = GlideScene.fromMap(map["scene"] as? Map<*, *>),
         speed = GlideSpeed.fromId(map["speed"] as? String),
+        lively = unit("lively", 1f),
       )
     }
 

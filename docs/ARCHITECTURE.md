@@ -99,6 +99,10 @@ ML Kit face contours (once per studio session) ▸ engine landmarks ▸ `pp_stud
 
 Photos (decoded within budget; faces found once, the focus for crops) ▸ `pp_studio_filmstrip` (classic 35mm, photo booth, amber negative, cinema; sprocket holes and edge markings) or `pp_studio_collage` (ten layouts, gap, corners, background), each frame with one of ten looks, a zoom, a pan and a mirror. UI: `src/screens/studio/FilmCollageScreen.tsx`, catalogues in `src/services/studio/film.ts`. See `docs/FILM_COLLAGE_REPORT.md`.
 
+## Relight, download sizes and the studio grid
+
+`pp_studio_relight_compose` puts the relit cut-out back over the person's own photo (background brightness, colour and a person-free blur). Studio saves take a download size (360p…4K, short edge; Premium from 720p) through `ExportSize`. Glide applies Lively per frame with a clip state (`pp_lively_frame`) so the look stays steady. See `docs/RELIGHT_REPORT.md`.
+
 ## Spotlight, Glow and Vibe Match
 
 ```

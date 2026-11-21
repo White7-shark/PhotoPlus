@@ -955,6 +955,14 @@ typedef struct pp_style {
 pp_status pp_style_analyze(const pp_image* image, pp_style* out);
 pp_status pp_style_apply(pp_image* image, const pp_style* target, float strength, const pp_cancel_token* token);
 
+/* Relight (Photoshoot Studio): the relit cut-out (straight alpha, the
+ * photo's own frame and size) put back over `photo`, whose background is
+ * brightened or darkened (bg_brightness -1..1), made more or less colourful
+ * (bg_colour -1..1) and softened (bg_blur 0..1, a blur that leaves the person
+ * out, so no halo). In place on `photo`. */
+pp_status pp_studio_relight_compose(pp_image* photo, const pp_image* lit_cutout, float bg_brightness, float bg_colour, float bg_blur,
+                                    const pp_cancel_token* token);
+
 /* ---- Film & Collage (Photoshoot Studio) ----------------------------------
  * One frame (or collage cell): which photo (index into `photos`), its look
  * (pp_frame_look), a zoom (1..4), a pan (-1..1 each way, from the focus) and
@@ -982,6 +990,11 @@ typedef struct pp_film_frame {
   int32_t flip;
   float focus_x; /* what crops and zooms centre on (the face), 0..1 of the photo; negative = unknown */
   float focus_y;
+  float look_fade;  /* 0 = the full look .. 1 = none (the photo as adjusted) */
+  float brightness; /* the frame's own adjustments, -1..1, 0 = as shot (before the look) */
+  float contrast;
+  float saturation;
+  float warmth;
 } pp_film_frame;
 
 typedef enum pp_film_style { PP_FILM_CLASSIC = 0, PP_FILM_AMBER = 1, PP_FILM_PHOTO_BOOTH = 2, PP_FILM_CINEMA = 3 } pp_film_style;
@@ -993,6 +1006,10 @@ typedef struct pp_film_params {
   int32_t frame_size;      /* a frame's short edge, px (64..2048) */
   int32_t markings;        /* 1: the stock name and frame numbers on the edges */
   uint32_t seed;           /* film grain */
+  float grain;             /* 0 = the style's own grain; > 0 = that multiple of it (up to 3); < 0 = none */
+  float spacing;           /* 0 = the style's own gap between frames; > 0 = that multiple (0.3..4) */
+  int32_t base_color;      /* 0 = the style's own film colour; else 0x01RRGGBB (the 0x01 marks it set) */
+  char label[24];          /* edge text in place of the stock name (A-Z, 0-9, - . & ' ! and * for a heart); empty = the stock name */
 } pp_film_params;
 
 /* Photos as frames on a strip of film: the base, sprocket holes and edge
@@ -1045,6 +1062,15 @@ pp_status pp_lively(pp_image* image, float strength, const pp_cancel_token* toke
  * own colour and the far background is not deepened. */
 pp_status pp_lively_masked(pp_image* image, float strength, const uint8_t* mask, int32_t mask_w, int32_t mask_h,
                            const pp_cancel_token* token, float* report_out);
+
+/* Video: one state per clip. Each frame gets the Lively finish (with the
+ * person's mask, NULL = none) while the look's tone, colour and skin target
+ * follow new frames gradually, so the clip stays steady (no flicker). */
+typedef struct pp_lively_state pp_lively_state;
+pp_status pp_lively_state_create(pp_lively_state** out);
+void pp_lively_state_destroy(pp_lively_state* state);
+pp_status pp_lively_frame(pp_image* image, float strength, const uint8_t* mask, int32_t mask_w, int32_t mask_h,
+                          pp_lively_state* state, const pp_cancel_token* token, float* report_out);
 
 /* ---- Video: "Glide" (Phase 6) ------------------------------------------------
  * A short handheld clip made steady and clean, one frame at a time:

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { AppText, Button, GlassSurface, Icon, IconButton, Screen } from '../../components';
 import { PremiumSheet } from '../../components/PremiumSheet';
@@ -22,14 +22,22 @@ import {
   type CollageChoice,
   type FilmChoice,
   type FilmFrame,
+  FILM_COLORS,
+  FILM_LABEL_MAX,
+  NO_ADJUST,
+  cleanLabel,
 } from '../../services/studio/film';
 import { getStorageService } from '../../services/storage/StorageService';
+import { defaultExportSize, exportPx, exportSize, type ExportSizeId } from '../../services/studio/exportSize';
 import { getStudioService, StudioError, type SceneResult } from '../../services/studio/StudioService';
 import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
 
+import { DownloadSize } from './DownloadSize';
+
 type Mode = 'film' | 'collage';
 const pct = (v: number) => `${Math.round(v * 100)}`;
+const signed = (v: number) => (Math.abs(v) < 0.005 ? '0' : `${v > 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`);
 
 function Chip({
   label,
@@ -86,11 +94,16 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
     portrait: false,
     markings: true,
     frames: [],
+    grain: 1,
+    spacing: 1,
+    filmColor: null,
+    label: '',
   });
   const [collage, setCollage] = useState<CollageChoice>({
     layout: 'hero3',
     aspect: 'portrait',
     gap: 0.015,
+    margin: 0.015,
     radius: 0.04,
     background: '#F6F1EA',
     frames: [],
@@ -99,7 +112,10 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
   const [preview, setPreview] = useState<SceneResult | null>(null);
   const [busy, setBusy] = useState<null | 'preview' | 'save'>(null);
   const [error, setError] = useState<string | null>(null);
-  const [premiumOpen, setPremiumOpen] = useState(false);
+  // Which Premium sheet is open: a film, or a download size.
+  const [premiumOpen, setPremiumOpen] = useState<null | 'filmPremium' | 'exportHd'>(null);
+  const premiumSizes = can('exportHd').allowed;
+  const [size, setSize] = useState<ExportSizeId>(defaultExportSize(premiumSizes));
 
   const frames = mode === 'film' ? film.frames : collage.frames;
   const setFrames = (next: FilmFrame[]) =>
@@ -178,8 +194,8 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
     try {
       const r =
         mode === 'film'
-          ? await studio.renderFilm(photos, film, 'full')
-          : await studio.renderCollage(photos, collage, 'full');
+          ? await studio.renderFilm(photos, film, 'full', exportPx(size))
+          : await studio.renderCollage(photos, collage, 'full', exportPx(size));
       try {
         await studio.saveToGallery(r.outputPath);
       } catch {
@@ -204,7 +220,8 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
         navigation.navigate('PhotoPreview', { imageId: record.id });
       }
     } catch (e) {
-      if (e instanceof StudioError && e.code === 'PREMIUM_REQUIRED') setPremiumOpen(true);
+      if (e instanceof StudioError && e.code === 'PREMIUM_REQUIRED')
+        setPremiumOpen(exportSize(size).premium ? 'exportHd' : 'filmPremium');
       else setError('Your photo couldn’t be saved. Please try again.');
     } finally {
       setBusy(null);
@@ -325,7 +342,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
                   testID={`film-style-${s.id}`}
                   onPress={() =>
                     s.premium && !premiumFilm
-                      ? setPremiumOpen(true)
+                      ? setPremiumOpen('filmPremium')
                       : setFilm(f => ({ ...f, style: s.id, portrait: s.portrait }))
                   }
                 />
@@ -360,6 +377,65 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
                 testID="film-markings"
               />
             </View>
+            <ValueSlider
+              label="Grain"
+              value={film.grain}
+              min={0}
+              max={3}
+              step={0.1}
+              onChange={v => setFilm(f => ({ ...f, grain: v }))}
+              format={v => (v < 0.05 ? 'None' : `${v.toFixed(1)}×`)}
+              testID="film-grain"
+            />
+            <ValueSlider
+              label="Spacing between frames"
+              value={film.spacing}
+              min={0.3}
+              max={4}
+              step={0.1}
+              onChange={v => setFilm(f => ({ ...f, spacing: v }))}
+              format={v => `${v.toFixed(1)}×`}
+              testID="film-spacing"
+            />
+            <AppText variant="caption" tone="secondary">
+              Film colour
+            </AppText>
+            <View style={styles.wrap} accessibilityRole="radiogroup">
+              <Chip
+                label="As the film"
+                selected={film.filmColor === null}
+                onPress={() => setFilm(f => ({ ...f, filmColor: null }))}
+                testID="film-color-own"
+              />
+              {FILM_COLORS.map(c => (
+                <Pressable
+                  key={c}
+                  onPress={() => setFilm(f => ({ ...f, filmColor: c }))}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`Film colour ${c}`}
+                  accessibilityState={{ selected: film.filmColor === c }}
+                  testID={`film-color-${c.slice(1)}`}
+                  style={[
+                    styles.colour,
+                    {
+                      backgroundColor: c,
+                      borderColor: film.filmColor === c ? theme.colors.accent : 'rgba(255,255,255,0.3)',
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+            <TextInput
+              value={film.label}
+              onChangeText={t => setFilm(f => ({ ...f, label: cleanLabel(t) }))}
+              placeholder="Your text on the film edge (e.g. ANNA * 2026)"
+              placeholderTextColor={theme.colors.textTertiary}
+              autoCapitalize="characters"
+              maxLength={FILM_LABEL_MAX}
+              accessibilityLabel="Text on the film edge"
+              style={[styles.input, { color: theme.colors.textPrimary, borderColor: 'rgba(255,255,255,0.14)' }]}
+              testID="film-label"
+            />
             <View style={styles.row}>
               <AppText variant="body" style={{ flex: 1 }}>
                 Frames · {film.frames.length}
@@ -444,6 +520,16 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               onChange={v => setCollage(c => ({ ...c, gap: v }))}
               format={v => pct(v / 0.06)}
               testID="collage-gap"
+            />
+            <ValueSlider
+              label="Border"
+              value={collage.margin}
+              min={0}
+              max={0.12}
+              step={0.005}
+              onChange={v => setCollage(c => ({ ...c, margin: v }))}
+              format={v => pct(v / 0.12)}
+              testID="collage-margin"
             />
             <ValueSlider
               label="Round corners"
@@ -567,10 +653,54 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
                 onPress={() => editFrame({ flip: !current.flip })}
                 testID="frame-flip"
               />
+              <Chip
+                label="Reset this frame"
+                selected={false}
+                onPress={() => editFrame({ ...NO_ADJUST, zoom: 1, panX: 0, panY: 0, flip: false })}
+                testID="frame-reset"
+              />
             </View>
+            <ValueSlider
+              label="Look strength"
+              value={current.lookStrength}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={v => editFrame({ lookStrength: v })}
+              format={pct}
+              testID="frame-look-strength"
+            />
+            {(
+              [
+                ['Brightness', 'brightness'],
+                ['Contrast', 'contrast'],
+                ['Colour', 'saturation'],
+                ['Warmth', 'warmth'],
+              ] as const
+            ).map(([label, key]) => (
+              <ValueSlider
+                key={key}
+                label={label}
+                value={current[key]}
+                min={-1}
+                max={1}
+                step={0.05}
+                onChange={v => editFrame({ [key]: v })}
+                format={signed}
+                testID={`frame-${key}`}
+              />
+            ))}
           </GlassSurface>
         ) : null}
 
+        {photos.length > 0 ? (
+          <DownloadSize
+            value={size}
+            onChange={setSize}
+            premium={premiumSizes}
+            onLocked={() => setPremiumOpen('exportHd')}
+          />
+        ) : null}
         {photos.length > 0 ? (
           <Button
             label={mode === 'film' ? 'Save film strip' : 'Save collage'}
@@ -583,7 +713,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
           />
         ) : null}
       </View>
-      <PremiumSheet feature={premiumOpen ? 'filmPremium' : null} onClose={() => setPremiumOpen(false)} />
+      <PremiumSheet feature={premiumOpen} onClose={() => setPremiumOpen(null)} />
     </Screen>
   );
 }
@@ -637,6 +767,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+  },
+  input: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    letterSpacing: 1,
   },
   layout: { width: 46, height: 58, borderRadius: 8, borderWidth: 1.5, overflow: 'hidden' },
   colour: { width: 30, height: 30, borderRadius: 15, borderWidth: 2 },

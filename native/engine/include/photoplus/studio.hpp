@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "photoplus/cancellation.hpp"
@@ -233,6 +234,17 @@ struct LightParams {
 };
 Error relight(ImageBuffer& cutout, const LightParams& params, const CancellationToken* token);
 
+// Relight: the relit cut-out (straight alpha, the photo's own frame and size)
+// back over the photo, whose background can be brightened or darkened, made
+// more or less colourful (each -1..1) and softened (0..1, a blur that leaves
+// the person out). In place on `photo` (RGBA8/BGRA8).
+struct RelightBackground {
+  float brightness = 0.0f;
+  float colour = 0.0f;
+  float blur = 0.0f;
+};
+Error relightCompose(ImageBuffer& photo, const ImageBuffer& lit, const RelightBackground& bg, const CancellationToken* token);
+
 // The whole frame graded (edited in place).
 struct FinishParams {
   float vignette = 0.0f;      // -1 lighter edges .. 1 darker edges
@@ -294,6 +306,9 @@ struct FrameSpec {
   float zoom = 1.0f, panX = 0.0f, panY = 0.0f;
   bool flip = false;
   float focusX = -1.0f, focusY = -1.0f;
+  float lookStrength = 1.0f;  // 0 (as adjusted) .. 1 (the full look)
+  // The frame's own adjustments, -1..1 (0 = as shot), before its look.
+  float brightness = 0.0f, contrast = 0.0f, saturation = 0.0f, warmth = 0.0f;
 };
 
 enum class FilmStyle : int32_t { Classic = 0, Amber = 1, PhotoBooth = 2, Cinema = 3 };
@@ -305,6 +320,10 @@ struct FilmParams {
   int32_t frameSize = 720;      // a frame's short edge, px (64..2048)
   bool markings = true;         // stock name and frame numbers on the edges
   uint32_t seed = 1;            // film grain
+  float grain = 1.0f;           // the style's grain x 0..3 (0 = none)
+  float spacing = 1.0f;         // the style's gap between frames x 0.3..4
+  int32_t baseColor = -1;       // the film's colour 0xRRGGBB (-1 = the style's own)
+  std::string label;            // edge text in place of the stock name (letters, digits, - . & ' ! and * for a heart)
 };
 
 // Photos as frames on a strip of film (RGBA8 out).
