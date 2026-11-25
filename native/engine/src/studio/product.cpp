@@ -98,47 +98,62 @@ int32_t label(const std::vector<uint8_t>& on, int32_t w, int32_t h, std::vector<
   return n;
 }
 
-// A least-squares plane c = a + b x + c y per channel through the
-// samples, reweighted so the object (where it touches the border) counts
-// for little.
-struct PlaneFit {
-  float k[3][3]{};
-  Rgbf at(float x, float y) const { return {k[0][0] + k[0][1] * x + k[0][2] * y, k[1][0] + k[1][1] * x + k[1][2] * y, k[2][0] + k[2][1] * x + k[2][2] * y}; }
+// A least-squares quadratic surface per channel through the samples
+// (c = a + b x + c y + d x² + e y² + f xy, about the centre): it follows a
+// backdrop lit brighter in the middle, as studio paper and phone shots
+// are. Reweighted so the object, where it touches the border, counts for
+// little.
+constexpr int kTerms = 6;
+struct SurfaceFit {
+  float k[3][kTerms]{};
+  static void terms(float x, float y, double* t) {
+    const double u = x - 0.5, v = y - 0.5;
+    t[0] = 1.0, t[1] = u, t[2] = v, t[3] = u * u, t[4] = v * v, t[5] = u * v;
+  }
+  Rgbf at(float x, float y) const {
+    double t[kTerms];
+    terms(x, y, t);
+    double c[3] = {};
+    for (int ch = 0; ch < 3; ++ch)
+      for (int i = 0; i < kTerms; ++i) c[ch] += k[ch][i] * t[i];
+    return {static_cast<float>(c[0]), static_cast<float>(c[1]), static_cast<float>(c[2])};
+  }
 };
 struct Sample {
   float x, y;
   Rgbf c;
 };
-PlaneFit fitPlane(const std::vector<Sample>& s) {
-  PlaneFit fit;
+SurfaceFit fitSurface(const std::vector<Sample>& s) {
+  SurfaceFit fit;
   std::vector<float> w(s.size(), 1.0f);
-  for (int it = 0; it < 4; ++it) {
+  for (int it = 0; it < 5; ++it) {
     for (int ch = 0; ch < 3; ++ch) {
-      double m[3][4] = {};
+      double m[kTerms][kTerms + 1] = {};
       for (size_t i = 0; i < s.size(); ++i) {
         const double v = ch == 0 ? s[i].c.r : ch == 1 ? s[i].c.g : s[i].c.b;
-        const double row[3] = {1.0, s[i].x, s[i].y};
-        for (int a = 0; a < 3; ++a) {
-          for (int b = 0; b < 3; ++b) m[a][b] += w[i] * row[a] * row[b];
-          m[a][3] += w[i] * row[a] * v;
+        double row[kTerms];
+        SurfaceFit::terms(s[i].x, s[i].y, row);
+        for (int a = 0; a < kTerms; ++a) {
+          for (int b = 0; b < kTerms; ++b) m[a][b] += w[i] * row[a] * row[b];
+          m[a][kTerms] += w[i] * row[a] * v;
         }
       }
-      for (int a = 0; a < 3; ++a) m[a][a] += 1e-6;
-      // Gauss-Jordan on the 3x3 system.
-      for (int c = 0; c < 3; ++c) {
+      for (int a = 0; a < kTerms; ++a) m[a][a] += 1e-6;
+      // Gauss-Jordan with partial pivoting.
+      for (int c = 0; c < kTerms; ++c) {
         int piv = c;
-        for (int r = c + 1; r < 3; ++r)
+        for (int r = c + 1; r < kTerms; ++r)
           if (std::fabs(m[r][c]) > std::fabs(m[piv][c])) piv = r;
-        for (int k = 0; k < 4; ++k) std::swap(m[c][k], m[piv][k]);
+        for (int k = 0; k <= kTerms; ++k) std::swap(m[c][k], m[piv][k]);
         const double d = std::fabs(m[c][c]) > 1e-12 ? m[c][c] : 1e-12;
-        for (int k = 0; k < 4; ++k) m[c][k] /= d;
-        for (int r = 0; r < 3; ++r)
+        for (int k = 0; k <= kTerms; ++k) m[c][k] /= d;
+        for (int r = 0; r < kTerms; ++r)
           if (r != c) {
             const double f = m[r][c];
-            for (int k = 0; k < 4; ++k) m[r][k] -= f * m[c][k];
+            for (int k = 0; k <= kTerms; ++k) m[r][k] -= f * m[c][k];
           }
       }
-      for (int a = 0; a < 3; ++a) fit.k[ch][a] = static_cast<float>(m[a][3]);
+      for (int a = 0; a < kTerms; ++a) fit.k[ch][a] = static_cast<float>(m[a][kTerms]);
     }
     for (size_t i = 0; i < s.size(); ++i) {
       const Rgbf b = fit.at(s[i].x, s[i].y);
@@ -238,7 +253,7 @@ Error cutout(const ImageBuffer& photo, const ImageBuffer* hint, const std::vecto
       if ((x + y) % 2) continue;
       border.push_back({static_cast<float>(x) / static_cast<float>(w), static_cast<float>(y) / static_cast<float>(h), I[static_cast<size_t>(y) * w + x]});
     }
-  const PlaneFit fit = fitPlane(border);
+  const SurfaceFit fit = fitSurface(border);
   std::vector<float> borderDist;
   borderDist.reserve(border.size());
   for (const auto& s : border) borderDist.push_back(distance(s.c, fit.at(s.x, s.y), false));
@@ -256,34 +271,45 @@ Error cutout(const ImageBuffer& photo, const ImageBuffer* hint, const std::vecto
   auto wr = Plane::allocate(w, h), wg = Plane::allocate(w, h), wb = Plane::allocate(w, h), ww = Plane::allocate(w, h);
   for (auto* p : {&wr, &wg, &wb, &ww})
     if (!*p) return p->error();
-  for (int32_t y = 0; y < h; ++y)
-    for (int32_t x = 0; x < w; ++x) {
-      const size_t i = static_cast<size_t>(y) * w + x;
-      const Rgbf b0 = fit.at(static_cast<float>(x) / static_cast<float>(w), static_cast<float>(y) / static_cast<float>(h));
-      // Only the paper as lit counts (not the object's shadow on it), so
-      // the backdrop under a shadow is the unshadowed paper.
-      float conf = distance(I[i], b0, false) < wide ? 1.0f : 0.0f;
-      if (hint != nullptr && hintNear->row(y)[x] > 0.25f) conf = 0.0f;
-      wr->row(y)[x] = I[i].r * conf, wg->row(y)[x] = I[i].g * conf, wb->row(y)[x] = I[i].b * conf, ww->row(y)[x] = conf;
-    }
-  auto Br = blurred(*wr, 0.06f * S, token), Bg = blurred(*wg, 0.06f * S, token), Bb = blurred(*wb, 0.06f * S, token), Bw = blurred(*ww, 0.06f * S, token);
-  auto Fr = blurred(*wr, 0.25f * S, token), Fg = blurred(*wg, 0.25f * S, token), Fb = blurred(*wb, 0.25f * S, token), Fw = blurred(*ww, 0.25f * S, token);
-  for (auto* p : {&Br, &Bg, &Bb, &Bw, &Fr, &Fg, &Fb, &Fw})
-    if (!*p) return p->error();
+  // The backdrop everywhere: the fitted surface first, then the photo's own
+  // backdrop colours spread under the object. Pixels count as backdrop when
+  // they match the estimate (the object's shadow does not: under it the
+  // estimate is the unshadowed paper); the estimate is made again from
+  // them, so it grows across paper the surface did not quite fit.
   std::vector<Rgbf> B(N);
   for (int32_t y = 0; y < h; ++y)
-    for (int32_t x = 0; x < w; ++x) {
-      const size_t i = static_cast<size_t>(y) * w + x;
-      const float n = Bw->row(y)[x], f = Fw->row(y)[x];
-      Rgbf v = fit.at(static_cast<float>(x) / static_cast<float>(w), static_cast<float>(y) / static_cast<float>(h));
-      if (f > 0.01f) v = {Fr->row(y)[x] / f, Fg->row(y)[x] / f, Fb->row(y)[x] / f};
-      if (n > 0.02f) {
-        const float t = smoothstep(0.02f, 0.15f, n);
-        const Rgbf near{Br->row(y)[x] / n, Bg->row(y)[x] / n, Bb->row(y)[x] / n};
-        v = {v.r + (near.r - v.r) * t, v.g + (near.g - v.g) * t, v.b + (near.b - v.b) * t};
+    for (int32_t x = 0; x < w; ++x) B[static_cast<size_t>(y) * w + x] = fit.at(static_cast<float>(x) / static_cast<float>(w), static_cast<float>(y) / static_cast<float>(h));
+  for (int pass = 0; pass < 3; ++pass) {
+    for (int32_t y = 0; y < h; ++y)
+      for (int32_t x = 0; x < w; ++x) {
+        const size_t i = static_cast<size_t>(y) * w + x;
+        float conf = distance(I[i], B[i], false) < wide ? 1.0f : 0.0f;
+        if (hint != nullptr && hintNear->row(y)[x] > 0.25f) conf = 0.0f;
+        wr->row(y)[x] = I[i].r * conf, wg->row(y)[x] = I[i].g * conf, wb->row(y)[x] = I[i].b * conf, ww->row(y)[x] = conf;
       }
-      B[i] = v;
-    }
+    auto Br = blurred(*wr, 0.06f * S, token), Bg = blurred(*wg, 0.06f * S, token), Bb = blurred(*wb, 0.06f * S, token), Bw = blurred(*ww, 0.06f * S, token);
+    auto Fr = blurred(*wr, 0.25f * S, token), Fg = blurred(*wg, 0.25f * S, token), Fb = blurred(*wb, 0.25f * S, token), Fw = blurred(*ww, 0.25f * S, token);
+    for (auto* p : {&Br, &Bg, &Bb, &Bw, &Fr, &Fg, &Fb, &Fw})
+      if (!*p) return p->error();
+    for (int32_t y = 0; y < h; ++y)
+      for (int32_t x = 0; x < w; ++x) {
+        const size_t i = static_cast<size_t>(y) * w + x;
+        const float n = Bw->row(y)[x], f = Fw->row(y)[x];
+        Rgbf v = fit.at(static_cast<float>(x) / static_cast<float>(w), static_cast<float>(y) / static_cast<float>(h));
+        if (f > 0.01f) {
+          // Far from any backdrop seen: the surface, nudged by what was seen.
+          const Rgbf far{Fr->row(y)[x] / f, Fg->row(y)[x] / f, Fb->row(y)[x] / f};
+          const float t = smoothstep(0.01f, 0.2f, f);
+          v = {v.r + (far.r - v.r) * t * 0.5f, v.g + (far.g - v.g) * t * 0.5f, v.b + (far.b - v.b) * t * 0.5f};
+        }
+        if (n > 0.02f) {
+          const float t = smoothstep(0.02f, 0.15f, n);
+          const Rgbf near{Br->row(y)[x] / n, Bg->row(y)[x] / n, Bb->row(y)[x] / n};
+          v = {v.r + (near.r - v.r) * t, v.g + (near.g - v.g) * t, v.b + (near.b - v.b) * t};
+        }
+        B[i] = v;
+      }
+  }
   std::vector<float> res;
   for (size_t i = 0; i < N; i += 3)
     if (ww->data()[i] > 0.5f) res.push_back(distance(I[i], B[i], false));
@@ -334,10 +360,27 @@ Error cutout(const ImageBuffer& photo, const ImageBuffer* hint, const std::vecto
     const int32_t hn = label(off, w, h, hl, ha);
     std::vector<uint8_t> outside(static_cast<size_t>(hn) + 1, 0);
     std::vector<double> hintSum(static_cast<size_t>(hn) + 1, 0.0);
+    // The edge around each hole: how much of it is solidly the object (a
+    // label inside a bottle is ringed by the bottle; paper caught between
+    // the object and a half-found shadow is not).
+    std::vector<int32_t> ring(static_cast<size_t>(hn) + 1, 0), solid(static_cast<size_t>(hn) + 1, 0);
     for (int32_t y = 0; y < h; ++y)
       for (int32_t x = 0; x < w; ++x) {
         const size_t i = static_cast<size_t>(y) * w + x;
-        if (!hl[i]) continue;
+        if (!hl[i]) {
+          // An object pixel: count it once for each hole it touches.
+          int32_t last = 0;
+          for (const int32_t j : {x > 0 ? static_cast<int32_t>(i) - 1 : -1, x + 1 < w ? static_cast<int32_t>(i) + 1 : -1,
+                                  y > 0 ? static_cast<int32_t>(i) - w : -1, y + 1 < h ? static_cast<int32_t>(i) + w : -1}) {
+            if (j < 0) continue;
+            const int32_t k = hl[static_cast<size_t>(j)];
+            if (!k || k == last) continue;
+            last = k;
+            ++ring[static_cast<size_t>(k)];
+            if (key->data()[i] > 0.85f) ++solid[static_cast<size_t>(k)];
+          }
+          continue;
+        }
         if (x == 0 || y == 0 || x == w - 1 || y == h - 1) outside[static_cast<size_t>(hl[i])] = 1;
         if (hint != nullptr) hintSum[static_cast<size_t>(hl[i])] += hs->data()[i];
       }
@@ -348,7 +391,8 @@ Error cutout(const ImageBuffer& photo, const ImageBuffer* hint, const std::vecto
       // Without a model, a white label on a white product looks like the
       // paper: every enclosed area is kept (a missing piece of the product
       // is worse than a filled handle, which the remove brush opens).
-      const bool part = hint != nullptr ? hintSum[static_cast<size_t>(k)] / ar > 0.5 : true;
+      const bool ringed = 100 * solid[static_cast<size_t>(k)] >= 85 * ring[static_cast<size_t>(k)];
+      const bool part = hint != nullptr ? hintSum[static_cast<size_t>(k)] / ar > 0.5 : ringed;
       if (part) a->data()[i] = 1.0f;
     }
   }
@@ -606,7 +650,7 @@ Result<ImageBuffer> render(const ImageBuffer& cutout, const ImageBuffer* scene, 
     if (corr.autoWhite)
       for (int k = 0; k < 3; ++k) gain[static_cast<size_t>(k)] = std::clamp(mean / ref[static_cast<size_t>(k)], 0.75f, 1.33f);
     const float sat = (std::max({ref[0], ref[1], ref[2]}) - std::min({ref[0], ref[1], ref[2]})) / std::max(1e-3f, std::max({ref[0], ref[1], ref[2]}));
-    if (corr.autoExposure && sat < 0.25f && mean > 0.12f) {
+    if (corr.autoExposure && sat < 0.4f && mean > 0.12f) {  // paper, a grey card or a wall; its tint is white balance's job
       const float e = std::clamp(0.88f / mean, 0.85f, 2.2f);  // the backdrop would have been near white
       for (auto& g : gain) g *= e;
     }
