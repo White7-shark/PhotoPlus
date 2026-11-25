@@ -18,6 +18,7 @@
 #include "photoplus/light.hpp"
 #include "photoplus/pose.hpp"
 #include "photoplus/studio.hpp"
+#include "photoplus/product.hpp"
 #include "photoplus/beauty.hpp"
 #include "photoplus/cancellation.hpp"
 #include "photoplus/enhance.hpp"
@@ -1947,5 +1948,68 @@ pp_status pp_gpu_init(pp_gpu_status* out) {
 void pp_gpu_get_status(pp_gpu_status* out) { fillGpu(photoplus::gpu::status(), out); }
 
 void pp_gpu_shutdown(void) { photoplus::gpu::shutdown(); }
+
+pp_status pp_product_cutout(const pp_image* photo, const pp_image* hint, const pp_studio_stroke* strokes, int32_t stroke_count,
+                            const pp_product_matte_params* params, pp_image* out, const pp_cancel_token* token,
+                            pp_product_matte_report* report) {
+  return guarded([&]() -> pp_status {
+    if (photo == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "photo and out are required");
+    if (stroke_count < 0 || stroke_count > 4096 || (stroke_count > 0 && strokes == nullptr)) return fail(PP_ERROR_INVALID_ARGUMENT, "Bad strokes");
+    std::vector<photoplus::studio::Stroke> list;
+    for (int32_t i = 0; i < stroke_count; ++i) {
+      const pp_studio_stroke& s = strokes[i];
+      if (s.brush < PP_STUDIO_KEEP || s.brush > PP_STUDIO_HAIR || s.count < 0 || s.count > 100000 || (s.count > 0 && s.points == nullptr))
+        return fail(PP_ERROR_INVALID_ARGUMENT, "Bad stroke");
+      photoplus::studio::Stroke st;
+      st.brush = static_cast<photoplus::studio::Brush>(s.brush);
+      st.radius = s.radius;
+      for (int32_t k = 0; k < s.count; ++k) st.points.push_back({s.points[2 * k], s.points[2 * k + 1]});
+      list.push_back(std::move(st));
+    }
+    photoplus::product::MatteParams p;
+    if (params != nullptr) {
+      p.tolerance = params->tolerance, p.softness = params->softness, p.shift = params->shift;
+      p.shadowsOut = params->shadows_out != 0;
+    }
+    photoplus::product::MatteReport r;
+    const photoplus::Error e = photoplus::product::cutout(photo->buffer, hint ? &hint->buffer : nullptr, list, p, out->buffer,
+                                                          token ? &token->token : nullptr, &r);
+    if (e.status != PP_OK) return fail(e);
+    if (report != nullptr) {
+      *report = pp_product_matte_report{r.coverage, r.left, r.top, r.right, r.bottom, {r.backdrop[0], r.backdrop[1], r.backdrop[2]},
+                                        r.spread, r.plain ? 1 : 0, r.objects};
+    }
+    return succeed();
+  });
+}
+
+pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const pp_product_render_params* params,
+                            const pp_cancel_token* token, pp_image** out, pp_product_render_report* report) {
+  return guarded([&]() -> pp_status {
+    if (cutout == nullptr || params == nullptr || out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "cutout, params and out are required");
+    *out = nullptr;
+    const pp_product_render_params& q = *params;
+    if (q.backdrop < PP_PRODUCT_TRANSPARENT || q.backdrop > PP_PRODUCT_SCENE) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown backdrop");
+    photoplus::product::Backdrop b;
+    b.kind = static_cast<photoplus::product::BackdropKind>(q.backdrop);
+    b.wall = {q.wall[0], q.wall[1], q.wall[2]}, b.floor = {q.floor[0], q.floor[1], q.floor[2]};
+    b.horizon = q.horizon, b.softness = q.softness, b.light = q.light, b.seed = q.seed;
+    photoplus::product::Shadow sh;
+    sh.contact = q.contact, sh.soft = q.soft, sh.cast = q.cast, sh.castAngle = q.cast_angle, sh.castLength = q.cast_length;
+    sh.castSoftness = q.cast_softness, sh.reflection = q.reflection;
+    photoplus::product::Correction c;
+    c.autoWhite = q.auto_white != 0, c.autoExposure = q.auto_exposure != 0;
+    c.reference = {q.reference[0], q.reference[1], q.reference[2]};
+    c.exposure = q.exposure, c.contrast = q.contrast, c.saturation = q.saturation, c.warmth = q.warmth, c.tint = q.tint;
+    photoplus::product::Layout l;
+    l.width = q.width, l.height = q.height, l.fill = q.fill, l.x = q.x, l.y = q.y, l.ground = q.ground != 0, l.flip = q.flip != 0;
+    photoplus::product::RenderReport r;
+    auto result = photoplus::product::render(cutout->buffer, scene ? &scene->buffer : nullptr, b, sh, c, l, token ? &token->token : nullptr, &r);
+    if (!result) return fail(result.error());
+    *out = new pp_image{std::move(result).value()};
+    if (report != nullptr) *report = pp_product_render_report{r.left, r.top, r.right, r.bottom, {r.gain[0], r.gain[1], r.gain[2]}};
+    return succeed();
+  });
+}
 
 }  // extern "C"

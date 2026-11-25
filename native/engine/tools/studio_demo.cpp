@@ -470,11 +470,81 @@ int collageCmd(int argc, char** argv) {
   return 0;
 }
 
+// product IN.ppm HINT.pgm|- OUT_PREFIX [key=value ...]: a product cut out
+// (OUT_PREFIX_alpha.pgm, _cut.ppm) and made a catalogue shot (OUT_PREFIX.ppm,
+// _shot_alpha.pgm). Keys: tol shift softness; backdrop (0..5) wall=r,g,b
+// floor=r,g,b horizon blend light; contact soft cast angle len castsoft refl;
+// white expo exposure contrast sat warmth tint; w h fill x y ground flip.
+int product(int argc, char** argv) {
+  if (argc < 5) return 2;
+  pp_image* img = readPpm(argv[2]);
+  pp_image* hint = std::strcmp(argv[3], "-") != 0 ? readPgm(argv[3]) : nullptr;
+  if (img == nullptr) return 1;
+  std::map<std::string, std::string> kv;
+  for (int i = 5; i < argc; ++i) {
+    const char* eq = std::strchr(argv[i], '=');
+    if (eq) kv[std::string(argv[i], static_cast<size_t>(eq - argv[i]))] = eq + 1;
+  }
+  auto num = [&](const char* k, float d) { return kv.count(k) ? std::strtof(kv[k].c_str(), nullptr) : d; };
+  auto rgb = [&](const char* k, uint8_t* dst, int r, int g, int b) {
+    std::vector<float> v = kv.count(k) ? floatList(kv[k].c_str()) : std::vector<float>{};
+    dst[0] = static_cast<uint8_t>(v.size() == 3 ? v[0] : r), dst[1] = static_cast<uint8_t>(v.size() == 3 ? v[1] : g),
+    dst[2] = static_cast<uint8_t>(v.size() == 3 ? v[2] : b);
+  };
+  pp_image_info info{};
+  pp_image_get_info(img, &info);
+  pp_image* cut = rgba(info.width, info.height);
+  const pp_product_matte_params mp{num("tol", 0.5f), num("softness", 0.2f), num("shift", 0.0f), 1};
+  pp_product_matte_report mr{};
+  auto t0 = std::chrono::steady_clock::now();
+  if (pp_product_cutout(img, hint, nullptr, 0, &mp, cut, nullptr, &mr) != PP_OK) {
+    std::fprintf(stderr, "cutout failed: %s\n", pp_last_error_message());
+    return 1;
+  }
+  const double cutMs = ms(t0);
+  const std::string prefix = argv[4];
+  write(prefix + "_alpha.pgm", cut, 3);
+  write(prefix + "_cut.ppm", cut, -1);
+  pp_product_render_params p{};
+  p.backdrop = static_cast<int32_t>(num("backdrop", 2));
+  rgb("wall", p.wall, 238, 238, 238);
+  rgb("floor", p.floor, 252, 252, 252);
+  p.horizon = num("horizon", 0.65f), p.softness = num("blend", 0.5f), p.light = num("light", 0.5f);
+  p.contact = num("contact", 0.6f), p.soft = num("soft", 0.35f), p.cast = num("cast", 0.0f), p.cast_angle = num("angle", 25.0f);
+  p.cast_length = num("len", 0.45f), p.cast_softness = num("castsoft", 0.5f), p.reflection = num("refl", 0.0f);
+  p.auto_white = static_cast<int32_t>(num("white", 1)), p.auto_exposure = static_cast<int32_t>(num("expo", 0));
+  for (int k = 0; k < 3; ++k) p.reference[k] = mr.backdrop[k];
+  p.exposure = num("exposure", 0), p.contrast = num("contrast", 0), p.saturation = num("sat", 0), p.warmth = num("warmth", 0), p.tint = num("tint", 0);
+  p.width = static_cast<int32_t>(num("w", 1200)), p.height = static_cast<int32_t>(num("h", 1200));
+  p.fill = num("fill", 0.75f), p.x = num("x", 0.5f), p.y = num("y", 0.5f);
+  p.ground = static_cast<int32_t>(num("ground", 0)), p.flip = static_cast<int32_t>(num("flip", 0));
+  p.seed = 5;
+  pp_image* shot = nullptr;
+  pp_product_render_report rr{};
+  t0 = std::chrono::steady_clock::now();
+  if (pp_product_render(cut, nullptr, &p, nullptr, &shot, &rr) != PP_OK) {
+    std::fprintf(stderr, "render failed: %s\n", pp_last_error_message());
+    return 1;
+  }
+  std::printf("{\"cutout_ms\":%.0f,\"render_ms\":%.0f,\"plain\":%d,\"objects\":%d,\"spread\":%.4f,\"backdrop\":[%.0f,%.0f,%.0f],"
+              "\"box\":[%.3f,%.3f,%.3f,%.3f],\"gain\":[%.3f,%.3f,%.3f]}\n",
+              cutMs, ms(t0), mr.plain, mr.objects, mr.spread, mr.backdrop[0], mr.backdrop[1], mr.backdrop[2], mr.left, mr.top, mr.right,
+              mr.bottom, rr.gain[0], rr.gain[1], rr.gain[2]);
+  write(prefix + ".ppm", shot, -1);
+  write(prefix + "_shot_alpha.pgm", shot, 3);
+  pp_image_destroy(shot);
+  pp_image_destroy(cut);
+  if (hint) pp_image_destroy(hint);
+  pp_image_destroy(img);
+  return 0;
+}
+
 int main(int argc, char** argv) {
   int rc = 2;
   if (argc > 1 && std::strcmp(argv[1], "film") == 0) rc = film(argc, argv);
   if (argc > 1 && std::strcmp(argv[1], "collage") == 0) rc = collageCmd(argc, argv);
   if (argc > 1 && std::strcmp(argv[1], "lips") == 0) rc = lips(argc, argv);
+  if (argc > 1 && std::strcmp(argv[1], "product") == 0) rc = product(argc, argv);
   if (argc > 1 && std::strcmp(argv[1], "cutout") == 0) rc = cutout(argc, argv);
   else if (argc > 1 && std::strcmp(argv[1], "compose") == 0) rc = compose(argc, argv);
   else if (argc > 1 && std::strcmp(argv[1], "backdrop") == 0) rc = backdrop(argc, argv);
@@ -488,6 +558,7 @@ int main(int argc, char** argv) {
                  "       studio_demo styles\n"
                  "       studio_demo film OUT.ppm STYLE VERTICAL PORTRAIT LOOKS ZOOMS PHOTO.ppm...\n"
                  "       studio_demo collage OUT.ppm W H CELLS GAP MARGIN RADIUS R G B LOOKS PHOTO.ppm...\n"
+                 "       studio_demo product IN.ppm HINT.pgm|- OUT_PREFIX [key=value ...]\n"
                  "       studio_demo lips IN.ppm OUT.ppm LANDMARKS.txt R G B [strength] [natural]\n"
                  "       studio_demo studio IN.ppm MASK.pgm ZONES.pgm OUT.ppm [key=value ...] (light, backdrop, finish)\n"
                  "       studio_demo cutout IN.ppm MASK.pgm ZONES.pgm|- OUT_PREFIX [softness shift hair clean] [STROKES.txt]\n"

@@ -1301,6 +1301,70 @@ void pp_gpu_get_status(pp_gpu_status* out);
 /* Frees the GPU context (memory pressure). pp_gpu_init can start it again. */
 void pp_gpu_shutdown(void);
 
+/* ---- Product photography (Phase 12) ----
+ * pp_product_cutout: the object out of its photo. On a plain backdrop its
+ * colours decide the edge (the backdrop's light fall-off is measured, the
+ * object's own shadow is left out); `hint` (optional GRAY8 object mask, any
+ * size) keeps specks out and decides on a busy backdrop. Strokes as in
+ * pp_studio_cutout (keep, remove, and HAIR for fine detail the colours
+ * decide). `out`: same size and format as `photo`, straight alpha. */
+typedef struct pp_product_matte_params {
+  float tolerance;     /* 0..1 (0.5): higher keeps colours closer to the backdrop's */
+  float softness;      /* 0..1 */
+  float shift;         /* -1 grow .. +1 shrink the edge */
+  int32_t shadows_out; /* the object's shadow on the backdrop is not part of it */
+} pp_product_matte_params;
+
+typedef struct pp_product_matte_report {
+  float coverage;
+  float left, top, right, bottom; /* the object's box, normalised */
+  float backdrop[3];              /* the photographed backdrop, sRGB 0..255 */
+  float spread;                   /* how uneven the backdrop is */
+  int32_t plain;                  /* 1: a plain backdrop decided the edge */
+  int32_t objects;                /* separate objects kept */
+} pp_product_matte_report;
+
+pp_status pp_product_cutout(const pp_image* photo, const pp_image* hint, const pp_studio_stroke* strokes, int32_t stroke_count,
+                            const pp_product_matte_params* params, pp_image* out, const pp_cancel_token* token,
+                            pp_product_matte_report* report);
+
+typedef enum pp_product_backdrop {
+  PP_PRODUCT_TRANSPARENT = 0,
+  PP_PRODUCT_SOLID = 1,
+  PP_PRODUCT_SWEEP = 2,   /* seamless paper */
+  PP_PRODUCT_SURFACE = 3, /* a table against a wall */
+  PP_PRODUCT_RADIAL = 4,
+  PP_PRODUCT_SCENE = 5    /* the `scene` photo */
+} pp_product_backdrop;
+
+/* How a cut-out object becomes a catalogue shot. Colours sRGB 0..255;
+ * shadows and strengths 0..1; corrections -1..1. reference: the old
+ * backdrop (pp_product_matte_report.backdrop), negative for none. */
+typedef struct pp_product_render_params {
+  int32_t backdrop;
+  uint8_t wall[3];
+  uint8_t floor[3];
+  float horizon, softness, light;
+  float contact, soft, cast, cast_angle, cast_length, cast_softness, reflection;
+  int32_t auto_white, auto_exposure;
+  float reference[3];
+  float exposure, contrast, saturation, warmth, tint;
+  int32_t width, height; /* the frame, 16..8192 px */
+  float fill;            /* the object's larger side as a share of the frame's */
+  float x, y;            /* its box centre (y: its base when ground is set), 0..1 */
+  int32_t ground, flip;
+  uint32_t seed;
+} pp_product_render_params;
+
+typedef struct pp_product_render_report {
+  float left, top, right, bottom; /* the object's box in the frame */
+  float gain[3];                  /* the colour correction's gains */
+} pp_product_render_report;
+
+/* A new image (the cut-out's format) in *out. */
+pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const pp_product_render_params* params,
+                            const pp_cancel_token* token, pp_image** out, pp_product_render_report* report);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
