@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Image, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, TextInput, View } from 'react-native';
 
 import {
   AppText,
@@ -13,6 +13,8 @@ import {
   Screen,
 } from '../components';
 import { useResponsive } from '../hooks/useResponsive';
+import type { ProjectKind } from '../services/database/repositories/ProjectsRepository';
+import { Choice } from './product/controls';
 import type { TabScreenProps } from '../navigation/types';
 import { errorMessage } from '../native';
 import { getStorageService } from '../services/storage/StorageService';
@@ -25,6 +27,7 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
   const { projects, projectsStatus, projectsError, loadProjects, createProject, deleteProject } = useAppStore();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
+  const [kind, setKind] = useState<ProjectKind>('mixed');
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
@@ -33,7 +36,7 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
     }
     setSaving(true);
     try {
-      await createProject(name);
+      await createProject(name, kind);
       setName('');
       setCreating(false);
     } catch (e) {
@@ -94,6 +97,23 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
               fontSize: 15,
             }}
           />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup">
+            {(
+              [
+                ['product', 'Products'],
+                ['portrait', 'Portraits'],
+                ['mixed', 'Both'],
+              ] as const
+            ).map(([k, label]) => (
+              <Choice
+                key={k}
+                label={label}
+                selected={kind === k}
+                onPress={() => setKind(k)}
+                testID={`new-project-${k}`}
+              />
+            ))}
+          </View>
           <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'flex-end' }}>
             <Button label="Cancel" variant="ghost" onPress={() => setCreating(false)} />
             <Button label="Create" icon="check" onPress={submit} loading={saving} disabled={!name.trim()} />
@@ -140,10 +160,13 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
                   <Icon name="image" size={24} color="#FFFFFF" />
                 )}
               </View>
-              <View
+              <Pressable
                 style={{ flex: 1 }}
-                accessible
+                onPress={() => navigation.navigate('Project', { projectId: p.id })}
+                accessibilityRole="button"
                 accessibilityLabel={`${p.name}, ${p.imageCount} photos, updated ${new Date(p.updatedAt).toLocaleDateString()}`}
+                accessibilityHint="Opens the project"
+                testID={`project-open-${p.id}`}
               >
                 <AppText variant="bodyStrong" numberOfLines={1}>
                   {p.name}
@@ -152,7 +175,7 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
                   {p.imageCount} {p.imageCount === 1 ? 'photo' : 'photos'} ·{' '}
                   {new Date(p.updatedAt).toLocaleDateString()}
                 </AppText>
-              </View>
+              </Pressable>
               <IconButton
                 icon="trash"
                 label={`Delete ${p.name}`}

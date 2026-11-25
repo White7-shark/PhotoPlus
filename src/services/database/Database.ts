@@ -4,6 +4,7 @@ import { NativeSqlExecutor } from './NativeSqlExecutor';
 import { AssetRegistry } from './repositories/AssetRegistry';
 import { HistoryRepository } from './repositories/HistoryRepository';
 import { ImagesRepository } from './repositories/ImagesRepository';
+import { PresetsRepository } from './repositories/PresetsRepository';
 import { ProjectsRepository } from './repositories/ProjectsRepository';
 import { SettingsRepository } from './repositories/SettingsRepository';
 import type { SqlExecutor } from './SqlExecutor';
@@ -19,6 +20,7 @@ export interface Repositories {
   images: ImagesRepository;
   history: HistoryRepository;
   assets: AssetRegistry;
+  presets: PresetsRepository;
 }
 
 export function createRepositories(executor: SqlExecutor): Repositories {
@@ -29,6 +31,7 @@ export function createRepositories(executor: SqlExecutor): Repositories {
     images: new ImagesRepository(executor),
     history: new HistoryRepository(executor),
     assets: new AssetRegistry(executor),
+    presets: new PresetsRepository(executor),
   };
 }
 

@@ -15,7 +15,7 @@ export interface StudioTool {
   icon: IconName;
   available: boolean;
   premium: boolean;
-  route?: 'SceneSwap' | 'FilmCollage' | 'Relight';
+  route?: 'SceneSwap' | 'FilmCollage' | 'Relight' | 'ProductStudio' | 'Batch';
 }
 
 export const STUDIO_TOOLS: StudioTool[] = [
@@ -48,6 +48,25 @@ export const STUDIO_TOOLS: StudioTool[] = [
     available: true,
     premium: true,
     route: 'Relight',
+  },
+  {
+    id: 'product',
+    title: 'Product Studio',
+    about:
+      'Catalogue shots of what you sell: the product cut out onto white, paper or a tabletop, with a natural shadow, true colour and the right size for every shop.',
+    icon: 'bag',
+    available: true,
+    premium: false,
+    route: 'ProductStudio',
+  },
+  {
+    id: 'batch',
+    title: 'Batch edit',
+    about: 'One setup or look on many photos at once, every result saved beside its untouched original.',
+    icon: 'wand',
+    available: true,
+    premium: false,
+    route: 'Batch',
   },
   {
     id: 'recreate',

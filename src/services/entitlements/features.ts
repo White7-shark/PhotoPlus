@@ -46,6 +46,8 @@ export const FEATURES = {
   studioBasics: f('replication.studioBasics', 'Studio basics: soft and bright light, gradient backdrops, vignette, warmth and simple grades', 'replication', 'free'),
   frames: f('editing.frames', 'Photo frames', 'editing', 'free'),
   filmCollage: f('replication.filmCollage', 'Film & Collage: classic and photo-booth film strips, ten looks for every frame, ten collage layouts', 'replication', 'free'),
+  productPhotos: f('studio.product', 'Product photos: cut out onto white, paper or grey, with natural shadows and colour correction', 'replication', 'free'),
+  projects: f('library.projects', 'Projects: organise shoots, keep every original, compare before and after', 'editing', 'free'),
   marketplaceBrowse: f('marketplace.browse', 'Browse photoshoot packs', 'marketplace', 'free'),
   packPreview: f('marketplace.preview', 'Pack previews & descriptions', 'marketplace', 'free'),
   premiumDemos: f('marketplace.premiumDemos', 'Premium feature demonstrations', 'marketplace', 'free'),
@@ -107,6 +109,14 @@ export const FEATURES = {
   customProps: f('editing.customProps', 'Make your own props from your photos', 'editing', 'premium'),
   cameraProps: f('camera.props', 'Props in the camera', 'camera', 'free'),
   packAccess: f('marketplace.packAccess', 'Unlock, download & apply photoshoot packs', 'marketplace', 'premium'),
+  productPro: f(
+    'studio.productPro',
+    'Pro product setups: tabletop, spotlit, scene and transparent backdrops, cast shadows, reflections, layout templates and packs',
+    'replication',
+    'premium',
+  ),
+  batchEditing: f('editing.batch', 'Batch editing: one setup or look on up to 50 photos at once', 'editing', 'premium'),
+  savedSetups: f('editing.savedSetups', 'Save your setups and looks, and reuse them in every project', 'editing', 'premium'),
   clothingTransform: f('replication.clothing', 'Clothing transformation (compatible packs)', 'replication', 'premium'),
 } as const;
 

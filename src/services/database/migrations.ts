@@ -73,6 +73,26 @@ export const MIGRATIONS: readonly Migration[] = [
       'CREATE INDEX idx_assets_kind ON assets(kind)',
     ],
   },
+  {
+    version: 2,
+    name: 'professional_workflows',
+    statements: [
+      // Reusable setups: product setups, photo looks and export profiles.
+      `CREATE TABLE presets (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('product', 'look', 'export')),
+        name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+        data_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+      'CREATE INDEX idx_presets_kind ON presets(kind, updated_at DESC)',
+      // What a project holds (packs apply where they suit) and its defaults
+      // (pack, setup, look, export profile, size, brand mark).
+      `ALTER TABLE projects ADD COLUMN kind TEXT NOT NULL DEFAULT 'mixed' CHECK (kind IN ('product', 'portrait', 'mixed'))`,
+      `ALTER TABLE projects ADD COLUMN defaults_json TEXT NOT NULL DEFAULT '{}'`,
+    ],
+  },
 ];
 
 const BOOKKEEPING = `CREATE TABLE IF NOT EXISTS schema_migrations (

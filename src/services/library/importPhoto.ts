@@ -4,19 +4,20 @@ import { getStorageService } from '../storage/StorageService';
 
 /**
  * Brings a photo in from the gallery (system photo picker, no permission
- * needed) and files it under Captures so every tool can edit it.
- * Resolves with the new image id, or null if the user cancelled.
+ * needed) and files it under a project (Captures unless one is given) so
+ * every tool can edit it. Resolves with the new image id, or null if the
+ * user cancelled.
  */
-export async function importPhoto(repos: Repositories): Promise<string | null> {
+export async function importPhoto(repos: Repositories, projectId?: string | null): Promise<string | null> {
   const path = await getStorageService().pickImage('imports');
   if (!path) {
     return null;
   }
   const meta = await getProcessingService().metadata(path);
   const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-  const inbox = await repos.projects.ensureInbox();
+  const target = projectId ?? (await repos.projects.ensureInbox()).id;
   const record = await repos.images.add({
-    projectId: inbox.id,
+    projectId: target,
     path,
     source: 'import',
     width: n(meta.width),

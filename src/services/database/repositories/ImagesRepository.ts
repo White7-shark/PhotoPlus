@@ -123,6 +123,29 @@ export class ImagesRepository {
     return rows.map(toImage);
   }
 
+  /** Moves photos into another project (null: out of every project). */
+  async moveToProject(ids: readonly string[], projectId: string | null): Promise<void> {
+    if (ids.length === 0) return;
+    const ts = this.now();
+    await this.db.transaction([
+      ...ids.map(id => ({ sql: 'UPDATE images SET project_id = ? WHERE id = ?', params: [projectId, id] })),
+      ...(projectId ? [{ sql: 'UPDATE projects SET updated_at = ? WHERE id = ?', params: [ts, projectId] }] : []),
+    ]);
+  }
+
+  /** The photos made from this one (edits, product shots), newest first. */
+  async listDerived(sourceImageId: string): Promise<ImageRecord[]> {
+    // Metadata is written by JSON.stringify (no spaces); ids are plain
+    // letters, digits and underscores. Matched as text (JSON functions are
+    // not in every phone's database), then checked exactly.
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(sourceImageId)) return [];
+    const rows = await this.db.query<ImageRow>(
+      'SELECT * FROM images WHERE metadata_json LIKE ? ORDER BY created_at DESC',
+      [`%"sourceImageId":"${sourceImageId}"%`],
+    );
+    return rows.map(toImage).filter(r => r.metadata.sourceImageId === sourceImageId);
+  }
+
   async remove(id: string): Promise<string | null> {
     const image = await this.get(id);
     if (!image) {

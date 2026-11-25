@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { bootstrap, BootstrapError, defaultBootstrapDeps, type BootstrapDeps } from '../app/bootstrap';
 import { classifyTier, type DeviceCapabilities, type DeviceTier } from '../services/capabilities';
 import type { Repositories } from '../services/database/Database';
-import type { Project } from '../services/database/repositories/ProjectsRepository';
+import type { Project, ProjectKind } from '../services/database/repositories/ProjectsRepository';
 import { DEFAULT_SETTINGS, type AppSettings } from '../services/database/repositories/SettingsRepository';
 import type { MemoryPressure } from '../services/lifecycle/LifecycleCoordinator';
 import { createLogger } from '../services/logging/logger';
@@ -47,7 +47,7 @@ export interface AppStore {
   start: (deps?: BootstrapDeps) => Promise<void>;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
   loadProjects: () => Promise<void>;
-  createProject: (name: string) => Promise<Project | null>;
+  createProject: (name: string, kind?: ProjectKind) => Promise<Project | null>;
   deleteProject: (id: string) => Promise<string[]>;
   setMemoryPressure: (level: MemoryPressure) => void;
   setForeground: (active: boolean) => void;
@@ -142,12 +142,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
-  async createProject(name) {
+  async createProject(name, kind = 'mixed') {
     const repos = get().repos;
     if (!repos) {
       return null;
     }
-    const project = await repos.projects.create(name);
+    const project = await repos.projects.create(name, kind);
     set({ projects: [project, ...get().projects] });
     return project;
   },

@@ -48,6 +48,7 @@ import { friendlyMessage } from '../../services/errors';
 import { createLogger } from '../../services/logging/logger';
 import { getProcessingService, ProcessingError } from '../../services/processing/ImageProcessingService';
 import { cleanOf, editedPathFor } from '../../services/processing/quality';
+import { isLookValues } from '../../services/product/setup';
 import { getStorageService } from '../../services/storage/StorageService';
 import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
@@ -257,6 +258,26 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
   const askPremium = (feature: FeatureKey, message?: string) => {
     setPremiumMessage(message ?? null);
     setPremiumFor(feature);
+  };
+
+  // ---- a look to reuse (Phase 12): the colour of this edit, for batches and other photos.
+  const lookValues = {
+    exposure: doc.exposure,
+    brightness: doc.brightness,
+    contrast: doc.contrast,
+    saturation: doc.saturation,
+    warmth: doc.warmth,
+    sharpen: doc.sharpen,
+    look: doc.look,
+  };
+  const [savedLook, setSavedLook] = useState<string | null>(null);
+  const lookSaved = savedLook === JSON.stringify(lookValues);
+  const saveLook = async () => {
+    if (!repos) return;
+    if (!can('savedSetups').allowed) return askPremium('savedSetups');
+    const n = (await repos.presets.list('look', isLookValues)).length + 1;
+    await repos.presets.save('look', `My look ${n}`, lookValues);
+    setSavedLook(JSON.stringify(lookValues));
   };
 
   // ---- props --------------------------------------------------------------------
@@ -977,6 +998,14 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
             testID="editor-gallery"
           />
         </View>
+        <Button
+          label={lookSaved ? 'Look saved' : 'Save this look to reuse'}
+          icon={lookSaved ? 'check' : 'drop'}
+          variant="ghost"
+          onPress={() => void saveLook()}
+          disabled={lookSaved}
+          testID="editor-save-look"
+        />
         {!premiumPlan && base ? <WatermarkUnlock photoPath={base} /> : null}
         <AppText variant="caption" tone="secondary" align="center">
           {premiumPlan

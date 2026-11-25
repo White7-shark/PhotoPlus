@@ -19,6 +19,9 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { PhotoshootStudioScreen } from '../screens/studio/PhotoshootStudioScreen';
 import { FilmCollageScreen } from '../screens/studio/FilmCollageScreen';
 import { RelightScreen } from '../screens/studio/RelightScreen';
+import { BatchScreen } from '../screens/product/BatchScreen';
+import { ProductStudioScreen } from '../screens/product/ProductStudioScreen';
+import { ProjectScreen } from '../screens/product/ProjectScreen';
 import { SceneSwapScreen } from '../screens/studio/SceneSwapScreen';
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
@@ -55,6 +58,9 @@ const PhotoshootStudio = guarded(PhotoshootStudioScreen, 'Photoshoot Studio');
 const SceneSwap = guarded(SceneSwapScreen, 'Scene Swap');
 const FilmCollage = guarded(FilmCollageScreen, 'Film & Collage');
 const Relight = guarded(RelightScreen, 'Relight');
+const ProductStudio = guarded(ProductStudioScreen, 'Product Studio');
+const Batch = guarded(BatchScreen, 'Batch edit');
+const Project = guarded(ProjectScreen, 'Project');
 
 const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 
@@ -113,6 +119,9 @@ export function RootNavigator() {
         <Stack.Screen name="SceneSwap" component={SceneSwap} />
         <Stack.Screen name="FilmCollage" component={FilmCollage} />
         <Stack.Screen name="Relight" component={Relight} />
+        <Stack.Screen name="ProductStudio" component={ProductStudio} />
+        <Stack.Screen name="Batch" component={Batch} />
+        <Stack.Screen name="Project" component={Project} options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

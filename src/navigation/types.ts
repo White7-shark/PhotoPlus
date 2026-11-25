@@ -8,7 +8,7 @@ export type TabParamList = {
   Studio: undefined;
   Projects: undefined;
   /** returnTo: a screen the photo goes straight to (the Photoshoot Studio). */
-  Camera: { returnTo?: 'SceneSwap' | 'FilmCollage' | 'Relight' } | undefined;
+  Camera: { returnTo?: 'SceneSwap' | 'FilmCollage' | 'Relight' | 'ProductStudio' } | undefined;
   Packs: undefined;
   Settings: undefined;
 };
@@ -32,6 +32,16 @@ export type RootStackParamList = {
   /** Relight: studio light on the person in their own photo; photo: one just taken in the camera. */
   Relight: { photo?: string } | undefined;
   FilmCollage: { photo?: string } | undefined;
+  /**
+   * Product Studio: a product photo made a catalogue shot. photo: one just
+   * taken in the camera; imageId: a library photo; projectId: the project it
+   * is for (its pack and defaults; results are saved there).
+   */
+  ProductStudio: { photo?: string; imageId?: string; projectId?: string } | undefined;
+  /** Batch editing: one setup or look on many photos (of a project, or those given). */
+  Batch: { projectId?: string; imageIds?: string[] } | undefined;
+  /** A project: its photos, pack and defaults. */
+  Project: { projectId: string };
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
