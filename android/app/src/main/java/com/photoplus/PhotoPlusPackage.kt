@@ -13,6 +13,7 @@ import com.photoplus.device.DeviceModule
 import com.photoplus.engine.EngineModule
 import com.photoplus.storage.DatabaseModule
 import com.photoplus.storage.StorageModule
+import com.photoplus.integrity.IntegrityModule
 import com.photoplus.rewards.RewardsModule
 import com.photoplus.studio.ProductModule
 import com.photoplus.studio.StudioModule
@@ -30,11 +31,12 @@ class PhotoPlusPackage : BaseReactPackage() {
     StudioModule.NAME -> StudioModule(reactContext)
     ProductModule.NAME -> ProductModule(reactContext)
     RewardsModule.NAME -> RewardsModule(reactContext)
+    IntegrityModule.NAME -> IntegrityModule(reactContext)
     else -> null
   }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
-    listOf(DeviceModule.NAME, EngineModule.NAME, DatabaseModule.NAME, StorageModule.NAME, CameraModule.NAME, AdsModule.NAME, StudioModule.NAME, ProductModule.NAME, RewardsModule.NAME)
+    listOf(DeviceModule.NAME, EngineModule.NAME, DatabaseModule.NAME, StorageModule.NAME, CameraModule.NAME, AdsModule.NAME, StudioModule.NAME, ProductModule.NAME, RewardsModule.NAME, IntegrityModule.NAME)
       .associateWith { name ->
         ReactModuleInfo(
           name = name,

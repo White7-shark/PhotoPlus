@@ -6,6 +6,7 @@ import { AuroraBackground } from '../components/AuroraBackground';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ErrorState, SplashState } from '../components/States';
 import { RootNavigator } from '../navigation/RootNavigator';
+import { IntegrityGate } from './IntegrityGate';
 import { startLifecycleCoordinator } from '../services/lifecycle/LifecycleCoordinator';
 import { createLogger } from '../services/logging/logger';
 import { useAppStore } from '../state/store';
@@ -20,7 +21,11 @@ function BootGate() {
   const start = useAppStore(s => s.start);
 
   if (status === 'ready') {
-    return <RootNavigator />;
+    return (
+      <IntegrityGate>
+        <RootNavigator />
+      </IntegrityGate>
+    );
   }
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>

@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
-import { Alert, DeviceEventEmitter } from 'react-native';
+import { Alert } from 'react-native';
 
 import { PremiumSheet } from '../src/components/PremiumSheet';
 import { PremiumScreen } from '../src/screens/premium/PremiumScreen';
@@ -35,6 +35,7 @@ const base = (): RewardsState => ({
     ready: false,
     opensAt: 0,
     locks: { 'com.whatsapp': NOW + 5 * 3_600_000 },
+    counts: { 'com.whatsapp': 4 },
   },
   premiumUntil: 0,
   tools: {},
@@ -71,12 +72,37 @@ const mockRewards = {
     until: NOW + 2 * 86_400_000,
     state: withState({ premiumUntil: NOW + 2 * 86_400_000 }),
   })),
-  installedApps: jest.fn(async (pk: string[]) => pk.filter(p => ['com.whatsapp', 'com.instagram.android'].includes(p))),
-  share: jest.fn(async (target: string) => ({
+  shareTargets: jest.fn(async () => [
+    { pkg: 'com.zzz.notes', activity: 'Share', label: 'Notes', app: 'Notes', icon: '' },
+    {
+      pkg: 'com.whatsapp',
+      activity: 'ContactPicker',
+      label: 'WhatsApp',
+      app: 'WhatsApp',
+      icon: '/cache/share-icons/wa.png',
+    },
+    {
+      pkg: 'com.whatsapp',
+      activity: 'StatusShare',
+      label: 'My status',
+      app: 'WhatsApp',
+      icon: '/cache/share-icons/wa2.png',
+    },
+    { pkg: 'com.instagram.android', activity: 'Feed', label: 'Feed', app: 'Instagram', icon: '' },
+    { bad: true },
+  ]),
+  share: jest.fn(async (target: string, _activity: string) => ({
     opened: true,
-    counted: target !== '',
+    counted: true,
     target,
-    state: withState({ shares: { ...mockState.shares, count: mockState.shares.count + (target ? 1 : 0) } }),
+    state: withState({
+      shares: {
+        ...mockState.shares,
+        count: mockState.shares.count + 1,
+        locks: { ...mockState.shares.locks, [target]: NOW + 8 * 3_600_000 },
+        counts: { ...mockState.shares.counts, [target]: (mockState.shares.counts[target] ?? 0) + 1 },
+      },
+    }),
   })),
   recordActivity: jest.fn(),
   addListener: jest.fn(),
@@ -224,41 +250,47 @@ describe('Rewards', () => {
     expect(screen.getByText(/more points/)).toBeTruthy();
   });
 
-  it('shares to an app with the chosen picture and words; a locked app waits', async () => {
+  it('shares through the app’s own share sheet: every app, counts and 8-hour locks', async () => {
     await step(() =>
       wrap(<RewardsScreen navigation={nav() as never} route={{ key: 'r', name: 'Rewards' } as never} />),
     );
     expect(screen.getByTestId('rewards-share-count').props.children).toEqual([12, ' of ', 30, ' shares']);
     await step(() => fireEvent.press(screen.getByTestId('rewards-share-open')));
-    // Only installed apps; WhatsApp is locked for 5 more hours.
-    expect(screen.queryByTestId('rewards-app-com.facebook.katana')).toBeNull();
-    expect(screen.getByLabelText('WhatsApp, opens again in 5 hours')).toBeTruthy();
-    await step(() => fireEvent.press(screen.getByTestId('rewards-app-com.whatsapp')));
-    expect(mockRewards.share).not.toHaveBeenCalled();
     // Status: the tall picture with the post words.
     await step(() => fireEvent.press(screen.getByTestId('rewards-form-status')));
     expect(screen.getByTestId('rewards-share-picture').props.source.uri).toBe('asset:/promo/status.jpg');
-    await step(() => fireEvent.press(screen.getByTestId('rewards-app-com.instagram.android')));
-    const [target, asset, text] = mockRewards.share.mock.calls[0] as unknown as [string, string, string];
-    expect([target, asset]).toEqual(['com.instagram.android', 'status.jpg']);
+    await step(() => fireEvent.press(screen.getByTestId('rewards-share-choose')));
+    expect(screen.getByTestId('share-sheet')).toBeTruthy();
+    // Every app that takes a picture, popular ones first; an app with two share screens shows both.
+    const ids = screen.getAllByTestId(/^share-target-/).map(e => e.props.testID as string);
+    expect(ids).toEqual([
+      'share-target-com.whatsapp-ContactPicker',
+      'share-target-com.whatsapp-StatusShare',
+      'share-target-com.instagram.android-Feed',
+      'share-target-com.zzz.notes-Share',
+    ]);
+    // WhatsApp: shared 4 times, locked for 5 more hours (both its screens).
+    expect(screen.getAllByText('4')).toHaveLength(2);
+    expect(screen.getByLabelText('WhatsApp, opens again in 5 hours')).toBeTruthy();
+    expect(screen.getByLabelText('WhatsApp My status, opens again in 5 hours')).toBeTruthy();
+    await step(() => fireEvent.press(screen.getByTestId('share-target-com.whatsapp-StatusShare')));
+    expect(mockRewards.share).not.toHaveBeenCalled();
+    // Instagram: shared straight to its screen, with the picture and the post words.
+    await step(() => fireEvent.press(screen.getByTestId('share-target-com.instagram.android-Feed')));
+    const [target, activity, asset, text] = mockRewards.share.mock.calls[0] as unknown as string[];
+    expect([target, activity, asset]).toEqual(['com.instagram.android', 'Feed', 'status.jpg']);
     expect(text).toContain('#PhotoPlus');
     expect(screen.getByText(/Shared to Instagram — it counts!/)).toBeTruthy();
-    // Friends: the square picture and a personal note; the next words differ.
+    expect(screen.getByTestId('rewards-share-count').props.children).toEqual([13, ' of ', 30, ' shares']);
+    // Now Instagram is locked too, and counted once.
     await step(() => fireEvent.press(screen.getByTestId('rewards-form-friends')));
-    await step(() => fireEvent.press(screen.getByTestId('rewards-app-more')));
-    const [t2, a2, words] = mockRewards.share.mock.calls[1] as unknown as [string, string, string];
-    expect([t2, a2]).toEqual(['', 'friends.jpg']);
+    await step(() => fireEvent.press(screen.getByTestId('rewards-share-choose')));
+    expect(screen.getByLabelText('Instagram, opens again in 8 hours')).toBeTruthy();
+    // Friends: the square picture and a personal note.
+    await step(() => fireEvent.press(screen.getByTestId('share-target-com.zzz.notes-Share')));
+    const [t2, , a2, words] = mockRewards.share.mock.calls[1] as unknown as string[];
+    expect([t2, a2]).toEqual(['com.zzz.notes', 'friends.jpg']);
     expect(words).not.toContain('#PhotoPlus');
-    // An app picked from the share sheet counts when the device says so.
-    await step(() =>
-      DeviceEventEmitter.emit('PhotoPlusRewardsChanged', {
-        target: 'org.telegram.messenger',
-        counted: true,
-        state: withState({ shares: { ...mockState.shares, count: 14 } }),
-      }),
-    );
-    expect(screen.getByText(/Shared to Telegram — it counts!/)).toBeTruthy();
-    expect(screen.getByTestId('rewards-share-count').props.children).toEqual([14, ' of ', 30, ' shares']);
   });
 
   it('30 shares: collect two days of Premium; subscribers are told Rewards are for the free plan', async () => {

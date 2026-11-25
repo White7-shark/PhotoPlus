@@ -3,14 +3,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-nat
 
 import { AppText, Button, GlassSurface, Icon, Screen } from '../../components';
 import type { RootScreenProps } from '../../navigation/types';
-import {
-  appName,
-  SHARE_APPS,
-  SHARE_STYLES,
-  shareStyle,
-  shareText,
-  type ShareForm,
-} from '../../services/rewards/campaign';
+import { SHARE_STYLES, shareStyle, shareText, type ShareForm } from '../../services/rewards/campaign';
 import {
   getRewardsService,
   RewardsError,
@@ -19,9 +12,12 @@ import {
   type RewardItem,
   type RewardsState,
   type RewardTool,
+  type ShareTarget,
 } from '../../services/rewards/RewardsService';
 import { useTheme } from '../../theme';
 import { Choice } from '../product/controls';
+
+import { ShareSheet, targetName } from './ShareSheet';
 
 const ITEM_TEXT: Record<RewardItem, string> = {
   tool: 'One Premium tool for 24 hours',
@@ -48,7 +44,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
   const [tool, setTool] = useState<RewardTool>('sceneSwap');
   const [sharing, setSharing] = useState(false);
   const [form, setForm] = useState<ShareForm>('post');
-  const [installed, setInstalled] = useState<string[]>([]);
+  const [sheet, setSheet] = useState(false);
   // Which version of the words is shared next (they change from share to share).
   const [turn, setTurn] = useState(0);
 
@@ -58,19 +54,8 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
       .state()
       .then(s => live && setState(s))
       .catch(() => live && setNote({ text: 'Rewards couldn’t be loaded.', good: false }));
-    void rewards.installedApps(SHARE_APPS.map(a => a.pkg)).then(list => live && setInstalled(list));
-    const off = rewards.onChange(e => {
-      setState(e.state);
-      if (e.target)
-        setNote(
-          e.counted
-            ? { text: `Shared to ${appName(e.target)} — it counts!`, good: true }
-            : { text: `${appName(e.target)} counted recently; it opens again later.`, good: false },
-        );
-    });
     return () => {
       live = false;
-      off();
     };
   }, [rewards]);
 
@@ -132,23 +117,21 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
   const campaignClosed = s.opensAt > now;
   const style = shareStyle(form);
   const text = shareText(form, turn);
-  const apps = SHARE_APPS.filter(a => installed.includes(a.pkg));
 
-  const share = (target: string) =>
-    act(
-      `share-${target}`,
+  const share = (target: ShareTarget) => {
+    setSheet(false);
+    const { name } = targetName(target, [target]);
+    void act(
+      `share-${target.pkg}`,
       async () => {
         const r = await rewards.share(target, style.asset, text);
         setTurn(t => t + 1);
         return r;
       },
       r =>
-        r.target === ''
-          ? 'Pick an app to share to.'
-          : r.counted
-            ? `Shared to ${appName(String(r.target))} — it counts!`
-            : 'Shared! This app counted recently.',
+        r.counted ? `Shared to ${name} — it counts!` : `Shared to ${name}. It counted recently, so this one doesn’t.`,
     );
+  };
 
   return (
     <Screen title="Rewards" overline="Free plan" onBack={() => navigation.goBack()} bottomInset={32}>
@@ -403,53 +386,25 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                   {text}
                 </AppText>
               </View>
-              <AppText variant="caption" tone="secondary">
-                Share to
-              </AppText>
-              <View style={styles.wrap}>
-                {apps.map(a => {
-                  const opens = s.locks[a.pkg] ?? 0;
-                  const locked = opens > now;
-                  return (
-                    <Pressable
-                      key={a.pkg}
-                      onPress={() => (locked ? undefined : share(a.pkg))}
-                      disabled={locked || busy !== null}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        locked ? `${a.name}, opens again in ${hoursLeft(opens, now)} hours` : `Share to ${a.name}`
-                      }
-                      testID={`rewards-app-${a.pkg}`}
-                      style={[styles.app, { opacity: locked ? 0.45 : 1 }]}
-                    >
-                      <AppText variant="caption" style={{ fontWeight: '700' }}>
-                        {a.name}
-                      </AppText>
-                      <AppText variant="caption" tone="tertiary" style={{ fontSize: 10 }}>
-                        {locked ? `in ${hoursLeft(opens, now)} h` : 'Share'}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-                <Pressable
-                  onPress={() => share('')}
-                  disabled={busy !== null}
-                  accessibilityRole="button"
-                  accessibilityLabel="Share to another app"
-                  testID="rewards-app-more"
-                  style={styles.app}
-                >
-                  <AppText variant="caption" style={{ fontWeight: '700' }}>
-                    More apps
-                  </AppText>
-                  <AppText variant="caption" tone="tertiary" style={{ fontSize: 10 }}>
-                    Share sheet
-                  </AppText>
-                </Pressable>
-              </View>
+              <Button
+                label="Choose an app to share to"
+                icon="share"
+                onPress={() => setSheet(true)}
+                disabled={busy !== null}
+                testID="rewards-share-choose"
+              />
             </View>
           ) : null}
         </GlassSurface>
+        <ShareSheet
+          visible={sheet}
+          onClose={() => setSheet(false)}
+          onPick={share}
+          locks={s.locks}
+          counts={s.counts ?? {}}
+          now={now}
+          busy={busy !== null}
+        />
 
         {/* ---- Spend */}
         <GlassSurface radius={18} style={styles.section} testID="rewards-store">

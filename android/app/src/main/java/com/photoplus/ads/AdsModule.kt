@@ -155,6 +155,10 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
    * between them.
    */
   override fun showRewardedAdForPoints(promise: Promise) {
+    if (com.photoplus.integrity.Integrity.blocked()) {
+      promise.reject("BLOCKED", "Photo Plus needs to check in online first.")
+      return
+    }
     if (Entitlements.subscribed) {
       promise.reject("SUBSCRIBED", "You have Premium already")
       return

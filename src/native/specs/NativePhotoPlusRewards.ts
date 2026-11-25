@@ -16,10 +16,10 @@ export interface Spec extends TurboModule {
   /** item: tool, premium-1, premium-3, premium-7; tool: the tool for a tool unlock (else ""). */
   redeem(item: string, tool: string): Promise<Object>;
   claimSharePass(): Promise<Object>;
-  /** Which of these apps (packages) are on the phone and take pictures. */
-  installedApps(packages: string[]): Promise<string[]>;
-  /** Opens an app (or the share sheet when target is "") with a campaign picture and words. */
-  share(target: string, asset: string, text: string): Promise<Object>;
+  /** Every app that takes a picture: [{ pkg, activity, label, app, icon }] (the in-app share sheet). */
+  shareTargets(): Promise<Object[]>;
+  /** Opens one app's share screen (package and its share activity) with a campaign picture and words. */
+  share(target: string, activity: string, asset: string, text: string): Promise<Object>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }

@@ -2,6 +2,9 @@
 
     <!-- Marketplace & purchase sync (later phases); Metro in debug builds. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Checks need to know when there is a connection; update reminders are notifications. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Glide video sound (optional: clips record silently without it). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

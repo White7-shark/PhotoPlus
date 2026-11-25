@@ -11,6 +11,7 @@ import NativeCamera from './specs/NativePhotoPlusCamera';
 import NativeDatabase from './specs/NativePhotoPlusDatabase';
 import NativeDevice from './specs/NativePhotoPlusDevice';
 import NativeEngine from './specs/NativePhotoPlusEngine';
+import NativeIntegrity from './specs/NativePhotoPlusIntegrity';
 import NativeProduct from './specs/NativePhotoPlusProduct';
 import NativeRewards from './specs/NativePhotoPlusRewards';
 import NativeStorage from './specs/NativePhotoPlusStorage';
@@ -21,6 +22,7 @@ export type { Spec as CameraSpec } from './specs/NativePhotoPlusCamera';
 export type { Spec as DatabaseSpec } from './specs/NativePhotoPlusDatabase';
 export type { Spec as DeviceSpec } from './specs/NativePhotoPlusDevice';
 export type { Spec as EngineSpec } from './specs/NativePhotoPlusEngine';
+export type { Spec as IntegritySpec } from './specs/NativePhotoPlusIntegrity';
 export type { Spec as ProductSpec } from './specs/NativePhotoPlusProduct';
 export type { Spec as RewardsSpec } from './specs/NativePhotoPlusRewards';
 export type { Spec as StorageSpec } from './specs/NativePhotoPlusStorage';
@@ -47,6 +49,7 @@ export const nativeModules = {
   database: NativeDatabase,
   device: NativeDevice,
   engine: NativeEngine,
+  integrity: NativeIntegrity,
   product: NativeProduct,
   rewards: NativeRewards,
   storage: NativeStorage,
@@ -59,8 +62,8 @@ export const NativeEvents = {
   jobState: 'PhotoPlusJobState',
   /** { jobId, progress 0..1 } while a job runs (only when it moves). */
   jobProgress: 'PhotoPlusJobProgress',
-  /** { target, counted, state } after a share through the share sheet. */
-  rewardsChanged: 'PhotoPlusRewardsChanged',
+  /** The integrity status changed (an online check finished). */
+  integrityChanged: 'PhotoPlusIntegrityChanged',
 } as const;
 
 /** Error shape produced by rejected native promises. */

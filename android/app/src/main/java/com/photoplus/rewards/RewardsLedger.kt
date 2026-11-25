@@ -185,6 +185,7 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
     if (!TARGET.matches(target)) throw RewardsException("INVALID_ARGUMENT", "Unknown app")
     if (shareOpensAt(target) != 0L || campaignOpensAt() != 0L || sharePassReady()) return false
     store.putLong("$K_SHARE$target", now())
+    store.putLong("$K_SHARE_TOTAL$target", store.getLong("$K_SHARE_TOTAL$target") + 1)
     val n = shares() + 1
     if (n >= SHARE_GOAL) {
       store.putLong(K_SHARES, 0)
@@ -273,7 +274,10 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
         "lockHours" to (SHARE_LOCK_MS / HOUR_MS).toInt(),
         "ready" to sharePassReady(),
         "opensAt" to campaignOpensAt().toDouble(),
-        "locks" to store.keys().filter { it.startsWith(K_SHARE) }.associate { k ->
+        "counts" to store.keys().filter { it.startsWith(K_SHARE_TOTAL) }.associate { k ->
+        k.removePrefix(K_SHARE_TOTAL) to store.getLong(k).toInt()
+      },
+      "locks" to store.keys().filter { it.startsWith(K_SHARE) && !it.startsWith(K_SHARE_TOTAL) }.associate { k ->
           val target = k.removePrefix(K_SHARE)
           target to shareOpensAt(target).toDouble()
         }.filterValues { it > 0 },
@@ -319,6 +323,7 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
     private const val K_TASK = "task:"
     private const val K_SHARE = "share:"
     private const val K_SHARES = "shares"
+    private const val K_SHARE_TOTAL = "shareTotal:"
     private const val K_SHARE_PASS_READY = "sharePassReady"
     private const val K_CAMPAIGN_DONE = "campaignDone"
     private const val K_PREMIUM_UNTIL = "premiumUntil"
@@ -338,6 +343,8 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
             override fun putString(key: String, value: String?) = prefs.edit { putString(key, value) }
             override fun keys(): Set<String> = prefs.all.keys
           },
+          // The trusted time (the phone's clock can be set; this can't).
+          clock = { if (com.photoplus.integrity.Integrity.installed()) com.photoplus.integrity.Integrity.time.now() else System.currentTimeMillis() },
           zoneOffsetMs = { java.util.TimeZone.getDefault().getOffset(it) },
         ).also { shared = it }
       }

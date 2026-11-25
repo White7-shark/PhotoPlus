@@ -4,9 +4,7 @@
  * to rewarded ads for points. Nothing here can grant points or Premium: the
  * device decides and answers with the new state.
  */
-import { DeviceEventEmitter } from 'react-native';
-
-import { errorCode, errorMessage, nativeModules, NativeEvents, type AdsSpec, type RewardsSpec } from '../../native';
+import { errorCode, errorMessage, nativeModules, type AdsSpec, type RewardsSpec } from '../../native';
 
 export type ActivityEvent = 'photo' | 'edit' | 'studio' | 'product' | 'film' | 'project' | 'glide';
 export type RewardItem = 'tool' | 'premium-1' | 'premium-3' | 'premium-7';
@@ -37,12 +35,38 @@ export interface RewardsState {
     ready: boolean;
     opensAt: number;
     locks: Record<string, number>;
+    /** Shares made to each app (all time). */
+    counts: Record<string, number>;
   };
   premiumUntil: number;
   tools: Partial<Record<RewardTool, number>>;
   daysUsed: number;
   capDays: number;
   store: { id: RewardItem; cost: number; days: number; hours: number }[];
+}
+
+/** One app's share screen (an app can have several, such as a chat and a status). */
+export interface ShareTarget {
+  pkg: string;
+  activity: string;
+  /** The share screen's name ("Status", "Chats"…). */
+  label: string;
+  /** The app's name. */
+  app: string;
+  /** A PNG of its icon, or "". */
+  icon: string;
+}
+
+export function isShareTarget(v: unknown): v is ShareTarget {
+  if (!v || typeof v !== 'object') return false;
+  const t = v as Record<string, unknown>;
+  return (
+    typeof t.pkg === 'string' &&
+    typeof t.activity === 'string' &&
+    typeof t.label === 'string' &&
+    typeof t.app === 'string' &&
+    typeof t.icon === 'string'
+  );
 }
 
 export class RewardsError extends Error {
@@ -162,43 +186,29 @@ export class RewardsService {
     return { rewarded: r.rewarded === true, points: Number(r.points) || 0, state: RewardsService.stateOf(r) };
   }
 
-  async installedApps(packages: readonly string[]): Promise<string[]> {
+  /** Every app that takes a picture (the in-app share sheet). */
+  async shareTargets(): Promise<ShareTarget[]> {
     if (!this.native) return [];
     try {
-      return await this.native.installedApps([...packages]);
+      const list = (await this.native.shareTargets()) as unknown[];
+      return list.filter(isShareTarget);
     } catch {
       return [];
     }
   }
 
   async share(
-    target: string,
+    target: ShareTarget,
     asset: string,
     text: string,
   ): Promise<{ counted: boolean; target: string; state: RewardsState }> {
     const n = this.need();
-    const r = await this.call(() => n.share(target, asset, text));
+    const r = await this.call(() => n.share(target.pkg, target.activity, asset, text));
     return {
       counted: r.counted === true,
       target: typeof r.target === 'string' ? r.target : '',
       state: RewardsService.stateOf(r),
     };
-  }
-
-  /** A share made through the share sheet is counted when an app is picked. */
-  onChange(listener: (e: { target: string; counted: boolean; state: RewardsState }) => void): () => void {
-    const sub = DeviceEventEmitter.addListener(NativeEvents.rewardsChanged, (e: Record<string, unknown>) => {
-      try {
-        listener({
-          target: typeof e.target === 'string' ? e.target : '',
-          counted: e.counted === true,
-          state: RewardsService.stateOf(e),
-        });
-      } catch {
-        // A malformed event is ignored.
-      }
-    });
-    return () => sub.remove();
   }
 }
 
