@@ -1766,6 +1766,114 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeRgbaToYuv420
 // (left, top, right, bottom), cut (left, top, right, bottom), face found,
 // face box (left, top, right, bottom); with 26, also the number of faces,
 // the outfit colours found (0..2), their sRGB (r g b, r g b) and shares.
+// ---- Product photography (Phase 12) ----
+
+// Strokes as StudioStroke.encode() writes them: count, then per stroke
+// brush, radius, point count and the points. False (and a thrown
+// exception) when malformed; `list` points into `buf`.
+static bool decodeProductStrokes(JNIEnv* env, jfloatArray strokes, std::vector<float>& buf, std::vector<pp_studio_stroke>& list) {
+  if (strokes != nullptr) {
+    buf.resize(static_cast<size_t>(env->GetArrayLength(strokes)));
+    if (!buf.empty()) env->GetFloatArrayRegion(strokes, 0, static_cast<jsize>(buf.size()), buf.data());
+  }
+  size_t at = 0;
+  const int count = buf.empty() ? 0 : static_cast<int>(buf[at++]);
+  if (count < 0 || count > 4096) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+    return false;
+  }
+  for (int i = 0; i < count; ++i) {
+    if (at + 3 > buf.size()) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+      return false;
+    }
+    pp_studio_stroke st{static_cast<int32_t>(buf[at]), buf[at + 1], static_cast<int32_t>(buf[at + 2]), nullptr};
+    at += 3;
+    if (st.count < 0 || at + static_cast<size_t>(st.count) * 2 > buf.size()) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad strokes");
+      return false;
+    }
+    st.points = buf.data() + at;
+    at += static_cast<size_t>(st.count) * 2;
+    list.push_back(st);
+  }
+  return true;
+}
+
+// params: tolerance, softness, shift, shadowsOut. report (11): coverage,
+// box l t r b, backdrop r g b, spread, plain, objects.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeProductCutout(JNIEnv* env, jobject, jobject bitmap, jobject hint,
+                                                                                 jfloatArray strokes, jfloatArray params, jobject out,
+                                                                                 jlong token, jfloatArray reportOut) {
+  constexpr jsize kReport = 11;
+  if (out == nullptr || params == nullptr || env->GetArrayLength(params) < 4 || reportOut == nullptr || env->GetArrayLength(reportOut) < kReport) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad cut-out arguments");
+    return;
+  }
+  std::vector<float> buf;
+  std::vector<pp_studio_stroke> list;
+  if (!decodeProductStrokes(env, strokes, buf, list)) return;
+  jfloat p[4];
+  env->GetFloatArrayRegion(params, 0, 4, p);
+  WrappedBitmap img, h, dst;
+  if (!img.open(env, bitmap, false) || !h.open(env, hint, true) || !dst.open(env, out, false)) return;
+  const pp_product_matte_params mp{p[0], p[1], p[2], p[3] > 0.5f ? 1 : 0};
+  pp_product_matte_report r{};
+  const pp_status st = pp_product_cutout(img.image, h.image, list.data(), static_cast<int32_t>(list.size()), &mp, dst.image,
+                                         reinterpret_cast<const pp_cancel_token*>(token), &r);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return;
+  }
+  const jfloat rep[kReport] = {r.coverage, r.left, r.top, r.right, r.bottom, r.backdrop[0], r.backdrop[1], r.backdrop[2],
+                               r.spread, static_cast<jfloat>(r.plain), static_cast<jfloat>(r.objects)};
+  env->SetFloatArrayRegion(reportOut, 0, kReport, rep);
+}
+
+// ints (14): backdrop, wall r g b, floor r g b, autoWhite, autoExposure,
+// width, height, ground, flip, seed. floats (21): horizon, softness, light,
+// contact, soft, cast, castAngle, castLength, castSoftness, reflection,
+// reference r g b, exposure, contrast, saturation, warmth, tint, fill, x, y.
+// report (7): box l t r b, gains r g b. A result handle.
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeProductRender(JNIEnv* env, jobject, jobject cutout, jobject scene,
+                                                                                  jintArray ints, jfloatArray floats, jlong token,
+                                                                                  jfloatArray reportOut) {
+  constexpr jsize kInts = 14, kFloats = 21, kReport = 7;
+  if (ints == nullptr || floats == nullptr || env->GetArrayLength(ints) < kInts || env->GetArrayLength(floats) < kFloats ||
+      reportOut == nullptr || env->GetArrayLength(reportOut) < kReport) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad product settings");
+    return 0;
+  }
+  jint i[kInts];
+  jfloat f[kFloats];
+  env->GetIntArrayRegion(ints, 0, kInts, i);
+  env->GetFloatArrayRegion(floats, 0, kFloats, f);
+  auto u8 = [](jint v) { return static_cast<uint8_t>(std::clamp(v, 0, 255)); };
+  pp_product_render_params p{};
+  p.backdrop = i[0];
+  p.wall[0] = u8(i[1]), p.wall[1] = u8(i[2]), p.wall[2] = u8(i[3]);
+  p.floor[0] = u8(i[4]), p.floor[1] = u8(i[5]), p.floor[2] = u8(i[6]);
+  p.auto_white = i[7], p.auto_exposure = i[8], p.width = i[9], p.height = i[10], p.ground = i[11], p.flip = i[12];
+  p.seed = static_cast<uint32_t>(i[13]);
+  p.horizon = f[0], p.softness = f[1], p.light = f[2];
+  p.contact = f[3], p.soft = f[4], p.cast = f[5], p.cast_angle = f[6], p.cast_length = f[7], p.cast_softness = f[8], p.reflection = f[9];
+  p.reference[0] = f[10], p.reference[1] = f[11], p.reference[2] = f[12];
+  p.exposure = f[13], p.contrast = f[14], p.saturation = f[15], p.warmth = f[16], p.tint = f[17];
+  p.fill = f[18], p.x = f[19], p.y = f[20];
+  WrappedBitmap c, sc;
+  if (!c.open(env, cutout, false) || !sc.open(env, scene, false)) return 0;
+  pp_image* out = nullptr;
+  pp_product_render_report r{};
+  const pp_status st = pp_product_render(c.image, sc.image, &p, reinterpret_cast<const pp_cancel_token*>(token), &out, &r);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  const jfloat rep[kReport] = {r.left, r.top, r.right, r.bottom, r.gain[0], r.gain[1], r.gain[2]};
+  env->SetFloatArrayRegion(reportOut, 0, kReport, rep);
+  return reinterpret_cast<jlong>(out);
+}
+
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioCutout(
     JNIEnv* env, jobject, jobject bitmap, jobject subject, jobject zones, jfloatArray strokes, jfloatArray params, jobject out,
     jlong token, jfloatArray reportOut) {

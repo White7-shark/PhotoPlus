@@ -367,6 +367,43 @@ class PortraitProcessor {
     return MaskGeometry.resizeBilinear(bytes, size[0], size[1], w, h)
   }
 
+  /**
+   * Products (Phase 12): the object mask from subject segmentation only (no
+   * person model: a product is not a person). Taps choose which objects;
+   * without taps every object found is kept (a set of products). Returns
+   * mask bytes (0..255) at the bitmap's size, or null when nothing was found
+   * (the engine then cuts out by the backdrop's colours alone).
+   */
+  fun objectMask(bitmap: Bitmap, points: List<Pair<Float, Float>>): ByteArray? {
+    val w = bitmap.width
+    val h = bitmap.height
+    val result = runCatching { Tasks.await(subjectSegmenter.process(InputImage.fromBitmap(bitmap, 0)), ML_TIMEOUT_S, TimeUnit.SECONDS) }
+      .onFailure { Log.i(TAG, "subject segmentation unavailable, cutting out by colour", it) }.getOrNull() ?: return null
+    val out = ByteArray(w * h)
+    var any = false
+    for (s in result.subjects) {
+      val mask = s.confidenceMask ?: continue
+      fun at(px: Float, py: Float): Float {
+        val x = (px * w).toInt() - s.startX
+        val y = (py * h).toInt() - s.startY
+        return if (x in 0 until s.width && y in 0 until s.height) mask.get(y * s.width + x) else 0f
+      }
+      if (points.isNotEmpty() && points.none { (px, py) -> at(px, py) >= 0.5f }) continue
+      any = true
+      for (y in 0 until s.height) for (x in 0 until s.width) {
+        val gx = s.startX + x
+        val gy = s.startY + y
+        if (gx !in 0 until w || gy !in 0 until h) continue
+        val v = (mask.get(y * s.width + x).coerceIn(0f, 1f) * 255f).roundToInt()
+        val idx = gy * w + gx
+        if (v > (out[idx].toInt() and 0xFF)) out[idx] = v.toByte()
+      }
+    }
+    if (any) return out
+    // Taps on nothing found: the foreground as a whole.
+    return result.foregroundConfidenceMask?.let { floatsToBytes(it, w * h) }
+  }
+
   private fun buildMasks(bitmap: Bitmap, rotation: Int, points: List<Pair<Float, Float>>, wantDepth: Boolean): Masks {
     val rot = MaskGeometry.normalise(rotation)
     // Small upright copy for the models (one scaled copy; the photo itself is untouched).

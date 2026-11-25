@@ -11,6 +11,7 @@ import NativeCamera from './specs/NativePhotoPlusCamera';
 import NativeDatabase from './specs/NativePhotoPlusDatabase';
 import NativeDevice from './specs/NativePhotoPlusDevice';
 import NativeEngine from './specs/NativePhotoPlusEngine';
+import NativeProduct from './specs/NativePhotoPlusProduct';
 import NativeStorage from './specs/NativePhotoPlusStorage';
 import NativeStudio from './specs/NativePhotoPlusStudio';
 
@@ -19,6 +20,7 @@ export type { Spec as CameraSpec } from './specs/NativePhotoPlusCamera';
 export type { Spec as DatabaseSpec } from './specs/NativePhotoPlusDatabase';
 export type { Spec as DeviceSpec } from './specs/NativePhotoPlusDevice';
 export type { Spec as EngineSpec } from './specs/NativePhotoPlusEngine';
+export type { Spec as ProductSpec } from './specs/NativePhotoPlusProduct';
 export type { Spec as StorageSpec } from './specs/NativePhotoPlusStorage';
 export type { Spec as StudioSpec } from './specs/NativePhotoPlusStudio';
 
@@ -43,6 +45,7 @@ export const nativeModules = {
   database: NativeDatabase,
   device: NativeDevice,
   engine: NativeEngine,
+  product: NativeProduct,
   storage: NativeStorage,
   studio: NativeStudio,
 };

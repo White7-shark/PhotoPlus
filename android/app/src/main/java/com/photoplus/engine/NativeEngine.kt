@@ -476,6 +476,23 @@ object NativeEngine {
    * darkened, made more or less colourful (each -1..1) and softened (0..1,
    * leaving the person out). In place on [photo].
    */
+  /**
+   * Products (Phase 12): [bitmap]'s object cut out into [out] (same size,
+   * unpremultiplied ARGB_8888, straight alpha). [hint]: an optional ALPHA_8
+   * object mask (any size). [strokes] as StudioStroke.encode(). [params]:
+   * tolerance, softness, shift, shadowsOut. [report] (11): coverage, box
+   * l t r b, the old backdrop r g b (0..255), spread, plain, objects.
+   */
+  external fun nativeProductCutout(bitmap: Bitmap, hint: Bitmap?, strokes: FloatArray?, params: FloatArray, out: Bitmap, token: Long, report: FloatArray)
+
+  /**
+   * Products: the cut-out as a catalogue shot, as a result handle. [ints]
+   * (14) and [floats] (21) are ProductSetup.ints() / floats(); [scene] the
+   * photo for a scene backdrop. [report] (7): the product's box, the colour
+   * gains.
+   */
+  external fun nativeProductRender(cutout: Bitmap, scene: Bitmap?, ints: IntArray, floats: FloatArray, token: Long, report: FloatArray): Long
+
   external fun nativeStudioRelightCompose(photo: Bitmap, lit: Bitmap, brightness: Float, colour: Float, blur: Float, token: Long)
 
   /**

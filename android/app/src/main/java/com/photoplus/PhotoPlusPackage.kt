@@ -13,6 +13,7 @@ import com.photoplus.device.DeviceModule
 import com.photoplus.engine.EngineModule
 import com.photoplus.storage.DatabaseModule
 import com.photoplus.storage.StorageModule
+import com.photoplus.studio.ProductModule
 import com.photoplus.studio.StudioModule
 
 /** Registers Photo Plus TurboModules and native components (lazy-loaded). */
@@ -26,11 +27,12 @@ class PhotoPlusPackage : BaseReactPackage() {
     CameraModule.NAME -> CameraModule(reactContext)
     AdsModule.NAME -> AdsModule(reactContext)
     StudioModule.NAME -> StudioModule(reactContext)
+    ProductModule.NAME -> ProductModule(reactContext)
     else -> null
   }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
-    listOf(DeviceModule.NAME, EngineModule.NAME, DatabaseModule.NAME, StorageModule.NAME, CameraModule.NAME, AdsModule.NAME, StudioModule.NAME)
+    listOf(DeviceModule.NAME, EngineModule.NAME, DatabaseModule.NAME, StorageModule.NAME, CameraModule.NAME, AdsModule.NAME, StudioModule.NAME, ProductModule.NAME)
       .associateWith { name ->
         ReactModuleInfo(
           name = name,
