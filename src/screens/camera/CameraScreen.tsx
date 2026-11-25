@@ -87,6 +87,7 @@ import { useCameraSession } from './useCameraSession';
 import { LivePropOverlay, PropTray, livePlacement, propRequest, useLiveProp } from './CameraProps';
 import { allProps, findProp, type PropCategory, type PropDef } from '../../services/edit/catalog';
 import { VibeSheet } from './VibeSheet';
+import { recordActivity } from '../../services/rewards/RewardsService';
 
 const log = createLogger('camera');
 const FLASH_CYCLE: FlashMode[] = ['off', 'auto', 'on'];
@@ -377,6 +378,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
         return null;
       }
       const inbox = await repos.projects.ensureInbox();
+      recordActivity('photo');
       const record = await repos.images.add({
         projectId: inbox.id,
         path: shot.path,
@@ -579,6 +581,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
         tone: 'success',
       });
       if (focusedRef.current) {
+        recordActivity('glide');
         navigation.navigate('GlidePreview', { clip });
       }
     },

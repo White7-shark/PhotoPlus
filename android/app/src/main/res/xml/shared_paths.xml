@@ -4,4 +4,6 @@
     <files-path name="captures" path="captures/" />
     <files-path name="exports" path="exports/" />
     <files-path name="imports" path="imports/" />
+    <!-- The Rewards share campaign's pictures. -->
+    <files-path name="promo" path="promo/" />
 </paths>

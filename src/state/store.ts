@@ -11,6 +11,7 @@ import type { EngineInfo } from '../services/processing/types';
 import { FREE_STATE, type EntitlementState } from '../services/entitlements/EntitlementService';
 import { getProcessingService } from '../services/processing/ImageProcessingService';
 import { errorMessage } from '../native';
+import { recordActivity } from '../services/rewards/RewardsService';
 
 const log = createLogger('store');
 
@@ -148,6 +149,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return null;
     }
     const project = await repos.projects.create(name, kind);
+    recordActivity('project');
     set({ projects: [project, ...get().projects] });
     return project;
   },

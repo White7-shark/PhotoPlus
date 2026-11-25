@@ -239,8 +239,13 @@ class ProductModule(reactContext: ReactApplicationContext) :
       return
     }
     val (setup, profile, watermark) = parsed
-    if (full && Entitlements.plan != Plan.PREMIUM) {
-      val reason = setup.premiumReason() ?: profile.premiumReason()
+    if (full) {
+      // A day's unlock with reward points opens the pro setups or the larger sizes.
+      val reason = setup.premiumReason()?.takeUnless { Entitlements.allows("productPro") }
+        ?: profile.premiumReason()?.takeUnless {
+          if (ExportSize.needsPremium(profile.resolution)) Entitlements.allows("exportHd") && (!profile.png || Entitlements.allows("productPro"))
+          else Entitlements.allows("productPro")
+        }
       if (reason != null) {
         promise.reject("PREMIUM_REQUIRED", reason)
         return

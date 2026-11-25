@@ -42,6 +42,10 @@ export type RootStackParamList = {
   Batch: { projectId?: string; imageIds?: string[] } | undefined;
   /** A project: its photos, pack and defaults. */
   Project: { projectId: string };
+  /** Premium plans (monthly, 3 months, yearly; a 7-day free trial). */
+  Premium: undefined;
+  /** Rewards (free plan): points from check-ins, ads and tasks; the share campaign. */
+  Rewards: undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

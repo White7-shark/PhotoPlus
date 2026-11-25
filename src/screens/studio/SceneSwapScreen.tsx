@@ -32,6 +32,7 @@ import { FinishPanel, LightPanel, TemplateRow } from './StudioLightPanel';
 import { BrushCanvas, type Backing } from './BrushCanvas';
 import { PlacementView } from './PlacementView';
 import { useSceneSwap, type Step } from './useSceneSwap';
+import { recordActivity } from '../../services/rewards/RewardsService';
 
 const STEPS: { step: Step; label: string }[] = [
   { step: 'pick', label: 'Photo' },
@@ -163,6 +164,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
     }
     if (!repos) return;
     const inbox = await repos.projects.ensureInbox();
+    recordActivity('studio', 'edit');
     const record = await repos.images.add({
       projectId: inbox.id,
       path: r.outputPath,

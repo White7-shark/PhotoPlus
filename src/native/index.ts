@@ -12,6 +12,7 @@ import NativeDatabase from './specs/NativePhotoPlusDatabase';
 import NativeDevice from './specs/NativePhotoPlusDevice';
 import NativeEngine from './specs/NativePhotoPlusEngine';
 import NativeProduct from './specs/NativePhotoPlusProduct';
+import NativeRewards from './specs/NativePhotoPlusRewards';
 import NativeStorage from './specs/NativePhotoPlusStorage';
 import NativeStudio from './specs/NativePhotoPlusStudio';
 
@@ -21,6 +22,7 @@ export type { Spec as DatabaseSpec } from './specs/NativePhotoPlusDatabase';
 export type { Spec as DeviceSpec } from './specs/NativePhotoPlusDevice';
 export type { Spec as EngineSpec } from './specs/NativePhotoPlusEngine';
 export type { Spec as ProductSpec } from './specs/NativePhotoPlusProduct';
+export type { Spec as RewardsSpec } from './specs/NativePhotoPlusRewards';
 export type { Spec as StorageSpec } from './specs/NativePhotoPlusStorage';
 export type { Spec as StudioSpec } from './specs/NativePhotoPlusStudio';
 
@@ -46,6 +48,7 @@ export const nativeModules = {
   device: NativeDevice,
   engine: NativeEngine,
   product: NativeProduct,
+  rewards: NativeRewards,
   storage: NativeStorage,
   studio: NativeStudio,
 };
@@ -56,6 +59,8 @@ export const NativeEvents = {
   jobState: 'PhotoPlusJobState',
   /** { jobId, progress 0..1 } while a job runs (only when it moves). */
   jobProgress: 'PhotoPlusJobProgress',
+  /** { target, counted, state } after a share through the share sheet. */
+  rewardsChanged: 'PhotoPlusRewardsChanged',
 } as const;
 
 /** Error shape produced by rejected native promises. */

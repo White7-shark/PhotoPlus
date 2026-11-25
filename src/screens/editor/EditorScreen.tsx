@@ -72,6 +72,7 @@ import { SkinTonePanel } from './SkinTonePanel';
 import { BeautyEditPanel } from './BeautyPanel';
 import { WatermarkUnlock } from '../WatermarkUnlock';
 import { WatermarkPanel } from './WatermarkPanel';
+import { recordActivity } from '../../services/rewards/RewardsService';
 
 const log = createLogger('editor');
 
@@ -466,6 +467,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
         cleanOutputPath,
       });
       countTransform();
+      recordActivity('edit');
       const record = await repos.images.add({
         projectId: image.projectId,
         path: r.outputPath,

@@ -47,6 +47,7 @@ import { BrushCanvas } from '../studio/BrushCanvas';
 import { DownloadSize } from '../studio/DownloadSize';
 
 import { Choice, pct, signed, Tabs, Toggle } from './controls';
+import { recordActivity } from '../../services/rewards/RewardsService';
 
 type Panel = 'setups' | 'product' | 'backdrop' | 'shadow' | 'colour' | 'layout' | 'export';
 const PANELS: readonly { value: Panel; label: string }[] = [
@@ -320,6 +321,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
         // Still in the library.
       }
       const target = projectId ?? (await repos.projects.ensureInbox()).id;
+      recordActivity('product', 'studio', 'edit');
       const record = await repos.images.add({
         projectId: target,
         path: r.outputPath,

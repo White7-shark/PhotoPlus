@@ -265,7 +265,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
     if (!requireEngine(promise)) return
     val map = request.toHashMap()
     val full = map["quality"] == "full"
-    if (full && Entitlements.plan != Plan.PREMIUM) {
+    if (full && !Entitlements.allows("sceneSwap")) {
       promise.reject("PREMIUM_REQUIRED", "Saving studio photos is part of Premium")
       return
     }
@@ -296,7 +296,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       promise.reject(e.code, e.message, e)
       return
     }
-    if (hair != null && Entitlements.plan != Plan.PREMIUM) {
+    if (hair != null && !Entitlements.allows("hair")) {
       promise.reject("PREMIUM_REQUIRED", "Hair colours and hairstyles are part of Premium")
       return
     }
@@ -315,7 +315,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     val (light, finish) = lightAndFinish
-    if (Entitlements.plan != Plan.PREMIUM && (light?.premium == true || finish?.premium == true)) {
+    if (!Entitlements.allows("studioLight") && (light?.premium == true || finish?.premium == true)) {
       promise.reject("PREMIUM_REQUIRED", "This light or film look is part of Premium")
       return
     }
@@ -601,11 +601,11 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     val (light, finish, lips) = parsed
-    if (full && Entitlements.plan != Plan.PREMIUM) {
+    if (full && !Entitlements.allows("relight")) {
       promise.reject("PREMIUM_REQUIRED", "Saving relit photos is part of Premium")
       return
     }
-    if (Entitlements.plan != Plan.PREMIUM && (light?.premium == true || finish?.premium == true)) {
+    if (!Entitlements.allows("studioLight") && (light?.premium == true || finish?.premium == true)) {
       promise.reject("PREMIUM_REQUIRED", "This light or film look is part of Premium")
       return
     }
@@ -714,7 +714,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       promise.reject(e.code, e.message, e)
       return null
     }
-    if (ExportSize.needsPremium(px) && Entitlements.plan != Plan.PREMIUM) {
+    if (ExportSize.needsPremium(px) && !Entitlements.allows("exportHd")) {
       promise.reject("PREMIUM_REQUIRED", "720p, 1080p, HD and 4K downloads are part of Premium")
       return null
     }

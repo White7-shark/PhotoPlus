@@ -34,6 +34,7 @@ import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
 
 import { DownloadSize } from './DownloadSize';
+import { recordActivity } from '../../services/rewards/RewardsService';
 
 type Mode = 'film' | 'collage';
 const pct = (v: number) => `${Math.round(v * 100)}`;
@@ -203,6 +204,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
       }
       if (repos) {
         const inbox = await repos.projects.ensureInbox();
+        recordActivity('film', 'studio', 'edit');
         const record = await repos.images.add({
           projectId: inbox.id,
           path: r.outputPath,

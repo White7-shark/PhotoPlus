@@ -68,6 +68,22 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
 
   return (
     <Screen title="Settings" overline="Preferences">
+      <SectionHeader title="Premium" />
+      <GlassSurface style={{ marginBottom: 24 }}>
+        <ListRow
+          icon="crown"
+          title="Photo Plus Premium"
+          subtitle="Monthly, 3 months or yearly · 7 days free"
+          onPress={() => navigation.navigate('Premium')}
+        />
+        <ListRow
+          icon="target"
+          title="Rewards"
+          subtitle="Earn Premium time: check-ins, tasks, ads and sharing"
+          onPress={() => navigation.navigate('Rewards')}
+          last
+        />
+      </GlassSurface>
       <SectionHeader title="Appearance" />
       <GlassSurface style={{ padding: 16, gap: 14, marginBottom: 24 }}>
         <SegmentedControl

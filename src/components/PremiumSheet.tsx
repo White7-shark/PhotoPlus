@@ -1,7 +1,9 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
+import { TRIAL_DAYS } from '../services/billing/plans';
 import { FEATURES, PREMIUM_PRICE, type FeatureKey } from '../services/entitlements/features';
+import { openScreen } from '../navigation/ref';
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
 import { Button } from './Button';
@@ -40,10 +42,30 @@ export function PremiumSheet({
               </AppText>
             ) : null}
             <AppText variant="body" tone="secondary" align="center">
-              Part of Photo Plus Premium — {PREMIUM_PRICE.currency} {PREMIUM_PRICE.amount} a {PREMIUM_PRICE.period}.
-              Premium arrives in a coming update.
+              Part of Photo Plus Premium — from {PREMIUM_PRICE.currency} {PREMIUM_PRICE.amount} a {PREMIUM_PRICE.period}
+              , with a {TRIAL_DAYS}-day free trial.
             </AppText>
-            <Button label="Got it" variant="premium" onPress={onClose} />
+            <Button
+              label="See Premium plans"
+              variant="premium"
+              icon="crown"
+              onPress={() => {
+                onClose();
+                openScreen('Premium');
+              }}
+              testID="premium-sheet-plans"
+            />
+            <Button
+              label="Earn it free with Rewards"
+              variant="glass"
+              icon="target"
+              onPress={() => {
+                onClose();
+                openScreen('Rewards');
+              }}
+              testID="premium-sheet-rewards"
+            />
+            <Button label="Not now" variant="ghost" onPress={onClose} />
           </GlassSurface>
         </Pressable>
       </Pressable>

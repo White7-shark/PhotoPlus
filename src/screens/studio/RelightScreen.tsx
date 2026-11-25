@@ -25,6 +25,7 @@ import { useTheme } from '../../theme';
 import { DownloadSize } from './DownloadSize';
 import { LipstickPanel, PinkLipsPanel } from './LipsPanel';
 import { FinishPanel, LightPanel } from './StudioLightPanel';
+import { recordActivity } from '../../services/rewards/RewardsService';
 
 type Panel = 'light' | 'background' | 'lips' | 'finish';
 const PANELS: { value: Panel; label: string }[] = [
@@ -163,6 +164,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
       }
       if (repos) {
         const inbox = await repos.projects.ensureInbox();
+        recordActivity('studio', 'edit');
         const record = await repos.images.add({
           projectId: inbox.id,
           path: r.outputPath,

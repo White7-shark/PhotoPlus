@@ -22,6 +22,9 @@ import { RelightScreen } from '../screens/studio/RelightScreen';
 import { BatchScreen } from '../screens/product/BatchScreen';
 import { ProductStudioScreen } from '../screens/product/ProductStudioScreen';
 import { ProjectScreen } from '../screens/product/ProjectScreen';
+import { PremiumScreen } from '../screens/premium/PremiumScreen';
+import { RewardsScreen } from '../screens/premium/RewardsScreen';
+import { navigationRef } from './ref';
 import { SceneSwapScreen } from '../screens/studio/SceneSwapScreen';
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
@@ -61,6 +64,8 @@ const Relight = guarded(RelightScreen, 'Relight');
 const ProductStudio = guarded(ProductStudioScreen, 'Product Studio');
 const Batch = guarded(BatchScreen, 'Batch edit');
 const Project = guarded(ProjectScreen, 'Project');
+const Premium = guarded(PremiumScreen, 'Premium');
+const Rewards = guarded(RewardsScreen, 'Rewards');
 
 const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 
@@ -98,7 +103,7 @@ export function RootNavigator() {
   }, [theme]);
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme}>
       <Stack.Navigator
         initialRouteName={onboarded ? 'Main' : 'Onboarding'}
         screenOptions={{
@@ -122,6 +127,8 @@ export function RootNavigator() {
         <Stack.Screen name="ProductStudio" component={ProductStudio} />
         <Stack.Screen name="Batch" component={Batch} />
         <Stack.Screen name="Project" component={Project} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Premium" component={Premium} options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="Rewards" component={Rewards} options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -15,6 +15,14 @@
     <!-- Camera is core but not mandatory: editing still works without one. -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- Rewards share campaign: which apps on this phone can take a picture (to list them). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="image/*" />
+        </intent>
+    </queries>
+
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"
