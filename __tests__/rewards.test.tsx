@@ -6,7 +6,7 @@ import { PremiumSheet } from '../src/components/PremiumSheet';
 import { PremiumScreen } from '../src/screens/premium/PremiumScreen';
 import { RewardsScreen } from '../src/screens/premium/RewardsScreen';
 import { perMonth, PLANS, PRICES_CONFIRMED, savings, SUBSCRIPTION_ID, TRIAL_DAYS } from '../src/services/billing/plans';
-import { HASHTAGS, PLAY_URL, SHARE_APPS, SHARE_STYLES, shareText } from '../src/services/rewards/campaign';
+import { HASHTAGS, HEADLINE, PLAY_URL, SHARE_APPS, SHARE_STYLES, shareText } from '../src/services/rewards/campaign';
 import { isRewardsState, recordActivity, type RewardsState } from '../src/services/rewards/RewardsService';
 import { useAppStore } from '../src/state/store';
 import { ThemeProvider } from '../src/theme';
@@ -199,6 +199,10 @@ describe('the share campaign', () => {
       expect(new Set(texts).size).toBe(3);
       for (const t of texts) {
         expect(t).toContain(PLAY_URL);
+        // The headline first; the link on a line of its own (tappable); hashtags, if any, last.
+        expect(t.startsWith(HEADLINE)).toBe(true);
+        expect(t.split('\n').some(line => line.startsWith(PLAY_URL))).toBe(true);
+        expect(t.trimEnd().endsWith(form === 'friends' ? t.split('\n').at(-1)! : HASHTAGS.join(' '))).toBe(true);
         expect(t).toMatch(/7[- ]days? free|FREE for 7 days|7 days FREE/i);
         // Posts carry the hashtags; a note to friends does not.
         expect(t.includes(HASHTAGS.join(' '))).toBe(form !== 'friends');

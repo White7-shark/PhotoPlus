@@ -386,6 +386,10 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                   {text}
                 </AppText>
               </View>
+              <AppText variant="caption" tone="tertiary" testID="rewards-share-caption-note">
+                The link and hashtags go with the picture as text, so they can be tapped. They’re also copied: paste
+                them if an app leaves them out.
+              </AppText>
               <Button
                 label="Choose an app to share to"
                 icon="share"

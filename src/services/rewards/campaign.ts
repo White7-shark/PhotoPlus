@@ -51,10 +51,17 @@ export const SHARE_STYLES: readonly ShareStyle[] = [
 ];
 export const shareStyle = (id: ShareForm) => SHARE_STYLES.find(s => s.id === id) ?? SHARE_STYLES[0];
 
+/** The headline of every share, as on the pictures. */
+export const HEADLINE = '🎉 You can now photoshoot right on your phone! 📸';
+
+// Each caption is sent as the text beside the picture, so the link (on its
+// own line) can be tapped and the hashtags (the last line) are recognised
+// by the app. Neither is drawn on the pictures.
 const POST_TEXTS = [
   (link: string) =>
-    `📸 Studio-quality photos, straight from my phone — meet Photo Plus! ✨
+    `${HEADLINE}
 
+Meet Photo Plus ✨
 ✅ Be in a real studio, park or café without leaving home
 ✅ Pro studio lighting on any photo with Relight
 ✅ Clean product photos that sell, with real shadows
@@ -64,46 +71,60 @@ const POST_TEXTS = [
 No studio. No laptop. No experience needed.
 🎁 Try Premium FREE for ${TRIAL_DAYS} days!
 
-📲 Download on Google Play: ${link}
+📲 Download on Google Play:
+${link}
 
 ${HASHTAGS.join(' ')}`,
   (link: string) =>
-    `My phone just became a photo studio 🤯📷
+    `${HEADLINE}
 
-Photo Plus swaps your background for a real studio scene, adds pro lighting, retouches skin naturally and turns product snaps into catalogue shots — all on the phone, in seconds.
+My phone just became a photo studio 🤯 Photo Plus swaps your background for a real studio scene, adds pro lighting, retouches skin naturally and turns product snaps into catalogue shots — in seconds.
 
 🎁 ${TRIAL_DAYS} days FREE trial of Premium
-👉 Get it on Google Play: ${link}
+
+👉 Get it on Google Play:
+${link}
 
 ${HASHTAGS.join(' ')}`,
   (link: string) =>
-    `Stop paying for photoshoots 💸 — I make mine with Photo Plus ✨
+    `${HEADLINE}
 
+Stop paying for photoshoots 💸 — make yours with Photo Plus ✨
 📸 Photoshoot Studio · 💡 Relight · 🛍️ Product Studio · 💄 Beauty & Spotlight · 🎬 Glide video
 
 Perfect for creators, sellers and anyone who loves great photos.
 🎁 Start with a ${TRIAL_DAYS}-day free trial.
 
-Download free 👉 ${link}
+Download free 👉
+${link}
 
 ${HASHTAGS.join(' ')}`,
 ];
 
 const FRIEND_TEXTS = [
   (link: string) =>
-    `Hey! 👋 You have to try Photo Plus 📸 I use it to make my photos look like a real photoshoot — new backgrounds, studio lighting, natural beauty retouch, even clean product photos for selling. It's super easy and it all happens on your phone.
+    `${HEADLINE}
+
+Hey! 👋 You have to try Photo Plus. I use it to make my photos look like a real photoshoot — new backgrounds, studio lighting, natural beauty retouch, even clean product photos for selling. It all happens on your phone.
 
 You can try Premium FREE for ${TRIAL_DAYS} days 🎁
-Get it here 👉 ${link}`,
+Get it here 👇
+${link}`,
   (link: string) =>
-    `Look what my phone can do now 😍 Photo Plus puts you in a real studio, relights your photos like a pro and makes product shots look professional — in seconds.
+    `${HEADLINE}
+
+Look what my phone can do now 😍 Photo Plus puts you in a real studio, relights your photos like a pro and makes product shots look professional — in seconds.
 
 🎁 ${TRIAL_DAYS}-day free trial of Premium
-Download it free on Google Play 👉 ${link}`,
+Download it free on Google Play 👇
+${link}`,
   (link: string) =>
-    `Found the best photo app 🔥 Photo Plus: studio backgrounds, pro lighting, beauty retouch, product photos and smooth Glide videos, all on the phone.
+    `${HEADLINE}
 
-Try it with ${TRIAL_DAYS} days free 🎁 👉 ${link}`,
+Found the best photo app 🔥 Photo Plus: studio backgrounds, pro lighting, beauty retouch, product photos and smooth Glide videos.
+
+Try it with ${TRIAL_DAYS} days free 🎁
+${link}`,
 ];
 
 /** The words for a share (they change from share to share, so posts don't look copied). */

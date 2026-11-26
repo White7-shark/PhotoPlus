@@ -55,6 +55,11 @@ Rewards are a real taste of Premium, not a substitute for it, and they bring ad 
 
 ## The share campaign
 
+**Headline.** Every picture and caption leads with **"You can now photoshoot right on your phone!"**, styled as a celebration: an "IT'S HERE!" ribbon, the word *photoshoot* in the brand gradient, confetti and sparkles along the sides.
+
+**What's in the picture and what isn't.** The pictures carry no link and no hashtags. Both go in the caption sent with the picture, so the link (on a line of its own) can be tapped and the hashtags (the last line) are recognised by the app. The caption is also copied to the clipboard, so it can be pasted into apps that keep only the picture.
+
+
 - **Goal:** share Photo Plus 30 times for 2 days of Premium. It opens again 30 days after it is completed.
 - **Per-app lock:** each app counts once every 8 hours, whatever form was shared.
   - An app opened from the list counts when it opens.

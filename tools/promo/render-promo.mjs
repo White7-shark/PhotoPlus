@@ -35,7 +35,6 @@ for (const m of body.matchAll(/\n {2}(\w+): ([\s\S]*?)(?=,\n {2}\w+: |,\n$)/g)) 
 const icon = (name, size, color = '#fff', sw = 1.9) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] ?? ''}</svg>`;
 
-const PLAY_LINK = 'play.google.com/store/apps/details?id=com.photoplus';
 const GOLD = 'linear-gradient(135deg,#F7D58B 0%,#E9B04F 55%,#C98A2E 100%)';
 const ACTION = 'linear-gradient(135deg,#FF7A45 0%,#E0408A 50%,#7445E0 100%)';
 
@@ -55,6 +54,32 @@ body{font-family:Poppins,system-ui,sans-serif;color:#F7F5FB;-webkit-font-smoothi
 .fi{flex:none;display:flex;align-items:center;justify-content:center;border-radius:20px;background-image:${ACTION}}
 .tag{color:rgba(247,245,251,.55)}
 `;
+
+// The celebration: confetti and sparkles in the brand's colours (fixed
+// positions, so the pictures come out the same every time).
+const CONFETTI = ['#FF7A45', '#F7D58B', '#E0408A', '#7445E0', '#2DD4BF', '#FFFFFF'];
+function confetti(w, h, n, seed) {
+  let x = seed;
+  const rnd = () => (x = (x * 9301 + 49297) % 233280) / 233280;
+  return Array.from({ length: n }, (_, i) => {
+    const size = 10 + rnd() * 16;
+    const round = i % 3 === 0;
+    // Along the sides, clear of the words in the middle.
+    const side = rnd();
+    const left = side < 0.5 ? rnd() * w * 0.1 : w * 0.88 + rnd() * w * 0.11;
+    return `<div style="position:absolute;left:${left.toFixed(0)}px;top:${(rnd() * h).toFixed(0)}px;width:${round ? size * 0.7 : size * 0.45}px;height:${round ? size * 0.7 : size}px;border-radius:${round ? '50%' : '3px'};background:${CONFETTI[i % CONFETTI.length]};opacity:${(0.55 + rnd() * 0.45).toFixed(2)};transform:rotate(${(rnd() * 180).toFixed(0)}deg)"></div>`;
+  }).join('');
+}
+const star = (x, y, s, c = '#F7D58B') =>
+  `<svg style="position:absolute;left:${x}px;top:${y}px" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 0c.8 6.6 4.6 10.4 12 12-7.4 1.6-11.2 5.4-12 12-.8-6.6-4.6-10.4-12-12C7.4 10.4 11.2 6.6 12 0z" fill="${c}"/></svg>`;
+/** The headline, in celebration: "You can now photoshoot right on your phone!" */
+const headline = (
+  size,
+  align = 'left',
+) => `<div class="col" style="gap:${size * 0.22}px;align-items:${align === 'center' ? 'center' : 'flex-start'};text-align:${align}">
+    <div style="display:inline-flex;align-items:center;gap:10px;padding:${size * 0.1}px ${size * 0.3}px;border-radius:999px;background-image:${ACTION};font-family:PoppinsXB;font-size:${size * 0.34}px;letter-spacing:2px;box-shadow:0 10px 30px -8px rgba(224,64,138,.7)">🎉 IT'S HERE! 🎉</div>
+    <div style="font-family:PoppinsXB;font-size:${size}px;line-height:1.04;letter-spacing:-1px">You can now<br><span style="background-image:linear-gradient(90deg,#FFD36E 0%,#FF7A45 35%,#E0408A 70%,#A57BFF 100%);-webkit-background-clip:text;color:transparent">photoshoot</span><br>right on your phone! 📸</div>
+  </div>`;
 
 // A small Google Play mark (the coloured triangle), drawn here.
 const playMark = s =>
@@ -95,46 +120,50 @@ const strip = (ids, h, r) =>
 const post = `<div class="card" style="width:1080px;height:1350px;padding:70px 70px 60px">
   <div class="glow" style="width:900px;height:900px;left:-300px;top:-380px;background:#FF7A45;opacity:.33"></div>
   <div class="glow" style="width:900px;height:900px;right:-360px;bottom:-300px;background:#6B4BFF;opacity:.38"></div>
+  ${confetti(1080, 560, 46, 7)}${star(930, 150, 54)}${star(990, 300, 30, '#fff')}${star(560, 120, 26)}
   <div class="col" style="position:relative;height:100%;gap:34px">
     ${brand(84, 50)}
-    <div style="font-family:PoppinsXB;font-size:70px;line-height:1.05;letter-spacing:-1px">Studio-quality photos.<br><span style="background-image:${ACTION};-webkit-background-clip:text;color:transparent">Right from your phone.</span></div>
+    ${headline(68)}
     <div class="row" style="gap:44px;align-items:flex-start">
-      <div class="col" style="flex:1;gap:26px">${FEATURES.map(f => feature(f, 74)).join('')}</div>
+      <div class="col" style="flex:1;gap:20px">${FEATURES.slice(0, 5)
+        .map(f => feature(f, 66))
+        .join('')}</div>
       ${phone(300, 'white-studio')}
     </div>
     <div class="row" style="gap:26px;margin-top:auto;justify-content:space-between">
       <div class="trial" style="font-size:36px">${icon('crown', 40, '#1A1206', 2.2)}7 DAYS FREE TRIAL</div>
       ${play(1)}
     </div>
-    <div class="tag" style="font-size:24px;text-align:center">No studio. No laptop. No experience needed · ${PLAY_LINK}</div>
+    <div class="tag" style="font-size:24px;text-align:center">No studio. No laptop. No experience needed.</div>
   </div></div>`;
 
 // ---- status (9:16)
 const status = `<div class="card" style="width:1080px;height:1920px;padding:110px 80px 90px">
   <div class="glow" style="width:1100px;height:1100px;left:-380px;top:-400px;background:#FF7A45;opacity:.33"></div>
   <div class="glow" style="width:1100px;height:1100px;right:-420px;bottom:-200px;background:#6B4BFF;opacity:.4"></div>
+  ${confetti(1080, 820, 60, 11)}${star(90, 330, 50)}${star(930, 300, 60)}${star(860, 560, 30, '#fff')}${star(150, 610, 28, '#fff')}
   <div class="col" style="position:relative;height:100%;gap:44px;align-items:center;text-align:center">
     ${brand(110, 64)}
-    <div style="font-family:PoppinsXB;font-size:96px;line-height:1.02;letter-spacing:-1px">Your phone is now<br><span style="background-image:${ACTION};-webkit-background-clip:text;color:transparent">a photo studio.</span></div>
-    ${strip(['sunlit-loft', 'white-studio', 'coastal-dusk'], 330, 28)}
-    <div class="col" style="gap:30px;align-items:flex-start;text-align:left;width:100%">${FEATURES.slice(0, 5)
-      .map(f => feature(f, 86))
+    ${headline(84, 'center')}
+    ${strip(['sunlit-loft', 'white-studio', 'coastal-dusk'], 300, 26)}
+    <div class="col" style="gap:30px;align-items:flex-start;text-align:left;width:100%">${FEATURES.slice(0, 4)
+      .map(f => feature(f, 84))
       .join('')}</div>
     <div class="trial" style="font-size:44px;margin-top:auto">${icon('crown', 48, '#1A1206', 2.2)}7 DAYS FREE TRIAL</div>
     ${play(1.25)}
-    <div class="tag" style="font-size:28px">Download free · ${PLAY_LINK}</div>
+    <div class="tag" style="font-size:28px">Download free on Google Play</div>
   </div></div>`;
 
 // ---- friends (1:1)
 const friends = `<div class="card" style="width:1080px;height:1080px;padding:70px">
   <div class="glow" style="width:800px;height:800px;left:-260px;top:-300px;background:#FF7A45;opacity:.35"></div>
   <div class="glow" style="width:800px;height:800px;right:-300px;bottom:-280px;background:#6B4BFF;opacity:.4"></div>
+  ${confetti(1080, 460, 38, 5)}${star(900, 140, 50)}${star(980, 300, 28, '#fff')}${star(640, 100, 24)}
   <div class="col" style="position:relative;height:100%;gap:30px">
     ${brand(76, 44)}
-    <div style="font-family:PoppinsXB;font-size:70px;line-height:1.05">You have to try this 📸</div>
-    <div style="font-size:31px;line-height:1.35;color:rgba(247,245,251,.82)">New backgrounds, studio lighting, beauty retouch and product photos that sell — all on your phone, in seconds.</div>
-    ${strip(['white-studio', 'boho-corner', 'sunrise-beach', 'neon-lines'], 250, 24)}
-    <div class="row" style="gap:12px;flex-wrap:wrap">${['Photoshoot Studio', 'Relight', 'Product Studio', 'Glide video', 'Film & Collage'].map(t => `<span style="font-size:24px;padding:9px 20px;border-radius:999px;border:2px solid rgba(255,255,255,.25)">${t}</span>`).join('')}</div>
+    ${headline(62)}
+    <div style="font-size:28px;line-height:1.35;color:rgba(247,245,251,.82)">New backgrounds, studio lighting, beauty retouch and product photos that sell — all on your phone, in seconds.</div>
+    ${strip(['white-studio', 'boho-corner', 'sunrise-beach', 'neon-lines'], 210, 22)}
     <div class="row" style="gap:24px;margin-top:auto;justify-content:space-between">
       <div class="trial" style="font-size:32px">${icon('crown', 36, '#1A1206', 2.2)}7 DAYS FREE TRIAL</div>
       ${play(0.95)}

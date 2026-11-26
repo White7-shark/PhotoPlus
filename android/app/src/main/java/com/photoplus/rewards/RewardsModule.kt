@@ -142,6 +142,12 @@ class RewardsModule(reactContext: ReactApplicationContext) : NativePhotoPlusRewa
       clipData = ClipData.newUri(reactApplicationContext.contentResolver, "Photo Plus", uri)
       if (activity.isNotEmpty()) component = ComponentName(target, activity) else setPackage(target)
     }
+    // The words also go to the clipboard: an app that keeps only the
+    // picture (some feeds do) can have them pasted, link and hashtags too.
+    runCatching {
+      val clipboard = reactApplicationContext.getSystemService(android.content.ClipboardManager::class.java)
+      clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("Photo Plus", text.take(2000)))
+    }
     try {
       host.startActivity(send)
     } catch (_: android.content.ActivityNotFoundException) {
