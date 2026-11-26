@@ -158,8 +158,27 @@ const phone = (c, w, scene) => {
     </div></div>`;
 };
 
-const strip = (ids, h, r, from = 0) =>
-  `<div class="row" style="gap:12px">${ids.map((id, i) => `<img src="${pic(id, from + i)}" style="width:${h * 0.8}px;height:${h}px;object-fit:cover;object-position:center 25%;border-radius:${r}px">`).join('')}</div>`;
+// people: which photo of tools/promo/people each frame shows (by sorted name).
+const strip = (ids, h, r, people = []) =>
+  `<div class="row" style="gap:12px">${ids
+    .map(
+      (id, i) =>
+        `<img src="${pic(id, people[i] ?? i)}" style="width:${h * 0.8}px;height:${h}px;object-fit:cover;object-position:center 22%;border-radius:${r}px;border:3px solid rgba(255,255,255,.9);box-shadow:0 18px 40px -12px rgba(0,0,0,.7)">`,
+    )
+    .join('')}</div>`;
+
+// A phone in the camera, a portrait on its screen (when there are photos of people).
+const phoneShot = (w, person) => {
+  const h = w * 2.05;
+  return `<div style="position:relative;width:${w}px;height:${h}px;border-radius:${w * 0.14}px;background:#111;padding:${w * 0.03}px;box-shadow:0 40px 90px -20px rgba(0,0,0,.8),0 0 0 2px rgba(255,255,255,.14)">
+    <div style="position:relative;width:100%;height:100%;border-radius:${w * 0.11}px;overflow:hidden;background:#000">
+      <img src="${PEOPLE[person % PEOPLE.length]}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 20%">
+      <div style="position:absolute;left:0;right:0;top:0;height:${h * 0.12}px;background:linear-gradient(rgba(0,0,0,.55),transparent)"></div>
+      <div style="position:absolute;left:0;right:0;bottom:0;height:${h * 0.22}px;background:linear-gradient(transparent,rgba(0,0,0,.7))"></div>
+      <div style="position:absolute;left:50%;bottom:${h * 0.04}px;transform:translateX(-50%);width:${w * 0.22}px;height:${w * 0.22}px;border-radius:50%;border:${w * 0.015}px solid #fff;background:rgba(255,255,255,.25)"></div>
+      <div style="position:absolute;top:${h * 0.035}px;left:50%;transform:translateX(-50%);padding:${w * 0.012}px ${w * 0.05}px;border-radius:999px;background-image:${ACTION};font-size:${w * 0.045}px;white-space:nowrap">Photoshoot Studio</div>
+    </div></div>`;
+};
 
 // ---- post (4:5)
 const post = c => `<div class="card" style="width:1080px;height:1350px;padding:70px 70px 60px">
@@ -171,10 +190,12 @@ const post = c => `<div class="card" style="width:1080px;height:1350px;padding:7
     ${headline(c, 68)}
     <div class="row feats" style="gap:44px;align-items:flex-start">
       <div class="col" style="flex:1;gap:20px">${FEATURES(c)
-        .slice(0, 5)
+        .slice(0, PEOPLE.length ? 3 : 5)
         .map(f => feature(f, 66))
-        .join('')}</div>
-      ${phone(c, 300, 'white-studio')}
+        .join(
+          '',
+        )}${PEOPLE.length ? `<div style="margin-top:8px">${strip(['', '', ''], 196, 18, [1, 2, 4])}</div>` : ''}</div>
+      ${PEOPLE.length ? phoneShot(300, 0) : phone(c, 300, 'white-studio')}
     </div>
     <div class="row" style="gap:26px;margin-top:auto;justify-content:space-between">
       <div class="trial" style="font-size:36px">${icon('crown', 40, '#1A1206', 2.2)}${c.trial}</div>
@@ -191,7 +212,7 @@ const status = c => `<div class="card" style="width:1080px;height:1920px;padding
   <div class="col" style="position:relative;height:100%;gap:44px;align-items:center;text-align:center">
     ${brand(110, 64)}
     ${headline(c, 84, 'center')}
-    ${strip(['sunlit-loft', 'white-studio', 'coastal-dusk'], 300, 26)}
+    ${strip(['sunlit-loft', 'white-studio', 'coastal-dusk'], 300, 26, [1, 3, 2])}
     <div class="col feats" style="gap:30px;align-items:flex-start;text-align:start;width:100%">${FEATURES(c)
       .slice(0, 4)
       .map(f => feature(f, 84))
@@ -210,7 +231,7 @@ const friends = c => `<div class="card" style="width:1080px;height:1080px;paddin
     ${brand(76, 44)}
     ${headline(c, 62)}
     <div class="feats" style="font-size:28px;line-height:1.35;color:rgba(247,245,251,.82)">${c.friends}</div>
-    ${strip(['white-studio', 'boho-corner', 'sunrise-beach', 'neon-lines'], 210, 22, 1)}
+    ${strip(['white-studio', 'boho-corner', 'sunrise-beach', 'neon-lines'], PEOPLE.length ? 280 : 210, 22, [4, 6, 5, 1])}
     <div class="row" style="gap:24px;margin-top:auto;justify-content:space-between">
       <div class="trial" style="font-size:32px">${icon('crown', 36, '#1A1206', 2.2)}${c.trial}</div>
       ${play(c, 0.95)}
