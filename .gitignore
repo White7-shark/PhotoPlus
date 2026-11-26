@@ -82,3 +82,7 @@ __pycache__/
 
 # Downloads for scripts/studio-plates.py
 .cache/
+
+# Promo renderer: fonts fetched from Google Fonts; photos of people (rights-cleared, never committed)
+tools/promo/.fonts/
+tools/promo/people/

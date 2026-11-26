@@ -60,6 +60,17 @@
           android:resource="@xml/shared_paths" />
       </provider>
 
+      <!-- The app's own language (Settings > Language) on Android 10-12:
+           AppCompat keeps it here (Android 13+ keeps it in the system). -->
+      <service
+        android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+        android:enabled="false"
+        android:exported="false">
+        <meta-data
+          android:name="autoStoreLocales"
+          android:value="true" />
+      </service>
+
       <!-- Google Mobile Ads app id (test id unless a real one is configured). -->
       <meta-data
         android:name="com.google.android.gms.ads.APPLICATION_ID"

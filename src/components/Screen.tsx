@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useResponsive } from '../hooks/useResponsive';
+import { useT } from '../i18n';
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
 import { AuroraBackground } from './AuroraBackground';
@@ -41,6 +42,7 @@ export function Screen({
   contentStyle,
 }: ScreenProps) {
   const theme = useTheme();
+  const t = useT();
   const insets = useSafeAreaInsets();
   const r = useResponsive();
   const bottom = (bottomInset ?? theme.layout.tabBarHeight + 24) + insets.bottom;
@@ -48,7 +50,7 @@ export function Screen({
   const header =
     title || onBack || headerRight ? (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        {onBack ? <IconButton icon="chevronLeft" label="Go back" onPress={onBack} size={44} /> : null}
+        {onBack ? <IconButton icon="chevronLeft" label={t('common_back')} onPress={onBack} size={44} /> : null}
         <View style={{ flex: 1 }}>
           {overline ? (
             <AppText variant="overline" tone="accent">

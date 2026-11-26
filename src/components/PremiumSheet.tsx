@@ -4,6 +4,7 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { TRIAL_DAYS } from '../services/billing/plans';
 import { FEATURES, PREMIUM_PRICE, type FeatureKey } from '../services/entitlements/features';
 import { openScreen } from '../navigation/ref';
+import { useT } from '../i18n';
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
 import { Button } from './Button';
@@ -22,12 +23,18 @@ export function PremiumSheet({
   message?: string | null;
 }) {
   const theme = useTheme();
+  const t = useT();
   if (!feature) {
     return null;
   }
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button">
+      <Pressable
+        style={styles.scrim}
+        onPress={onClose}
+        accessibilityLabel={t('common_close')}
+        accessibilityRole="button"
+      >
         <Pressable onPress={() => undefined} style={styles.wrap}>
           <GlassSurface intensity="strong" radius={28} style={{ padding: 22, gap: 12 }} glow="rgba(245,198,107,0.3)">
             <View style={[styles.badge, { backgroundImage: theme.gradients.premium }]}>
@@ -42,11 +49,13 @@ export function PremiumSheet({
               </AppText>
             ) : null}
             <AppText variant="body" tone="secondary" align="center">
-              Part of Photo Plus Premium — from {PREMIUM_PRICE.currency} {PREMIUM_PRICE.amount} a {PREMIUM_PRICE.period}
-              , with a {TRIAL_DAYS}-day free trial.
+              {t('premium_sheet_body', {
+                price: `${PREMIUM_PRICE.currency} ${PREMIUM_PRICE.amount}`,
+                days: TRIAL_DAYS,
+              })}
             </AppText>
             <Button
-              label="See Premium plans"
+              label={t('premium_sheet_plans')}
               variant="premium"
               icon="crown"
               onPress={() => {
@@ -56,7 +65,7 @@ export function PremiumSheet({
               testID="premium-sheet-plans"
             />
             <Button
-              label="Earn it free with Rewards"
+              label={t('premium_sheet_rewards')}
               variant="glass"
               icon="target"
               onPress={() => {
@@ -65,7 +74,7 @@ export function PremiumSheet({
               }}
               testID="premium-sheet-rewards"
             />
-            <Button label="Not now" variant="ghost" onPress={onClose} />
+            <Button label={t('common_not_now')} variant="ghost" onPress={onClose} />
           </GlassSurface>
         </Pressable>
       </Pressable>

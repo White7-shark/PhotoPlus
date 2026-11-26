@@ -24,6 +24,7 @@ import { ProductStudioScreen } from '../screens/product/ProductStudioScreen';
 import { ProjectScreen } from '../screens/product/ProjectScreen';
 import { PremiumScreen } from '../screens/premium/PremiumScreen';
 import { RewardsScreen } from '../screens/premium/RewardsScreen';
+import { LanguageScreen } from '../screens/LanguageScreen';
 import { navigationRef } from './ref';
 import { SceneSwapScreen } from '../screens/studio/SceneSwapScreen';
 import { useAppStore } from '../state/store';
@@ -66,6 +67,7 @@ const Batch = guarded(BatchScreen, 'Batch edit');
 const Project = guarded(ProjectScreen, 'Project');
 const Premium = guarded(PremiumScreen, 'Premium');
 const Rewards = guarded(RewardsScreen, 'Rewards');
+const Language = guarded(LanguageScreen, 'Language');
 
 const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 
@@ -129,6 +131,7 @@ export function RootNavigator() {
         <Stack.Screen name="Project" component={Project} options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Premium" component={Premium} options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="Rewards" component={Rewards} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Language" component={Language} options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

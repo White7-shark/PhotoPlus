@@ -121,6 +121,18 @@ android {
         // The depth model is memory-mapped straight from the APK.
         noCompress.add("tflite")
         noCompress.add("task") // MediaPipe model bundles are memory-mapped too
+        // The languages the app offers (Android's per-app language list), from
+        // the res/values-* folders; the default is English (res/resources.properties).
+        generateLocaleConfig = true
+    }
+
+    bundle {
+        language {
+            // The app's language can be changed inside the app (Settings >
+            // Language), so every language ships with it: Google Play would
+            // otherwise install only the phone's own languages.
+            enableSplit = false
+        }
     }
 
     testOptions {

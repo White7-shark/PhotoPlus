@@ -6,14 +6,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '../components/AppText';
 import { GlassSurface } from '../components/GlassSurface';
 import { Icon, type IconName } from '../components/Icon';
+import { useT, type StringKey } from '../i18n';
 import { useTheme } from '../theme';
 
-const META: Record<string, { icon: IconName; label: string }> = {
-  Studio: { icon: 'aperture', label: 'Studio' },
-  Projects: { icon: 'folder', label: 'Projects' },
-  Camera: { icon: 'camera', label: 'Camera' },
-  Packs: { icon: 'bag', label: 'Packs' },
-  Settings: { icon: 'gear', label: 'Settings' },
+const META: Record<string, { icon: IconName; label: StringKey }> = {
+  Studio: { icon: 'aperture', label: 'tab_studio' },
+  Projects: { icon: 'folder', label: 'tab_projects' },
+  Camera: { icon: 'camera', label: 'tab_camera' },
+  Packs: { icon: 'bag', label: 'tab_packs' },
+  Settings: { icon: 'gear', label: 'tab_settings' },
 };
 
 /**
@@ -22,6 +23,7 @@ const META: Record<string, { icon: IconName; label: string }> = {
  */
 export function GlassTabBar({ state, navigation }: BottomTabBarProps) {
   const theme = useTheme();
+  const t = useT();
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name;
   if (activeRoute === 'Camera') {
@@ -42,7 +44,8 @@ export function GlassTabBar({ state, navigation }: BottomTabBarProps) {
       >
         {state.routes.map((route, index) => {
           const focused = state.index === index;
-          const meta = META[route.name] ?? { icon: 'aperture', label: route.name };
+          const meta = META[route.name];
+          const label = meta ? t(meta.label) : route.name;
           const onPress = () => {
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (!focused && !event.defaultPrevented) {
@@ -55,7 +58,7 @@ export function GlassTabBar({ state, navigation }: BottomTabBarProps) {
                 key={route.key}
                 onPress={onPress}
                 accessibilityRole="tab"
-                accessibilityLabel="Open camera"
+                accessibilityLabel={t('tab_open_camera')}
                 accessibilityState={{ selected: focused }}
                 style={styles.shutterSlot}
               >
@@ -81,17 +84,17 @@ export function GlassTabBar({ state, navigation }: BottomTabBarProps) {
               key={route.key}
               onPress={onPress}
               accessibilityRole="tab"
-              accessibilityLabel={meta.label}
+              accessibilityLabel={label}
               accessibilityState={{ selected: focused }}
               style={styles.tab}
             >
-              <Icon name={meta.icon} size={22} color={color} strokeWidth={focused ? 2.1 : 1.75} />
+              <Icon name={meta?.icon ?? 'aperture'} size={22} color={color} strokeWidth={focused ? 2.1 : 1.75} />
               <AppText
                 variant="caption"
                 style={{ color, fontWeight: focused ? '700' : '500', fontSize: 11 }}
                 maxFontSizeMultiplier={1.2}
               >
-                {meta.label}
+                {label}
               </AppText>
               <View style={[styles.dot, { backgroundColor: focused ? theme.colors.accent : 'transparent' }]} />
             </Pressable>

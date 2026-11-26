@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Icon } from '../../components';
 import { SHARE_APPS } from '../../services/rewards/campaign';
 import { getRewardsService, type ShareTarget } from '../../services/rewards/RewardsService';
+import { useT } from '../../i18n';
 import { useTheme } from '../../theme';
 
 const COLUMNS = 4;
@@ -64,6 +65,7 @@ export function ShareSheet({
   busy: boolean;
 }) {
   const theme = useTheme();
+  const t = useT();
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const [targets, setTargets] = useState<ShareTarget[] | null>(null);
@@ -84,7 +86,12 @@ export function ShareSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
+      <Pressable
+        style={styles.scrim}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel={t('common_close')}
+      />
       <View
         style={[
           styles.sheet,
@@ -95,12 +102,12 @@ export function ShareSheet({
         <View style={styles.grip} />
         <View style={styles.head}>
           <AppText variant="bodyStrong" style={{ flex: 1 }}>
-            Share to
+            {t('share_sheet_title')}
           </AppText>
           <Pressable
             onPress={onClose}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={t('common_close')}
             hitSlop={10}
             testID="share-sheet-close"
           >
@@ -108,13 +115,13 @@ export function ShareSheet({
           </Pressable>
         </View>
         <AppText variant="caption" tone="tertiary" style={styles.note}>
-          Each app counts once every 8 hours.
+          {t('share_sheet_note')}
         </AppText>
         {targets === null ? (
           <ActivityIndicator style={{ marginTop: 40 }} color={theme.colors.accent} />
         ) : list.length === 0 ? (
           <AppText variant="body" tone="secondary" style={styles.note}>
-            No apps that take pictures were found on this phone.
+            {t('share_sheet_empty')}
           </AppText>
         ) : (
           <FlatList
@@ -139,8 +146,11 @@ export function ShareSheet({
                   accessibilityRole="button"
                   accessibilityLabel={
                     locked
-                      ? `${name}${detail ? ` ${detail}` : ''}, opens again in ${hoursLeft(opens, now)} hours`
-                      : `Share to ${name}${detail ? ` ${detail}` : ''}`
+                      ? t('share_sheet_locked', {
+                          app: `${name}${detail ? ` ${detail}` : ''}`,
+                          hours: hoursLeft(opens, now),
+                        })
+                      : t('share_sheet_to', { app: `${name}${detail ? ` ${detail}` : ''}` })
                   }
                   testID={`share-target-${item.pkg}-${item.activity}`}
                   style={[styles.tile, { width: tile, opacity: locked ? 0.4 : 1 }]}
@@ -165,7 +175,7 @@ export function ShareSheet({
                     {name}
                   </AppText>
                   <AppText variant="caption" tone="tertiary" align="center" numberOfLines={1} style={{ fontSize: 10 }}>
-                    {locked ? `in ${hoursLeft(opens, now)} h` : (detail ?? ' ')}
+                    {locked ? t('share_sheet_in_hours', { hours: hoursLeft(opens, now) }) : (detail ?? ' ')}
                   </AppText>
                 </Pressable>
               );

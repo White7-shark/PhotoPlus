@@ -5,6 +5,7 @@
  */
 import { DeviceEventEmitter } from 'react-native';
 
+import { t, useI18n } from '../../i18n';
 import { nativeModules, NativeEvents, type IntegritySpec } from '../../native';
 
 export type BlockReason = 'time' | 'offline' | 'update';
@@ -104,17 +105,18 @@ export function getIntegrityService(): IntegrityService {
 }
 
 export const formatDay = (ms: number) =>
-  new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  new Date(ms).toLocaleDateString(useI18n.getState().language.tag, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
 
 /** How far off the clock is, in words. */
 export function skewWords(minutes: number | null): string {
-  if (minutes === null) return 'set to a different date or time';
+  if (minutes === null) return t('integrity_skew_unknown');
   const abs = Math.abs(minutes);
-  const amount =
-    abs >= 2 * 24 * 60
-      ? `${Math.round(abs / (24 * 60))} days`
-      : abs >= 120
-        ? `${Math.round(abs / 60)} hours`
-        : `${Math.round(abs)} minutes`;
-  return `${amount} ${minutes > 0 ? 'ahead' : 'behind'}`;
+  const way = minutes > 0 ? 'ahead' : 'behind';
+  if (abs >= 2 * 24 * 60) return t(`integrity_skew_${way}_days`, { n: Math.round(abs / (24 * 60)) });
+  if (abs >= 120) return t(`integrity_skew_${way}_hours`, { n: Math.round(abs / 60) });
+  return t(`integrity_skew_${way}_minutes`, { n: Math.round(abs) });
 }

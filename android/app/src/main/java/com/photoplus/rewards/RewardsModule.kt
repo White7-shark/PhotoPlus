@@ -115,7 +115,7 @@ class RewardsModule(reactContext: ReactApplicationContext) : NativePhotoPlusRewa
 
   /**
    * Opens one app's share screen ([target] package, [activity] its share
-   * screen) with the campaign picture [asset] (assets/promo) and [text]. The
+   * screen) with the campaign picture [asset] (assets/promo, in a language's folder) and [text]. The
    * share counts for that app, once every eight hours.
    */
   override fun share(target: String, activity: String, asset: String, text: String, promise: Promise) = freeOnly(promise) {
@@ -170,6 +170,7 @@ class RewardsModule(reactContext: ReactApplicationContext) : NativePhotoPlusRewa
   private fun promoFile(asset: String): File {
     val dir = File(reactApplicationContext.filesDir, "promo").apply { mkdirs() }
     val out = File(dir, asset)
+    out.parentFile?.mkdirs()
     if (!out.isFile || out.length() == 0L) {
       reactApplicationContext.assets.open("promo/$asset").use { input -> out.outputStream().use { input.copyTo(it) } }
     }
@@ -184,6 +185,7 @@ class RewardsModule(reactContext: ReactApplicationContext) : NativePhotoPlusRewa
     const val NAME = "PhotoPlusRewards"
     private const val ICON_PX = 96
     private val NAME_RE = Regex("^[A-Za-z0-9_.$]{1,200}$")
-    private val ASSET = Regex("^[a-z0-9-]{1,40}\\.jpg$")
+    /** A campaign picture: assets/promo/<name>.jpg, or assets/promo/<language>/<name>.jpg. */
+    private val ASSET = Regex("^(?:[a-z]{2}(?:-[a-z]{2})?/)?[a-z0-9-]{1,40}\\.jpg$")
   }
 }

@@ -1,0 +1,11 @@
+[
+  { "tag": "en", "res": "", "name": "English", "english": "English" },
+  { "tag": "es", "res": "es", "name": "Español", "english": "Spanish" },
+  { "tag": "pt-BR", "res": "pt-rBR", "name": "Português (Brasil)", "english": "Portuguese (Brazil)" },
+  { "tag": "fr", "res": "fr", "name": "Français", "english": "French" },
+  { "tag": "ar", "res": "ar", "name": "العربية", "english": "Arabic", "rtl": true },
+  { "tag": "hi", "res": "hi", "name": "हिन्दी", "english": "Hindi" },
+  { "tag": "id", "res": "in", "name": "Bahasa Indonesia", "english": "Indonesian" },
+  { "tag": "ru", "res": "ru", "name": "Русский", "english": "Russian" },
+  { "tag": "zh-CN", "res": "zh-rCN", "name": "简体中文", "english": "Chinese (Simplified)" }
+]

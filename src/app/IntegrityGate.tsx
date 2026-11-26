@@ -22,25 +22,26 @@ import {
   type BlockReason,
   type IntegrityState,
 } from '../services/integrity/IntegrityService';
+import { t, useT, type StringKey } from '../i18n';
 import { useTheme } from '../theme';
 
 /** How often the app checks online while it is open (it also checks on opening and in the background). */
 export const CHECK_EVERY_MS = 30 * 60_000;
 
-const COPY: Record<BlockReason, { icon: IconName; title: string }> = {
-  time: { icon: 'timer', title: 'Your phone’s date and time are wrong' },
-  offline: { icon: 'shield', title: 'Connect to the internet' },
-  update: { icon: 'download', title: 'Update Photo Plus' },
+const COPY: Record<BlockReason, { icon: IconName; title: StringKey }> = {
+  time: { icon: 'timer', title: 'integrity_time_title' },
+  offline: { icon: 'shield', title: 'integrity_offline_title' },
+  update: { icon: 'download', title: 'integrity_update_title' },
 };
 
 function reasonText(s: IntegrityState): string {
   switch (s.reason) {
     case 'time':
-      return `Photo Plus needs your phone’s correct date and time. Your clock is ${skewWords(s.skewMinutes)}. Set the date and time to automatic, then tap Check time.`;
+      return t('integrity_time_reason', { skew: skewWords(s.skewMinutes) });
     case 'offline':
-      return `Photo Plus needs to go online at least once every ${s.maxOfflineDays} days to check the app’s integrity. It has been ${Math.floor(s.offlineDays)} days. Turn on Wi-Fi or mobile data, then tap Check connection.`;
+      return t('integrity_offline_reason', { max: s.maxOfflineDays, days: Math.floor(s.offlineDays) });
     case 'update':
-      return 'This version of Photo Plus is out of date. The update period has ended: update now to keep using Photo Plus. Your photos and projects stay as they are.';
+      return t('integrity_update_reason');
     default:
       return '';
   }
@@ -72,13 +73,12 @@ export function IntegrityGate({ children }: { children: React.ReactNode }) {
         const next = await integrity.check(force);
         setState(next);
         if (manual) {
-          if (!next.online) setResult('No internet connection. Connect to Wi-Fi or mobile data and try again.');
-          else if (next.reason === 'time')
-            setResult('Your phone’s time is still wrong. Set it to automatic and try again.');
-          else if (next.reason === 'update') setResult('An update is still needed.');
+          if (!next.online) setResult(t('integrity_no_internet'));
+          else if (next.reason === 'time') setResult(t('integrity_time_still_wrong'));
+          else if (next.reason === 'update') setResult(t('integrity_update_still_needed'));
         }
       } catch {
-        if (manual) setResult('The check couldn’t run. Please try again.');
+        if (manual) setResult(t('integrity_check_failed'));
       } finally {
         if (manual) setChecking(false);
       }
@@ -124,7 +124,7 @@ export function IntegrityGate({ children }: { children: React.ReactNode }) {
     try {
       await integrity.startUpdate();
     } catch {
-      setResult('Google Play couldn’t be opened. Please try again.');
+      setResult(t('integrity_play_failed'));
     }
   };
 
@@ -176,6 +176,7 @@ export function BlockScreen({
   onUpdate: () => void;
 }) {
   const theme = useTheme();
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const reason = state.reason ?? 'offline';
   const copy = COPY[reason];
@@ -195,16 +196,14 @@ export function BlockScreen({
           <Icon name={copy.icon} size={30} color="#1A1206" strokeWidth={2} />
         </View>
         <AppText variant="title2" align="center" accessibilityRole="header" testID="integrity-title">
-          {copy.title}
+          {tr(copy.title)}
         </AppText>
         <AppText variant="body" tone="secondary" align="center" testID="integrity-reason">
           {reasonText(state)}
         </AppText>
         <GlassSurface radius={16} style={styles.why}>
           <AppText variant="caption" tone="tertiary" align="center">
-            {reason === 'update'
-              ? 'Updates keep your photos safe and the app working as it should.'
-              : 'Photo Plus checks the time and its integrity online to keep rewards, Premium time and your account fair and secure.'}
+            {tr(reason === 'update' ? 'integrity_update_why' : 'integrity_why')}
           </AppText>
         </GlassSurface>
         {result ? (
@@ -224,7 +223,7 @@ export function BlockScreen({
         {reason === 'update' ? (
           <>
             <Button
-              label="Update now"
+              label={tr('integrity_update_now')}
               icon="download"
               variant="premium"
               size="lg"
@@ -232,7 +231,7 @@ export function BlockScreen({
               testID="integrity-update"
             />
             <Button
-              label="I’ve updated · check again"
+              label={tr('integrity_updated_check')}
               variant="ghost"
               onPress={onCheck}
               disabled={checking}
@@ -242,7 +241,7 @@ export function BlockScreen({
         ) : reason === 'time' ? (
           <>
             <Button
-              label="Check time"
+              label={tr('integrity_check_time')}
               icon="timer"
               size="lg"
               onPress={onCheck}
@@ -251,7 +250,7 @@ export function BlockScreen({
               testID="integrity-check"
             />
             <Button
-              label="Open date & time settings"
+              label={tr('integrity_open_settings')}
               variant="glass"
               onPress={onSettings}
               testID="integrity-settings"
@@ -259,7 +258,7 @@ export function BlockScreen({
           </>
         ) : (
           <Button
-            label="Check connection"
+            label={tr('integrity_check_connection')}
             icon="shield"
             size="lg"
             onPress={onCheck}
@@ -286,8 +285,15 @@ export function UpdateBanner({
   onLater: () => void;
 }) {
   const theme = useTheme();
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const days = Math.max(0, Math.ceil((deadline - now) / 86_400_000));
+  const left =
+    days === 0
+      ? tr('integrity_banner_last_day')
+      : days === 1
+        ? tr('integrity_banner_one_day')
+        : tr('integrity_banner_days', { days });
   return (
     <View style={[styles.bannerWrap, { top: insets.top + 6 }]} pointerEvents="box-none" testID="update-banner">
       <GlassSurface intensity="strong" radius={18} style={styles.banner} glow="rgba(245,198,107,0.25)">
@@ -296,34 +302,34 @@ export function UpdateBanner({
         </View>
         <View style={{ flex: 1 }}>
           <AppText variant="caption" style={{ fontWeight: '700' }}>
-            A new version of Photo Plus is ready
+            {tr('integrity_banner_title')}
           </AppText>
           <AppText variant="caption" tone="secondary">
-            Update by {formatDay(deadline)}
-            {days <= 2 ? ` · ${days === 0 ? 'last day' : `${days} ${days === 1 ? 'day' : 'days'} left`}` : ''}
+            {tr('integrity_banner_by', { date: formatDay(deadline) })}
+            {days <= 2 ? ` · ${left}` : ''}
           </AppText>
         </View>
         <Pressable
           onPress={onLater}
           accessibilityRole="button"
-          accessibilityLabel="Later"
+          accessibilityLabel={tr('common_later')}
           hitSlop={8}
           testID="update-later"
           style={styles.later}
         >
           <AppText variant="caption" tone="secondary">
-            Later
+            {tr('common_later')}
           </AppText>
         </Pressable>
         <Pressable
           onPress={onUpdate}
           accessibilityRole="button"
-          accessibilityLabel="Update"
+          accessibilityLabel={tr('common_update')}
           testID="update-now"
           style={[styles.updateBtn, { backgroundImage: theme.gradients.premium }]}
         >
           <AppText variant="caption" style={{ color: '#1A1206', fontWeight: '800' }}>
-            Update
+            {tr('common_update')}
           </AppText>
         </Pressable>
       </GlassSurface>

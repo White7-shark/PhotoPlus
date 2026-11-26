@@ -46,6 +46,8 @@ export type RootStackParamList = {
   Premium: undefined;
   /** Rewards (free plan): points from check-ins, ads and tasks; the share campaign. */
   Rewards: undefined;
+  /** The app's language (English and 8 more, or the phone's). */
+  Language: undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

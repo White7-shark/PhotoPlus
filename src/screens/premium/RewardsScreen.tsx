@@ -3,7 +3,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-nat
 
 import { AppText, Button, GlassSurface, Icon, Screen } from '../../components';
 import type { RootScreenProps } from '../../navigation/types';
-import { SHARE_STYLES, shareStyle, shareText, type ShareForm } from '../../services/rewards/campaign';
+import { promoAsset, SHARE_STYLES, shareStyle, shareText, type ShareForm } from '../../services/rewards/campaign';
 import {
   getRewardsService,
   RewardsError,
@@ -14,6 +14,7 @@ import {
   type RewardTool,
   type ShareTarget,
 } from '../../services/rewards/RewardsService';
+import { useI18n, useT } from '../../i18n';
 import { useTheme } from '../../theme';
 import { Choice } from '../product/controls';
 
@@ -37,6 +38,8 @@ const when = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: '
  */
 export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
   const theme = useTheme();
+  const tr = useT();
+  const language = useI18n(st => st.language.tag);
   const rewards = getRewardsService();
   const [state, setState] = useState<RewardsState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -116,7 +119,8 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
   const s = state.shares;
   const campaignClosed = s.opensAt > now;
   const style = shareStyle(form);
-  const text = shareText(form, turn);
+  const text = shareText(form, turn, language);
+  const asset = promoAsset(form, language);
 
   const share = (target: ShareTarget) => {
     setSheet(false);
@@ -124,7 +128,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
     void act(
       `share-${target.pkg}`,
       async () => {
-        const r = await rewards.share(target, style.asset, text);
+        const r = await rewards.share(target, asset, text);
         setTurn(t => t + 1);
         return r;
       },
@@ -364,7 +368,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                 {SHARE_STYLES.map(st => (
                   <Choice
                     key={st.id}
-                    label={st.name}
+                    label={tr(st.name)}
                     selected={form === st.id}
                     onPress={() => setForm(st.id)}
                     testID={`rewards-form-${st.id}`}
@@ -372,10 +376,10 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                 ))}
               </View>
               <AppText variant="caption" tone="tertiary">
-                {style.about}
+                {tr(style.about)}
               </AppText>
               <Image
-                source={{ uri: `asset:/promo/${style.asset}` }}
+                source={{ uri: `asset:/promo/${asset}` }}
                 style={[styles.promo, { aspectRatio: style.aspect }]}
                 resizeMode="cover"
                 accessibilityLabel="The picture you share"
