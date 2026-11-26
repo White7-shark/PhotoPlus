@@ -1,5 +1,7 @@
 package com.photoplus.integrity
 
+import com.photoplus.R
+import com.photoplus.i18n.Words
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -87,7 +89,7 @@ class IntegrityModule(reactContext: ReactApplicationContext) : NativePhotoPlusIn
   override fun startUpdate(promise: Promise) {
     val activity = reactApplicationContext.currentActivity
     if (activity == null) {
-      promise.reject("NO_ACTIVITY", "Photo Plus needs to be open")
+      promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_be_open))
       return
     }
     val manager = AppUpdateManagerFactory.create(reactApplicationContext)

@@ -11,6 +11,7 @@
 import { STUDIO_COLOURS, normalizeHex } from './colors';
 import rawPlates from './plates.json';
 import type { GradientDef } from './light';
+import { t as tx } from '../../i18n';
 
 export type SceneCategory = 'studio' | 'indoors' | 'outdoors' | 'golden' | 'night' | 'mine' | 'pack' | 'plain';
 
@@ -81,14 +82,14 @@ export interface PlainDef {
 export const STUDIO_LIGHT = 1;
 
 export const PLAINS: readonly PlainDef[] = [
-  { id: 'plain-white', name: 'White', color: '#F4F4F2', vignette: false, light: 0 },
-  { id: 'plain-paper', name: 'Paper grey', color: '#B9BBBE', vignette: true, light: STUDIO_LIGHT },
-  { id: 'plain-charcoal', name: 'Charcoal', color: '#2B2D31', vignette: true, light: STUDIO_LIGHT },
-  { id: 'plain-black', name: 'Black', color: '#0B0B0C', vignette: false, light: 0 },
-  { id: 'plain-cream', name: 'Cream', color: '#EFE3CF', vignette: true, light: STUDIO_LIGHT },
-  { id: 'plain-blush', name: 'Blush', color: '#E9C3C6', vignette: true, light: STUDIO_LIGHT },
-  { id: 'plain-sky', name: 'Sky blue', color: '#9FC3E7', vignette: true, light: STUDIO_LIGHT },
-  { id: 'plain-emerald', name: 'Emerald', color: '#1F5B47', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-white', name: tx('scene_white'), color: '#F4F4F2', vignette: false, light: 0 },
+  { id: 'plain-paper', name: tx('scene_paper_grey'), color: '#B9BBBE', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-charcoal', name: tx('scene_charcoal'), color: '#2B2D31', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-black', name: tx('scene_black'), color: '#0B0B0C', vignette: false, light: 0 },
+  { id: 'plain-cream', name: tx('scene_cream'), color: '#EFE3CF', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-blush', name: tx('scene_blush'), color: '#E9C3C6', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-sky', name: tx('scene_sky_blue'), color: '#9FC3E7', vignette: true, light: STUDIO_LIGHT },
+  { id: 'plain-emerald', name: tx('scene_emerald'), color: '#1F5B47', vignette: true, light: STUDIO_LIGHT },
   ...STUDIO_COLOURS.filter(c => c.id !== 'charcoal').map(c => ({
     id: `plain-${c.id}`,
     name: c.name,
@@ -100,7 +101,7 @@ export const PLAINS: readonly PlainDef[] = [
 
 /** A colour the person picked, lit like studio paper unless they turn that off. */
 export function customPlain(color: string, light = STUDIO_LIGHT): PlainDef {
-  return { id: 'plain-custom', name: 'Your colour', color: normalizeHex(color) ?? '#C4962F', vignette: light === 0, light };
+  return { id: 'plain-custom', name: tx('scene_your_colour'), color: normalizeHex(color) ?? '#C4962F', vignette: light === 0, light };
 }
 
 /** The same plain colour with the studio light on or off. */

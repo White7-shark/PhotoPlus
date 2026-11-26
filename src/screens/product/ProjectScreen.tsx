@@ -18,12 +18,13 @@ import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
 
 import { Choice, Tabs } from './controls';
+import { t as tx } from '../../i18n';
 
 type Filter = 'all' | 'originals' | 'edited';
 const KINDS: readonly { value: ProjectKind; label: string }[] = [
-  { value: 'product', label: 'Products' },
-  { value: 'portrait', label: 'Portraits' },
-  { value: 'mixed', label: 'Both' },
+  { value: 'product', label: tx('project_products') },
+  { value: 'portrait', label: tx('project_portraits') },
+  { value: 'mixed', label: tx('project_both') },
 ];
 
 const isEdited = (r: ImageRecord) => typeof r.metadata.sourceImageId === 'string';
@@ -69,7 +70,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
       setProject(p);
       setImages(list);
     })().catch(() => {
-      if (live) setError('This project couldn’t be loaded.');
+      if (live) setError(tx('project_this_project_couldn_t_be'));
     });
     return () => {
       live = false;
@@ -80,7 +81,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
     return (
       <Screen title="Project" onBack={() => navigation.goBack()}>
         <AppText variant="body" tone="secondary">
-          {error ?? 'Loading…'}
+          {error ?? tx('project_loading')}
         </AppText>
       </Screen>
     );
@@ -124,7 +125,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
       await reload();
       void loadProjects();
     } catch (e) {
-      Alert.alert('Couldn’t rename', errorMessage(e));
+      Alert.alert(tx('project_couldn_t_rename'), errorMessage(e));
     }
   };
   const add = async () => {
@@ -143,12 +144,12 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
   };
   const remove = () =>
     Alert.alert(
-      `Delete ${selected.length} ${selected.length === 1 ? 'photo' : 'photos'}?`,
-      'They will be removed from this device. Edits made from them stay.',
+      tx('project_delete', { length: selected.length, value: selected.length === 1 ? 'photo' : 'photos' }),
+      tx('project_they_will_be_removed_from'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: tx('project_cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: tx('project_delete_2'),
           style: 'destructive',
           onPress: async () => {
             const storage = getStorageService();
@@ -189,7 +190,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
       headerRight={
         <IconButton
           icon="sliders"
-          label="Rename project"
+          label={tx('project_rename_project')}
           onPress={() => (setName(project.name), setRenaming(r => !r))}
           active={renaming}
         />
@@ -205,18 +206,18 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
                 maxLength={120}
                 autoFocus
                 onSubmitEditing={rename}
-                accessibilityLabel="Project name"
+                accessibilityLabel={tx('project_project_name')}
                 testID="project-name"
                 style={[styles.input, { color: theme.colors.textPrimary, borderColor: theme.colors.glassStroke }]}
               />
-              <Button label="Rename" onPress={rename} disabled={!name.trim()} testID="project-rename" />
+              <Button label={tx('project_rename')} onPress={rename} disabled={!name.trim()} testID="project-rename" />
             </View>
           </GlassSurface>
         ) : null}
 
         <AppText variant="caption" tone="secondary">
-          {originals} {originals === 1 ? 'original' : 'originals'} · {images.length - originals} edited · originals are
-          never changed
+          {originals} {originals === 1 ? 'original' : 'originals'} · {images.length - originals}{' '}
+          {tx('project_edited_originals_are_never_changed')}
         </AppText>
 
         <View style={styles.row}>
@@ -228,7 +229,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
             style={{ flex: 1 }}
           />
           <Button
-            label="Batch edit"
+            label={tx('project_batch_edit')}
             icon="wand"
             variant="glass"
             onPress={() => navigation.navigate('Batch', { projectId: project.id })}
@@ -238,7 +239,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
         </View>
 
         <GlassSurface radius={18} style={styles.section}>
-          <AppText variant="bodyStrong">What this project holds</AppText>
+          <AppText variant="bodyStrong">{tx('project_what_this_project_holds')}</AppText>
           <View style={styles.wrap}>
             {KINDS.map(k => (
               <Choice
@@ -250,9 +251,9 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
               />
             ))}
           </View>
-          <AppText variant="bodyStrong">Pack</AppText>
+          <AppText variant="bodyStrong">{tx('project_pack')}</AppText>
           <AppText variant="caption" tone="secondary">
-            A pack brings ready-made setups or looks to every photo in the project.
+            {tx('project_a_pack_brings_ready_made')}
           </AppText>
           {PACKS.map(p => {
             const suits = packSuits(p, project.kind);
@@ -264,7 +265,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
                 disabled={!suits}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: on, disabled: !suits }}
-                accessibilityLabel={`${p.name}${p.premium ? ', Premium' : ''}${suits ? '' : ', made for product photos'}`}
+                accessibilityLabel={`${p.name}${p.premium ? tx('project_premium') : ''}${suits ? '' : tx('project_made_for_product_photos')}`}
                 testID={`project-pack-${p.id}`}
                 style={[
                   styles.pack,
@@ -280,7 +281,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
                     {p.premium ? <Icon name="crown" size={11} color={theme.colors.accent} /> : null}
                   </View>
                   <AppText variant="caption" tone="tertiary">
-                    {suits ? p.about : 'Made for product photos'}
+                    {suits ? p.about : tx('project_made_for_product_photos_2')}
                   </AppText>
                 </View>
                 {on ? <Icon name="check" size={16} color={theme.colors.accent} /> : null}
@@ -289,7 +290,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
           })}
           {defaults.some(([, v]) => v) ? (
             <>
-              <AppText variant="bodyStrong">Reused for every photo</AppText>
+              <AppText variant="bodyStrong">{tx('project_reused_for_every_photo')}</AppText>
               {defaults.map(([label, value, key]) =>
                 value ? (
                   <View key={key} style={styles.row}>
@@ -302,7 +303,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
                     <Pressable
                       onPress={() => clearDefault(key)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Clear ${label}`}
+                      accessibilityLabel={tx('project_clear', { label })}
                       hitSlop={8}
                       testID={`project-clear-${key}`}
                     >
@@ -318,9 +319,9 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
         <View style={styles.head}>
           <Tabs
             tabs={[
-              { value: 'all', label: 'All' },
-              { value: 'originals', label: 'Originals' },
-              { value: 'edited', label: 'Edited' },
+              { value: 'all', label: tx('project_all') },
+              { value: 'originals', label: tx('project_originals') },
+              { value: 'edited', label: tx('project_edited') },
             ]}
             value={filter}
             onChange={setFilter}
@@ -328,7 +329,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
           />
           <View style={{ flex: 1 }} />
           <Choice
-            label={selecting ? 'Done' : 'Select'}
+            label={selecting ? tx('project_done') : tx('project_select')}
             selected={selecting}
             onPress={() => (setSelecting(s => !s), setSelected([]))}
             testID="project-select"
@@ -338,7 +339,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
           <Pressable
             onPress={add}
             accessibilityRole="button"
-            accessibilityLabel="Add photos"
+            accessibilityLabel={tx('project_add_photos')}
             testID="project-add"
             style={[styles.thumb, styles.addTile]}
           >
@@ -353,7 +354,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
                 onLongPress={() => (setSelecting(true), toggle(r.id))}
                 accessibilityRole={selecting ? 'checkbox' : 'button'}
                 accessibilityState={selecting ? { checked: on } : undefined}
-                accessibilityLabel={isEdited(r) ? 'Edited photo' : 'Original photo'}
+                accessibilityLabel={isEdited(r) ? tx('project_edited_photo') : tx('project_original_photo')}
                 testID={`project-photo-${r.id}`}
                 style={[styles.thumb, { borderColor: on ? theme.colors.accent : 'transparent' }]}
               >
@@ -378,7 +379,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
             <AppText variant="bodyStrong">{selected.length} selected</AppText>
             <View style={styles.wrap}>
               <Choice
-                label="Batch edit"
+                label={tx('project_batch_edit')}
                 icon="wand"
                 selected={false}
                 onPress={() => navigation.navigate('Batch', { projectId: project.id, imageIds: selected })}
@@ -386,7 +387,7 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
               />
               {selected.length === 1 ? (
                 <Choice
-                  label="Product shot"
+                  label={tx('project_product_shot')}
                   icon="bag"
                   selected={false}
                   onPress={() => navigation.navigate('ProductStudio', { projectId: project.id, imageId: selected[0] })}
@@ -394,13 +395,19 @@ export function ProjectScreen({ navigation, route }: RootScreenProps<'Project'>)
                 />
               ) : null}
               <Choice
-                label="Move to…"
+                label={tx('project_move_to')}
                 icon="folder"
                 selected={moving}
                 onPress={() => setMoving(m => !m)}
                 testID="project-action-move"
               />
-              <Choice label="Delete" icon="trash" selected={false} onPress={remove} testID="project-action-delete" />
+              <Choice
+                label={tx('project_delete_2')}
+                icon="trash"
+                selected={false}
+                onPress={remove}
+                testID="project-action-delete"
+              />
             </View>
             {moving ? (
               <View style={styles.wrap}>

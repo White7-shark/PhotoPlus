@@ -53,7 +53,10 @@ function resourceText(s) {
 }
 
 function stringsXml(table, header, base) {
-  const lines = Object.entries(table).map(([k, v]) => `    <string name="${k}">${resourceText(v)}</string>`);
+  // A literal % (as in "40% steadier") is text, not a format pattern.
+  const lines = Object.entries(table).map(
+    ([k, v]) => `    <string name="${k}"${v.includes('%') ? ' formatted="false"' : ''}>${resourceText(v)}</string>`,
+  );
   const app = base ? '    <string name="app_name" translatable="false">Photo Plus</string>\n' : '';
   // The default file holds every key; the translations hold some of them
   // (Play's translation, or English, fills the rest), so a missing

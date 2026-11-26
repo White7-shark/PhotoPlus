@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * Studio light, film looks, gradient backdrops and composition templates
  * for the Photoshoot Studio (Phase 11).
@@ -50,17 +51,17 @@ export interface GradientDef {
 }
 
 export const GRADIENTS: readonly GradientDef[] = [
-  { id: 'grad-studio-grey', name: 'Studio grey', from: '#D9D4CC', to: '#8F8A84', radial: true },
-  { id: 'grad-charcoal', name: 'Charcoal', from: '#5A5650', to: '#1E1C1A', radial: true },
-  { id: 'grad-midnight', name: 'Midnight', from: '#2A2C33', to: '#08090C', radial: true },
-  { id: 'grad-warm-sand', name: 'Warm sand', from: '#E3D6C4', to: '#9A8770', radial: true },
-  { id: 'grad-sunset', name: 'Sunset', from: '#F2C58F', to: '#B4664A', radial: true },
-  { id: 'grad-deep-teal', name: 'Deep teal', from: '#3F6F78', to: '#14262B', radial: true },
-  { id: 'grad-violet-night', name: 'Violet night', from: '#3B1D5E', to: '#0B1030', radial: true },
-  { id: 'grad-blush', name: 'Blush', from: '#F3DCDD', to: '#C99598', radial: true },
-  { id: 'grad-sky', name: 'Sky', from: '#CFE3F5', to: '#6E95BF', radial: false },
-  { id: 'grad-forest', name: 'Forest', from: '#4F6B4C', to: '#1A2619', radial: false },
-  { id: 'grad-high-key', name: 'Bright white', from: '#FBFAF8', to: '#E4E2DE', radial: true },
+  { id: 'grad-studio-grey', name: tx('light_studio_grey'), from: '#D9D4CC', to: '#8F8A84', radial: true },
+  { id: 'grad-charcoal', name: tx('light_charcoal'), from: '#5A5650', to: '#1E1C1A', radial: true },
+  { id: 'grad-midnight', name: tx('light_midnight'), from: '#2A2C33', to: '#08090C', radial: true },
+  { id: 'grad-warm-sand', name: tx('light_warm_sand'), from: '#E3D6C4', to: '#9A8770', radial: true },
+  { id: 'grad-sunset', name: tx('light_sunset'), from: '#F2C58F', to: '#B4664A', radial: true },
+  { id: 'grad-deep-teal', name: tx('light_deep_teal'), from: '#3F6F78', to: '#14262B', radial: true },
+  { id: 'grad-violet-night', name: tx('light_violet_night'), from: '#3B1D5E', to: '#0B1030', radial: true },
+  { id: 'grad-blush', name: tx('light_blush'), from: '#F3DCDD', to: '#C99598', radial: true },
+  { id: 'grad-sky', name: tx('light_sky'), from: '#CFE3F5', to: '#6E95BF', radial: false },
+  { id: 'grad-forest', name: tx('light_forest'), from: '#4F6B4C', to: '#1A2619', radial: false },
+  { id: 'grad-high-key', name: tx('light_bright_white'), from: '#FBFAF8', to: '#E4E2DE', radial: true },
 ];
 
 // ------------------------------------------------------------------ finish
@@ -92,21 +93,21 @@ export interface FilmGrade {
 }
 
 export const FILM_GRADES: readonly FilmGrade[] = [
-  { id: 'none', name: 'None', premium: false, finish: {} },
-  { id: 'vivid', name: 'Vivid', premium: false, finish: { contrast: 0.15, saturation: 0.15 } },
-  { id: 'soft', name: 'Soft', premium: false, finish: { contrast: -0.12, saturation: -0.05 } },
-  { id: 'black-white', name: 'Black & white', premium: false, finish: { saturation: -1, contrast: 0.15 } },
+  { id: 'none', name: tx('light_none'), premium: false, finish: {} },
+  { id: 'vivid', name: tx('light_vivid'), premium: false, finish: { contrast: 0.15, saturation: 0.15 } },
+  { id: 'soft', name: tx('light_soft'), premium: false, finish: { contrast: -0.12, saturation: -0.05 } },
+  { id: 'black-white', name: tx('light_black_white'), premium: false, finish: { saturation: -1, contrast: 0.15 } },
   {
     id: 'warm-film',
-    name: 'Warm film',
+    name: tx('light_warm_film'),
     premium: true,
     finish: { warmth: 0.15, fade: 0.15, saturation: -0.12, highlightTone: [0.15, 0.08, -0.05], shadowTone: [-0.05, 0.05, 0.08], toneAmount: 0.6, grain: 0.3 },
   },
-  { id: 'teal-orange', name: 'Teal & orange', premium: true, finish: { shadowTone: [-0.35, 0.08, 0.35], highlightTone: [0.35, 0.12, -0.3], toneAmount: 0.85, contrast: 0.15 } },
-  { id: 'matte', name: 'Matte', premium: true, finish: { fade: 0.35, contrast: -0.1, saturation: -0.15 } },
-  { id: 'classic-chrome', name: 'Classic chrome', premium: true, finish: { contrast: 0.25, saturation: -0.25, shadowTone: [0, 0.04, 0.08], toneAmount: 0.5, grain: 0.2 } },
-  { id: 'noir', name: 'Noir', premium: true, finish: { mono: true, contrast: 0.45, grain: 0.5, vignette: 0.5 } },
-  { id: 'cinema', name: 'Cinema', premium: true, finish: { contrast: 0.2, fade: 0.08, shadowTone: [-0.2, 0.05, 0.25], highlightTone: [0.2, 0.1, -0.1], toneAmount: 0.6, vignette: 0.3 } },
+  { id: 'teal-orange', name: tx('light_teal_orange'), premium: true, finish: { shadowTone: [-0.35, 0.08, 0.35], highlightTone: [0.35, 0.12, -0.3], toneAmount: 0.85, contrast: 0.15 } },
+  { id: 'matte', name: tx('light_matte'), premium: true, finish: { fade: 0.35, contrast: -0.1, saturation: -0.15 } },
+  { id: 'classic-chrome', name: tx('light_classic_chrome'), premium: true, finish: { contrast: 0.25, saturation: -0.25, shadowTone: [0, 0.04, 0.08], toneAmount: 0.5, grain: 0.2 } },
+  { id: 'noir', name: tx('light_noir'), premium: true, finish: { mono: true, contrast: 0.45, grain: 0.5, vignette: 0.5 } },
+  { id: 'cinema', name: tx('light_cinema'), premium: true, finish: { contrast: 0.2, fade: 0.08, shadowTone: [-0.2, 0.05, 0.25], highlightTone: [0.2, 0.1, -0.1], toneAmount: 0.6, vignette: 0.3 } },
 ];
 
 // ------------------------------------------------------------------ looks
@@ -126,19 +127,19 @@ export interface LightPreset {
 }
 
 export const LIGHT_PRESETS: readonly LightPreset[] = [
-  { id: 'as-shot', name: 'As shot', about: 'The light of your photo, untouched.', premium: false, light: null },
+  { id: 'as-shot', name: tx('light_as_shot'), about: tx('light_the_light_of_your_photo'), premium: false, light: null },
   {
     id: 'soft-studio',
-    name: 'Soft studio',
-    about: 'A big soft light just to one side: flattering and even.',
+    name: tx('light_soft_studio'),
+    about: tx('light_a_big_soft_light_just'),
     premium: false,
     light: { angle: -20, height: 40, softness: 0.85, key: 1, fill: 0.6 },
     gradient: 'grad-studio-grey',
   },
   {
     id: 'high-key',
-    name: 'Bright',
-    about: 'Bright, soft light from the front on white: clean and airy.',
+    name: tx('light_bright'),
+    about: tx('light_bright_soft_light_from_the'),
     premium: false,
     light: { angle: -10, height: 35, softness: 0.95, key: 1, fill: 0.85 },
     gradient: 'grad-high-key',
@@ -146,29 +147,29 @@ export const LIGHT_PRESETS: readonly LightPreset[] = [
   },
   {
     id: 'rembrandt',
-    name: 'Rembrandt',
-    about: 'Light from high to one side: a small triangle of light on the shadowed cheek.',
+    name: tx('light_rembrandt'),
+    about: tx('light_light_from_high_to_one'),
     premium: true,
     light: { angle: -50, height: 40, softness: 0.35, key: 1, fill: 0.15 },
     gradient: 'grad-charcoal',
     finish: { vignette: 0.35 },
   },
-  { id: 'loop', name: 'Loop', about: 'Slightly to one side and above: a soft shadow from the nose.', premium: true, light: { angle: -35, height: 30, softness: 0.5, key: 1, fill: 0.3 }, gradient: 'grad-warm-sand' },
-  { id: 'butterfly', name: 'Butterfly', about: 'High in front: shadows under the cheekbones and chin, a classic beauty light.', premium: true, light: { angle: 0, height: 55, softness: 0.45, key: 1, fill: 0.35 }, gradient: 'grad-studio-grey' },
+  { id: 'loop', name: tx('light_loop'), about: tx('light_slightly_to_one_side_and'), premium: true, light: { angle: -35, height: 30, softness: 0.5, key: 1, fill: 0.3 }, gradient: 'grad-warm-sand' },
+  { id: 'butterfly', name: tx('light_butterfly'), about: tx('light_high_in_front_shadows_under'), premium: true, light: { angle: 0, height: 55, softness: 0.45, key: 1, fill: 0.35 }, gradient: 'grad-studio-grey' },
   {
     id: 'split',
-    name: 'Split',
-    about: 'From the side: half the face lit, half in shadow. Dramatic.',
+    name: tx('light_split'),
+    about: tx('light_from_the_side_half_the'),
     premium: true,
     light: { angle: -88, height: 10, softness: 0.3, key: 1, fill: 0.04 },
     gradient: 'grad-midnight',
     finish: { vignette: 0.4, contrast: 0.15 },
   },
-  { id: 'clamshell', name: 'Clamshell', about: 'Soft light above and below the face: smooth skin, bright eyes.', premium: true, light: { angle: 0, height: 45, softness: 0.9, key: 1, fill: 0.75 }, gradient: 'grad-high-key' },
+  { id: 'clamshell', name: tx('light_clamshell'), about: tx('light_soft_light_above_and_below'), premium: true, light: { angle: 0, height: 45, softness: 0.9, key: 1, fill: 0.75 }, gradient: 'grad-high-key' },
   {
     id: 'rim-light',
-    name: 'Rim light',
-    about: 'Lights behind on both sides: a bright edge that lifts you off a dark backdrop.',
+    name: tx('light_rim_light'),
+    about: tx('light_lights_behind_on_both_sides'),
     premium: true,
     light: { angle: -20, height: 30, softness: 0.7, key: 0.75, fill: 0.3, rimLeft: 0.75, rimRight: 0.75 },
     gradient: 'grad-midnight',
@@ -176,8 +177,8 @@ export const LIGHT_PRESETS: readonly LightPreset[] = [
   },
   {
     id: 'low-key',
-    name: 'Low key',
-    about: 'One light from the side on black: moody, mostly shadow.',
+    name: tx('light_low_key'),
+    about: tx('light_one_light_from_the_side'),
     premium: true,
     light: { angle: -55, height: 40, softness: 0.4, key: 1, fill: 0.08 },
     gradient: 'grad-midnight',
@@ -185,8 +186,8 @@ export const LIGHT_PRESETS: readonly LightPreset[] = [
   },
   {
     id: 'golden-hour',
-    name: 'Golden hour',
-    about: 'Low, warm sun from the side with cool shade: the hour before sunset.',
+    name: tx('light_golden_hour'),
+    about: tx('light_low_warm_sun_from_the'),
     premium: true,
     light: { angle: 60, height: 15, softness: 0.6, key: 1, fill: 0.35, keyColour: [1.25, 0.98, 0.7], fillColour: [0.85, 0.95, 1.15] },
     gradient: 'grad-sunset',
@@ -194,8 +195,8 @@ export const LIGHT_PRESETS: readonly LightPreset[] = [
   },
   {
     id: 'neon-gels',
-    name: 'Neon',
-    about: 'Magenta and cyan coloured lights, like a club or a city at night.',
+    name: tx('light_neon'),
+    about: tx('light_magenta_and_cyan_coloured_lights'),
     premium: true,
     light: {
       angle: -70,
@@ -213,8 +214,8 @@ export const LIGHT_PRESETS: readonly LightPreset[] = [
   },
   {
     id: 'noir',
-    name: 'Film noir',
-    about: 'Hard side light, black and white, grain: an old detective film.',
+    name: tx('light_film_noir'),
+    about: tx('light_hard_side_light_black_and'),
     premium: true,
     light: { angle: -80, height: 30, softness: 0.25, key: 1, fill: 0.06 },
     gradient: 'grad-charcoal',
@@ -319,12 +320,12 @@ export interface CompositionTemplate {
 }
 
 export const TEMPLATES: readonly CompositionTemplate[] = [
-  { id: 'centre', name: 'Centre', about: 'Centred, with room around you.', premium: false, x: 0.5, y: 1, height: 0.82 },
-  { id: 'close-up', name: 'Close-up', about: 'Head and shoulders filling the frame.', premium: false, x: 0.5, y: 1, height: 1.18 },
-  { id: 'left-third', name: 'Left third', about: 'On the left third, looking into the space.', premium: true, x: 0.36, y: 1, height: 0.8 },
-  { id: 'right-third', name: 'Right third', about: 'On the right third, looking into the space.', premium: true, x: 0.64, y: 1, height: 0.8 },
-  { id: 'editorial', name: 'Editorial', about: 'Small in a large frame: a magazine opening page.', premium: true, x: 0.5, y: 1, height: 0.6 },
-  { id: 'cover', name: 'Cover', about: 'Tall and centred with space above for a title.', premium: true, x: 0.5, y: 1, height: 0.72 },
+  { id: 'centre', name: tx('light_centre'), about: tx('light_centred_with_room_around_you'), premium: false, x: 0.5, y: 1, height: 0.82 },
+  { id: 'close-up', name: tx('light_close_up'), about: tx('light_head_and_shoulders_filling_the'), premium: false, x: 0.5, y: 1, height: 1.18 },
+  { id: 'left-third', name: tx('light_left_third'), about: tx('light_on_the_left_third_looking'), premium: true, x: 0.36, y: 1, height: 0.8 },
+  { id: 'right-third', name: tx('light_right_third'), about: tx('light_on_the_right_third_looking'), premium: true, x: 0.64, y: 1, height: 0.8 },
+  { id: 'editorial', name: tx('light_editorial'), about: tx('light_small_in_a_large_frame'), premium: true, x: 0.5, y: 1, height: 0.6 },
+  { id: 'cover', name: tx('light_cover'), about: tx('light_tall_and_centred_with_space'), premium: true, x: 0.5, y: 1, height: 0.72 },
 ];
 
 export const template = (id: string) => TEMPLATES.find(t => t.id === id);

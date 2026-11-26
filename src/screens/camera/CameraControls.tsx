@@ -5,6 +5,7 @@ import { AppText, Icon, usePressScale, type IconName } from '../../components';
 import { activeZoomPreset, formatZoom, type ModeDefinition, type UiMode } from '../../services/camera/model';
 import { FEATURES } from '../../services/entitlements/features';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 const GLASS = 'rgba(16,14,25,0.55)';
 const STROKE = 'rgba(255,255,255,0.16)';
@@ -72,7 +73,7 @@ export function ZoomPills({
   const theme = useTheme();
   const active = activeZoomPreset(presets, zoom);
   return (
-    <View style={styles.zoomRow} accessibilityRole="radiogroup" accessibilityLabel="Zoom">
+    <View style={styles.zoomRow} accessibilityRole="radiogroup" accessibilityLabel={tx('camera_zoom')}>
       {presets.map(p => {
         const selected = p === active;
         return (
@@ -80,7 +81,7 @@ export function ZoomPills({
             key={p}
             onPress={() => onSelect(p)}
             accessibilityRole="radio"
-            accessibilityLabel={`Zoom ${formatZoom(p)}`}
+            accessibilityLabel={tx('camera_zoom_2', { zoom: formatZoom(p) })}
             accessibilityState={{ selected }}
             hitSlop={8}
             style={[styles.zoomPill, selected ? { width: 44, height: 44, borderColor: theme.colors.premium } : null]}
@@ -115,7 +116,7 @@ export function ModeSwitcher({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.modes}
       accessibilityRole="tablist"
-      accessibilityLabel="Capture mode"
+      accessibilityLabel={tx('camera_capture_mode')}
     >
       {modes.map(m => {
         const selected = m.id === value;
@@ -126,7 +127,7 @@ export function ModeSwitcher({
             testID={`mode-${m.id}`}
             onPress={() => onChange(m.id)}
             accessibilityRole="tab"
-            accessibilityLabel={`${m.label}${premium ? ', premium' : ''}`}
+            accessibilityLabel={`${m.label}${premium ? tx('camera_premium') : ''}`}
             accessibilityHint={m.description}
             accessibilityState={{ selected }}
             hitSlop={{ top: 12, bottom: 12 }}
@@ -177,12 +178,12 @@ export function ShutterButton({
         accessibilityRole="button"
         accessibilityLabel={
           countdown !== null
-            ? 'Cancel timer'
+            ? tx('camera_cancel_timer')
             : mode === 'glide'
               ? recording
-                ? 'Stop recording'
-                : 'Record a Glide clip'
-              : 'Take photo'
+                ? tx('camera_stop_recording')
+                : tx('camera_record_a_glide_clip')
+              : tx('camera_take_photo')
         }
         accessibilityState={{ disabled, busy }}
         disabled={disabled}
@@ -242,7 +243,7 @@ export function LastShot({
       onPress={onPress}
       disabled={!path}
       accessibilityRole="button"
-      accessibilityLabel={path ? 'Open last photo' : 'No photos yet'}
+      accessibilityLabel={path ? tx('camera_open_last_photo') : tx('camera_no_photos_yet')}
       accessibilityState={{ disabled: !path, busy: progress !== null }}
       hitSlop={8}
       style={[styles.thumb, rotate(rotation)]}

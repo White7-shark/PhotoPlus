@@ -5,6 +5,7 @@ import { AppText, Button, IconButton } from '../../components';
 import { ValueSlider } from '../../components/ValueSlider';
 import { NO_EDIT, type HairBrush, type HairChoice, type HairEdit } from '../../services/studio/hair';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 const signed = (v: number) => (Math.abs(v) < 0.005 ? '0' : `${v > 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`);
 const pct = (v: number) => `${Math.round(v * 100)}`;
@@ -13,26 +14,26 @@ const pct = (v: number) => `${Math.round(v * 100)}`;
 export const HAIR_BRUSHES: { value: HairBrush; label: string; hint: string; colour: string }[] = [
   {
     value: 'erase',
-    label: 'Erase hair',
-    hint: 'Paint where the new hair should not be.',
+    label: tx('hair_editor_erase_hair'),
+    hint: tx('hair_editor_paint_where_the_new_hair'),
     colour: 'rgba(255,107,107,0.55)',
   },
   {
     value: 'restore',
-    label: 'Restore',
-    hint: 'Paint to bring back the photo as it was: their own hair, skin or clothes.',
+    label: tx('hair_editor_restore'),
+    hint: tx('hair_editor_paint_to_bring_back_the'),
     colour: 'rgba(91,228,155,0.55)',
   },
   {
     value: 'colourOn',
-    label: 'Add colour',
-    hint: 'Paint over hair the colour missed.',
+    label: tx('hair_editor_add_colour'),
+    hint: tx('hair_editor_paint_over_hair_the_colour'),
     colour: 'rgba(245,198,107,0.6)',
   },
   {
     value: 'colourOff',
-    label: 'Remove colour',
-    hint: 'Paint over brows, skin or anything the colour should not touch.',
+    label: tx('hair_editor_remove_colour'),
+    hint: tx('hair_editor_paint_over_brows_skin_or'),
     colour: 'rgba(120,170,255,0.55)',
   },
 ];
@@ -88,7 +89,7 @@ export function HairEditor({
     <View style={{ gap: 12 }} testID="hair-editor">
       {styled ? (
         <View style={styles.section}>
-          <AppText variant="bodyStrong">Shape</AppText>
+          <AppText variant="bodyStrong">{tx('hair_editor_shape')}</AppText>
           {slider('Length', 'length')}
           {slider('Volume', 'volume')}
           {slider('Height on top', 'height')}
@@ -96,7 +97,7 @@ export function HairEditor({
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <ValueSlider
-                label="Parting"
+                label={tx('hair_editor_parting')}
                 value={e.part ?? 0}
                 min={-1}
                 max={1}
@@ -108,7 +109,7 @@ export function HairEditor({
             </View>
             {e.part != null ? (
               <Button
-                label="As styled"
+                label={tx('hair_editor_as_styled')}
                 variant="ghost"
                 onPress={() => set({ part: null })}
                 testID="hair-edit-part-reset"
@@ -121,7 +122,7 @@ export function HairEditor({
       ) : null}
       {styled ? (
         <View style={styles.section}>
-          <AppText variant="bodyStrong">Fit to the head</AppText>
+          <AppText variant="bodyStrong">{tx('hair_editor_fit_to_the_head')}</AppText>
           {slider('Left or right', 'moveX', -0.5, 0.5, v => signed(v * 2), 0.01)}
           {slider('Up or down', 'moveY', -0.5, 0.5, v => signed(v * 2), 0.01)}
           {slider('Size', 'size', 0.7, 1.4, v => `${Math.round(v * 100)}%`, 0.01)}
@@ -130,7 +131,7 @@ export function HairEditor({
       ) : null}
       {coloured || styled ? (
         <View style={styles.section}>
-          <AppText variant="bodyStrong">Colour finish</AppText>
+          <AppText variant="bodyStrong">{tx('hair_editor_colour_finish')}</AppText>
           {coloured ? slider('Depth', 'depth') : null}
           {!styled ? slider('Shine', 'shine') : null}
           {slider('Darker roots', 'roots', 0, 1, pct)}
@@ -142,11 +143,11 @@ export function HairEditor({
       <View style={styles.section}>
         <View style={styles.row}>
           <AppText variant="bodyStrong" style={{ flex: 1 }}>
-            Brushes
+            {tx('hair_editor_brushes')}
           </AppText>
           <IconButton
             icon="undo"
-            label="Undo the last stroke"
+            label={tx('hair_editor_undo_the_last_stroke')}
             size={36}
             disabled={strokes.length === 0}
             onPress={() => onChange({ ...value, strokes: strokes.slice(0, -1) })}
@@ -173,7 +174,7 @@ export function HairEditor({
           {HAIR_BRUSHES.find(b => b.value === brush)?.hint}
         </AppText>
         <ValueSlider
-          label="Brush size"
+          label={tx('hair_editor_brush_size')}
           value={radius}
           min={0.01}
           max={0.1}
@@ -182,7 +183,7 @@ export function HairEditor({
           format={v => `${Math.round(v * 1000) / 10}`}
         />
         <Button
-          label={brushing ? 'Done painting' : 'Paint on the photo'}
+          label={brushing ? tx('hair_editor_done_painting') : tx('hair_editor_paint_on_the_photo')}
           icon={brushing ? 'check' : 'wand'}
           variant={brushing ? 'primary' : 'glass'}
           onPress={() => onBrushing(!brushing)}
@@ -190,7 +191,7 @@ export function HairEditor({
         />
       </View>
       <Button
-        label="Reset my changes"
+        label={tx('hair_editor_reset_my_changes')}
         variant="ghost"
         icon="refresh"
         disabled={!value.edit && strokes.length === 0}

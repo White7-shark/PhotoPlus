@@ -7,6 +7,7 @@ import type { RootScreenProps } from '../../navigation/types';
 import { money, perMonth, periodLabel, PLANS, savings, TRIAL_DAYS, type PlanId } from '../../services/billing/plans';
 import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 const BENEFITS: readonly [IconName, string, string][] = [
   ['layers', 'Photoshoot Studio, unlimited', 'Scene Swap, Relight, studio light, hair and every scene'],
@@ -31,11 +32,11 @@ export function PremiumScreen({ navigation }: RootScreenProps<'Premium'>) {
 
   const start = () =>
     Alert.alert(
-      'Premium is almost here',
-      `Subscriptions open in a coming update. When they do, your ${TRIAL_DAYS} days free start the moment you subscribe — you won't be charged before the trial ends. In the meantime, earn Premium time with Rewards.`,
+      tx('premium_premium_is_almost_here'),
+      tx('premium_subscriptions_open_in_a_coming', { TRIALDAYS: TRIAL_DAYS }),
       [
-        { text: 'Not now', style: 'cancel' },
-        { text: 'Open Rewards', onPress: () => navigation.navigate('Rewards') },
+        { text: tx('premium_not_now'), style: 'cancel' },
+        { text: tx('premium_open_rewards'), onPress: () => navigation.navigate('Rewards') },
       ],
     );
 
@@ -50,20 +51,20 @@ export function PremiumScreen({ navigation }: RootScreenProps<'Premium'>) {
             Photo Plus Premium
           </AppText>
           <AppText variant="body" tone="secondary" align="center">
-            Every studio tool, every look and full-quality downloads with no watermark.
+            {tx('premium_every_studio_tool_every_look')}
           </AppText>
           <View style={[styles.trial, { backgroundImage: theme.gradients.premium }]}>
             <AppText variant="caption" style={styles.trialText}>
-              {TRIAL_DAYS} DAYS FREE TRIAL
+              {TRIAL_DAYS} {tx('premium_days_free_trial')}
             </AppText>
           </View>
         </GlassSurface>
 
         {plan === 'premium' ? (
           <GlassSurface radius={18} style={styles.section} testID="premium-active">
-            <AppText variant="bodyStrong">You have Premium</AppText>
+            <AppText variant="bodyStrong">{tx('premium_you_have_premium')}</AppText>
             <AppText variant="caption" tone="secondary">
-              Every tool is yours. Thank you for supporting Photo Plus.
+              {tx('premium_every_tool_is_yours_thank')}
             </AppText>
           </GlassSurface>
         ) : null}
@@ -78,7 +79,12 @@ export function PremiumScreen({ navigation }: RootScreenProps<'Premium'>) {
                 onPress={() => setChosen(p.id)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: on }}
-                accessibilityLabel={`${p.name}, ${money(p.price)} a ${periodLabel(p)}${save > 0 ? `, save ${save}%` : ''}`}
+                accessibilityLabel={tx('premium_a', {
+                  name: p.name,
+                  money: money(p.price),
+                  periodLabel: periodLabel(p),
+                  value: save > 0 ? tx('premium_save', { save }) : '',
+                })}
                 testID={`premium-plan-${p.id}`}
                 style={[
                   styles.plan,
@@ -103,7 +109,9 @@ export function PremiumScreen({ navigation }: RootScreenProps<'Premium'>) {
                     ) : null}
                   </View>
                   <AppText variant="caption" tone="secondary">
-                    {p.months > 1 ? `${money(perMonth(p))} a month · save ${save}%` : 'Cancel any time'}
+                    {p.months > 1
+                      ? tx('premium_a_month_save', { money: money(perMonth(p)), save })
+                      : tx('premium_cancel_any_time')}
                   </AppText>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
@@ -118,7 +126,7 @@ export function PremiumScreen({ navigation }: RootScreenProps<'Premium'>) {
         </View>
 
         <Button
-          label={`Start ${TRIAL_DAYS}-day free trial`}
+          label={tx('premium_start_day_free_trial', { TRIALDAYS: TRIAL_DAYS })}
           icon="crown"
           variant="premium"
           size="lg"
@@ -126,12 +134,12 @@ export function PremiumScreen({ navigation }: RootScreenProps<'Premium'>) {
           testID="premium-start"
         />
         <AppText variant="caption" tone="tertiary" align="center">
-          {TRIAL_DAYS} days free, then {money(selected.price)} per {periodLabel(selected)}. Renews automatically; cancel
-          any time in Google Play before the trial ends and you won’t be charged.
+          {TRIAL_DAYS} {tx('premium_days_free_then')} {money(selected.price)} per {periodLabel(selected)}
+          {tx('premium_renews_automatically_cancel_any_time')}
         </AppText>
 
         <GlassSurface radius={18} style={styles.section}>
-          <AppText variant="bodyStrong">Everything in Premium</AppText>
+          <AppText variant="bodyStrong">{tx('premium_everything_in_premium')}</AppText>
           {BENEFITS.map(([ic, title, text]) => (
             <View key={title} style={styles.benefit}>
               <View style={[styles.benefitIcon, { backgroundImage: theme.gradients.premium }]}>
@@ -154,9 +162,9 @@ export function PremiumScreen({ navigation }: RootScreenProps<'Premium'>) {
             <GlassSurface radius={18} style={[styles.section, styles.row]}>
               <Icon name="target" size={22} color={theme.colors.accent} />
               <View style={{ flex: 1 }}>
-                <AppText variant="bodyStrong">Not ready yet? Earn Premium time</AppText>
+                <AppText variant="bodyStrong">{tx('premium_not_ready_yet_earn_premium')}</AppText>
                 <AppText variant="caption" tone="secondary">
-                  Check in, complete tasks, watch short ads or share Photo Plus to unlock Premium days and tools.
+                  {tx('premium_check_in_complete_tasks_watch')}
                 </AppText>
               </View>
               <Icon name="chevronRight" size={18} color={theme.colors.textTertiary} />

@@ -4,6 +4,7 @@ import { ActivityIndicator, Animated, Pressable, StyleSheet, View } from 'react-
 import { AppText, Icon } from '../../components';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 export function GridOverlay() {
   return (
@@ -51,7 +52,13 @@ export function FocusRing({
     <Animated.View
       pointerEvents="none"
       accessibilityLiveRegion="polite"
-      accessibilityLabel={status === 'locked' ? 'Focus locked' : status === 'failed' ? 'Could not focus' : 'Focusing'}
+      accessibilityLabel={
+        status === 'locked'
+          ? tx('overlays_focus_locked')
+          : status === 'failed'
+            ? tx('overlays_could_not_focus')
+            : tx('overlays_focusing')
+      }
       style={[
         styles.ring,
         {
@@ -103,7 +110,12 @@ export function StatusPill({
         {label}
       </AppText>
       {onCancel ? (
-        <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel processing" hitSlop={12}>
+        <Pressable
+          onPress={onCancel}
+          accessibilityRole="button"
+          accessibilityLabel={tx('overlays_cancel_processing')}
+          hitSlop={12}
+        >
           <Icon name="close" size={14} color="#FFFFFF" strokeWidth={2.2} />
         </Pressable>
       ) : null}

@@ -1,5 +1,7 @@
 package com.photoplus.ads
 
+import com.photoplus.R
+import com.photoplus.i18n.Words
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
@@ -54,7 +56,7 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
     main.post {
       val activity = activity()
       if (activity == null) {
-        promise.reject("NO_ACTIVITY", "Photo Plus needs to be open")
+        promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_be_open))
         return@post
       }
       consent.requestConsentInfoUpdate(
@@ -104,7 +106,7 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
   override fun getRewardProgress(photoPath: String, promise: Promise) {
     val file = photoFile(photoPath)
     if (file == null) {
-      promise.reject("INVALID_ARGUMENT", "Unknown photo")
+      promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_unknown_photo))
       return
     }
     val p = rewards.progress(file)
@@ -114,15 +116,15 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
   override fun showRewardedAd(photoPath: String, promise: Promise) {
     val file = photoFile(photoPath)
     if (file == null) {
-      promise.reject("INVALID_ARGUMENT", "Unknown photo")
+      promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_unknown_photo))
       return
     }
     main.post {
       val activity = activity()
       when {
-        activity == null -> promise.reject("NO_ACTIVITY", "Photo Plus needs to be open")
-        !consent.canRequestAds() -> promise.reject("ADS_UNAVAILABLE", "Ads can't be shown right now")
-        !showing.compareAndSet(false, true) -> promise.reject("BUSY", "An ad is already showing")
+        activity == null -> promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_be_open))
+        !consent.canRequestAds() -> promise.reject("ADS_UNAVAILABLE", Words.get(reactApplicationContext, R.string.native_ads_can_t_be_shown_right))
+        !showing.compareAndSet(false, true) -> promise.reject("BUSY", Words.get(reactApplicationContext, R.string.native_an_ad_is_already_showing))
         else -> {
           val ad = loaded
           if (ad != null) {
@@ -135,7 +137,7 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
               override fun onAdLoaded(fresh: RewardedAd) = show(activity, fresh, file, promise)
               override fun onAdFailedToLoad(error: LoadAdError) {
                 showing.set(false)
-                promise.reject("AD_NOT_AVAILABLE", "No ad is available right now. Please try again in a moment.")
+                promise.reject("AD_NOT_AVAILABLE", Words.get(reactApplicationContext, R.string.native_no_ad_is_available_right_now))
               }
             })
           }
@@ -156,11 +158,11 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
    */
   override fun showRewardedAdForPoints(promise: Promise) {
     if (com.photoplus.integrity.Integrity.blocked()) {
-      promise.reject("BLOCKED", "Photo Plus needs to check in online first.")
+      promise.reject("BLOCKED", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_check_in))
       return
     }
     if (Entitlements.subscribed) {
-      promise.reject("SUBSCRIBED", "You have Premium already")
+      promise.reject("SUBSCRIBED", Words.get(reactApplicationContext, R.string.native_you_have_premium_already))
       return
     }
     val wait = ledger.adWait()
@@ -171,9 +173,9 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
     main.post {
       val activity = activity()
       when {
-        activity == null -> promise.reject("NO_ACTIVITY", "Photo Plus needs to be open")
-        !consent.canRequestAds() -> promise.reject("ADS_UNAVAILABLE", "Ads can't be shown right now")
-        !showing.compareAndSet(false, true) -> promise.reject("BUSY", "An ad is already showing")
+        activity == null -> promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_be_open))
+        !consent.canRequestAds() -> promise.reject("ADS_UNAVAILABLE", Words.get(reactApplicationContext, R.string.native_ads_can_t_be_shown_right))
+        !showing.compareAndSet(false, true) -> promise.reject("BUSY", Words.get(reactApplicationContext, R.string.native_an_ad_is_already_showing))
         else -> {
           var earned = 0
           val present = { ad: RewardedAd ->
@@ -191,7 +193,7 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
               override fun onAdLoaded(fresh: RewardedAd) = present(fresh)
               override fun onAdFailedToLoad(error: LoadAdError) {
                 showing.set(false)
-                promise.reject("AD_NOT_AVAILABLE", "No ad is available right now. Please try again in a moment.")
+                promise.reject("AD_NOT_AVAILABLE", Words.get(reactApplicationContext, R.string.native_no_ad_is_available_right_now))
               }
             })
           }
@@ -211,7 +213,7 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
 
       override fun onAdFailedToShowFullScreenContent(error: AdError) {
         showing.set(false)
-        promise.reject("AD_NOT_AVAILABLE", "The ad couldn't be shown. Please try again.")
+        promise.reject("AD_NOT_AVAILABLE", Words.get(reactApplicationContext, R.string.native_the_ad_couldn_t_be_shown))
         preload()
       }
     }

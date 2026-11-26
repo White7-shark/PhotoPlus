@@ -3,6 +3,7 @@ import { Image, View, type ImageStyle, type StyleProp, type ViewStyle } from 're
 
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
+import { t as tx } from '../i18n';
 
 // Rendered from the master artwork by scripts/generate-icons.py.
 const EMBLEM = require('../assets/brand/logo-emblem.png');
@@ -17,7 +18,7 @@ interface LogoMarkProps {
 export function LogoMark({ size = 48, style }: LogoMarkProps) {
   const imageStyle: ImageStyle = { width: size, height: size, borderRadius: size * 0.225 };
   return (
-    <View style={style} accessibilityRole="image" accessibilityLabel="Photo Plus logo">
+    <View style={style} accessibilityRole="image" accessibilityLabel={tx('logo_photo_plus_logo')}>
       <Image source={EMBLEM} style={imageStyle} resizeMode="cover" />
     </View>
   );
@@ -26,7 +27,7 @@ export function LogoMark({ size = 48, style }: LogoMarkProps) {
 /** The complete Photo Plus logo artwork (emblem, wordmark and tagline). */
 export function LogoFull({ size = 220, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
   return (
-    <View style={style} accessibilityRole="image" accessibilityLabel="Photo Plus. Shoot, edit, create more.">
+    <View style={style} accessibilityRole="image" accessibilityLabel={tx('logo_photo_plus_shoot_edit_create')}>
       <Image source={FULL_LOGO} style={{ width: size, height: size }} resizeMode="contain" />
     </View>
   );
@@ -45,8 +46,8 @@ export function Logo({ size = 36 }: { size?: number }) {
     >
       <LogoMark size={size} />
       <View style={{ flexDirection: 'row', alignItems: 'baseline' }} importantForAccessibility="no-hide-descendants">
-        <AppText style={[text, { color: theme.colors.textPrimary }]}>Photo</AppText>
-        <AppText style={[text, { color: theme.colors.brandGold }]}>Plus</AppText>
+        <AppText style={[text, { color: theme.colors.textPrimary }]}>{tx('logo_photo')}</AppText>
+        <AppText style={[text, { color: theme.colors.brandGold }]}>{tx('logo_plus')}</AppText>
       </View>
     </View>
   );

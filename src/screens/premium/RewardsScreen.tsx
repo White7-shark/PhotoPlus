@@ -19,6 +19,7 @@ import { useTheme } from '../../theme';
 import { Choice } from '../product/controls';
 
 import { ShareSheet, targetName } from './ShareSheet';
+import { t as tx } from '../../i18n';
 
 const ITEM_TEXT: Record<RewardItem, string> = {
   tool: 'One Premium tool for 24 hours',
@@ -56,7 +57,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
     rewards
       .state()
       .then(s => live && setState(s))
-      .catch(() => live && setNote({ text: 'Rewards couldn’t be loaded.', good: false }));
+      .catch(() => live && setNote({ text: tx('rewards_rewards_couldn_t_be_loaded'), good: false }));
     return () => {
       live = false;
     };
@@ -76,7 +77,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
         setNote({ text: good(r), good: true });
       } catch (e) {
         setNote({
-          text: e instanceof RewardsError ? e.message : 'Something went wrong. Please try again.',
+          text: e instanceof RewardsError ? e.message : tx('rewards_something_went_wrong_please_try'),
           good: false,
         });
       } finally {
@@ -104,9 +105,9 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
     return (
       <Screen title="Rewards" onBack={() => navigation.goBack()}>
         <GlassSurface radius={18} style={styles.section} testID="rewards-subscribed">
-          <AppText variant="bodyStrong">You have Premium</AppText>
+          <AppText variant="bodyStrong">{tx('rewards_you_have_premium')}</AppText>
           <AppText variant="caption" tone="secondary">
-            Rewards are for the free plan. Every tool is already yours.
+            {tx('rewards_rewards_are_for_the_free')}
           </AppText>
         </GlassSurface>
       </Screen>
@@ -138,11 +139,11 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
   };
 
   return (
-    <Screen title="Rewards" overline="Free plan" onBack={() => navigation.goBack()} bottomInset={32}>
+    <Screen title="Rewards" overline={tx('rewards_free_plan')} onBack={() => navigation.goBack()} bottomInset={32}>
       <View style={{ gap: 14 }}>
         <GlassSurface radius={22} style={styles.balance} glow="rgba(245,198,107,0.25)" testID="rewards-balance">
           <AppText variant="caption" tone="secondary">
-            Your points
+            {tx('rewards_your_points')}
           </AppText>
           <AppText variant="title1" style={{ fontSize: 40, lineHeight: 46 }}>
             {state.points.toLocaleString()}
@@ -150,13 +151,13 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
           {premiumOn ? (
             <View style={[styles.pill, { backgroundImage: theme.gradients.premium }]}>
               <AppText variant="caption" style={styles.pillText}>
-                Premium until {when(state.premiumUntil)}
+                {tx('rewards_premium_until')} {when(state.premiumUntil)}
               </AppText>
             </View>
           ) : null}
           {tools.map(([t, until]) => (
             <AppText key={t} variant="caption" tone="secondary">
-              {TOOL_TEXT[t]} unlocked · {hoursLeft(until, now)} h left
+              {TOOL_TEXT[t]} {tx('rewards_unlocked')} {hoursLeft(until, now)} {tx('rewards_h_left')}
             </AppText>
           ))}
         </GlassSurface>
@@ -174,9 +175,9 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
 
         {/* ---- Daily check-in */}
         <GlassSurface radius={18} style={styles.section} testID="rewards-checkin">
-          <AppText variant="bodyStrong">Daily check-in</AppText>
+          <AppText variant="bodyStrong">{tx('rewards_daily_check_in')}</AppText>
           <AppText variant="caption" tone="secondary">
-            Check in every day: the streak pays more each day. Miss a day and it starts again.
+            {tx('rewards_check_in_every_day_the')}
           </AppText>
           <View style={styles.week}>
             {state.checkIn.schedule.map((pts, i) => {
@@ -195,7 +196,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                   ]}
                 >
                   <AppText variant="caption" tone="tertiary" style={{ fontSize: 10 }}>
-                    Day {day}
+                    {tx('rewards_day')} {day}
                   </AppText>
                   {past ? (
                     <Icon name="check" size={14} color={theme.colors.accent} />
@@ -211,8 +212,8 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
           <Button
             label={
               state.checkIn.done
-                ? 'Checked in · come back tomorrow'
-                : `Check in · +${state.checkIn.schedule[state.checkIn.day - 1]}`
+                ? tx('rewards_checked_in_come_back_tomorrow')
+                : tx('rewards_check_in', { value: state.checkIn.schedule[state.checkIn.day - 1] })
             }
             icon="check"
             onPress={() =>
@@ -233,7 +234,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
           <View style={styles.row}>
             <Icon name="play" size={20} color={theme.colors.accent} />
             <AppText variant="bodyStrong" style={{ flex: 1 }}>
-              Watch a short ad
+              {tx('rewards_watch_a_short_ad')}
             </AppText>
             <AppText variant="caption" tone="secondary">
               {state.ads.today} of {state.ads.perDay} today
@@ -242,10 +243,10 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
           <Button
             label={
               state.ads.wait < 0
-                ? 'Today’s ads are done · more tomorrow'
+                ? tx('rewards_today_s_ads_are_done')
                 : state.ads.wait > 0
-                  ? `Next ad in ${Math.ceil(state.ads.wait)} s`
-                  : `Watch · +${state.ads.points} points`
+                  ? tx('rewards_next_ad_in_s', { value: Math.ceil(state.ads.wait) })
+                  : tx('rewards_watch_points', { points: state.ads.points })
             }
             icon="play"
             variant="glass"
@@ -265,7 +266,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
 
         {/* ---- Tasks */}
         <GlassSurface radius={18} style={styles.section} testID="rewards-tasks">
-          <AppText variant="bodyStrong">Tasks</AppText>
+          <AppText variant="bodyStrong">{tx('rewards_tasks')}</AppText>
           {state.tasks.map(t => {
             const done = t.progress >= t.goal;
             const copy = TASK_TEXT[t.id] ?? { title: t.id, hint: '' };
@@ -274,7 +275,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                 <View style={{ flex: 1 }}>
                   <AppText variant="caption" style={{ fontWeight: '700' }}>
                     {copy.title}
-                    {t.daily ? ' · daily' : ''}
+                    {t.daily ? tx('rewards_daily') : ''}
                   </AppText>
                   <AppText variant="caption" tone="tertiary">
                     {copy.hint}
@@ -285,12 +286,12 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                   <View style={styles.row}>
                     <Icon name="check" size={14} color={theme.colors.accent} />
                     <AppText variant="caption" tone="secondary">
-                      Done
+                      {tx('rewards_done')}
                     </AppText>
                   </View>
                 ) : (
                   <Choice
-                    label={done ? `Collect +${t.points}` : `+${t.points}`}
+                    label={done ? tx('rewards_collect', { points: t.points }) : `+${t.points}`}
                     selected={done}
                     onPress={() =>
                       done
@@ -314,11 +315,11 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
           <View style={styles.row}>
             <Icon name="share" size={20} color={theme.colors.accent} />
             <AppText variant="bodyStrong" style={{ flex: 1 }}>
-              Share Photo Plus · {s.days} days of Premium
+              {tx('rewards_share_photo_plus')} {s.days} {tx('rewards_days_of_premium')}
             </AppText>
           </View>
           <AppText variant="caption" tone="secondary">
-            Share {s.goal} times to your apps. Each app counts once every {s.lockHours} hours.
+            {tx('rewards_share')} {s.goal} {tx('rewards_times_to_your_apps_each')} {s.lockHours} hours.
           </AppText>
           <View style={styles.track}>
             <View
@@ -336,7 +337,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
           </AppText>
           {s.ready ? (
             <Button
-              label={`Collect ${s.days} days of Premium`}
+              label={tx('rewards_collect_days_of_premium', { days: s.days })}
               icon="crown"
               variant="premium"
               onPress={() =>
@@ -351,11 +352,11 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
             />
           ) : campaignClosed ? (
             <AppText variant="caption" tone="secondary">
-              You’ve done this one — it opens again on {when(s.opensAt)}.
+              {tx('rewards_you_ve_done_this_one')} {when(s.opensAt)}.
             </AppText>
           ) : (
             <Button
-              label={sharing ? 'Hide' : 'Share now'}
+              label={sharing ? tx('rewards_hide') : tx('rewards_share_now')}
               icon="share"
               variant="glass"
               onPress={() => setSharing(v => !v)}
@@ -382,7 +383,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                 source={{ uri: `asset:/promo/${asset}` }}
                 style={[styles.promo, { aspectRatio: style.aspect }]}
                 resizeMode="cover"
-                accessibilityLabel="The picture you share"
+                accessibilityLabel={tx('rewards_the_picture_you_share')}
                 testID="rewards-share-picture"
               />
               <View style={styles.textBox}>
@@ -391,11 +392,10 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                 </AppText>
               </View>
               <AppText variant="caption" tone="tertiary" testID="rewards-share-caption-note">
-                The link and hashtags go with the picture as text, so they can be tapped. They’re also copied: paste
-                them if an app leaves them out.
+                {tx('rewards_the_link_and_hashtags_go')}
               </AppText>
               <Button
-                label="Choose an app to share to"
+                label={tx('rewards_choose_an_app_to_share')}
                 icon="share"
                 onPress={() => setSheet(true)}
                 disabled={busy !== null}
@@ -416,7 +416,7 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
 
         {/* ---- Spend */}
         <GlassSurface radius={18} style={styles.section} testID="rewards-store">
-          <AppText variant="bodyStrong">Spend your points</AppText>
+          <AppText variant="bodyStrong">{tx('rewards_spend_your_points')}</AppText>
           {state.store.map(item => {
             const short = state.points < item.cost;
             return (
@@ -428,17 +428,19 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
                     </AppText>
                     <AppText variant="caption" tone="tertiary">
                       {item.cost.toLocaleString()} points
-                      {short ? ` · ${(item.cost - state.points).toLocaleString()} to go` : ''}
+                      {short ? tx('rewards_to_go', { value: (item.cost - state.points).toLocaleString() }) : ''}
                     </AppText>
                   </View>
                   <Choice
-                    label="Redeem"
+                    label={tx('rewards_redeem')}
                     icon="crown"
                     selected={!short}
                     onPress={() =>
                       short
                         ? setNote({
-                            text: `You need ${(item.cost - state.points).toLocaleString()} more points.`,
+                            text: tx('rewards_you_need_more_points', {
+                              value: (item.cost - state.points).toLocaleString(),
+                            }),
                             good: false,
                           })
                         : act(
@@ -470,8 +472,8 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
             );
           })}
           <AppText variant="caption" tone="tertiary">
-            Rewards give up to {state.capDays} days of Premium in any 30 days ({state.daysUsed} used). Premium itself
-            has no limit.
+            {tx('rewards_rewards_give_up_to')} {state.capDays} {tx('rewards_days_of_premium_in_any')}
+            {state.daysUsed} {tx('rewards_used_premium_itself_has_no')}
           </AppText>
         </GlassSurface>
 
@@ -479,9 +481,9 @@ export function RewardsScreen({ navigation }: RootScreenProps<'Rewards'>) {
           <GlassSurface radius={18} style={[styles.section, styles.row]}>
             <Icon name="crown" size={22} color={theme.colors.accent} />
             <View style={{ flex: 1 }}>
-              <AppText variant="bodyStrong">Want everything, always?</AppText>
+              <AppText variant="bodyStrong">{tx('rewards_want_everything_always')}</AppText>
               <AppText variant="caption" tone="secondary">
-                Premium unlocks every tool with no limits. Try it free for 7 days.
+                {tx('rewards_premium_unlocks_every_tool_with')}
               </AppText>
             </View>
             <Icon name="chevronRight" size={18} color={theme.colors.textTertiary} />

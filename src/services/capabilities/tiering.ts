@@ -1,4 +1,5 @@
 import type { CameraInfo, DeviceCapabilities } from './types';
+import { t as tx } from '../../i18n';
 
 /**
  * Turns raw capabilities into product decisions: which performance tier the
@@ -101,7 +102,7 @@ export interface ModelRequirement {
 export const MODEL_CATALOG: readonly ModelRequirement[] = [
   {
     id: 'segmentation-lite',
-    name: 'Subject segmentation (lite)',
+    name: tx('tiering_subject_segmentation_lite'),
     purpose: 'Portrait focus, basic background effects',
     sizeMb: 4,
     minTier: 'entry',
@@ -109,7 +110,7 @@ export const MODEL_CATALOG: readonly ModelRequirement[] = [
   },
   {
     id: 'pose-lite',
-    name: 'Pose detection (lite)',
+    name: tx('tiering_pose_detection_lite'),
     purpose: 'Live pose guidance',
     sizeMb: 6,
     minTier: 'entry',
@@ -117,7 +118,7 @@ export const MODEL_CATALOG: readonly ModelRequirement[] = [
   },
   {
     id: 'face-landmarks',
-    name: 'Face landmarks',
+    name: tx('tiering_face_landmarks'),
     purpose: 'Retouching and lighting analysis',
     sizeMb: 3,
     minTier: 'entry',
@@ -125,7 +126,7 @@ export const MODEL_CATALOG: readonly ModelRequirement[] = [
   },
   {
     id: 'segmentation-hq',
-    name: 'Subject segmentation (HQ)',
+    name: tx('tiering_subject_segmentation_hq'),
     purpose: 'Background removal and replacement',
     sizeMb: 28,
     minTier: 'standard',
@@ -133,7 +134,7 @@ export const MODEL_CATALOG: readonly ModelRequirement[] = [
   },
   {
     id: 'pose-full',
-    name: 'Pose matching (full)',
+    name: tx('tiering_pose_matching_full'),
     purpose: 'Reference pose matching',
     sizeMb: 24,
     minTier: 'standard',
@@ -141,7 +142,7 @@ export const MODEL_CATALOG: readonly ModelRequirement[] = [
   },
   {
     id: 'relight',
-    name: 'Relighting',
+    name: tx('tiering_relighting'),
     purpose: 'Lighting and shadow reproduction',
     sizeMb: 60,
     minTier: 'performance',
@@ -149,7 +150,7 @@ export const MODEL_CATALOG: readonly ModelRequirement[] = [
   },
   {
     id: 'garment-transfer',
-    name: 'Garment transfer',
+    name: tx('tiering_garment_transfer'),
     purpose: 'Clothing transformation for compatible packs',
     sizeMb: 140,
     minTier: 'performance',

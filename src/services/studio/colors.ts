@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * Backdrop colours for the Photoshoot Studio: conversions for the colour
  * picker, the studio paper palette, and colours that suit an outfit.
@@ -108,18 +109,18 @@ export interface StudioColour {
 }
 
 export const STUDIO_COLOURS: readonly StudioColour[] = [
-  { id: 'mustard', name: 'Mustard', color: '#C4962F' },
-  { id: 'terracotta', name: 'Terracotta', color: '#B8684A' },
-  { id: 'sage', name: 'Sage', color: '#9CAA8C' },
-  { id: 'dusty-blue', name: 'Dusty blue', color: '#8098B2' },
-  { id: 'peach', name: 'Peach', color: '#E8B697' },
-  { id: 'lilac', name: 'Lilac', color: '#B5A3C8' },
-  { id: 'olive', name: 'Olive', color: '#6F6A3A' },
-  { id: 'burgundy', name: 'Burgundy', color: '#6B2737' },
-  { id: 'teal', name: 'Teal', color: '#2F6A6C' },
-  { id: 'navy', name: 'Navy', color: '#22304F' },
-  { id: 'sand', name: 'Sand', color: '#D8C3A0' },
-  { id: 'charcoal', name: 'Charcoal', color: '#2B2D31' },
+  { id: 'mustard', name: tx('colors_mustard'), color: '#C4962F' },
+  { id: 'terracotta', name: tx('colors_terracotta'), color: '#B8684A' },
+  { id: 'sage', name: tx('colors_sage'), color: '#9CAA8C' },
+  { id: 'dusty-blue', name: tx('colors_dusty_blue'), color: '#8098B2' },
+  { id: 'peach', name: tx('colors_peach'), color: '#E8B697' },
+  { id: 'lilac', name: tx('colors_lilac'), color: '#B5A3C8' },
+  { id: 'olive', name: tx('colors_olive'), color: '#6F6A3A' },
+  { id: 'burgundy', name: tx('colors_burgundy'), color: '#6B2737' },
+  { id: 'teal', name: tx('colors_teal'), color: '#2F6A6C' },
+  { id: 'navy', name: tx('colors_navy'), color: '#22304F' },
+  { id: 'sand', name: tx('colors_sand'), color: '#D8C3A0' },
+  { id: 'charcoal', name: tx('colors_charcoal'), color: '#2B2D31' },
 ];
 
 export interface OutfitColour {

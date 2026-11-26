@@ -20,6 +20,7 @@ import { errorMessage } from '../native';
 import { getStorageService } from '../services/storage/StorageService';
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
+import { t as tx } from '../i18n';
 
 export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
   const theme = useTheme();
@@ -40,17 +41,17 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
       setName('');
       setCreating(false);
     } catch (e) {
-      Alert.alert('Could not create project', errorMessage(e));
+      Alert.alert(tx('projects_could_not_create_project'), errorMessage(e));
     } finally {
       setSaving(false);
     }
   };
 
   const confirmDelete = (id: string, projectName: string) =>
-    Alert.alert(`Delete "${projectName}"?`, 'Photos in this project will be removed from this device.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(tx('projects_delete', { projectName }), tx('projects_photos_in_this_project_will'), [
+      { text: tx('projects_cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: tx('projects_delete_2'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -58,7 +59,7 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
             const storage = getStorageService();
             await Promise.allSettled(paths.map(p => storage.deleteFile(p)));
           } catch (e) {
-            Alert.alert('Could not delete project', errorMessage(e));
+            Alert.alert(tx('projects_could_not_delete_project'), errorMessage(e));
           }
         },
       },
@@ -67,25 +68,30 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
   return (
     <Screen
       title="Projects"
-      overline="Library"
+      overline={tx('projects_library')}
       onRefresh={loadProjects}
       refreshing={projectsStatus === 'loading'}
       headerRight={
-        <IconButton icon="plus" label="New project" onPress={() => setCreating(c => !c)} active={creating} />
+        <IconButton
+          icon="plus"
+          label={tx('projects_new_project')}
+          onPress={() => setCreating(c => !c)}
+          active={creating}
+        />
       }
     >
       {creating ? (
         <GlassSurface style={{ padding: 16, marginBottom: 16, gap: 12 }}>
-          <AppText variant="bodyStrong">New project</AppText>
+          <AppText variant="bodyStrong">{tx('projects_new_project')}</AppText>
           <TextInput
             value={name}
             onChangeText={setName}
-            placeholder="e.g. Studio portraits — March"
+            placeholder={tx('projects_e_g_studio_portraits_march')}
             placeholderTextColor={theme.colors.textTertiary}
             maxLength={120}
             autoFocus
             onSubmitEditing={submit}
-            accessibilityLabel="Project name"
+            accessibilityLabel={tx('projects_project_name')}
             style={{
               minHeight: 48,
               borderRadius: theme.radii.sm,
@@ -115,22 +121,32 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
             ))}
           </View>
           <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'flex-end' }}>
-            <Button label="Cancel" variant="ghost" onPress={() => setCreating(false)} />
-            <Button label="Create" icon="check" onPress={submit} loading={saving} disabled={!name.trim()} />
+            <Button label={tx('projects_cancel')} variant="ghost" onPress={() => setCreating(false)} />
+            <Button
+              label={tx('projects_create')}
+              icon="check"
+              onPress={submit}
+              loading={saving}
+              disabled={!name.trim()}
+            />
           </View>
         </GlassSurface>
       ) : null}
 
       {projectsStatus === 'loading' && projects.length === 0 ? (
-        <LoadingState label="Loading projects…" />
+        <LoadingState label={tx('projects_loading_projects')} />
       ) : projectsStatus === 'error' ? (
-        <ErrorState title="Couldn't load projects" message={projectsError ?? undefined} onRetry={loadProjects} />
+        <ErrorState
+          title={tx('projects_couldn_t_load_projects')}
+          message={projectsError ?? undefined}
+          onRetry={loadProjects}
+        />
       ) : projects.length === 0 ? (
         <EmptyState
           icon="folder"
-          title="Your library is empty"
-          message="Create a project to organise a shoot, or just start capturing — photos go to Captures."
-          actionLabel="Open camera"
+          title={tx('projects_your_library_is_empty')}
+          message={tx('projects_create_a_project_to_organise')}
+          actionLabel={tx('projects_open_camera')}
           onAction={() => navigation.navigate('Camera')}
           secondaryLabel="Create a project"
           onSecondary={() => setCreating(true)}
@@ -164,8 +180,12 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
                 style={{ flex: 1 }}
                 onPress={() => navigation.navigate('Project', { projectId: p.id })}
                 accessibilityRole="button"
-                accessibilityLabel={`${p.name}, ${p.imageCount} photos, updated ${new Date(p.updatedAt).toLocaleDateString()}`}
-                accessibilityHint="Opens the project"
+                accessibilityLabel={tx('projects_photos_updated', {
+                  name: p.name,
+                  imageCount: p.imageCount,
+                  value: new Date(p.updatedAt).toLocaleDateString(),
+                })}
+                accessibilityHint={tx('projects_opens_the_project')}
                 testID={`project-open-${p.id}`}
               >
                 <AppText variant="bodyStrong" numberOfLines={1}>
@@ -178,7 +198,7 @@ export function ProjectsScreen({ navigation }: TabScreenProps<'Projects'>) {
               </Pressable>
               <IconButton
                 icon="trash"
-                label={`Delete ${p.name}`}
+                label={tx('projects_delete_3', { name: p.name })}
                 size={44}
                 tint={theme.colors.danger}
                 onPress={() => confirmDelete(p.id, p.name)}

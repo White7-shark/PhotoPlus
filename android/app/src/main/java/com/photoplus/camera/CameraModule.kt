@@ -1,5 +1,7 @@
 package com.photoplus.camera
 
+import com.photoplus.R
+import com.photoplus.i18n.Words
 import java.io.File
 
 import android.os.Handler
@@ -77,7 +79,7 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
 
   override fun analyzePosePhoto(uri: String, promise: Promise) {
     if (!com.photoplus.engine.NativeEngine.ensureLoaded() || !com.photoplus.pose.PoseEstimator.available(reactApplicationContext)) {
-      promise.reject("UNAVAILABLE", "Pose detection is not available on this build")
+      promise.reject("UNAVAILABLE", Words.get(reactApplicationContext, R.string.native_pose_detection_is_not_available_on))
       return
     }
     com.photoplus.pose.PoseAnalyzer.worker.execute {
@@ -113,7 +115,7 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
     main.post {
       val capture = CameraController.imageCapture
       if (capture == null || !CameraController.isReady) {
-        promise.reject("NOT_READY", "Camera is not ready")
+        promise.reject("NOT_READY", Words.get(reactApplicationContext, R.string.native_camera_is_not_ready))
         return@post
       }
       CameraController.setFlash(request.flash)
@@ -128,7 +130,7 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
         val ready = CameraController.imageCapture
         if (ready == null || !CameraController.isReady) {
           restoreLight()
-          promise.reject("NOT_READY", "Camera is not ready")
+          promise.reject("NOT_READY", Words.get(reactApplicationContext, R.string.native_camera_is_not_ready))
           return@prepareLight
         }
         processor.capture(ready, request, CameraController.activeLensFacing == "front", CameraController.deviceTurnDegrees(), object : CaptureProcessor.Listener {
@@ -174,7 +176,7 @@ class CameraModule(reactContext: ReactApplicationContext) : NativePhotoPlusCamer
           promise.reject(error ?: "RECORDING_FAILED", "The video could not be recorded")
         }
       }
-      if (!started) promise.reject("NOT_READY", "Video recording is not ready")
+      if (!started) promise.reject("NOT_READY", Words.get(reactApplicationContext, R.string.native_video_recording_is_not_ready))
       else emit(EVENT_RECORDING, mapOf("recording" to true, "maxMs" to maxMs.toDouble()))
     }
   }

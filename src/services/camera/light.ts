@@ -6,6 +6,7 @@
  */
 import type { CaptureModeId, FlashMode, LightStatus } from './types';
 import type { IconName } from '../../components/Icon';
+import { t as tx } from '../../i18n';
 
 /** Modes Auto Light may change: the everyday ones (not RAW, Ultra Detail or Spotlight). */
 export function autoLightApplies(mode: CaptureModeId): boolean {
@@ -98,7 +99,7 @@ export function lightChip(status: LightStatus | null, enabled: boolean): LightCh
           : status.backlit
             ? 'Your face and the bright background are both kept'
             : 'Bright skies and deep shadows are both kept';
-  return { label, icon, accessibilityLabel: `Auto Light: ${label}. ${luxWords(status.lux)}${what}.` };
+  return { label, icon, accessibilityLabel: tx('light_auto_light', { label, luxWords: luxWords(status.lux), what }) };
 }
 
 /** The flash button: shown for a flash unit, or for the screen light on the front camera. */

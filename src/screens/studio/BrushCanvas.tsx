@@ -5,6 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { thin, toPhoto, type Touch } from '../../services/studio/gesture';
 import type { Brush, Stroke } from '../../services/studio/StudioService';
 import { containRect } from '../editor/geometry';
+import { t as tx } from '../../i18n';
 
 export type Backing = 'dim' | 'checks' | 'white' | 'black';
 
@@ -97,7 +98,7 @@ export function BrushCanvas<B extends string = Brush>({
       style={styles.wrap}
       onLayout={(e: LayoutChangeEvent) => setView({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
       accessibilityLabel={
-        tapMode ? 'Photo. Tap the person to keep' : (label ?? 'Your cut-out. Paint with a finger to correct it')
+        tapMode ? tx('brush_canvas_photo_tap_the_person_to') : (label ?? tx('brush_canvas_your_cut_out_paint_with'))
       }
       testID="brush-canvas"
       {...handlers}

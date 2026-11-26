@@ -48,6 +48,10 @@ export type RootStackParamList = {
   Rewards: undefined;
   /** The app's language (English and 8 more, or the phone's). */
   Language: undefined;
+  /** Help & FAQ: every tool, plan and setting, by topic, with search. */
+  Help: undefined;
+  /** The privacy policy, with ad privacy choices. */
+  Privacy: undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

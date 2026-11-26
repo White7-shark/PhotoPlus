@@ -16,6 +16,7 @@ import { getStorageService, joinPath } from '../services/storage/StorageService'
 import { PLATES, SIZE_MAX, SIZE_MIN, type Background } from '../services/studio/scene';
 import { useAppStore } from '../state/store';
 import { BackgroundPicker } from './studio/BackgroundPicker';
+import { t as tx } from '../i18n';
 
 const log = createLogger('glide-preview');
 
@@ -57,7 +58,7 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
     try {
       await getStorageService().saveVideoToGallery(clip.outputPath);
       setSaved(true);
-      setMessage({ text: 'Saved to your gallery', tone: 'success' });
+      setMessage({ text: tx('glide_preview_saved_to_your_gallery'), tone: 'success' });
     } catch (e) {
       log.warn('gallery save failed', e);
       setMessage({
@@ -87,7 +88,7 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
       subject.current ??= await processing.glideSubject(clip.rawPath);
       const framed = frameGlideScene(subject.current, background, size);
       if (!framed) {
-        setMessage({ text: 'Nobody was found in this clip, so there is no one to move into a scene.', tone: 'danger' });
+        setMessage({ text: tx('glide_preview_nobody_was_found_in_this'), tone: 'danger' });
         return;
       }
       const paths = await getStorageService().getPaths();
@@ -104,7 +105,7 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
       setView('glide');
       setFailed(false);
       setScenePanel(false);
-      setMessage({ text: 'You’re in the new scene. Saved to your gallery.', tone: 'success' });
+      setMessage({ text: tx('glide_preview_you_re_in_the_new'), tone: 'success' });
     } catch (e) {
       const code = errorCode(e);
       if (code === 'PREMIUM_REQUIRED') setPremiumOpen(true);
@@ -121,16 +122,16 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
   return (
     <Screen
       title="Glide"
-      overline={`${(clip.durationMs / 1000).toFixed(1)} s · ${clip.width}×${clip.height}`}
+      overline={tx('glide_preview_s', { value: (clip.durationMs / 1000).toFixed(1), width: clip.width, height: clip.height })}
       onBack={() => navigation.goBack()}
       headerRight={
-        <IconButton icon="share" label="Share video" onPress={() => void share()} size={44} testID="share-video" />
+        <IconButton icon="share" label={tx('glide_preview_share_video')} onPress={() => void share()} size={44} testID="share-video" />
       }
       bottomInset={32}
     >
       <View style={{ gap: 16 }}>
         <SegmentedControl
-          label="View"
+          label={tx('glide_preview_view')}
           value={view}
           onChange={v => {
             setFailed(false);
@@ -138,7 +139,7 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
           }}
           options={[
             { value: 'glide', label: 'Glide' },
-            { value: 'before', label: 'As recorded' },
+            { value: 'before', label: tx('glide_preview_as_recorded') },
           ]}
         />
 
@@ -146,7 +147,7 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
           {failed ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' }}>
               <AppText variant="body" tone="secondary" align="center">
-                This clip can’t be played.
+                {tx('glide_preview_this_clip_can_t_be')}
               </AppText>
             </View>
           ) : (
@@ -154,7 +155,7 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
               key={view}
               source={view === 'glide' ? clip.outputPath : clip.rawPath}
               muted={muted}
-              accessibilityLabel={view === 'glide' ? 'Your Glide clip' : 'The clip as recorded'}
+              accessibilityLabel={view === 'glide' ? tx('glide_preview_your_glide_clip') : tx('glide_preview_the_clip_as_recorded')}
               onError={() => setFailed(true)}
               style={{ flex: 1 }}
             />
@@ -163,37 +164,37 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <AppText variant="caption" tone="secondary" style={{ flex: 1 }}>
-            {view === 'glide' ? (clip.scene ? 'In a new scene, steadied and cleaned' : 'Steadied, cleaned and sharpened') : 'Before Glide'}
+            {view === 'glide' ? (clip.scene ? tx('glide_preview_in_a_new_scene_steadied') : tx('glide_preview_steadied_cleaned_and_sharpened')) : tx('glide_preview_before_glide')}
           </AppText>
           <Button
-            label={muted ? 'Sound off' : 'Sound on'}
+            label={muted ? tx('glide_preview_sound_off') : tx('glide_preview_sound_on')}
             variant="ghost"
-            accessibilityHint={muted ? 'Turns the sound on' : 'Turns the sound off'}
+            accessibilityHint={muted ? tx('glide_preview_turns_the_sound_on') : tx('glide_preview_turns_the_sound_off')}
             onPress={() => setMuted(m => !m)}
             testID="mute"
           />
         </View>
 
         <GlassSurface style={{ padding: 16, gap: 10 }}>
-          <AppText variant="title3">What Glide did</AppText>
+          <AppText variant="title3">{tx('glide_preview_what_glide_did')}</AppText>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {steadier ? <Badge label={`${steadier}% steadier`} tone="success" icon="check" /> : null}
-            <Badge label="Cleaner in low light" tone="success" icon="check" />
-            <Badge label="Sharper detail" tone="success" icon="check" />
-            {clip.watermarked ? <Badge label="Photo Plus mark" tone="neutral" icon="info" /> : null}
+            {steadier ? <Badge label={tx('glide_preview_steadier', { steadier })} tone="success" icon="check" /> : null}
+            <Badge label={tx('glide_preview_cleaner_in_low_light')} tone="success" icon="check" />
+            <Badge label={tx('glide_preview_sharper_detail')} tone="success" icon="check" />
+            {clip.watermarked ? <Badge label={tx('glide_preview_photo_plus_mark')} tone="neutral" icon="info" /> : null}
           </View>
         </GlassSurface>
 
         <GlassSurface style={{ padding: 16, gap: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <View style={{ flex: 1, gap: 2 }}>
-              <AppText variant="title3">Put me in a new scene</AppText>
+              <AppText variant="title3">{tx('glide_preview_put_me_in_a_new')}</AppText>
               <AppText variant="caption" tone="secondary">
-                The background is replaced in every frame, and you stay the right size for the scene.
+                {tx('glide_preview_the_background_is_replaced_in')}
               </AppText>
             </View>
             <Button
-              label={scenePanel ? 'Close' : 'Choose'}
+              label={scenePanel ? tx('glide_preview_close') : tx('glide_preview_choose')}
               icon={plan === 'premium' ? 'layers' : 'crown'}
               variant="glass"
               onPress={openScene}
@@ -204,7 +205,7 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
             <>
               <BackgroundPicker value={background} mine={settings.myBackgrounds} onChoose={setBackground} transparent={false} />
               <ValueSlider
-                label="Size"
+                label={tx('glide_preview_size')}
                 value={size}
                 min={SIZE_MIN}
                 max={SIZE_MAX}
@@ -215,17 +216,17 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
               />
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <AppText variant="caption" tone={Math.abs(size - 1) < 0.05 ? 'accent' : 'secondary'} style={{ flex: 1 }}>
-                  {Math.abs(size - 1) < 0.05 ? 'Auto size: true to the scene.' : size > 1 ? 'Larger than the scene gives you.' : 'Smaller than the scene gives you.'}
+                  {Math.abs(size - 1) < 0.05 ? tx('glide_preview_auto_size_true_to_the') : size > 1 ? tx('glide_preview_larger_than_the_scene_gives') : tx('glide_preview_smaller_than_the_scene_gives')}
                 </AppText>
-                <Button label="Auto size" variant="ghost" icon="wand" disabled={Math.abs(size - 1) < 0.05} onPress={() => setSize(1)} testID="glide-scene-auto" />
+                <Button label={tx('glide_preview_auto_size')} variant="ghost" icon="wand" disabled={Math.abs(size - 1) < 0.05} onPress={() => setSize(1)} testID="glide-scene-auto" />
               </View>
               {crafting !== null ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <AppText variant="body" style={{ flex: 1 }}>{`Moving you into the scene · ${Math.round(crafting * 100)}%`}</AppText>
-                  <Button label="Stop" variant="ghost" onPress={() => abort.current?.abort()} testID="glide-scene-stop" />
+                  <AppText variant="body" style={{ flex: 1 }}>{tx('glide_preview_moving_you_into_the_scene', { value: Math.round(crafting * 100) })}</AppText>
+                  <Button label={tx('glide_preview_stop')} variant="ghost" onPress={() => abort.current?.abort()} testID="glide-scene-stop" />
                 </View>
               ) : (
-                <Button label="Make my Glide here" icon="sparkles" onPress={() => void makeScene()} fullWidth testID="glide-scene-make" />
+                <Button label={tx('glide_preview_make_my_glide_here')} icon="sparkles" onPress={() => void makeScene()} fullWidth testID="glide-scene-make" />
               )}
             </>
           ) : null}
@@ -235,9 +236,9 @@ export function GlidePreviewScreen({ navigation, route }: RootScreenProps<'Glide
           <Badge label={message.text} tone={message.tone} icon={message.tone === 'danger' ? 'alert' : 'check'} />
         ) : null}
 
-        <Button label="Share" icon="share" onPress={() => void share()} fullWidth testID="glide-share" />
+        <Button label={tx('glide_preview_share')} icon="share" onPress={() => void share()} fullWidth testID="glide-share" />
         <Button
-          label={saved ? 'Saved to gallery' : 'Save to gallery'}
+          label={saved ? tx('glide_preview_saved_to_gallery') : tx('glide_preview_save_to_gallery')}
           icon={saved ? 'check' : 'image'}
           variant="glass"
           loading={saving}

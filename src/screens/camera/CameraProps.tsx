@@ -6,6 +6,7 @@ import type { CameraService } from '../../services/camera/CameraService';
 import { CameraEvents, type CameraPropRequest } from '../../services/camera/types';
 import { PROP_CATEGORIES, propSource, type PropCategory, type PropDef } from '../../services/edit/catalog';
 import { fitToFace, mainFace, type FaceGeometry } from '../../services/edit/placement';
+import { t as tx } from '../../i18n';
 
 /** The preview frame in screen pixels. */
 export interface Frame {
@@ -238,7 +239,7 @@ export function LivePropOverlay({
       onResponderMove={move}
       onResponderRelease={() => setTouch(null)}
       onResponderTerminate={() => setTouch(null)}
-      accessibilityLabel={`${def.name}. Drag to move it, pinch to resize`}
+      accessibilityLabel={tx('camera_props_drag_to_move_it_pinch', { name: def.name })}
       testID="live-prop"
       style={{ position: 'absolute', left: at.cx - box / 2, top: at.cy - box / 2, width: box, height: box }}
     >
@@ -284,14 +285,14 @@ export function PropTray({
       testID="prop-tray"
     >
       <SegmentedControl
-        label="Props"
+        label={tx('camera_props_props')}
         value={category}
         onChange={onCategory}
         options={PROP_CATEGORIES.map(c => ({ value: c.id, label: c.label }))}
       />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         <PreviewTile
-          label="None"
+          label={tx('camera_props_none')}
           placeholderIcon="close"
           width={64}
           height={64}
@@ -300,7 +301,7 @@ export function PropTray({
         />
         {category === 'mine' ? (
           <PreviewTile
-            label="Make one"
+            label={tx('camera_props_make_one')}
             placeholderIcon="plus"
             width={64}
             height={64}
@@ -324,7 +325,7 @@ export function PropTray({
         ))}
       </ScrollView>
       <AppText variant="caption" tone="secondary" align="center">
-        {selected ? 'It follows your face. Drag it to move it, pinch to resize.' : 'Tap a prop to try it on.'}
+        {selected ? tx('camera_props_it_follows_your_face_drag') : tx('camera_props_tap_a_prop_to_try')}
       </AppText>
     </View>
   );

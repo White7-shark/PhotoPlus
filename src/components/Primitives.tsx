@@ -91,6 +91,7 @@ export interface ListRowProps {
   right?: React.ReactNode;
   accessibilityHint?: string;
   last?: boolean;
+  testID?: string;
 }
 
 export function ListRow({
@@ -103,6 +104,7 @@ export function ListRow({
   right,
   accessibilityHint,
   last,
+  testID,
 }: ListRowProps) {
   const theme = useTheme();
   const content = (
@@ -149,6 +151,7 @@ export function ListRow({
       accessibilityLabel={[title, value].filter(Boolean).join(', ')}
       accessibilityHint={accessibilityHint ?? subtitle}
       android_ripple={{ color: 'rgba(255,255,255,0.08)' }}
+      testID={testID}
     >
       {content}
     </Pressable>

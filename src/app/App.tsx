@@ -11,6 +11,7 @@ import { startLifecycleCoordinator } from '../services/lifecycle/LifecycleCoordi
 import { createLogger } from '../services/logging/logger';
 import { useAppStore } from '../state/store';
 import { ThemeProvider, useTheme } from '../theme';
+import { t as tx } from '../i18n';
 
 const log = createLogger('app');
 
@@ -33,13 +34,13 @@ function BootGate() {
       {status === 'error' ? (
         <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
           <ErrorState
-            title="Something went wrong at startup"
+            title={tx('app_something_went_wrong_at_startup')}
             message={bootError ?? undefined}
             onRetry={() => void start()}
           />
         </View>
       ) : (
-        <SplashState label="Preparing your studio…" />
+        <SplashState label={tx('app_preparing_your_studio')} />
       )}
     </View>
   );

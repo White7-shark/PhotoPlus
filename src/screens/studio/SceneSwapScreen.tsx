@@ -33,36 +33,37 @@ import { BrushCanvas, type Backing } from './BrushCanvas';
 import { PlacementView } from './PlacementView';
 import { useSceneSwap, type Step } from './useSceneSwap';
 import { recordActivity } from '../../services/rewards/RewardsService';
+import { t as tx } from '../../i18n';
 
 const STEPS: { step: Step; label: string }[] = [
-  { step: 'pick', label: 'Photo' },
-  { step: 'cutout', label: 'Cut-out' },
-  { step: 'scene', label: 'Scene' },
+  { step: 'pick', label: tx('scene_swap_photo') },
+  { step: 'cutout', label: tx('scene_swap_cut_out') },
+  { step: 'scene', label: tx('scene_swap_scene') },
 ];
 
 const BRUSHES: { value: Brush; label: string }[] = [
-  { value: 'keep', label: 'Keep' },
-  { value: 'remove', label: 'Remove' },
-  { value: 'hair', label: 'Fix hair' },
+  { value: 'keep', label: tx('scene_swap_keep') },
+  { value: 'remove', label: tx('scene_swap_remove') },
+  { value: 'hair', label: tx('scene_swap_fix_hair') },
 ];
 
 const BACKINGS: { value: Backing; label: string }[] = [
-  { value: 'dim', label: 'Photo' },
-  { value: 'checks', label: 'Checks' },
-  { value: 'white', label: 'White' },
-  { value: 'black', label: 'Black' },
+  { value: 'dim', label: tx('scene_swap_photo') },
+  { value: 'checks', label: tx('scene_swap_checks') },
+  { value: 'white', label: tx('scene_swap_white') },
+  { value: 'black', label: tx('scene_swap_black') },
 ];
 
 type Panel = 'backgrounds' | 'light' | 'finish' | 'hair' | 'lips' | 'lipstick' | 'adjust' | 'frame';
 const PANELS: { value: Panel; label: string }[] = [
-  { value: 'backgrounds', label: 'Backgrounds' },
+  { value: 'backgrounds', label: tx('scene_swap_backgrounds') },
   { value: 'light', label: 'Light' },
-  { value: 'finish', label: 'Finish' },
-  { value: 'hair', label: 'Hair' },
-  { value: 'lips', label: 'Pink lips' },
-  { value: 'lipstick', label: 'Lipstick' },
-  { value: 'adjust', label: 'Adjust' },
-  { value: 'frame', label: 'Frame' },
+  { value: 'finish', label: tx('scene_swap_finish') },
+  { value: 'hair', label: tx('scene_swap_hair') },
+  { value: 'lips', label: tx('scene_swap_pink_lips') },
+  { value: 'lipstick', label: tx('scene_swap_lipstick') },
+  { value: 'adjust', label: tx('scene_swap_adjust') },
+  { value: 'frame', label: tx('scene_swap_frame') },
 ];
 
 const pct = (v: number) => `${Math.round(v * 100)}`;
@@ -142,10 +143,10 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
   };
 
   const removeMine = (p: PlateDef) =>
-    Alert.alert('Remove this background?', p.name, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(tx('scene_swap_remove_this_background'), p.name, [
+      { text: tx('scene_swap_cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: tx('scene_swap_remove'),
         style: 'destructive',
         onPress: () =>
           void updateSetting(
@@ -200,7 +201,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
         <View
           style={{ flexDirection: 'row', gap: 8 }}
           accessibilityRole="progressbar"
-          accessibilityLabel={`Step ${stepIndex + 1} of 3`}
+          accessibilityLabel={tx('scene_swap_step_of_3', { value: stepIndex + 1 })}
         >
           {STEPS.map((x, i) => (
             <View
@@ -233,16 +234,15 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
 
         {s.step === 'pick' ? (
           <GlassSurface radius={22} style={{ padding: 20, gap: 12 }}>
-            <AppText variant="title2">Put yourself in a new place</AppText>
+            <AppText variant="title2">{tx('scene_swap_put_yourself_in_a_new')}</AppText>
             <AppText variant="body" tone="secondary">
-              Choose a photo of a person, or take one now. They are cut out on this phone — hair and all — and you
-              choose where they go: a studio, a park at golden hour, a café, a plain colour, or a photo of your own.
+              {tx('scene_swap_choose_a_photo_of_a')}
             </AppText>
             <AppText variant="caption" tone="secondary">
-              Works best with one person, head and shoulders or head to toe, in a sharp photo.
+              {tx('scene_swap_works_best_with_one_person')}
             </AppText>
             <Button
-              label="Choose a photo"
+              label={tx('scene_swap_choose_a_photo')}
               icon="image"
               size="lg"
               loading={s.busy === 'start'}
@@ -250,7 +250,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
               testID="scene-pick"
             />
             <Button
-              label="Take a photo"
+              label={tx('scene_swap_take_a_photo')}
               icon="camera"
               size="lg"
               variant="glass"
@@ -280,21 +280,27 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
             />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <View style={{ flex: 1 }}>
-                <SegmentedControl label="Brush" options={BRUSHES} value={brush} onChange={setBrush} />
+                <SegmentedControl label={tx('scene_swap_brush')} options={BRUSHES} value={brush} onChange={setBrush} />
               </View>
-              <IconButton icon="undo" label="Undo" onPress={s.undo} disabled={s.strokes.length === 0} size={40} />
-              <IconButton icon="redo" label="Redo" onPress={s.redo} disabled={!s.canRedo} size={40} />
+              <IconButton
+                icon="undo"
+                label={tx('scene_swap_undo')}
+                onPress={s.undo}
+                disabled={s.strokes.length === 0}
+                size={40}
+              />
+              <IconButton icon="redo" label={tx('scene_swap_redo')} onPress={s.redo} disabled={!s.canRedo} size={40} />
             </View>
             <AppText variant="caption" tone="secondary">
               {brush === 'keep'
-                ? 'Paint over anything of the person that was missed.'
+                ? tx('scene_swap_paint_over_anything_of_the')
                 : brush === 'remove'
-                  ? 'Paint over anything that isn’t the person.'
-                  : 'Paint over fine hair, fur or lace: the colours decide what stays.'}
-              {s.busy === 'cut' ? '  Updating…' : ''}
+                  ? tx('scene_swap_paint_over_anything_that_isn')
+                  : tx('scene_swap_paint_over_fine_hair_fur')}
+              {s.busy === 'cut' ? tx('scene_swap_updating') : ''}
             </AppText>
             <ValueSlider
-              label="Brush size"
+              label={tx('scene_swap_brush_size')}
               value={radius}
               min={0.01}
               max={0.08}
@@ -302,23 +308,28 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
               onChange={setRadius}
               format={v => `${Math.round(v * 1000) / 10}`}
             />
-            <SegmentedControl label="Show on" options={BACKINGS} value={backing} onChange={setBacking} />
+            <SegmentedControl
+              label={tx('scene_swap_show_on')}
+              options={BACKINGS}
+              value={backing}
+              onChange={setBacking}
+            />
             <GlassSurface radius={18} style={{ padding: 14, gap: 10 }}>
-              <AppText variant="bodyStrong">Edges</AppText>
+              <AppText variant="bodyStrong">{tx('scene_swap_edges')}</AppText>
               <ValueSlider
-                label="Hair detail"
+                label={tx('scene_swap_hair_detail')}
                 value={s.edge.hairDetail}
                 onChange={v => s.changeEdge({ hairDetail: v })}
                 format={pct}
               />
               <ValueSlider
-                label="Softer edge"
+                label={tx('scene_swap_softer_edge')}
                 value={s.edge.softness}
                 onChange={v => s.changeEdge({ softness: v })}
                 format={pct}
               />
               <ValueSlider
-                label="Shrink or grow"
+                label={tx('scene_swap_shrink_or_grow')}
                 value={s.edge.shift}
                 min={-1}
                 max={1}
@@ -328,15 +339,15 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
             </GlassSurface>
             <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
               <Button
-                label={tapMode ? 'Tap the person…' : 'Wrong person?'}
+                label={tapMode ? tx('scene_swap_tap_the_person') : tx('scene_swap_wrong_person')}
                 variant="glass"
                 icon="figure"
                 onPress={() => setTapMode(t => !t)}
               />
-              <Button label="Start over" variant="ghost" icon="refresh" onPress={s.resetCutout} />
+              <Button label={tx('scene_swap_start_over')} variant="ghost" icon="refresh" onPress={s.resetCutout} />
             </View>
             <Button
-              label="Choose a scene"
+              label={tx('scene_swap_choose_a_scene')}
               icon="layers"
               size="lg"
               disabled={!s.report?.found}
@@ -359,7 +370,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
                 backing="dim"
                 tapMode={false}
                 colours={HAIR_BRUSH_COLOURS}
-                label="The person with their hair. Paint with a finger to erase, restore or colour"
+                label={tx('scene_swap_the_person_with_their_hair')}
                 onStroke={st => s.setHair({ ...s.hair, strokes: [...(s.hair.strokes ?? []), st] })}
                 onTap={() => undefined}
               />
@@ -378,7 +389,12 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
                 onChange={s.setPlacement}
               />
             )}
-            <SegmentedControl label="Scene options" options={PANELS} value={panel} onChange={setPanel} />
+            <SegmentedControl
+              label={tx('scene_swap_scene_options')}
+              options={PANELS}
+              value={panel}
+              onChange={setPanel}
+            />
             {panel === 'backgrounds' ? (
               <BackgroundPicker
                 value={s.background}
@@ -427,7 +443,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
             {panel === 'adjust' ? (
               <GlassSurface radius={18} style={{ padding: 14, gap: 10 }}>
                 <ValueSlider
-                  label="Size"
+                  label={tx('scene_swap_size')}
                   value={s.size}
                   min={SIZE_MIN}
                   max={SIZE_MAX}
@@ -445,16 +461,16 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
                   >
                     {s.sizeIsTrue
                       ? s.trueToScene
-                        ? 'True to the scene for where you stand.'
+                        ? tx('scene_swap_true_to_the_scene_for')
                         : s.size > 1
-                          ? 'Larger than the scene gives you here.'
-                          : 'Smaller than the scene gives you here.'
+                          ? tx('scene_swap_larger_than_the_scene_gives')
+                          : tx('scene_swap_smaller_than_the_scene_gives')
                       : s.trueToScene
-                        ? 'The size that suits this frame.'
-                        : 'Your own size.'}
+                        ? tx('scene_swap_the_size_that_suits_this')
+                        : tx('scene_swap_your_own_size')}
                   </AppText>
                   <Button
-                    label="Auto size"
+                    label={tx('scene_swap_auto_size')}
                     variant="glass"
                     icon="wand"
                     disabled={s.trueToScene}
@@ -470,33 +486,33 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
                   testID="scene-spotlight"
                 />
                 <ValueSlider
-                  label="Match the light"
+                  label={tx('scene_swap_match_the_light')}
                   value={s.look.colorMatch}
                   onChange={v => s.setLook({ colorMatch: v })}
                   format={pct}
                 />
                 <ValueSlider
-                  label="Blend the edges"
+                  label={tx('scene_swap_blend_the_edges')}
                   value={s.look.lightWrap}
                   onChange={v => s.setLook({ lightWrap: v })}
                   format={pct}
                 />
                 <ValueSlider
-                  label="Shadow"
+                  label={tx('scene_swap_shadow')}
                   value={s.look.shadow}
                   onChange={v => s.setLook({ shadow: v })}
                   format={pct}
                 />
                 {s.background.kind === 'plate' ? (
                   <ValueSlider
-                    label="Background blur"
+                    label={tx('scene_swap_background_blur')}
                     value={s.look.bgBlur}
                     onChange={v => s.setLook({ bgBlur: v })}
                     format={pct}
                   />
                 ) : null}
                 <ValueSlider
-                  label="Tilt"
+                  label={tx('scene_swap_tilt')}
                   value={s.placement.tilt}
                   min={-1}
                   max={1}
@@ -504,26 +520,31 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
                   format={signed}
                 />
                 <ToggleRow
-                  title="Mirror"
+                  title={tx('scene_swap_mirror')}
                   icon="flip"
                   value={s.placement.flip}
                   onChange={v => s.setPlacement({ ...s.placement!, flip: v })}
                 />
                 <ToggleRow
-                  title="Follow the scene’s depth"
-                  subtitle="Drag back and you shrink, drag nearer and you grow, as in the scene"
+                  title={tx('scene_swap_follow_the_scene_s_depth')}
+                  subtitle={tx('scene_swap_drag_back_and_you_shrink')}
                   icon="aspect"
                   value={s.follow}
                   onChange={s.setFollow}
                   last
                 />
-                <Button label="Put me back" variant="ghost" icon="refresh" onPress={s.resetPlacement} />
+                <Button
+                  label={tx('scene_swap_put_me_back')}
+                  variant="ghost"
+                  icon="refresh"
+                  onPress={s.resetPlacement}
+                />
               </GlassSurface>
             ) : null}
             {panel === 'frame' ? (
               <>
                 <SegmentedControl
-                  label="Frame"
+                  label={tx('scene_swap_frame')}
                   options={(Object.keys(SHAPE_LABELS) as FrameShape[]).map(v => ({ value: v, label: SHAPE_LABELS[v] }))}
                   value={s.shape}
                   onChange={s.chooseShape}
@@ -537,7 +558,9 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
             ) : null}
             {s.background.kind === 'plate' && s.background.plate.credit ? (
               <AppText variant="caption" tone="tertiary">
-                Scene: {s.background.plate.credit.source} ({s.background.plate.credit.authors.join(', ')}), free to use.
+                {tx('scene_swap_scene_2')} {s.background.plate.credit.source} (
+                {s.background.plate.credit.authors.join(', ')}
+                {tx('scene_swap_free_to_use')}
               </AppText>
             ) : null}
             <DownloadSize
@@ -549,7 +572,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
                 <Button
-                  label="Save photo"
+                  label={tx('scene_swap_save_photo')}
                   icon={allowed ? 'check' : 'crown'}
                   size="lg"
                   loading={s.busy === 'save'}
@@ -558,7 +581,7 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
                 />
               </View>
               <Button
-                label="Cut-out only"
+                label={tx('scene_swap_cut_out_only')}
                 variant="glass"
                 icon="layers"
                 onPress={() => void save(true)}

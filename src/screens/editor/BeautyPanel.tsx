@@ -7,6 +7,7 @@ import { BEAUTY_PRESETS, findPreset, presetCover } from '../../services/beauty/c
 import { DEFAULT_ADJUST, GROUP_MAX, resolveRecipe, type BeautyAdjust } from '../../services/beauty/recipe';
 import type { EditDocument } from '../../services/edit/document';
 import type { Update } from './panels';
+import { t as tx } from '../../i18n';
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
@@ -37,7 +38,7 @@ export function BeautyEditPanel({
     <View style={{ gap: 12 }} testID="beauty-panel">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         <PreviewTile
-          label="None"
+          label={tx('beauty_none')}
           placeholderIcon="close"
           width={68}
           height={68}
@@ -67,7 +68,7 @@ export function BeautyEditPanel({
             {findPreset(current.preset)?.description}
           </AppText>
           <ValueSlider
-            label="Intensity"
+            label={tx('beauty_intensity')}
             value={adjust.intensity}
             onChange={v => set(current.preset, { ...adjust, intensity: v }, 'beauty-intensity')}
             onEnd={commit}

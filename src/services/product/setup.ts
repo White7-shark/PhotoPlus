@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * Product photography (Phase 12): how a cut-out product becomes a catalogue
  * shot (mirrored and checked natively by Product.kt). A setup is the
@@ -65,27 +66,27 @@ export const DEFAULT_SETUP: ProductSetup = {
 };
 
 export const BACKDROP_KINDS: readonly { id: BackdropKind; name: string; about: string; premium: boolean }[] = [
-  { id: 'solid', name: 'Plain', about: 'One clean colour, as web shops ask for', premium: false },
-  { id: 'sweep', name: 'Paper sweep', about: 'Studio paper curving from the wall into the floor', premium: false },
-  { id: 'surface', name: 'Tabletop', about: 'A table against a wall', premium: true },
-  { id: 'radial', name: 'Spotlit', about: 'A pool of colour behind the product', premium: true },
-  { id: 'scene', name: 'Scene', about: 'A real place behind the product', premium: true },
-  { id: 'transparent', name: 'Transparent', about: 'No background: a PNG to place anywhere', premium: true },
+  { id: 'solid', name: tx('setup_plain'), about: tx('setup_one_clean_colour_as_web'), premium: false },
+  { id: 'sweep', name: tx('setup_paper_sweep'), about: tx('setup_studio_paper_curving_from_the'), premium: false },
+  { id: 'surface', name: tx('setup_tabletop'), about: tx('setup_a_table_against_a_wall'), premium: true },
+  { id: 'radial', name: tx('setup_spotlit'), about: tx('setup_a_pool_of_colour_behind'), premium: true },
+  { id: 'scene', name: tx('setup_scene'), about: tx('setup_a_real_place_behind_the'), premium: true },
+  { id: 'transparent', name: tx('setup_transparent'), about: tx('setup_no_background_a_png_to'), premium: true },
 ];
 
 export const BACKDROP_COLOURS: readonly { name: string; hex: string }[] = [
-  { name: 'White', hex: '#FFFFFF' },
-  { name: 'Paper', hex: '#F4F2EE' },
-  { name: 'Light grey', hex: '#E4E4E4' },
-  { name: 'Stone', hex: '#CFCAC2' },
-  { name: 'Sand', hex: '#E8D8BF' },
-  { name: 'Blush', hex: '#F2D7D3' },
-  { name: 'Sage', hex: '#C8D5C2' },
-  { name: 'Sky', hex: '#CDDFEE' },
-  { name: 'Terracotta', hex: '#C47558' },
-  { name: 'Navy', hex: '#1F2C44' },
-  { name: 'Charcoal', hex: '#2A2A2D' },
-  { name: 'Black', hex: '#101012' },
+  { name: tx('setup_white'), hex: '#FFFFFF' },
+  { name: tx('setup_paper'), hex: '#F4F2EE' },
+  { name: tx('setup_light_grey'), hex: '#E4E4E4' },
+  { name: tx('setup_stone'), hex: '#CFCAC2' },
+  { name: tx('setup_sand'), hex: '#E8D8BF' },
+  { name: tx('setup_blush'), hex: '#F2D7D3' },
+  { name: tx('setup_sage'), hex: '#C8D5C2' },
+  { name: tx('setup_sky'), hex: '#CDDFEE' },
+  { name: tx('setup_terracotta'), hex: '#C47558' },
+  { name: tx('setup_navy'), hex: '#1F2C44' },
+  { name: tx('setup_charcoal'), hex: '#2A2A2D' },
+  { name: tx('setup_black'), hex: '#101012' },
 ];
 
 /** Where the product sits: composition templates. */
@@ -100,50 +101,50 @@ export interface Template {
 export const TEMPLATES: readonly Template[] = [
   {
     id: 'centre',
-    name: 'Centred',
-    about: 'In the middle, with room around it',
+    name: tx('setup_centred'),
+    about: tx('setup_in_the_middle_with_room'),
     premium: false,
     layout: { fill: 0.75, x: 0.5, y: 0.5, ground: false, flip: false },
   },
   {
     id: 'marketplace',
-    name: 'Fill the frame',
-    about: 'Large and centred, as marketplaces ask (85%)',
+    name: tx('setup_fill_the_frame'),
+    about: tx('setup_large_and_centred_as_marketplaces'),
     premium: false,
     layout: { fill: 0.85, x: 0.5, y: 0.5, ground: false, flip: false },
   },
   {
     id: 'standing',
-    name: 'Standing',
-    about: 'On the floor, a little below the middle',
+    name: tx('setup_standing'),
+    about: tx('setup_on_the_floor_a_little'),
     premium: false,
     layout: { fill: 0.72, x: 0.5, y: 0.86, ground: true, flip: false },
   },
   {
     id: 'left-third',
-    name: 'Left third',
-    about: 'Room on the right for text',
+    name: tx('setup_left_third'),
+    about: tx('setup_room_on_the_right_for'),
     premium: true,
     layout: { fill: 0.62, x: 0.34, y: 0.84, ground: true, flip: false },
   },
   {
     id: 'right-third',
-    name: 'Right third',
-    about: 'Room on the left for text',
+    name: tx('setup_right_third'),
+    about: tx('setup_room_on_the_left_for'),
     premium: true,
     layout: { fill: 0.62, x: 0.66, y: 0.84, ground: true, flip: false },
   },
   {
     id: 'hero',
-    name: 'Hero close-up',
-    about: 'Close and bold, filling the frame',
+    name: tx('setup_hero_close_up'),
+    about: tx('setup_close_and_bold_filling_the'),
     premium: true,
     layout: { fill: 0.96, x: 0.5, y: 0.5, ground: false, flip: false },
   },
   {
     id: 'banner',
-    name: 'Banner',
-    about: 'Small and low, for wide headers',
+    name: tx('setup_banner'),
+    about: tx('setup_small_and_low_for_wide'),
     premium: true,
     layout: { fill: 0.5, x: 0.72, y: 0.88, ground: true, flip: false },
   },
@@ -164,8 +165,8 @@ export interface ExportProfile {
 export const EXPORT_PROFILES: readonly ExportProfile[] = [
   {
     id: 'square',
-    name: 'Square 1:1',
-    about: 'Web shops and marketplaces',
+    name: tx('setup_square_1_1'),
+    about: tx('setup_web_shops_and_marketplaces'),
     aspectW: 1,
     aspectH: 1,
     format: 'jpeg',
@@ -174,8 +175,8 @@ export const EXPORT_PROFILES: readonly ExportProfile[] = [
   },
   {
     id: 'post',
-    name: 'Post 4:5',
-    about: 'Social feeds',
+    name: tx('setup_post_4_5'),
+    about: tx('setup_social_feeds'),
     aspectW: 4,
     aspectH: 5,
     format: 'jpeg',
@@ -184,8 +185,8 @@ export const EXPORT_PROFILES: readonly ExportProfile[] = [
   },
   {
     id: 'story',
-    name: 'Story 9:16',
-    about: 'Stories and reels covers',
+    name: tx('setup_story_9_16'),
+    about: tx('setup_stories_and_reels_covers'),
     aspectW: 9,
     aspectH: 16,
     format: 'jpeg',
@@ -194,8 +195,8 @@ export const EXPORT_PROFILES: readonly ExportProfile[] = [
   },
   {
     id: 'catalogue',
-    name: 'Catalogue 3:4',
-    about: 'Print catalogues and lookbooks',
+    name: tx('setup_catalogue_3_4'),
+    about: tx('setup_print_catalogues_and_lookbooks'),
     aspectW: 3,
     aspectH: 4,
     format: 'jpeg',
@@ -204,8 +205,8 @@ export const EXPORT_PROFILES: readonly ExportProfile[] = [
   },
   {
     id: 'landscape',
-    name: 'Landscape 3:2',
-    about: 'Websites and listings',
+    name: tx('setup_landscape_3_2'),
+    about: tx('setup_websites_and_listings'),
     aspectW: 3,
     aspectH: 2,
     format: 'jpeg',
@@ -214,8 +215,8 @@ export const EXPORT_PROFILES: readonly ExportProfile[] = [
   },
   {
     id: 'banner',
-    name: 'Banner 16:9',
-    about: 'Website headers and slides',
+    name: tx('setup_banner_16_9'),
+    about: tx('setup_website_headers_and_slides'),
     aspectW: 16,
     aspectH: 9,
     format: 'jpeg',
@@ -224,8 +225,8 @@ export const EXPORT_PROFILES: readonly ExportProfile[] = [
   },
   {
     id: 'png',
-    name: 'PNG 1:1',
-    about: 'Lossless, transparent when the backdrop is',
+    name: tx('setup_png_1_1'),
+    about: tx('setup_lossless_transparent_when_the_backdrop'),
     aspectW: 1,
     aspectH: 1,
     format: 'png',
@@ -261,8 +262,8 @@ const with_ = (
 export const CATALOG_PRESETS: readonly CatalogPreset[] = [
   {
     id: 'marketplace-white',
-    name: 'Marketplace white',
-    about: 'Pure white, the product filling 85% of a square, a soft touch of shadow',
+    name: tx('setup_marketplace_white'),
+    about: tx('setup_pure_white_the_product_filling'),
     premium: false,
     setup: with_(
       { kind: 'solid', wall: '#FFFFFF', floor: '#FFFFFF', light: 0 },
@@ -274,16 +275,16 @@ export const CATALOG_PRESETS: readonly CatalogPreset[] = [
   },
   {
     id: 'soft-paper',
-    name: 'Soft paper',
-    about: 'Warm studio paper and a natural shadow, the product standing',
+    name: tx('setup_soft_paper'),
+    about: tx('setup_warm_studio_paper_and_a'),
     premium: false,
     setup: with_({ kind: 'sweep', wall: '#EEEDEA', floor: '#FAF9F7' }, { contact: 0.6, soft: 0.4 }, {}, 'standing'),
     profile: 'post',
   },
   {
     id: 'studio-grey',
-    name: 'Studio grey',
-    about: 'A neutral grey sweep that suits any product',
+    name: tx('setup_studio_grey'),
+    about: tx('setup_a_neutral_grey_sweep_that'),
     premium: false,
     setup: with_(
       { kind: 'sweep', wall: '#CFCFCF', floor: '#E6E6E6', light: 0.6 },
@@ -295,8 +296,8 @@ export const CATALOG_PRESETS: readonly CatalogPreset[] = [
   },
   {
     id: 'tabletop',
-    name: 'Tabletop',
-    about: 'A stone wall and pale table, with window light throwing a shadow',
+    name: tx('setup_tabletop'),
+    about: tx('setup_a_stone_wall_and_pale'),
     premium: true,
     setup: with_(
       { kind: 'surface', wall: '#CFCAC2', floor: '#F1ECE4', horizon: 0.62, softness: 0.2, light: 0.6 },
@@ -308,8 +309,8 @@ export const CATALOG_PRESETS: readonly CatalogPreset[] = [
   },
   {
     id: 'glossy-black',
-    name: 'Glossy black',
-    about: 'Black, a mirror finish under the product',
+    name: tx('setup_glossy_black'),
+    about: tx('setup_black_a_mirror_finish_under'),
     premium: true,
     setup: with_(
       { kind: 'radial', wall: '#2A2A2D', floor: '#08080A', light: 0.4 },
@@ -321,8 +322,8 @@ export const CATALOG_PRESETS: readonly CatalogPreset[] = [
   },
   {
     id: 'pastel-pop',
-    name: 'Pastel pop',
-    about: 'Blush paper and a spotlight, made for beauty and gifts',
+    name: tx('setup_pastel_pop'),
+    about: tx('setup_blush_paper_and_a_spotlight'),
     premium: true,
     setup: with_(
       { kind: 'radial', wall: '#F7E3DF', floor: '#E9C3BC', light: 0.5 },
@@ -334,8 +335,8 @@ export const CATALOG_PRESETS: readonly CatalogPreset[] = [
   },
   {
     id: 'cut-out',
-    name: 'Cut-out PNG',
-    about: 'No background, a soft shadow kept: drop it onto any design',
+    name: tx('setup_cut_out_png'),
+    about: tx('setup_no_background_a_soft_shadow'),
     premium: true,
     setup: with_({ kind: 'transparent' }, { contact: 0.5, soft: 0.3 }, {}, 'centre'),
     profile: 'png',
@@ -422,40 +423,40 @@ export interface Pack {
 export const PACKS: readonly Pack[] = [
   {
     id: 'catalogue-essentials',
-    name: 'Catalogue essentials',
-    about: 'White, paper and grey: the clean basics every shop needs',
+    name: tx('setup_catalogue_essentials'),
+    about: tx('setup_white_paper_and_grey_the'),
     kind: 'product',
     premium: false,
     items: ['marketplace-white', 'soft-paper', 'studio-grey'],
   },
   {
     id: 'lifestyle',
-    name: 'Lifestyle tabletop',
-    about: 'Tables, window light and mirror finishes',
+    name: tx('setup_lifestyle_tabletop'),
+    about: tx('setup_tables_window_light_and_mirror'),
     kind: 'product',
     premium: true,
     items: ['tabletop', 'glossy-black'],
   },
   {
     id: 'boutique',
-    name: 'Boutique',
-    about: 'Spotlit colour and cut-outs for beauty, gifts and fashion',
+    name: tx('setup_boutique'),
+    about: tx('setup_spotlit_colour_and_cut_outs'),
     kind: 'product',
     premium: true,
     items: ['pastel-pop', 'cut-out'],
   },
   {
     id: 'everyday-looks',
-    name: 'Everyday looks',
-    about: 'Bright, true and warm: looks for any photo',
+    name: tx('setup_everyday_looks'),
+    about: tx('setup_bright_true_and_warm_looks'),
     kind: 'look',
     premium: false,
     items: ['bright-clean', 'true-colour', 'warm-glow'],
   },
   {
     id: 'editorial-looks',
-    name: 'Editorial looks',
-    about: 'Moody, film and lush colour for a magazine feel',
+    name: tx('setup_editorial_looks'),
+    about: tx('setup_moody_film_and_lush_colour'),
     kind: 'look',
     premium: true,
     items: ['moody', 'film-day', 'lush'],

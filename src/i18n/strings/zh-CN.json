@@ -13,7 +13,7 @@
   "language_overline": "设置",
   "language_system": "手机语言",
   "language_system_detail": "跟随手机：{name}",
-  "language_note": "Photo Plus 会立即切换语言。在下次更新前，部分文字可能仍显示为英文。",
+  "language_note": "Photo Plus 会以你选择的语言重新启动。你的照片、项目和设置都会保留。",
   "language_failed": "无法切换语言",
   "settings_title": "设置",
   "settings_overline": "偏好设置",

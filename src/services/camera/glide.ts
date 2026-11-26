@@ -7,6 +7,7 @@
 import { isActive, type BeautyRecipe } from '../beauty/recipe';
 import type { WatermarkSpec } from '../edit/watermark';
 import { BLUR_LEVELS, type BeautySettings, type BlurLevel } from './model';
+import { t as tx } from '../../i18n';
 
 /** The standard Glide clip length (the free plan, always with the Photo Plus mark). */
 export const GLIDE_FREE_MAX_MS = 7_000;
@@ -26,9 +27,9 @@ export type GlideSpotlight = 'off' | BlurLevel;
 export type GlideSpeed = 'normal' | 'fast' | 'slow';
 
 export const GLIDE_SPEEDS: readonly { id: GlideSpeed; label: string }[] = [
-  { id: 'normal', label: 'Normal' },
-  { id: 'fast', label: 'Fast 2×' },
-  { id: 'slow', label: 'Slow motion' },
+  { id: 'normal', label: tx('glide_normal') },
+  { id: 'fast', label: tx('glide_fast_2') },
+  { id: 'slow', label: tx('glide_slow_motion') },
 ];
 
 /** How long a clip of `recordedMs` plays at a speed. */
@@ -37,7 +38,7 @@ export function playedMs(recordedMs: number, speed: GlideSpeed): number {
 }
 
 export const GLIDE_SPOTLIGHT_LEVELS: readonly { id: GlideSpotlight; label: string }[] = [
-  { id: 'off', label: 'Off' },
+  { id: 'off', label: tx('glide_off') },
   ...BLUR_LEVELS.map(l => ({ id: l.id, label: l.label })),
 ];
 

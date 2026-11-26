@@ -39,17 +39,22 @@ Photo Plus speaks English and 8 more languages. They were chosen as the most-spo
   - Because the language can be changed inside the app, `bundle.language.enableSplit = false` keeps all of them.
   - The strings add only a few kilobytes.
 
-### What is translated by hand, and what Play will translate
+### Every word is in `strings.xml`
 
-- **By hand (51 strings per language):**
-  - the tab bar;
-  - the Language screen;
-  - Settings' section titles, Premium and Rewards rows, and theme;
-  - the integrity block screen's titles, buttons and "no internet" message, and the update banner;
-  - the Premium sheet's buttons;
-  - the share sheet.
-- **Still English in `values/strings.xml` (120 strings in all), for Google Play to translate:** the remaining Settings, integrity and share-sheet text.
-- **Not yet moved into `strings.xml`:** the other screens (Studio, the editor, Product Studio, Rewards and Premium pages, and so on). They are still written in English in the JS code. They move into `en.json` screen by screen with the same `t()` call, and each one moved becomes translatable.
+- **How many.** All the words the app shows are string resources: 1787 strings in `values/strings.xml`. They cover:
+  - every screen;
+  - the tool and catalogue names;
+  - alerts;
+  - the FAQ (83 questions in 15 topics);
+  - the privacy policy (17 sections);
+  - the messages and notifications from the native side.
+- **How they got there.** `node tools/i18n/extract.mjs --write` moved the English out of the code into `en.json`, replacing each string with `tx('key')` without reformatting the code. A Jest test runs it in report mode and fails if any shown words are left in the code, so new text has to go through `en.json`.
+  - **What it moves:** JSX text, text props, text fields of catalogues, alerts and status messages.
+  - **What it never moves:** identifiers, ids, URLs, strings the code compares against, and brand or app names on their own (Photo Plus, Premium, Relight, Glide, WhatsApp, …). Brand names stay in English in every language.
+- **Kotlin messages.** The error messages and update notifications written in Kotlin read their text through `com.photoplus.i18n.Words`, which uses the app's chosen language. The Rewards errors carry their string resource.
+  - Left in English on purpose: internal errors such as database errors, which no one sees.
+- **Changing the language.** The app's JavaScript restarts in the new language (`ReactHost.reload`), so names read once when the app starts (tools, catalogues) switch too. Photos, projects and settings are untouched.
+- **Hand translations.** 51 most-seen strings per language, as before. Google Play translates the rest from `values/strings.xml`.
 
 ### Google Play's app-string translation: what to know
 
@@ -101,3 +106,15 @@ Photos from a real photoshoot made with the app would sell it best. They need ph
   - every language's 3 pictures exist and match the path the native side accepts.
 - **Kotlin:** `StringTableTest` checks that `STRING_TABLE` has exactly the keys of `en.json`, each with its own resource.
 - **Android lint:** clean for the new code. The "missing translation" check is turned off on purpose, because partial translations are expected; it is set in `values/strings.xml`.
+
+## Help & FAQ and the privacy policy
+
+- **Help & FAQ** (Settings → Help & legal):
+  - 83 questions in 15 topics: getting started, camera, pose assistant, Glide, editing, Photoshoot Studio, product photos and business, projects, packs, Premium and payments, Rewards, time and updates, language, privacy, and troubleshooting.
+  - A search box matches words in questions, answers and topics, ignoring case, accents and word order, best matches first, with a count of answers found. It works in every language.
+  - Topic chips and a browse-by-topic grid, and expandable answers.
+- **Privacy policy** (Settings → Help & legal):
+  - 17 sections that match what the app actually does: on-device processing, no account, AdMob with Google's consent form, Google Play payments, the time and update checks, ML Kit, sharing, children, deletion, rights and contact.
+  - An **Ad privacy choices** button opens Google's consent form where the law requires it.
+- **Content source.** The text of both comes from `tools/i18n/content/faq_en.py`, which also writes `docs/PRIVACY_POLICY.md`. Google Play needs that page at a public web address: host it and add the address in Play Console → App content → Privacy policy.
+- **Contact.** Contact points to the developer email on the Google Play page; add a support email there.

@@ -18,13 +18,14 @@ import { MAX_MY_POSES, type GridStyle, type PoseAssistantSettings } from '../../
 import type { PosePhotoResult } from '../../../services/camera/types';
 import { useTheme } from '../../../theme';
 import { PoseSilhouette } from './PoseSilhouette';
+import { t as tx } from '../../../i18n';
 
 const GRID_OPTIONS: { value: 'off' | GridStyle; label: string }[] = [
-  { value: 'off', label: 'Off' },
-  { value: 'thirds', label: 'Thirds' },
-  { value: 'golden', label: 'Golden' },
-  { value: 'cross', label: 'Centre' },
-  { value: 'diagonals', label: 'Diagonal' },
+  { value: 'off', label: tx('pose_off') },
+  { value: 'thirds', label: tx('pose_thirds') },
+  { value: 'golden', label: tx('pose_golden') },
+  { value: 'cross', label: tx('pose_centre') },
+  { value: 'diagonals', label: tx('pose_diagonal') },
 ];
 
 function PoseTile({
@@ -45,7 +46,7 @@ function PoseTile({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${pose.name}${locked ? ', Premium' : ''}`}
+      accessibilityLabel={`${pose.name}${locked ? tx('pose_premium') : ''}`}
       accessibilityState={{ selected }}
       style={[styles.tile, selected ? { borderColor: theme.colors.premium } : null]}
     >
@@ -73,7 +74,7 @@ function PoseTile({
           hitSlop={8}
           style={styles.remove}
           accessibilityRole="button"
-          accessibilityLabel={`Remove ${pose.name}`}
+          accessibilityLabel={tx('pose_remove', { name: pose.name })}
         >
           <Icon name="close" size={12} color="#FFFFFF" strokeWidth={2.4} />
         </Pressable>
@@ -137,7 +138,7 @@ export function PoseSheet({
       return;
     }
     if (myPoses.length >= MAX_MY_POSES) {
-      setNote(`You can keep up to ${MAX_MY_POSES} poses. Remove one to add another.`);
+      setNote(tx('pose_you_can_keep_up_to', { MAXMYPOSES: MAX_MY_POSES }));
       return;
     }
     setBusy(true);
@@ -149,7 +150,7 @@ export function PoseSheet({
         set({ poseId: out.pose.id });
         setCategory('mine');
       } else if (out.kind === 'noPerson') {
-        setNote('No one was found in that photo. Try one where the person is clearly visible.');
+        setNote(tx('pose_no_one_was_found_in'));
       }
     } catch (e) {
       setNote(friendlyMessage(errorCode(e), 'That photo couldn’t be read. Try another one.'));
@@ -160,35 +161,35 @@ export function PoseSheet({
 
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close the photo assistant">
+      <Pressable style={styles.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel={tx('pose_close_the_photo_assistant')}>
         <Pressable onPress={() => undefined} style={styles.wrap}>
           <GlassSurface intensity="strong" radius={28} style={{ paddingVertical: 18 }}>
             <ScrollView style={{ maxHeight: 620 }} contentContainerStyle={{ gap: 14, paddingHorizontal: 18 }}>
               <View style={styles.header}>
                 <Icon name="figure" size={20} color={theme.colors.premium} />
                 <AppText variant="title3" accessibilityRole="header" style={{ flex: 1 }}>
-                  Photo assistant
+                  {tx('pose_photo_assistant')}
                 </AppText>
               </View>
 
-              <AppText variant="bodyStrong">Framing</AppText>
-              <SegmentedControl label="Grid" options={GRID_OPTIONS} value={grid} onChange={onGrid} />
+              <AppText variant="bodyStrong">{tx('pose_framing')}</AppText>
+              <SegmentedControl label={tx('pose_grid')} options={GRID_OPTIONS} value={grid} onChange={onGrid} />
               <ToggleRow
                 icon="exposure"
-                title="Level"
-                subtitle="A line that turns green when the phone is straight"
+                title={tx('pose_level')}
+                subtitle={tx('pose_a_line_that_turns_green')}
                 value={settings.level}
                 onChange={v => set({ level: v })}
               />
               <ToggleRow
                 icon="target"
-                title="Face position"
-                subtitle="Helps you put the eyes on the upper third"
+                title={tx('pose_face_position')}
+                subtitle={tx('pose_helps_you_put_the_eyes')}
                 value={settings.faceGuide}
                 onChange={v => set({ faceGuide: v })}
               />
 
-              <AppText variant="bodyStrong">Poses</AppText>
+              <AppText variant="bodyStrong">{tx('pose_poses')}</AppText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                 {groups.map(g => {
                   const selected = g.category === shownGroup?.category;
@@ -214,12 +215,12 @@ export function PoseSheet({
                 <Pressable
                   onPress={() => void addFromPhoto()}
                   accessibilityRole="button"
-                  accessibilityLabel={premium ? 'Use a pose from my photo' : 'Use a pose from my photo, Premium'}
+                  accessibilityLabel={premium ? tx('pose_use_a_pose_from_my') : tx('pose_use_a_pose_from_my_2')}
                   style={[styles.tile, styles.addTile]}
                 >
                   <Icon name={busy ? 'refresh' : 'image'} size={22} color={theme.colors.premium} />
                   <AppText variant="caption" style={styles.tileName}>
-                    {busy ? 'Reading…' : 'From my photo'}
+                    {busy ? tx('pose_reading') : tx('pose_from_my_photo')}
                   </AppText>
                   {!premium ? (
                     <View style={styles.lock}>
@@ -253,8 +254,8 @@ export function PoseSheet({
               {settings.poseId ? (
                 <ToggleRow
                   icon="flip"
-                  title="Use the other hand"
-                  subtitle="Flip the pose left to right"
+                  title={tx('pose_use_the_other_hand')}
+                  subtitle={tx('pose_flip_the_pose_left_to')}
                   value={settings.mirror}
                   onChange={v => set({ mirror: v })}
                 />
@@ -262,7 +263,7 @@ export function PoseSheet({
 
               <View style={styles.header}>
                 <AppText variant="bodyStrong" style={{ flex: 1 }}>
-                  Live matching
+                  {tx('pose_live_matching')}
                 </AppText>
                 {!premium ? (
                   <View style={styles.crown}>
@@ -277,36 +278,36 @@ export function PoseSheet({
                 <>
                   <ToggleRow
                     icon="sliders"
-                    title="Guided capture"
-                    subtitle="One step at a time: position, pose, then hold still"
+                    title={tx('pose_guided_capture')}
+                    subtitle={tx('pose_one_step_at_a_time')}
                     value={settings.guided}
                     onChange={v => set({ guided: v })}
                   />
                   <ToggleRow
                     icon="camera"
-                    title="Take the photo for me"
-                    subtitle="When the pose and framing match and you hold still"
+                    title={tx('pose_take_the_photo_for_me')}
+                    subtitle={tx('pose_when_the_pose_and_framing')}
                     value={settings.autoCapture}
                     onChange={v => set({ autoCapture: v })}
                   />
                   {settings.autoCapture ? (
                     <>
                       <SegmentedControl
-                        label="How close the match must be"
+                        label={tx('pose_how_close_the_match_must')}
                         options={[
-                          { value: '70', label: 'Relaxed' },
-                          { value: '80', label: 'Close' },
-                          { value: '90', label: 'Exact' },
+                          { value: '70', label: tx('pose_relaxed') },
+                          { value: '80', label: tx('pose_close') },
+                          { value: '90', label: tx('pose_exact') },
                         ]}
                         value={String(settings.threshold >= 88 ? 90 : settings.threshold >= 75 ? 80 : 70)}
                         onChange={v => set({ threshold: Number(v) })}
                       />
                       <SegmentedControl
-                        label="Hold for"
+                        label={tx('pose_hold_for')}
                         options={[
-                          { value: '700', label: 'A moment' },
-                          { value: '1200', label: '1 second' },
-                          { value: '2500', label: '2 seconds' },
+                          { value: '700', label: tx('pose_a_moment') },
+                          { value: '1200', label: tx('pose_1_second') },
+                          { value: '2500', label: tx('pose_2_seconds') },
                         ]}
                         value={String(settings.holdMs <= 900 ? 700 : settings.holdMs <= 1800 ? 1200 : 2500)}
                         onChange={v => set({ holdMs: Number(v) })}
@@ -317,10 +318,9 @@ export function PoseSheet({
               ) : (
                 <>
                   <AppText variant="caption" tone="secondary">
-                    See your pose next to the outline, a score as you move, arrows to each part, how far to stand,
-                    and a photo taken by itself when you’ve got it.
+                    {tx('pose_see_your_pose_next_to')}
                   </AppText>
-                  <Button label="Unlock live matching" icon="crown" variant="glass" onPress={onPremium} />
+                  <Button label={tx('pose_unlock_live_matching')} icon="crown" variant="glass" onPress={onPremium} />
                 </>
               )}
             </ScrollView>

@@ -1,5 +1,7 @@
 package com.photoplus.storage
 
+import com.photoplus.R
+import com.photoplus.i18n.Words
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -116,7 +118,7 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
     }
     val activity = reactApplicationContext.currentActivity as? ComponentActivity
     if (activity == null) {
-      promise.reject("NO_ACTIVITY", "Photo picker needs a foreground activity")
+      promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_photo_picker_needs_a_foreground_activity))
       return
     }
     UiThreadUtil.runOnUiThread {
@@ -172,7 +174,7 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
   override fun shareImages(paths: ReadableArray, title: String, promise: Promise) {
     val activity = reactApplicationContext.currentActivity
     if (activity == null) {
-      promise.reject("NO_ACTIVITY", "Sharing needs a foreground activity")
+      promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_sharing_needs_a_foreground_activity))
       return
     }
     try {

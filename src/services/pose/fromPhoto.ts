@@ -5,6 +5,7 @@
  */
 import type { PosePhotoResult } from '../camera/types';
 import { POSE_LANDMARKS, isPoseDef, type PoseDef, type PosePoint, type PoseShot } from './library';
+import { t as tx } from '../../i18n';
 
 export type FromPhotoOutcome = { kind: 'pose'; pose: PoseDef } | { kind: 'cancelled' } | { kind: 'noPerson' };
 
@@ -22,7 +23,7 @@ export function poseFromResult(result: PosePhotoResult, photoUri: string, index:
   const shot = SHOTS.includes(result.shot as PoseShot) ? (result.shot as PoseShot) : 'headAndShoulders';
   const pose: PoseDef = {
     id: `mine-${now.toString(36)}`,
-    name: `My pose ${index}`,
+    name: tx('from_photo_my_pose', { index }),
     category: 'mine',
     tier: 'premium',
     shot,

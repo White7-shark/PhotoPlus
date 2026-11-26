@@ -1,5 +1,7 @@
 package com.photoplus.integrity
 
+import com.photoplus.R
+import com.photoplus.i18n.Words
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -156,17 +158,17 @@ object Integrity {
       return
     }
     val nm = app.getSystemService(NotificationManager::class.java)
-    nm.createNotificationChannel(NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
-      description = "Reminders to update Photo Plus"
+    nm.createNotificationChannel(NotificationChannel(CHANNEL, Words.get(app, R.string.native_channel_updates), NotificationManager.IMPORTANCE_DEFAULT).apply {
+      description = Words.get(app, R.string.native_channel_updates_about)
     })
     val open = app.packageManager.getLaunchIntentForPackage(app.packageName)
     val tap = PendingIntent.getActivity(app, 11, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     val day = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(deadline))
     val n = NotificationCompat.Builder(app, CHANNEL)
       .setSmallIcon(app.applicationInfo.icon)
-      .setContentTitle("Update Photo Plus")
-      .setContentText("A new version is ready. Update by $day to keep using Photo Plus.")
-      .setStyle(NotificationCompat.BigTextStyle().bigText("A new version of Photo Plus is ready with improvements and fixes. Update by $day to keep using the app."))
+      .setContentTitle(Words.get(app, R.string.native_update_title))
+      .setContentText(Words.get(app, R.string.native_update_text, "day" to day))
+      .setStyle(NotificationCompat.BigTextStyle().bigText(Words.get(app, R.string.native_update_long, "day" to day)))
       .setContentIntent(tap)
       .setAutoCancel(true)
       .build()

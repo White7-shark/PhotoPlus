@@ -3,6 +3,7 @@ import { Image, StyleSheet, View, type GestureResponderEvent, type LayoutChangeE
 
 import { AppText } from '../components';
 import { useTheme } from '../theme';
+import { t as tx } from '../i18n';
 
 export interface CompareViewProps {
   beforeUri: string;
@@ -64,8 +65,8 @@ export function CompareView({
       style={[styles.root, { height: height || undefined, aspectRatio: height ? undefined : aspect }]}
       accessible
       accessibilityRole="adjustable"
-      accessibilityLabel="Before and after comparison"
-      accessibilityValue={{ text: `${Math.round(split * 100)} percent original` }}
+      accessibilityLabel={tx('compare_view_before_and_after_comparison')}
+      accessibilityValue={{ text: tx('compare_view_percent_original', { value: Math.round(split * 100) }) }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={e =>
         setSplit(s => clampSplit(s + (e.nativeEvent.actionName === 'increment' ? 0.1 : -0.1)))

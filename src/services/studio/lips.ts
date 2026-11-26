@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * Lips in the Photoshoot Studio.
  *
@@ -21,18 +22,18 @@ export const NATURAL_PINK = '#F4A6B8';
 
 /** Lipstick shades people wear most. */
 export const LIPSTICKS: LipShade[] = [
-  { id: 'red', name: 'Classic red', color: '#C21E2F' },
-  { id: 'ruby', name: 'Ruby', color: '#9B111E' },
-  { id: 'wine', name: 'Wine', color: '#722F37' },
-  { id: 'berry', name: 'Berry', color: '#8E2A4F' },
-  { id: 'plum', name: 'Plum', color: '#6E2A4A' },
-  { id: 'mauve', name: 'Mauve', color: '#B07384' },
-  { id: 'nude', name: 'Nude', color: '#C48A76' },
-  { id: 'brown', name: 'Brown nude', color: '#8D5A4A' },
-  { id: 'coral', name: 'Coral', color: '#E8614D' },
-  { id: 'rose', name: 'Rose pink', color: '#D9668A' },
-  { id: 'hot', name: 'Hot pink', color: '#E0408A' },
-  { id: 'orange', name: 'Orange red', color: '#D9381E' },
+  { id: 'red', name: tx('lips_classic_red'), color: '#C21E2F' },
+  { id: 'ruby', name: tx('lips_ruby'), color: '#9B111E' },
+  { id: 'wine', name: tx('lips_wine'), color: '#722F37' },
+  { id: 'berry', name: tx('lips_berry'), color: '#8E2A4F' },
+  { id: 'plum', name: tx('lips_plum'), color: '#6E2A4A' },
+  { id: 'mauve', name: tx('lips_mauve'), color: '#B07384' },
+  { id: 'nude', name: tx('lips_nude'), color: '#C48A76' },
+  { id: 'brown', name: tx('lips_brown_nude'), color: '#8D5A4A' },
+  { id: 'coral', name: tx('lips_coral'), color: '#E8614D' },
+  { id: 'rose', name: tx('lips_rose_pink'), color: '#D9668A' },
+  { id: 'hot', name: tx('lips_hot_pink'), color: '#E0408A' },
+  { id: 'orange', name: tx('lips_orange_red'), color: '#D9381E' },
 ];
 
 /** The person's lips: natural pink, or a lipstick shade, and how strong (0..1). */

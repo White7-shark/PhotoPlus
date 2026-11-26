@@ -68,6 +68,7 @@ import { VibeSheet } from './camera/VibeSheet';
 import { WatermarkUnlock } from './WatermarkUnlock';
 import { SpotlightMarkers, SpotlightPanel } from './camera/SpotlightControls';
 import { CompareView } from './CompareView';
+import { t as tx } from '../i18n';
 
 const log = createLogger('photo');
 
@@ -83,20 +84,38 @@ interface Tool {
 
 /** Edits available on any photo, under their app names. */
 export const TOOLS: readonly Tool[] = [
-  { id: 'enhance', label: 'Clarity', description: 'Sharper, cleaner, brighter', icon: 'sparkles', feature: 'clarity' },
-  { id: 'spotlight', label: 'Spotlight', description: 'Make your subject shine', icon: 'target', feature: 'spotlight' },
+  {
+    id: 'enhance',
+    label: 'Clarity',
+    description: tx('photo_preview_sharper_cleaner_brighter'),
+    icon: 'sparkles',
+    feature: 'clarity',
+  },
+  {
+    id: 'spotlight',
+    label: 'Spotlight',
+    description: tx('photo_preview_make_your_subject_shine'),
+    icon: 'target',
+    feature: 'spotlight',
+  },
   {
     id: 'look',
     label: 'Vibe Match',
-    description: 'Copy the style of a photo you love',
+    description: tx('photo_preview_copy_the_style_of_a'),
     icon: 'wand',
     feature: 'vibeMatch',
   },
-  { id: 'superres', label: 'Ultra Detail', description: 'Twice the detail', icon: 'layers', feature: 'multiShot' },
+  {
+    id: 'superres',
+    label: 'Ultra Detail',
+    description: tx('photo_preview_twice_the_detail'),
+    icon: 'layers',
+    feature: 'multiShot',
+  },
   {
     id: 'transform',
     label: 'Transform',
-    description: 'The look of a high-end camera',
+    description: tx('photo_preview_the_look_of_a_high'),
     icon: 'aperture',
     feature: 'transform',
   },
@@ -135,38 +154,46 @@ export function improvementBadges(
   const before = num(r?.noiseBefore);
   const after = num(r?.noiseAfter);
   if (before !== null && after !== null && noiseReduction(before, after) >= 5) {
-    out.push({ label: `Grain −${noiseReduction(before, after)}%`, icon: 'sparkles', tone: 'success' });
+    out.push({
+      label: tx('photo_preview_grain', { noiseReduction: noiseReduction(before, after) }),
+      icon: 'sparkles',
+      tone: 'success',
+    });
   }
   const frames = num(r?.framesInput);
   if (frames !== null && frames > 1) {
-    out.push({ label: `${num(r?.framesUsed) ?? frames} shots blended`, icon: 'layers', tone: 'accent' });
+    out.push({
+      label: tx('photo_preview_shots_blended', { value: num(r?.framesUsed) ?? frames }),
+      icon: 'layers',
+      tone: 'accent',
+    });
   }
   if (num(r?.upscale) === 2 || mode === 'superres') {
-    out.push({ label: '2× detail', icon: 'crown', tone: 'premium' });
+    out.push({ label: tx('photo_preview_2_detail'), icon: 'crown', tone: 'premium' });
   }
   if (mode === 'transform') {
-    out.unshift({ label: 'High-end lens look', icon: 'aperture', tone: 'premium' });
+    out.unshift({ label: tx('photo_preview_high_end_lens_look'), icon: 'aperture', tone: 'premium' });
     if ((num(r?.fringesFixedPx) ?? 0) >= 0.5) {
-      out.push({ label: 'Colour fringes removed', icon: 'check', tone: 'success' });
+      out.push({ label: tx('photo_preview_colour_fringes_removed'), icon: 'check', tone: 'success' });
     }
     if ((num(r?.deblur) ?? 0) >= 0.6) {
-      out.push({ label: 'Sharper detail', icon: 'sparkles', tone: 'success' });
+      out.push({ label: tx('photo_preview_sharper_detail'), icon: 'sparkles', tone: 'success' });
     }
   }
   const p = portrait && typeof portrait === 'object' ? (portrait as Record<string, unknown>) : null;
   if (p || mode === 'spotlight') {
-    out.push({ label: 'Background softened', icon: 'target', tone: 'accent' });
+    out.push({ label: tx('photo_preview_background_softened'), icon: 'target', tone: 'accent' });
     const spots = num(p?.spots) ?? 0;
     if ((num(p?.skin) ?? 0) > 0.002) {
       out.push({
-        label: spots > 0 ? `Glow · ${spots} blemishes cleared` : 'Glow skin',
+        label: spots > 0 ? tx('photo_preview_glow_blemishes_cleared', { spots }) : tx('photo_preview_glow_skin'),
         icon: 'sparkles',
         tone: 'success',
       });
     }
   }
   if (look || mode === 'look') {
-    out.push({ label: 'Vibe Match style', icon: 'wand', tone: 'premium' });
+    out.push({ label: tx('photo_preview_vibe_match_style'), icon: 'wand', tone: 'premium' });
   }
   return out;
 }
@@ -405,7 +432,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
       setView('compare');
     } catch (e) {
       if (!(e instanceof ProcessingError && e.cancelled)) {
-        Alert.alert('That didn’t work', friendlyMessage(errorCode(e)));
+        Alert.alert(tx('photo_preview_that_didn_t_work'), friendlyMessage(errorCode(e)));
       }
     } finally {
       setWorking(false);
@@ -464,7 +491,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           navigation.replace('PhotoPreview', { imageId: record.id });
         }
       } catch (e) {
-        Alert.alert('Couldn’t save', friendlyMessage(errorCode(e)));
+        Alert.alert(tx('photo_preview_couldn_t_save'), friendlyMessage(errorCode(e)));
       }
     },
     [image, result, repos, loadProjects, navigation],
@@ -492,7 +519,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
       const out = await getProcessingService().exportImage({ inputPath: path, watermark, destination: 'share' });
       await getStorageService().share([out.outputPath], 'Share your photo');
     } catch (e) {
-      Alert.alert('Couldn’t share', friendlyMessage(errorCode(e), friendlyMessage('SHARE_FAILED')));
+      Alert.alert(tx('photo_preview_couldn_t_share'), friendlyMessage(errorCode(e), friendlyMessage('SHARE_FAILED')));
     }
   }, [result, image, watermark]);
 
@@ -500,10 +527,10 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
     if (!image || !repos) {
       return;
     }
-    Alert.alert('Delete photo?', 'It will be removed from this device.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(tx('photo_preview_delete_photo'), tx('photo_preview_it_will_be_removed_from'), [
+      { text: tx('photo_preview_cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: tx('photo_preview_delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -513,7 +540,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
             void loadProjects();
             navigation.goBack();
           } catch (e) {
-            Alert.alert('Couldn’t delete', friendlyMessage(errorCode(e)));
+            Alert.alert(tx('photo_preview_couldn_t_delete'), friendlyMessage(errorCode(e)));
           }
         },
       },
@@ -522,15 +549,19 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
 
   if (status === 'loading') {
     return (
-      <Screen title="Photo" onBack={() => navigation.goBack()} bottomInset={24}>
-        <LoadingState label="Opening photo…" />
+      <Screen title={tx('photo_preview_photo')} onBack={() => navigation.goBack()} bottomInset={24}>
+        <LoadingState label={tx('photo_preview_opening_photo')} />
       </Screen>
     );
   }
   if (!image) {
     return (
-      <Screen title="Photo" onBack={() => navigation.goBack()} bottomInset={24}>
-        <ErrorState title="Photo not found" message="It may have been deleted." onRetry={() => navigation.goBack()} />
+      <Screen title={tx('photo_preview_photo')} onBack={() => navigation.goBack()} bottomInset={24}>
+        <ErrorState
+          title={tx('photo_preview_photo_not_found')}
+          message={tx('photo_preview_it_may_have_been_deleted')}
+          onRetry={() => navigation.goBack()}
+        />
       </Screen>
     );
   }
@@ -575,19 +606,25 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
       overline={image.capturedAt ? new Date(image.capturedAt).toLocaleString() : undefined}
       onBack={() => navigation.goBack()}
       headerRight={
-        <IconButton icon="share" label="Share photo" onPress={() => void share()} size={44} testID="share" />
+        <IconButton
+          icon="share"
+          label={tx('photo_preview_share_photo')}
+          onPress={() => void share()}
+          size={44}
+          testID="share"
+        />
       }
       bottomInset={32}
     >
       <View style={{ gap: 16 }}>
         {before ? (
           <SegmentedControl
-            label="View"
+            label={tx('photo_preview_view')}
             value={view}
             onChange={setView}
             options={[
-              { value: 'photo', label: 'Photo' },
-              { value: 'compare', label: 'Before / after' },
+              { value: 'photo', label: tx('photo_preview_photo') },
+              { value: 'compare', label: tx('photo_preview_before_after') },
             ]}
           />
         ) : null}
@@ -598,7 +635,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           <Pressable
             onPress={onPhotoTap}
             disabled={!choosing}
-            accessibilityLabel={choosing ? 'Photo. Tap what should shine' : 'Photo'}
+            accessibilityLabel={choosing ? tx('photo_preview_photo_tap_what_should_shine') : tx('photo_preview_photo')}
             onLayout={(e: LayoutChangeEvent) =>
               setPhotoSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })
             }
@@ -621,7 +658,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
 
         {badges.length ? (
           <GlassSurface style={{ padding: 16, gap: 10 }}>
-            <AppText variant="title3">What we improved</AppText>
+            <AppText variant="title3">{tx('photo_preview_what_we_improved')}</AppText>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {badges.map(b => (
                 <Badge key={b.label} label={b.label} tone={b.tone} icon={b.icon} />
@@ -643,11 +680,11 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
             </AppText>
             {notice.signs.length ? (
               <AppText variant="caption" tone="secondary">
-                Seen in this photo: {notice.signs.join(', ')}.
+                {tx('photo_preview_seen_in_this_photo')} {notice.signs.join(', ')}.
               </AppText>
             ) : null}
             <Button
-              label="Try Transform"
+              label={tx('photo_preview_try_transform')}
               variant="premium"
               icon="aperture"
               onPress={() => transformTool && chooseTool(transformTool)}
@@ -664,9 +701,14 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         {result ? (
           <View style={{ gap: 10 }}>
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <Button label="Keep" icon="check" onPress={() => void keepResult()} style={{ flex: 1 }} />
               <Button
-                label="Discard"
+                label={tx('photo_preview_keep')}
+                icon="check"
+                onPress={() => void keepResult()}
+                style={{ flex: 1 }}
+              />
+              <Button
+                label={tx('photo_preview_discard')}
                 variant="glass"
                 icon="close"
                 onPress={() => void discardResult()}
@@ -674,7 +716,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
               />
             </View>
             <Button
-              label="Keep and edit photo"
+              label={tx('photo_preview_keep_and_edit_photo')}
               icon="sliders"
               variant="glass"
               onPress={() => void keepResult('edit')}
@@ -684,8 +726,10 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         ) : (
           <GlassSurface style={{ padding: 16, gap: 14 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <AppText variant="title3">Make it shine</AppText>
-              {suggestion.suggested ? <Badge label="Clarity suggested" tone="accent" icon="sparkles" /> : null}
+              <AppText variant="title3">{tx('photo_preview_make_it_shine')}</AppText>
+              {suggestion.suggested ? (
+                <Badge label={tx('photo_preview_clarity_suggested')} tone="accent" icon="sparkles" />
+              ) : null}
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }} accessibilityRole="tablist">
               {TOOLS.map(t => {
@@ -701,7 +745,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
                     testID={`tool-${t.id}`}
                     onPress={() => chooseTool(t)}
                     accessibilityRole="tab"
-                    accessibilityLabel={`${t.label}${premium ? ', premium' : ''}`}
+                    accessibilityLabel={`${t.label}${premium ? tx('photo_preview_premium') : ''}`}
                     accessibilityHint={t.description}
                     accessibilityState={{ selected }}
                     style={{
@@ -732,7 +776,8 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
 
             {tool === 'enhance' && suggestion.suggested ? (
               <AppText variant="body" tone="secondary">
-                This photo has {suggestion.reasons.join(' and ')}. Clarity cleans it up right on your phone.
+                {tx('photo_preview_this_photo_has')} {suggestion.reasons.join(' and ')}
+                {tx('photo_preview_clarity_cleans_it_up_right')}
               </AppText>
             ) : null}
             {tool === 'spotlight' ? (
@@ -755,10 +800,10 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
                   <AppText variant="bodyStrong" style={{ flex: 1 }}>
                     {lookDescription(vibeLook).text}
                   </AppText>
-                  <Button label="Change" variant="ghost" onPress={() => setVibeOpen(true)} />
+                  <Button label={tx('photo_preview_change')} variant="ghost" onPress={() => setVibeOpen(true)} />
                 </View>
                 <SegmentedControl
-                  label="Strength"
+                  label={tx('photo_preview_strength')}
                   value={VIBE_STRENGTHS.find(s => Math.abs(s.value - vibeLook.strength) < 0.01)?.id ?? 'balanced'}
                   onChange={id => {
                     const s = VIBE_STRENGTHS.find(v => v.id === id);
@@ -774,20 +819,22 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
             {tool === 'transform' ? (
               <View style={{ gap: 10 }}>
                 <AppText variant="body" tone="secondary">
-                  Restores fine detail, sharpens soft edges, removes colour fringes and grain, as if a high-end camera
-                  took it.
+                  {tx('photo_preview_restores_fine_detail_sharpens_soft')}
                   {kept.length
-                    ? ` Your ${kept.join(' and ')} ${kept.length > 1 ? 'effects are' : 'effect is'} re-applied on top.`
+                    ? tx('photo_preview_your_re_applied_on_top', {
+                        value: kept.join(' and '),
+                        value2: kept.length > 1 ? 'effects are' : 'effect is',
+                      })
                     : ''}
                 </AppText>
                 {Math.max(image.width, image.height) <= TRANSFORM_2X_MAX_EDGE ? (
                   <SegmentedControl
-                    label="Detail"
+                    label={tx('photo_preview_detail')}
                     value={transformDetail}
                     onChange={setTransformDetail}
                     options={[
-                      { value: 'standard', label: 'Standard' },
-                      { value: 'double', label: '2× detail' },
+                      { value: 'standard', label: tx('photo_preview_standard') },
+                      { value: 'double', label: tx('photo_preview_2_detail') },
                     ]}
                   />
                 ) : null}
@@ -800,12 +847,17 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
             {tool ? (
               working ? (
                 <View style={{ gap: 10 }}>
-                  <LoadingState label="Perfecting your photo…" />
-                  <Button label="Cancel" variant="glass" icon="stop" onPress={() => abort.current?.abort()} />
+                  <LoadingState label={tx('photo_preview_perfecting_your_photo')} />
+                  <Button
+                    label={tx('photo_preview_cancel')}
+                    variant="glass"
+                    icon="stop"
+                    onPress={() => abort.current?.abort()}
+                  />
                 </View>
               ) : (
                 <Button
-                  label={`Apply ${TOOLS.find(t => t.id === tool)?.label ?? ''}`}
+                  label={tx('photo_preview_apply', { value: TOOLS.find(t => t.id === tool)?.label ?? '' })}
                   icon="wand"
                   onPress={() => void apply()}
                   disabled={tool === 'look' && !vibeLook}
@@ -818,19 +870,19 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           <StatTile
-            label="Size"
+            label={tx('photo_preview_size')}
             value={`${image.width}×${image.height}`}
             icon="image"
             style={{ flexBasis: '47%', flexGrow: 1 }}
           />
           <StatTile
-            label="Resolution"
+            label={tx('photo_preview_resolution')}
             value={formatMegapixels(image.width, image.height)}
             icon="aperture"
             style={{ flexBasis: '47%', flexGrow: 1 }}
           />
           <StatTile
-            label="File"
+            label={tx('photo_preview_file')}
             value={formatBytes(image.sizeBytes)}
             icon="storage"
             style={{ flexBasis: '47%', flexGrow: 1 }}
@@ -840,7 +892,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           ) : null}
           {exposureTime !== null ? (
             <StatTile
-              label="Shutter"
+              label={tx('photo_preview_shutter')}
               value={shutterLabel(exposureTime)}
               icon="timer"
               style={{ flexBasis: '47%', flexGrow: 1 }}
@@ -849,7 +901,7 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
           {str(image.metadata.rawPath) ? (
             <StatTile
               label="RAW"
-              value="Saved"
+              value={tx('photo_preview_saved')}
               icon="layers"
               tint={theme.colors.premium}
               style={{ flexBasis: '47%', flexGrow: 1 }}
@@ -858,14 +910,14 @@ export function PhotoPreviewScreen({ navigation, route }: RootScreenProps<'Photo
         </View>
 
         <Button
-          label="Edit photo"
+          label={tx('photo_preview_edit_photo')}
           icon="sliders"
           onPress={() => navigation.navigate('Editor', { imageId: image.id })}
           testID="edit-photo"
         />
-        <Button label="Share" variant="glass" icon="share" onPress={() => void share()} />
+        <Button label={tx('photo_preview_share')} variant="glass" icon="share" onPress={() => void share()} />
         {entitlements.plan !== 'premium' && !result ? <WatermarkUnlock photoPath={cleanOf(image)} /> : null}
-        <Button label="Delete photo" variant="danger" icon="trash" onPress={confirmDelete} />
+        <Button label={tx('photo_preview_delete_photo_2')} variant="danger" icon="trash" onPress={confirmDelete} />
       </View>
       <VibeSheet
         visible={vibeOpen}

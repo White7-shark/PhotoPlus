@@ -48,16 +48,17 @@ import { DownloadSize } from '../studio/DownloadSize';
 
 import { Choice, pct, signed, Tabs, Toggle } from './controls';
 import { recordActivity } from '../../services/rewards/RewardsService';
+import { t as tx } from '../../i18n';
 
 type Panel = 'setups' | 'product' | 'backdrop' | 'shadow' | 'colour' | 'layout' | 'export';
 const PANELS: readonly { value: Panel; label: string }[] = [
-  { value: 'setups', label: 'Setups' },
-  { value: 'product', label: 'Cut-out' },
-  { value: 'backdrop', label: 'Backdrop' },
-  { value: 'shadow', label: 'Shadow' },
-  { value: 'colour', label: 'Colour' },
-  { value: 'layout', label: 'Layout' },
-  { value: 'export', label: 'Export' },
+  { value: 'setups', label: tx('product_studio_setups') },
+  { value: 'product', label: tx('product_studio_cut_out') },
+  { value: 'backdrop', label: tx('product_studio_backdrop') },
+  { value: 'shadow', label: tx('product_studio_shadow') },
+  { value: 'colour', label: tx('product_studio_colour') },
+  { value: 'layout', label: tx('product_studio_layout') },
+  { value: 'export', label: tx('product_studio_export') },
 ];
 type View_ = 'after' | 'before';
 type Brush = 'keep' | 'remove';
@@ -157,9 +158,9 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
       const s = await product.open(path);
       setSession(s);
       setCutout(s);
-      if (!s.report.found) setError('No product was found. Paint over it with Keep, or try a plainer background.');
+      if (!s.report.found) setError(tx('product_studio_no_product_was_found_paint'));
     } catch {
-      setError('This photo couldn’t be opened. Please try another.');
+      setError(tx('product_studio_this_photo_couldn_t_be'));
     } finally {
       setBusy(null);
     }
@@ -207,7 +208,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
       const r = await product.refine(session.sessionId, nextStrokes, nextMatte);
       if (id === refineSerial.current) setCutout(r);
     } catch {
-      if (id === refineSerial.current) setError('The cut-out couldn’t be updated.');
+      if (id === refineSerial.current) setError(tx('product_studio_the_cut_out_couldn_t'));
     }
   };
   const addStroke = (s: Stroke) => {
@@ -237,7 +238,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
       setPreview(r);
       setError(null);
     } catch {
-      if (id === drawSerial.current) setError('The preview couldn’t be drawn. Please try again.');
+      if (id === drawSerial.current) setError(tx('product_studio_the_preview_couldn_t_be'));
     } finally {
       if (id === drawSerial.current) setBusy(b => (b === 'preview' ? null : b));
     }
@@ -284,7 +285,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
       setNaming(false);
       setName('');
     } catch {
-      setError('The setup couldn’t be saved.');
+      setError(tx('product_studio_the_setup_couldn_t_be'));
     }
   };
   const forProject = async () => {
@@ -345,7 +346,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
     } catch (e) {
       if (e instanceof ProductError && e.code === 'PREMIUM_REQUIRED')
         lock(exportSize(size).premium ? 'exportHd' : 'productPro');
-      else setError('Your photo couldn’t be saved. Please try again.');
+      else setError(tx('product_studio_your_photo_couldn_t_be'));
     } finally {
       setBusy(null);
     }
@@ -365,16 +366,21 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
           <GlassSurface radius={20} style={styles.start}>
             <Icon name="bag" size={28} color={theme.colors.accent} />
             <AppText variant="title2" align="center">
-              Catalogue shots from your phone
+              {tx('product_studio_catalogue_shots_from_your_phone')}
             </AppText>
             <AppText variant="caption" tone="secondary" align="center">
-              Shoot your product on paper, a table or a wall. Photo Plus cuts it out, sets it on a clean backdrop with a
-              natural shadow and fixes its colour. Your original stays as it is.
+              {tx('product_studio_shoot_your_product_on_paper')}
             </AppText>
             {busy === 'open' ? <ActivityIndicator color={theme.colors.accent} /> : null}
             <View style={styles.row}>
-              <Button label="Choose a photo" icon="image" onPress={pick} testID="product-pick" />
-              <Button label="Take a photo" icon="camera" variant="glass" onPress={takePhoto} testID="product-shoot" />
+              <Button label={tx('product_studio_choose_a_photo')} icon="image" onPress={pick} testID="product-pick" />
+              <Button
+                label={tx('product_studio_take_a_photo')}
+                icon="camera"
+                variant="glass"
+                onPress={takePhoto}
+                testID="product-shoot"
+              />
             </View>
           </GlassSurface>
         ) : (
@@ -389,7 +395,9 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                   testID={`product-view-${v}`}
                   style={[styles.segmentItem, view === v ? { backgroundColor: 'rgba(255,255,255,0.12)' } : null]}
                 >
-                  <AppText variant="bodyStrong">{v === 'before' ? 'Before' : 'After'}</AppText>
+                  <AppText variant="bodyStrong">
+                    {v === 'before' ? tx('product_studio_before') : tx('product_studio_after')}
+                  </AppText>
                 </Pressable>
               ))}
             </View>
@@ -406,7 +414,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                   tapMode={false}
                   onStroke={s => addStroke({ brush: s.brush, radius: s.radius, points: s.points })}
                   onTap={() => undefined}
-                  label="The cut-out product: paint to keep or remove"
+                  label={tx('product_studio_the_cut_out_product_paint')}
                 />
               </View>
             ) : (
@@ -416,7 +424,11 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     source={{ uri: shownUri }}
                     style={StyleSheet.absoluteFill}
                     resizeMode="contain"
-                    accessibilityLabel={view === 'before' ? 'Your original photo' : 'The catalogue shot'}
+                    accessibilityLabel={
+                      view === 'before'
+                        ? tx('product_studio_your_original_photo')
+                        : tx('product_studio_the_catalogue_shot')
+                    }
                     testID="product-preview"
                   />
                 ) : null}
@@ -433,7 +445,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
         ) : null}
         {cutout && !cutout.report.plain && cutout.report.found ? (
           <AppText variant="caption" tone="tertiary" testID="product-busy-backdrop">
-            A busy background: the outline comes from the object finder. Paint with Keep or Remove to perfect it.
+            {tx('product_studio_a_busy_background_the_outline')}
           </AppText>
         ) : null}
 
@@ -444,8 +456,9 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
               {panel === 'setups' ? (
                 <View style={{ gap: 10 }} testID="product-setups">
                   <AppText variant="caption" tone="secondary">
-                    Ready-made catalogue looks{packItems ? ' from this project’s pack' : ''}. Pick one, then change
-                    anything.
+                    {tx('product_studio_ready_made_catalogue_looks')}
+                    {packItems ? tx('product_studio_from_this_project_s_pack') : ''}
+                    {tx('product_studio_pick_one_then_change_anything')}
                   </AppText>
                   <View style={styles.wrap}>
                     {presetList.map(p => (
@@ -462,7 +475,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                   {saved.length > 0 ? (
                     <>
                       <AppText variant="caption" tone="secondary">
-                        Your setups
+                        {tx('product_studio_your_setups')}
                       </AppText>
                       <View style={styles.wrap}>
                         {saved.map(p => (
@@ -482,12 +495,12 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                       <TextInput
                         value={name}
                         onChangeText={setName}
-                        placeholder="Name this setup (e.g. Shop white)"
+                        placeholder={tx('product_studio_name_this_setup_e_g')}
                         placeholderTextColor={theme.colors.textTertiary}
                         maxLength={60}
                         autoFocus
                         onSubmitEditing={saveSetup}
-                        accessibilityLabel="Setup name"
+                        accessibilityLabel={tx('product_studio_setup_name')}
                         testID="product-setup-name"
                         style={[
                           styles.input,
@@ -495,7 +508,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                         ]}
                       />
                       <Button
-                        label="Save"
+                        label={tx('product_studio_save')}
                         icon="check"
                         onPress={saveSetup}
                         disabled={!name.trim()}
@@ -505,7 +518,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                   ) : (
                     <View style={styles.row}>
                       <Choice
-                        label="Save this setup"
+                        label={tx('product_studio_save_this_setup')}
                         icon="plus"
                         selected={false}
                         locked={!canSave}
@@ -514,7 +527,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                       />
                       {projectId ? (
                         <Choice
-                          label="Use for this project"
+                          label={tx('product_studio_use_for_this_project')}
                           icon="folder"
                           selected={false}
                           onPress={forProject}
@@ -529,26 +542,26 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
               {panel === 'product' ? (
                 <View style={{ gap: 10 }} testID="product-cutout">
                   <AppText variant="caption" tone="secondary">
-                    Paint over the photo to keep a part of the product or remove what isn’t.
+                    {tx('product_studio_paint_over_the_photo_to')}
                     {cutout
                       ? ` ${cutout.report.objects} ${cutout.report.objects === 1 ? 'object' : 'objects'} found.`
                       : ''}
                   </AppText>
                   <View style={styles.wrap}>
                     <Choice
-                      label="Keep"
+                      label={tx('product_studio_keep')}
                       selected={brush === 'keep'}
                       onPress={() => setBrush('keep')}
                       testID="product-brush-keep"
                     />
                     <Choice
-                      label="Remove"
+                      label={tx('product_studio_remove')}
                       selected={brush === 'remove'}
                       onPress={() => setBrush('remove')}
                       testID="product-brush-remove"
                     />
                     <Choice
-                      label="Undo"
+                      label={tx('product_studio_undo')}
                       icon="undo"
                       selected={false}
                       onPress={undoStroke}
@@ -556,7 +569,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     />
                   </View>
                   <ValueSlider
-                    label="Close colours"
+                    label={tx('product_studio_close_colours')}
                     value={matte.tolerance}
                     onChange={v => setMatte(m => ({ ...m, tolerance: v }))}
                     onEnd={() => setMatteAndRefine({})}
@@ -564,7 +577,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     testID="product-tolerance"
                   />
                   <ValueSlider
-                    label="Edge softness"
+                    label={tx('product_studio_edge_softness')}
                     value={matte.softness}
                     onChange={v => setMatte(m => ({ ...m, softness: v }))}
                     onEnd={() => setMatteAndRefine({})}
@@ -572,7 +585,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     testID="product-softness"
                   />
                   <ValueSlider
-                    label="Edge in or out"
+                    label={tx('product_studio_edge_in_or_out')}
                     value={matte.shift}
                     min={-1}
                     max={1}
@@ -621,10 +634,10 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     <>
                       <AppText variant="caption" tone="secondary">
                         {setup.backdrop.kind === 'solid'
-                          ? 'Colour'
+                          ? tx('product_studio_colour')
                           : setup.backdrop.kind === 'radial'
-                            ? 'Centre'
-                            : 'Wall'}
+                            ? tx('product_studio_centre')
+                            : tx('product_studio_wall')}
                       </AppText>
                       <Swatches
                         value={setup.backdrop.wall}
@@ -634,7 +647,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                       {setup.backdrop.kind !== 'solid' ? (
                         <>
                           <AppText variant="caption" tone="secondary">
-                            {setup.backdrop.kind === 'radial' ? 'Edges' : 'Floor'}
+                            {setup.backdrop.kind === 'radial' ? tx('product_studio_edges') : tx('product_studio_floor')}
                           </AppText>
                           <Swatches
                             value={setup.backdrop.floor}
@@ -645,7 +658,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                       ) : null}
                       {setup.backdrop.kind === 'sweep' || setup.backdrop.kind === 'surface' ? (
                         <ValueSlider
-                          label="Where the floor starts"
+                          label={tx('product_studio_where_the_floor_starts')}
                           value={setup.backdrop.horizon}
                           min={0.3}
                           max={0.9}
@@ -655,14 +668,14 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                         />
                       ) : null}
                       <ValueSlider
-                        label="Blend"
+                        label={tx('product_studio_blend')}
                         value={setup.backdrop.softness}
                         onChange={v => edit('backdrop', { softness: v })}
                         format={pct}
                         testID="product-blend"
                       />
                       <ValueSlider
-                        label="Studio light"
+                        label={tx('product_studio_studio_light')}
                         value={setup.backdrop.light}
                         onChange={v => edit('backdrop', { light: v })}
                         format={pct}
@@ -676,14 +689,14 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
               {panel === 'shadow' ? (
                 <View style={{ gap: 10 }} testID="product-shadow">
                   <ValueSlider
-                    label="Contact shadow"
+                    label={tx('product_studio_contact_shadow')}
                     value={setup.shadow.contact}
                     onChange={v => edit('shadow', { contact: v })}
                     format={pct}
                     testID="product-contact"
                   />
                   <ValueSlider
-                    label="Soft shadow"
+                    label={tx('product_studio_soft_shadow')}
                     value={setup.shadow.soft}
                     onChange={v => edit('shadow', { soft: v })}
                     format={pct}
@@ -692,7 +705,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                   {pro ? (
                     <>
                       <ValueSlider
-                        label="Cast shadow"
+                        label={tx('product_studio_cast_shadow')}
                         value={setup.shadow.cast}
                         onChange={v => edit('shadow', { cast: v })}
                         format={pct}
@@ -701,7 +714,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                       {setup.shadow.cast > 0 ? (
                         <>
                           <ValueSlider
-                            label="Light from"
+                            label={tx('product_studio_light_from')}
                             value={setup.shadow.castAngle}
                             min={-70}
                             max={70}
@@ -711,7 +724,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                             testID="product-cast-angle"
                           />
                           <ValueSlider
-                            label="Shadow length (behind − in front)"
+                            label={tx('product_studio_shadow_length_behind_in_front')}
                             value={setup.shadow.castLength}
                             min={-1}
                             max={1}
@@ -720,7 +733,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                             testID="product-cast-length"
                           />
                           <ValueSlider
-                            label="Shadow softness"
+                            label={tx('product_studio_shadow_softness')}
                             value={setup.shadow.castSoftness}
                             onChange={v => edit('shadow', { castSoftness: v })}
                             format={pct}
@@ -729,7 +742,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                         </>
                       ) : null}
                       <ValueSlider
-                        label="Reflection"
+                        label={tx('product_studio_reflection')}
                         value={setup.shadow.reflection}
                         onChange={v => edit('shadow', { reflection: v })}
                         format={pct}
@@ -738,7 +751,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     </>
                   ) : (
                     <Choice
-                      label="Cast shadows and reflections"
+                      label={tx('product_studio_cast_shadows_and_reflections')}
                       selected={false}
                       locked
                       onPress={() => lock('productPro')}
@@ -751,25 +764,25 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
               {panel === 'colour' ? (
                 <View style={{ gap: 8 }} testID="product-colour">
                   <Toggle
-                    label="Auto white balance"
+                    label={tx('product_studio_auto_white_balance')}
                     hint={
                       cutout?.report.plain
-                        ? `Takes out the colour of your backdrop (${cutout.report.backdrop})`
-                        : 'Needs a plain background'
+                        ? tx('product_studio_takes_out_the_colour_of', { backdrop: cutout.report.backdrop })
+                        : tx('product_studio_needs_a_plain_background')
                     }
                     value={setup.correction.autoWhite}
                     onChange={v => edit('correction', { autoWhite: v })}
                     testID="product-auto-white"
                   />
                   <Toggle
-                    label="Auto brightness"
-                    hint="Brings a grey-looking white background up to white, and the product with it"
+                    label={tx('product_studio_auto_brightness')}
+                    hint={tx('product_studio_brings_a_grey_looking_white')}
                     value={setup.correction.autoExposure}
                     onChange={v => edit('correction', { autoExposure: v })}
                     testID="product-auto-exposure"
                   />
                   <ValueSlider
-                    label="Exposure"
+                    label={tx('product_studio_exposure')}
                     value={setup.correction.exposure}
                     min={-1}
                     max={1}
@@ -778,7 +791,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     testID="product-exposure"
                   />
                   <ValueSlider
-                    label="Contrast"
+                    label={tx('product_studio_contrast')}
                     value={setup.correction.contrast}
                     min={-1}
                     max={1}
@@ -787,7 +800,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     testID="product-contrast"
                   />
                   <ValueSlider
-                    label="Colour"
+                    label={tx('product_studio_colour')}
                     value={setup.correction.saturation}
                     min={-1}
                     max={1}
@@ -796,7 +809,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     testID="product-saturation"
                   />
                   <ValueSlider
-                    label="Warmth"
+                    label={tx('product_studio_warmth')}
                     value={setup.correction.warmth}
                     min={-1}
                     max={1}
@@ -805,7 +818,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     testID="product-warmth"
                   />
                   <ValueSlider
-                    label="Tint"
+                    label={tx('product_studio_tint')}
                     value={setup.correction.tint}
                     min={-1}
                     max={1}
@@ -837,7 +850,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     ))}
                   </View>
                   <ValueSlider
-                    label="Size"
+                    label={tx('product_studio_size')}
                     value={setup.layout.fill}
                     min={0.2}
                     max={1}
@@ -846,28 +859,28 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     testID="product-fill"
                   />
                   <ValueSlider
-                    label="Left or right"
+                    label={tx('product_studio_left_or_right')}
                     value={setup.layout.x}
                     onChange={v => edit('layout', { x: v })}
                     format={pct}
                     testID="product-x"
                   />
                   <ValueSlider
-                    label="Up or down"
+                    label={tx('product_studio_up_or_down')}
                     value={setup.layout.y}
                     onChange={v => edit('layout', { y: v })}
                     format={pct}
                     testID="product-y"
                   />
                   <Toggle
-                    label="Standing on the floor"
-                    hint="Up or down places its base"
+                    label={tx('product_studio_standing_on_the_floor')}
+                    hint={tx('product_studio_up_or_down_places_its')}
                     value={setup.layout.ground}
                     onChange={v => edit('layout', { ground: v })}
                     testID="product-ground"
                   />
                   <Toggle
-                    label="Mirror"
+                    label={tx('product_studio_mirror')}
                     value={setup.layout.flip}
                     onChange={v => edit('layout', { flip: v })}
                     testID="product-flip"
@@ -878,7 +891,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
               {panel === 'export' ? (
                 <View style={{ gap: 10 }} testID="product-export">
                   <AppText variant="caption" tone="secondary">
-                    Shape and format
+                    {tx('product_studio_shape_and_format')}
                   </AppText>
                   <View style={styles.wrap}>
                     {EXPORT_PROFILES.map(p => (
@@ -902,11 +915,11 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                     onLocked={() => lock('exportHd')}
                   />
                   <AppText variant="caption" tone="secondary">
-                    Your brand mark
+                    {tx('product_studio_your_brand_mark')}
                   </AppText>
                   <View style={styles.wrap}>
                     <Choice
-                      label="None"
+                      label={tx('product_studio_none')}
                       selected={brandingId === null}
                       onPress={() => setBrandingId(null)}
                       testID="product-brand-none"
@@ -924,7 +937,7 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
                   </View>
                   {brandings.length === 0 ? (
                     <AppText variant="caption" tone="tertiary">
-                      Save a branding in the editor’s Watermark tool to put your logo on every product photo.
+                      {tx('product_studio_save_a_branding_in_the')}
                     </AppText>
                   ) : null}
                 </View>
@@ -932,9 +945,14 @@ export function ProductStudioScreen({ navigation, route }: RootScreenProps<'Prod
             </GlassSurface>
 
             <View style={styles.row}>
-              <Button label="Another photo" variant="glass" onPress={pick} testID="product-another" />
               <Button
-                label="Save"
+                label={tx('product_studio_another_photo')}
+                variant="glass"
+                onPress={pick}
+                testID="product-another"
+              />
+              <Button
+                label={tx('product_studio_save')}
                 icon="download"
                 onPress={save}
                 loading={busy === 'save'}

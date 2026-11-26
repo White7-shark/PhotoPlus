@@ -17,6 +17,7 @@ import type { CameraCapabilities, ManualSettings, WhiteBalanceId } from '../../s
 import { useTheme } from '../../theme';
 import { StopDial } from './StopDial';
 import type { Metadata } from './useCameraSession';
+import { t as tx } from '../../i18n';
 
 type Tab = 'iso' | 'shutter' | 'focus' | 'wb' | 'assist' | 'presets';
 
@@ -58,17 +59,17 @@ export function ProPanel({
       t.push({ id: 'iso', label: 'ISO', icon: 'aperture' });
     }
     if (m.exposure && m.shutterStops.length) {
-      t.push({ id: 'shutter', label: 'Shutter', icon: 'timer' });
+      t.push({ id: 'shutter', label: tx('pro_shutter'), icon: 'timer' });
     }
     if (m.focus) {
-      t.push({ id: 'focus', label: 'Focus', icon: 'target' });
+      t.push({ id: 'focus', label: tx('pro_focus'), icon: 'target' });
     }
     if (m.kelvin || m.whiteBalanceModes.length > 1) {
       t.push({ id: 'wb', label: 'WB', icon: 'thermometer' });
     }
-    t.push({ id: 'assist', label: 'Assist', icon: 'sliders' });
+    t.push({ id: 'assist', label: tx('pro_assist'), icon: 'sliders' });
     if (presets.length) {
-      t.push({ id: 'presets', label: 'Presets', icon: 'wand' });
+      t.push({ id: 'presets', label: tx('pro_presets'), icon: 'wand' });
     }
     return t;
   }, [m, presets.length]);
@@ -104,7 +105,7 @@ export function ProPanel({
               key={t.id}
               onPress={() => setTab(t.id)}
               accessibilityRole="tab"
-              accessibilityLabel={`${t.label}${isManual ? ', manual' : ''}`}
+              accessibilityLabel={`${t.label}${isManual ? tx('pro_manual') : ''}`}
               accessibilityState={{ selected }}
               style={[styles.tab, selected ? styles.tabSelected : null]}
             >
@@ -142,7 +143,7 @@ export function ProPanel({
             }
           >
             <StopDial
-              label="Shutter speed"
+              label={tx('pro_shutter_speed')}
               values={m.shutterStops}
               value={manual.exposureTimeNs ?? null}
               format={formatShutter}
@@ -155,7 +156,7 @@ export function ProPanel({
         {current === 'focus' ? (
           <Row onAuto={manual.focusDiopters != null ? () => onManual({ ...manual, focusDiopters: null }) : undefined}>
             <StopDial
-              label="Focus distance"
+              label={tx('pro_focus_distance')}
               values={focusStops(m.minFocusDiopters)}
               value={manual.focusDiopters ?? null}
               format={formatFocusDistance}
@@ -183,7 +184,7 @@ export function ProPanel({
             </ScrollView>
             {manual.whiteBalance === 'kelvin' ? (
               <StopDial
-                label="Colour temperature"
+                label={tx('pro_colour_temperature')}
                 values={KELVIN_STOPS}
                 value={manual.kelvin ?? 5500}
                 format={k => `${k}K`}
@@ -197,16 +198,22 @@ export function ProPanel({
           <View style={styles.assist}>
             {caps.focusPeaking ? (
               <Toggle
-                label={peaking && sharpness !== null ? `Peaking · ${Math.round(sharpness * 100)}` : 'Focus peaking'}
+                label={
+                  peaking && sharpness !== null
+                    ? tx('pro_peaking', { value: Math.round(sharpness * 100) })
+                    : tx('pro_focus_peaking')
+                }
                 icon="target"
                 selected={peaking}
                 onPress={() => onPeaking(!peaking)}
               />
             ) : null}
-            {caps.raw ? <Toggle label="RAW + JPEG" icon="layers" selected={raw} onPress={() => onRaw(!raw)} /> : null}
+            {caps.raw ? (
+              <Toggle label={tx('pro_raw_jpeg')} icon="layers" selected={raw} onPress={() => onRaw(!raw)} />
+            ) : null}
             {m.aeLock ? (
               <Toggle
-                label="AE lock"
+                label={tx('pro_ae_lock')}
                 icon="lock"
                 selected={!!manual.aeLock}
                 onPress={() => onManual({ ...manual, aeLock: !manual.aeLock })}
@@ -214,7 +221,7 @@ export function ProPanel({
             ) : null}
             {m.awbLock ? (
               <Toggle
-                label="AWB lock"
+                label={tx('pro_awb_lock')}
                 icon="lock"
                 selected={!!manual.awbLock}
                 onPress={() => onManual({ ...manual, awbLock: !manual.awbLock })}
@@ -257,7 +264,7 @@ function Row({ children, onAuto }: { children: React.ReactNode; onAuto?: () => v
         onPress={onAuto}
         disabled={!onAuto}
         accessibilityRole="button"
-        accessibilityLabel="Back to automatic"
+        accessibilityLabel={tx('pro_back_to_automatic')}
         accessibilityState={{ disabled: !onAuto }}
         style={[styles.auto, { opacity: onAuto ? 1 : 0.4 }]}
         hitSlop={8}

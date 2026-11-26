@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText, Icon } from '../../components';
 import type { IconName } from '../../components/Icon';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 /** A choice chip: a crown when it needs Premium, an optional colour swatch or icon. */
 export function Choice({
@@ -28,7 +29,7 @@ export function Choice({
     <Pressable
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityLabel={locked ? `${label}, Premium` : label}
+      accessibilityLabel={locked ? tx('controls_premium', { label }) : label}
       accessibilityState={{ selected }}
       testID={testID}
       style={[styles.chip, { borderColor: selected ? theme.colors.accent : 'rgba(255,255,255,0.14)' }]}

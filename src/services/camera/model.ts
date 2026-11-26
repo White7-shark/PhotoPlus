@@ -15,6 +15,7 @@ import type {
   SpotlightSettings,
   WhiteBalanceId,
 } from './types';
+import { t as tx } from '../../i18n';
 
 // ---------------------------------------------------------------- modes
 
@@ -32,28 +33,33 @@ export interface ModeDefinition {
 export const DEFAULT_MODE: UiMode = 'enhance';
 
 export const MODES: readonly ModeDefinition[] = [
-  { id: 'night', label: 'Moonlight', description: 'Bright, clean photos after dark', feature: 'multiShot' },
+  { id: 'night', label: 'Moonlight', description: tx('model_bright_clean_photos_after_dark'), feature: 'multiShot' },
   {
     id: 'spotlight',
     label: 'Spotlight',
-    description: 'Your subject shines, the background melts away',
+    description: tx('model_your_subject_shines_the_background'),
     feature: 'spotlight',
   },
-  { id: 'enhance', label: 'Clarity', description: 'Sharper, cleaner, brighter in one tap', feature: 'clarity' },
-  { id: 'photo', label: 'Photo', description: 'Bright, lively colour in one tap', feature: 'cameraCapture' },
+  { id: 'enhance', label: 'Clarity', description: tx('model_sharper_cleaner_brighter_in_one'), feature: 'clarity' },
+  {
+    id: 'photo',
+    label: tx('model_photo'),
+    description: tx('model_bright_lively_colour_in_one'),
+    feature: 'cameraCapture',
+  },
   {
     id: 'superres',
     label: 'Ultra Detail',
-    description: 'Twice the detail from a few quick shots',
+    description: tx('model_twice_the_detail_from_a'),
     feature: 'multiShot',
   },
   {
     id: 'glide',
     label: 'Glide',
-    description: '7-second pro video: steady, sharp, glowing',
+    description: tx('model_7_second_pro_video_steady'),
     feature: 'glide',
   },
-  { id: 'pro', label: 'Pro', description: 'Full manual control', feature: 'advancedCamera' },
+  { id: 'pro', label: 'Pro', description: tx('model_full_manual_control'), feature: 'advancedCamera' },
 ];
 
 export function modeLabel(mode: string): string {
@@ -303,15 +309,15 @@ export type GlowLevel = 'off' | 'natural' | 'smooth' | 'flawless';
 
 export const BLUR_LEVELS: readonly { id: BlurLevel; label: string; value: number }[] = [
   { id: 'light', label: 'Light', value: 0.35 },
-  { id: 'medium', label: 'Medium', value: 0.6 },
-  { id: 'strong', label: 'Strong', value: 0.9 },
+  { id: 'medium', label: tx('model_medium'), value: 0.6 },
+  { id: 'strong', label: tx('model_strong'), value: 0.9 },
 ];
 
 export const GLOW_LEVELS: readonly { id: GlowLevel; label: string; retouch: number; brighten: number }[] = [
-  { id: 'off', label: 'Off', retouch: 0, brighten: 0 },
-  { id: 'natural', label: 'Natural', retouch: 0.5, brighten: 0.3 },
-  { id: 'smooth', label: 'Smooth', retouch: 0.75, brighten: 0.4 },
-  { id: 'flawless', label: 'Flawless', retouch: 1, brighten: 0.5 },
+  { id: 'off', label: tx('model_off'), retouch: 0, brighten: 0 },
+  { id: 'natural', label: tx('model_natural'), retouch: 0.5, brighten: 0.3 },
+  { id: 'smooth', label: tx('model_smooth'), retouch: 0.75, brighten: 0.4 },
+  { id: 'flawless', label: tx('model_flawless'), retouch: 1, brighten: 0.5 },
 ];
 
 export function spotlightSettings(blur: BlurLevel, glow: GlowLevel): SpotlightSettings {
@@ -466,37 +472,37 @@ export interface CapturePreset {
 export const PRESETS: readonly CapturePreset[] = [
   {
     id: 'portrait',
-    title: 'Portrait',
-    description: 'Soft background, glowing skin',
+    title: tx('model_portrait'),
+    description: tx('model_soft_background_glowing_skin'),
     mode: 'spotlight',
     aspectRatio: '4:3',
   },
   {
     id: 'night',
-    title: 'Night',
-    description: 'Bright, clean photos after dark',
+    title: tx('model_night'),
+    description: tx('model_bright_clean_photos_after_dark'),
     mode: 'night',
     tuning: { denoise: 1, sharpen: 0.8, detail: 0.3, vibrance: 0.2, autoTone: true },
   },
   {
     id: 'sport',
-    title: 'Sport',
-    description: '1/1000 s freezes motion; ISO follows',
+    title: tx('model_sport'),
+    description: tx('model_1_1000_s_freezes_motion'),
     mode: 'pro',
     shutterNs: 1_000_000,
   },
   {
     id: 'landscape',
-    title: 'Landscape',
-    description: 'Wide frame, crisp detail, rich colour',
+    title: tx('model_landscape'),
+    description: tx('model_wide_frame_crisp_detail_rich'),
     mode: 'enhance',
     aspectRatio: '16:9',
     tuning: { denoise: 0.8, sharpen: 1, detail: 0.55, vibrance: 0.35, autoTone: true },
   },
   {
     id: 'document',
-    title: 'Document',
-    description: 'Sharp, clean text on a neutral page',
+    title: tx('model_document'),
+    description: tx('model_sharp_clean_text_on_a'),
     mode: 'enhance',
     aspectRatio: '4:3',
     tuning: { denoise: 1, sharpen: 1, detail: 0.7, vibrance: 0, autoTone: true },

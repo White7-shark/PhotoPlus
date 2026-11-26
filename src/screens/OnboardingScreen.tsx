@@ -8,22 +8,23 @@ import { getPermissionService } from '../services/permissions/PermissionService'
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { t as tx } from '../i18n';
 
 const PROMISES: { icon: IconName; title: string; body: string }[] = [
   {
     icon: 'aperture',
-    title: 'A pro camera in your pocket',
-    body: 'Manual controls and composition guides, tuned to your phone.',
+    title: tx('onboarding_a_pro_camera_in_your'),
+    body: tx('onboarding_manual_controls_and_composition_guides'),
   },
   {
     icon: 'sparkles',
-    title: 'An assistant that directs',
-    body: 'Pose, light and framing guidance — on-device, no cloud.',
+    title: tx('onboarding_an_assistant_that_directs'),
+    body: tx('onboarding_pose_light_and_framing_guidance'),
   },
   {
     icon: 'shield',
-    title: 'Private by design',
-    body: 'Works offline. Your photos never leave this device unless you share them.',
+    title: tx('onboarding_private_by_design'),
+    body: tx('onboarding_works_offline_your_photos_never'),
   },
 ];
 
@@ -56,7 +57,7 @@ export function OnboardingScreen({ navigation }: RootScreenProps<'Onboarding'>) 
         <View style={{ alignItems: 'center', marginTop: 12 }}>
           <LogoFull size={Math.min(240, r.contentWidth * 0.7)} />
           <AppText variant="body" tone="secondary" align="center" style={{ marginTop: 14, maxWidth: 320 }}>
-            Your photoshoot studio — camera, director and darkroom in one.
+            {tx('onboarding_your_photoshoot_studio_camera_director')}
           </AppText>
         </View>
         <View style={{ gap: 12, marginTop: 36 }}>
@@ -91,16 +92,16 @@ export function OnboardingScreen({ navigation }: RootScreenProps<'Onboarding'>) 
         </View>
         <View style={{ flex: 1, minHeight: 24 }} />
         <Button
-          label="Get started"
+          label={tx('onboarding_get_started')}
           size="lg"
           icon="camera"
           fullWidth
           loading={busy}
           onPress={() => finish(true)}
-          accessibilityHint="Asks for camera access, then opens the studio"
+          accessibilityHint={tx('onboarding_asks_for_camera_access_then')}
         />
         <Button
-          label="Explore first"
+          label={tx('onboarding_explore_first')}
           variant="ghost"
           fullWidth
           disabled={busy}

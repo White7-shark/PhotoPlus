@@ -21,6 +21,7 @@ import { useAppStore } from '../state/store';
 import { TRIAL_DAYS } from '../services/billing/plans';
 import { useI18n, useT } from '../i18n';
 import { useTheme } from '../theme';
+import { t as tx } from '../i18n';
 
 const APP_VERSION = '0.2.0';
 
@@ -155,9 +156,9 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
             onChange={v => save('cameraResolution', v)}
             options={[
               { value: 'max', label: t('settings_resolution_max') },
-              { value: '12mp', label: '12 MP' },
-              { value: '8mp', label: '8 MP' },
-              { value: '5mp', label: '5 MP' },
+              { value: '12mp', label: tx('settings_12_mp') },
+              { value: '8mp', label: tx('settings_8_mp') },
+              { value: '5mp', label: tx('settings_5_mp') },
             ]}
           />
           <AppText variant="caption" tone="tertiary">
@@ -280,6 +281,23 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
         />
       </GlassSurface>
 
+      <SectionHeader title={t('settings_section_help')} />
+      <GlassSurface style={{ marginBottom: 24 }}>
+        <ListRow
+          icon="help"
+          title={t('settings_help_title')}
+          subtitle={t('settings_help_detail')}
+          onPress={() => navigation.navigate('Help')}
+          testID="settings-help"
+        />
+        <ListRow
+          icon="lock"
+          title={t('settings_privacy_title')}
+          subtitle={t('settings_privacy_detail')}
+          onPress={() => navigation.navigate('Privacy')}
+          last
+        />
+      </GlassSurface>
       <SectionHeader title={t('settings_section_about')} />
       <GlassSurface>
         {DEVELOPER_TOOLS ? (

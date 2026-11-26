@@ -13,6 +13,7 @@ import {
   type WatermarkSpec,
 } from '../../services/edit/watermark';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 const SWATCHES = ['#FFFFFF', '#111111', '#F5C66B', '#FF7A45', '#E8DCCB', '#8B5CF6', '#3DDC97', '#4F8BFF'];
 
@@ -63,9 +64,7 @@ export function WatermarkPanel({
   return (
     <View style={{ gap: 14 }}>
       <AppText variant="caption" tone="secondary">
-        {premium
-          ? 'Your branding goes on every photo you share.'
-          : 'Every shared photo carries the Photo Plus mark. Make it yours:'}
+        {premium ? tx('watermark_your_branding_goes_on_every') : tx('watermark_every_shared_photo_carries_the')}
       </AppText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         {WATERMARK_STYLES.map(s => (
@@ -112,19 +111,24 @@ export function WatermarkPanel({
         ))}
       </ScrollView>
       <SegmentedControl
-        label="Layout"
+        label={tx('watermark_layout')}
         value={spec.layout}
         onChange={layout => set({ layout })}
         options={[
-          { value: 'inline', label: 'Side by side' },
-          { value: 'stacked', label: 'Stacked' },
+          { value: 'inline', label: tx('watermark_side_by_side') },
+          { value: 'stacked', label: tx('watermark_stacked') },
         ]}
       />
-      <ValueSlider label="Size" value={spec.size} onChange={size => set({ size })} testID="wm-size" />
-      <ValueSlider label="Opacity" value={spec.opacity} onChange={opacity => set({ opacity })} testID="wm-opacity" />
+      <ValueSlider label={tx('watermark_size')} value={spec.size} onChange={size => set({ size })} testID="wm-size" />
+      <ValueSlider
+        label={tx('watermark_opacity')}
+        value={spec.opacity}
+        onChange={opacity => set({ opacity })}
+        testID="wm-opacity"
+      />
       <View style={{ gap: 8 }}>
         <AppText variant="caption" tone="secondary">
-          Position
+          {tx('watermark_position')}
         </AppText>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: 156, gap: 6 }}>
           {POSITIONS.map(p => (
@@ -158,7 +162,7 @@ export function WatermarkPanel({
           ))}
         </View>
         <Button
-          label="Restore default"
+          label={tx('watermark_restore_default')}
           variant="ghost"
           icon="refresh"
           onPress={() =>
@@ -172,16 +176,16 @@ export function WatermarkPanel({
       <View style={{ gap: 10, paddingTop: 6, borderTopWidth: 1, borderTopColor: theme.colors.glassStroke }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Icon name="crown" size={14} color={theme.colors.premium} strokeWidth={2.2} />
-          <AppText variant="bodyStrong">Your branding</AppText>
+          <AppText variant="bodyStrong">{tx('watermark_your_branding')}</AppText>
         </View>
         <TextInput
           value={custom.text}
           onChangeText={text => setCustom({ text: text.slice(0, 40) })}
           onFocus={() => !premium && onPremium()}
           editable={premium}
-          placeholder="Your name or studio"
+          placeholder={tx('watermark_your_name_or_studio')}
           placeholderTextColor={theme.colors.textSecondary}
-          accessibilityLabel="Watermark text"
+          accessibilityLabel={tx('watermark_watermark_text')}
           testID="wm-text"
           style={{
             borderWidth: 1,
@@ -198,7 +202,7 @@ export function WatermarkPanel({
               key={c}
               onPress={() => setCustom({ color: c })}
               accessibilityRole="button"
-              accessibilityLabel={`Colour ${c}`}
+              accessibilityLabel={tx('watermark_colour', { c })}
               accessibilityState={{ selected: custom.color === c }}
               style={{
                 width: 30,
@@ -216,7 +220,7 @@ export function WatermarkPanel({
             <Image source={{ uri: `file://${custom.logoPath}` }} style={{ width: 36, height: 36, borderRadius: 8 }} />
           ) : null}
           <Button
-            label={custom.logoPath ? 'Change logo' : 'Add your logo'}
+            label={custom.logoPath ? tx('watermark_change_logo') : tx('watermark_add_your_logo')}
             variant="glass"
             icon="image"
             onPress={() => (premium ? onPickLogo() : onPremium())}
@@ -224,26 +228,26 @@ export function WatermarkPanel({
             testID="wm-logo"
           />
           {custom.logoPath ? (
-            <Button label="Remove" variant="ghost" onPress={() => setCustom({ logoPath: null })} />
+            <Button label={tx('watermark_remove')} variant="ghost" onPress={() => setCustom({ logoPath: null })} />
           ) : null}
         </View>
         <SegmentedControl
-          label="Alignment"
+          label={tx('watermark_alignment')}
           value={custom.align}
           onChange={align => setCustom({ align })}
           options={[
-            { value: 'left', label: 'Left' },
-            { value: 'center', label: 'Centre' },
-            { value: 'right', label: 'Right' },
+            { value: 'left', label: tx('watermark_left') },
+            { value: 'center', label: tx('watermark_centre') },
+            { value: 'right', label: tx('watermark_right') },
           ]}
         />
         <SegmentedControl
-          label="Watermark"
+          label={tx('watermark_watermark')}
           value={spec.enabled ? 'on' : 'off'}
           onChange={v => (premium ? set({ enabled: v === 'on' }) : onPremium())}
           options={[
-            { value: 'on', label: 'On' },
-            { value: 'off', label: 'No watermark' },
+            { value: 'on', label: tx('watermark_on') },
+            { value: 'off', label: tx('watermark_no_watermark') },
           ]}
         />
         {presets.length ? (
@@ -254,7 +258,7 @@ export function WatermarkPanel({
                 <Pressable
                   onPress={() => onDeletePreset(p.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Delete ${p.name}`}
+                  accessibilityLabel={tx('watermark_delete', { name: p.name })}
                   style={{ padding: 6 }}
                 >
                   <Icon name="close" size={14} color={theme.colors.textSecondary} />
@@ -269,9 +273,9 @@ export function WatermarkPanel({
             onChangeText={t => setPresetName(t.slice(0, 30))}
             editable={premium}
             onFocus={() => !premium && onPremium()}
-            placeholder="Preset name"
+            placeholder={tx('watermark_preset_name')}
             placeholderTextColor={theme.colors.textSecondary}
-            accessibilityLabel="Preset name"
+            accessibilityLabel={tx('watermark_preset_name')}
             style={{
               flex: 1,
               borderWidth: 1,
@@ -282,7 +286,7 @@ export function WatermarkPanel({
             }}
           />
           <Button
-            label="Save preset"
+            label={tx('watermark_save_preset')}
             variant="glass"
             icon="check"
             onPress={() => {

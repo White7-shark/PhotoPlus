@@ -4,6 +4,7 @@ import { ActivityIndicator, Image, StyleSheet, View, type GestureResponderEvent,
 import { applyGesture, overlayRect, type Touch } from '../../services/studio/gesture';
 import type { Placement } from '../../services/studio/scene';
 import { containRect } from '../editor/geometry';
+import { t as tx } from '../../i18n';
 
 /**
  * The scene, with the person moved by hand: one finger moves them (their
@@ -82,7 +83,7 @@ export function PlacementView({
     <View
       style={styles.wrap}
       onLayout={(e: LayoutChangeEvent) => setView({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-      accessibilityLabel="Your scene. Drag to move yourself, pinch to resize"
+      accessibilityLabel={tx('placement_view_your_scene_drag_to_move')}
       testID="placement-view"
       {...handlers}
     >
@@ -106,7 +107,7 @@ export function PlacementView({
           />
         </View>
       ) : null}
-      {rendering ? <ActivityIndicator style={styles.spinner} color="#FFFFFF" accessibilityLabel="Updating the scene" /> : null}
+      {rendering ? <ActivityIndicator style={styles.spinner} color="#FFFFFF" accessibilityLabel={tx('placement_view_updating_the_scene')} /> : null}
     </View>
   );
 }

@@ -73,6 +73,11 @@ describe('the string resources', () => {
     ).not.toThrow();
   });
 
+  it('no words the app shows are left in the code (they are all string resources)', () => {
+    const out = String(execFileSync('node', ['tools/i18n/extract.mjs'], { cwd: root, stdio: 'pipe' }));
+    expect(out).toMatch(/\n0 edits, 0 new strings/);
+  }, 60_000);
+
   it('every language has a hand-translated file with only English keys and the same placeholders', () => {
     const holes = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
     for (const l of LANGUAGES.filter(x => x.tag !== 'en')) {

@@ -5,6 +5,7 @@
  * device decides and answers with the new state.
  */
 import { errorCode, errorMessage, nativeModules, type AdsSpec, type RewardsSpec } from '../../native';
+import { t as tx } from '../../i18n';
 
 export type ActivityEvent = 'photo' | 'edit' | 'studio' | 'product' | 'film' | 'project' | 'glide';
 export type RewardItem = 'tool' | 'premium-1' | 'premium-3' | 'premium-7';
@@ -94,15 +95,18 @@ export function isRewardsState(v: unknown): v is RewardsState {
 }
 
 export const TASK_TEXT: Record<string, { title: string; hint: string }> = {
-  'first-photo': { title: 'Take your first photo', hint: 'With the Photo Plus camera' },
-  'first-edit': { title: 'Edit and save a photo', hint: 'Any edit in the editor' },
-  'first-product': { title: 'Make a product shot', hint: 'In Product Studio' },
-  'first-film': { title: 'Make a film strip or collage', hint: 'In Film & Collage' },
-  'first-project': { title: 'Start a project', hint: 'Organise a shoot in Projects' },
-  'first-glide': { title: 'Record a Glide video', hint: 'Glide in the camera' },
-  'daily-photos': { title: 'Take 3 photos today', hint: 'Any mode in the camera' },
-  'daily-edit': { title: 'Save an edit today', hint: 'The editor or any studio tool' },
-  'daily-studio': { title: 'Create in the Photoshoot Studio', hint: 'Scene Swap, Relight, Film, Product…' },
+  'first-photo': { title: tx('rewards_take_your_first_photo'), hint: tx('rewards_with_the_photo_plus_camera') },
+  'first-edit': { title: tx('rewards_edit_and_save_a_photo'), hint: tx('rewards_any_edit_in_the_editor') },
+  'first-product': { title: tx('rewards_make_a_product_shot'), hint: tx('rewards_in_product_studio') },
+  'first-film': { title: tx('rewards_make_a_film_strip_or'), hint: tx('rewards_in_film_collage') },
+  'first-project': { title: tx('rewards_start_a_project'), hint: tx('rewards_organise_a_shoot_in_projects') },
+  'first-glide': { title: tx('rewards_record_a_glide_video'), hint: tx('rewards_glide_in_the_camera') },
+  'daily-photos': { title: tx('rewards_take_3_photos_today'), hint: tx('rewards_any_mode_in_the_camera') },
+  'daily-edit': { title: tx('rewards_save_an_edit_today'), hint: tx('rewards_the_editor_or_any_studio') },
+  'daily-studio': {
+    title: tx('rewards_create_in_the_photoshoot_studio'),
+    hint: tx('rewards_scene_swap_relight_film_product'),
+  },
 };
 
 export const TOOL_TEXT: Record<RewardTool, string> = {

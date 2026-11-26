@@ -25,6 +25,8 @@ import { ProjectScreen } from '../screens/product/ProjectScreen';
 import { PremiumScreen } from '../screens/premium/PremiumScreen';
 import { RewardsScreen } from '../screens/premium/RewardsScreen';
 import { LanguageScreen } from '../screens/LanguageScreen';
+import { HelpScreen } from '../screens/HelpScreen';
+import { PrivacyScreen } from '../screens/PrivacyScreen';
 import { navigationRef } from './ref';
 import { SceneSwapScreen } from '../screens/studio/SceneSwapScreen';
 import { useAppStore } from '../state/store';
@@ -68,6 +70,8 @@ const Project = guarded(ProjectScreen, 'Project');
 const Premium = guarded(PremiumScreen, 'Premium');
 const Rewards = guarded(RewardsScreen, 'Rewards');
 const Language = guarded(LanguageScreen, 'Language');
+const Help = guarded(HelpScreen, 'Help');
+const Privacy = guarded(PrivacyScreen, 'Privacy');
 
 const renderTabBar = (props: BottomTabBarProps) => <GlassTabBar {...props} />;
 
@@ -132,6 +136,8 @@ export function RootNavigator() {
         <Stack.Screen name="Premium" component={Premium} options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="Rewards" component={Rewards} options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Language" component={Language} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Help" component={Help} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Privacy" component={Privacy} options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

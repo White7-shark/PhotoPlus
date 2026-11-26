@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /** Pure geometry for the editor's preview: what a tap or a drag means on the photo. */
 
 export interface Rect {
@@ -57,8 +58,8 @@ export interface CropAspect {
 }
 
 export const CROP_ASPECTS: readonly CropAspect[] = [
-  { id: 'original', label: 'Original', ratio: null },
-  { id: 'square', label: 'Square', ratio: 1 },
+  { id: 'original', label: tx('geometry_original'), ratio: null },
+  { id: 'square', label: tx('geometry_square'), ratio: 1 },
   { id: 'portrait', label: '4:5', ratio: 4 / 5 },
   { id: 'photo', label: '3:4', ratio: 3 / 4 },
   { id: 'story', label: '9:16', ratio: 9 / 16 },

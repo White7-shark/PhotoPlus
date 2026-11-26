@@ -32,10 +32,11 @@ import { useTheme } from '../../theme';
 import { DownloadSize } from '../studio/DownloadSize';
 
 import { Choice, Tabs } from './controls';
+import { t as tx } from '../../i18n';
 
 type Mode = 'product' | 'look';
 const SHAPES = [
-  { id: 'as-shot', name: 'As shot', shape: null },
+  { id: 'as-shot', name: tx('batch_as_shot'), shape: null },
   { id: '1-1', name: '1:1', shape: { aspectW: 1, aspectH: 1 } },
   { id: '4-5', name: '4:5', shape: { aspectW: 4, aspectH: 5 } },
   { id: '9-16', name: '9:16', shape: { aspectW: 9, aspectH: 16 } },
@@ -113,7 +114,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
         if (d.brandingId) setBrandingId(d.brandingId);
       }
     })().catch(() => {
-      if (live) setError('Your photos couldn’t be loaded.');
+      if (live) setError(tx('batch_your_photos_couldn_t_be'));
     });
     return () => {
       live = false;
@@ -156,7 +157,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
     let job: BatchJob;
     if (mode === 'product') {
       const s = setupOf(setupId);
-      if (!s) return setError('Choose a setup first.');
+      if (!s) return setError(tx('batch_choose_a_setup_first'));
       const profile = exportProfile(profileId);
       if ((s.premium || profile.premium) && !pro) return setPremiumOpen('productPro');
       if (exportSize(size).premium && !premiumSizes) return setPremiumOpen('exportHd');
@@ -170,7 +171,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
       };
     } else {
       const l = lookOf(lookId);
-      if (!l) return setError('Choose a look first.');
+      if (!l) return setError(tx('batch_choose_a_look_first'));
       if (l.premium && !pro) return setPremiumOpen('productPro');
       job = {
         kind: 'look',
@@ -204,7 +205,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
       void loadProjects();
     } catch (e) {
       if (e instanceof ProductError && e.code === 'PREMIUM_REQUIRED') setPremiumOpen('productPro');
-      else setError('The batch stopped. The photos already done are in your library.');
+      else setError(tx('batch_the_batch_stopped_the_photos'));
     } finally {
       setRunning(false);
     }
@@ -214,24 +215,24 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
   const failed = items?.filter(i => i.status === 'failed').length ?? 0;
 
   return (
-    <Screen title="Batch edit" onBack={() => navigation.goBack()} bottomInset={32}>
+    <Screen title={tx('batch_batch_edit')} onBack={() => navigation.goBack()} bottomInset={32}>
       <View style={{ gap: 14 }}>
         <AppText variant="body" tone="secondary">
-          One setup or look on many photos at once. Each result is saved beside its original; your originals stay as
-          they are.
+          {tx('batch_one_setup_or_look_on')}
         </AppText>
 
         <GlassSurface radius={18} style={styles.section}>
           <View style={styles.head}>
             <AppText variant="bodyStrong" style={{ flex: 1 }}>
-              Photos · {photos.length}
+              {tx('batch_photos')} {photos.length}
               {!unlimited ? ` of ${FREE_BATCH}` : ''}
             </AppText>
-            <Choice label="Add photos" icon="plus" selected={false} onPress={add} testID="batch-add" />
+            <Choice label={tx('batch_add_photos')} icon="plus" selected={false} onPress={add} testID="batch-add" />
           </View>
           {originals.length === 0 && photos.length === 0 ? (
             <AppText variant="caption" tone="tertiary">
-              Add the photos to edit{project ? `, or take them into “${project.name}”` : ''}.
+              {tx('batch_add_the_photos_to_edit')}
+              {project ? tx('batch_or_take_them_into', { name: project.name }) : ''}.
             </AppText>
           ) : null}
           <View style={styles.grid} testID="batch-photos">
@@ -243,7 +244,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
                   onPress={() => toggle(r.id)}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: on }}
-                  accessibilityLabel="Photo"
+                  accessibilityLabel={tx('batch_photo')}
                   testID={`batch-photo-${r.id}`}
                   style={[styles.thumb, { borderColor: on ? theme.colors.accent : 'transparent' }]}
                 >
@@ -260,7 +261,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
           {!unlimited ? (
             <Pressable onPress={() => setPremiumOpen('batchEditing')} accessibilityRole="button" testID="batch-limit">
               <AppText variant="caption" tone="tertiary">
-                Up to {FREE_BATCH} photos at a time on the free plan; Premium edits up to {MAX_BATCH}.
+                {tx('batch_up_to')} {FREE_BATCH} {tx('batch_photos_at_a_time_on')} {MAX_BATCH}.
               </AppText>
             </Pressable>
           ) : null}
@@ -268,8 +269,8 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
 
         <Tabs
           tabs={[
-            { value: 'product', label: 'Product shots' },
-            { value: 'look', label: 'Photo look' },
+            { value: 'product', label: tx('batch_product_shots') },
+            { value: 'look', label: tx('batch_photo_look') },
           ]}
           value={mode}
           onChange={setMode}
@@ -279,7 +280,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
           {mode === 'product' ? (
             <>
               <AppText variant="caption" tone="secondary">
-                Setup
+                {tx('batch_setup')}
               </AppText>
               <View style={styles.wrap}>
                 {CATALOG_PRESETS.map(p => (
@@ -304,7 +305,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
                 ))}
               </View>
               <AppText variant="caption" tone="secondary">
-                Shape and format
+                {tx('batch_shape_and_format')}
               </AppText>
               <View style={styles.wrap}>
                 {EXPORT_PROFILES.map(p => (
@@ -328,7 +329,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
           ) : (
             <>
               <AppText variant="caption" tone="secondary">
-                Look
+                {tx('batch_look')}
               </AppText>
               <View style={styles.wrap}>
                 {LOOK_PRESETS.map(l => (
@@ -353,7 +354,7 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
                 ))}
               </View>
               <AppText variant="caption" tone="secondary">
-                Shape
+                {tx('batch_shape')}
               </AppText>
               <View style={styles.wrap}>
                 {SHAPES.map(s => (
@@ -369,11 +370,11 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
             </>
           )}
           <AppText variant="caption" tone="secondary">
-            Brand mark
+            {tx('batch_brand_mark')}
           </AppText>
           <View style={styles.wrap}>
             <Choice
-              label={mode === 'look' ? 'Your watermark' : 'None'}
+              label={mode === 'look' ? tx('batch_your_watermark') : tx('batch_none')}
               selected={brandingId === null}
               onPress={() => setBrandingId(null)}
               testID="batch-brand-none"
@@ -401,9 +402,12 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
           <GlassSurface radius={18} style={styles.section} testID="batch-results">
             <AppText variant="bodyStrong" accessibilityLiveRegion="polite">
               {running
-                ? `Editing ${Math.min(doneCount + failed + 1, items.length)} of ${items.length}…`
-                : `Done: ${doneCount} of ${items.length}`}
-              {failed ? ` · ${failed} couldn’t be edited` : ''}
+                ? tx('batch_editing_of', {
+                    value: Math.min(doneCount + failed + 1, items.length),
+                    length: items.length,
+                  })
+                : tx('batch_done_of', { doneCount, length: items.length })}
+              {failed ? tx('batch_couldn_t_be_edited', { failed }) : ''}
             </AppText>
             {items.map((it, i) => (
               <Pressable
@@ -411,14 +415,22 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
                 onPress={() => (it.result ? navigation.navigate('PhotoPreview', { imageId: it.result.id }) : undefined)}
                 disabled={!it.result}
                 accessibilityRole="button"
-                accessibilityLabel={`Photo ${i + 1}: ${it.status}`}
+                accessibilityLabel={tx('batch_photo_2', { value: i + 1, status: it.status })}
                 testID={`batch-item-${i}`}
                 style={styles.result}
               >
-                <Image source={{ uri: `file://${it.image.path}` }} style={styles.small} accessibilityLabel="Before" />
+                <Image
+                  source={{ uri: `file://${it.image.path}` }}
+                  style={styles.small}
+                  accessibilityLabel={tx('batch_before')}
+                />
                 <Icon name="chevronRight" size={14} color={theme.colors.textTertiary} />
                 {it.result ? (
-                  <Image source={{ uri: `file://${it.result.path}` }} style={styles.small} accessibilityLabel="After" />
+                  <Image
+                    source={{ uri: `file://${it.result.path}` }}
+                    style={styles.small}
+                    accessibilityLabel={tx('batch_after')}
+                  />
                 ) : (
                   <View style={[styles.small, styles.waiting]}>
                     {it.status === 'working' ? <ActivityIndicator color={theme.colors.accent} /> : null}
@@ -431,12 +443,12 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
                   numberOfLines={2}
                 >
                   {it.status === 'done'
-                    ? 'Saved · tap to compare'
+                    ? tx('batch_saved_tap_to_compare')
                     : it.status === 'failed'
-                      ? (it.error ?? 'Couldn’t be edited')
+                      ? (it.error ?? tx('batch_couldn_t_be_edited_2'))
                       : it.status === 'working'
-                        ? 'Working…'
-                        : 'Waiting'}
+                        ? tx('batch_working')
+                        : tx('batch_waiting')}
                 </AppText>
               </Pressable>
             ))}
@@ -446,14 +458,18 @@ export function BatchScreen({ navigation, route }: RootScreenProps<'Batch'>) {
         <View style={styles.row}>
           {running ? (
             <Button
-              label="Stop"
+              label={tx('batch_stop')}
               variant="glass"
               onPress={() => (signal.current.cancelled = true)}
               testID="batch-stop"
             />
           ) : null}
           <Button
-            label={running ? 'Working…' : `Edit ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}`}
+            label={
+              running
+                ? tx('batch_working')
+                : tx('batch_edit', { length: photos.length, value: photos.length === 1 ? 'photo' : 'photos' })
+            }
             icon="wand"
             onPress={run}
             loading={running}

@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * Photo Plus Premium plans. One Google Play subscription with three base
  * plans, each opening with a 7-day free trial (a Play offer). Prices are
@@ -30,17 +31,25 @@ export interface PremiumPlan {
 }
 
 export const PLANS: readonly PremiumPlan[] = [
-  { id: 'monthly', basePlanId: 'monthly', name: 'Monthly', months: 1, price: 50, currency: 'GHS' },
+  { id: 'monthly', basePlanId: 'monthly', name: tx('plans_monthly'), months: 1, price: 50, currency: 'GHS' },
   {
     id: 'quarterly',
     basePlanId: 'quarterly',
-    name: '3 months',
+    name: tx('plans_3_months'),
     months: 3,
     price: 135,
     currency: 'GHS',
-    badge: 'Popular',
+    badge: tx('plans_popular'),
   },
-  { id: 'yearly', basePlanId: 'yearly', name: 'Yearly', months: 12, price: 480, currency: 'GHS', badge: 'Best value' },
+  {
+    id: 'yearly',
+    basePlanId: 'yearly',
+    name: tx('plans_yearly'),
+    months: 12,
+    price: 480,
+    currency: 'GHS',
+    badge: tx('plans_best_value'),
+  },
 ];
 
 export const plan = (id: PlanId) => PLANS.find(p => p.id === id) ?? PLANS[0];

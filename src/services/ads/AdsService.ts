@@ -45,6 +45,19 @@ export class AdsService {
     return this.started;
   }
 
+  /** Whether the law asks for ad privacy choices where the user is (Google's consent form). */
+  async privacyOptionsRequired(): Promise<boolean> {
+    if (!this.native) return false;
+    await this.start();
+    return this.native.privacyOptionsRequired().catch(() => false);
+  }
+
+  /** Google's form to change ad consent; true when it was shown. */
+  async showPrivacyOptions(): Promise<boolean> {
+    if (!this.native) return false;
+    return this.native.showPrivacyOptions();
+  }
+
   async progress(photoPath: string): Promise<RewardProgress> {
     const native = this.native;
     if (!native) return { watched: 0, required: 4, unlocked: false };

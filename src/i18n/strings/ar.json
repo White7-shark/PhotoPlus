@@ -13,7 +13,7 @@
   "language_overline": "الإعدادات",
   "language_system": "لغة الهاتف",
   "language_system_detail": "تتبع لغة هاتفك: {name}",
-  "language_note": "يغيّر Photo Plus اللغة فورًا. قد تبقى بعض الكلمات بالإنجليزية حتى التحديث القادم.",
+  "language_note": "يُعاد تشغيل Photo Plus باللغة التي تختارها. تبقى صورك ومشاريعك وإعداداتك كما هي.",
   "language_failed": "تعذّر تغيير اللغة",
   "settings_title": "الإعدادات",
   "settings_overline": "التفضيلات",

@@ -16,7 +16,8 @@ import en from './strings/en.json';
 import languages from './languages.json';
 
 export type StringKey = keyof typeof en;
-export type Params = Record<string, string | number>;
+/** Placeholder values; an empty one (null, undefined) shows as nothing. */
+export type Params = Record<string, string | number | null | undefined>;
 
 export interface Language {
   /** BCP 47 tag, e.g. "pt-BR". */
@@ -49,7 +50,7 @@ export function matchLanguage(tag: string): Language {
 /** Fills {name} placeholders. */
 export function format(text: string, params?: Params): string {
   if (!params) return text;
-  return text.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k]) : all));
+  return text.replace(/\{(\w+)\}/g, (all, k: string) => (k in params ? String(params[k] ?? '') : all));
 }
 
 function readStrings(tag: string): Record<string, string> {

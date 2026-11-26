@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText, Icon } from '../../components';
 import { EXPORT_SIZES, type ExportSizeId } from '../../services/studio/exportSize';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 /**
  * The download size of a studio photo: 360p and 480p on every plan; 720p,
@@ -24,7 +25,7 @@ export function DownloadSize({
   return (
     <View style={{ gap: 6 }} testID="download-size">
       <AppText variant="caption" tone="secondary">
-        Download size
+        {tx('download_size_download_size')}
       </AppText>
       <View style={styles.row} accessibilityRole="radiogroup">
         {EXPORT_SIZES.map(s => {
@@ -35,7 +36,7 @@ export function DownloadSize({
               key={s.id}
               onPress={() => (locked ? onLocked() : onChange(s.id))}
               accessibilityRole="radio"
-              accessibilityLabel={locked ? `${s.label}, Premium` : s.label}
+              accessibilityLabel={locked ? tx('download_size_premium', { label: s.label }) : s.label}
               accessibilityState={{ selected }}
               testID={`size-${s.id}`}
               style={[styles.chip, { borderColor: selected ? theme.colors.accent : 'rgba(255,255,255,0.14)' }]}

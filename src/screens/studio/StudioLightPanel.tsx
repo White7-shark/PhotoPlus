@@ -13,6 +13,7 @@ import {
   type LightChoice,
 } from '../../services/studio/light';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 const pct = (v: number) => `${Math.round(v * 100)}`;
 const signed = (v: number) => (Math.abs(v) < 0.005 ? '0' : `${v > 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`);
@@ -25,7 +26,7 @@ function Chip({ id, label, selected, locked, onPress }: { id: string; label: str
     <Pressable
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityLabel={locked ? `${label}, Premium` : label}
+      accessibilityLabel={locked ? tx('studio_light_premium', { label }) : label}
       accessibilityState={{ selected }}
       testID={id}
       style={[
@@ -86,9 +87,9 @@ export function LightPanel({
       </AppText>
       {value && base ? (
         <>
-          <ValueSlider label="Strength" value={value.strength} onChange={v => onChange({ ...value, strength: v })} format={pct} testID="light-strength" />
+          <ValueSlider label={tx('studio_light_strength')} value={value.strength} onChange={v => onChange({ ...value, strength: v })} format={pct} testID="light-strength" />
           <ValueSlider
-            label="Direction"
+            label={tx('studio_light_direction')}
             value={value.angle ?? base.angle}
             min={-90}
             max={90}
@@ -99,7 +100,7 @@ export function LightPanel({
             testID="light-direction"
           />
           <ValueSlider
-            label="Softness"
+            label={tx('studio_light_softness')}
             value={value.softness ?? base.softness}
             onChange={v => tweak({ softness: v })}
             format={pct}
@@ -107,7 +108,7 @@ export function LightPanel({
             testID="light-softness"
           />
           <ValueSlider
-            label="Rim light"
+            label={tx('studio_light_rim_light')}
             value={value.rim ?? Math.max(base.rimLeft ?? 0, base.rimRight ?? 0)}
             onChange={v => tweak({ rim: v })}
             format={pct}
@@ -116,10 +117,10 @@ export function LightPanel({
           />
           <AppText variant="caption" tone="tertiary">
             {premium
-              ? 'The light is drawn from your outline and face. If a shadow falls oddly, turn the light, soften it or lower the strength.'
-              : 'Turning, softening and rim light are part of Premium.'}
+              ? tx('studio_light_the_light_is_drawn_from')
+              : tx('studio_light_turning_softening_and_rim_light')}
           </AppText>
-          <Button label="Reset light" variant="ghost" icon="refresh" onPress={() => onChange({ preset: value.preset, strength: 1 })} testID="light-reset" />
+          <Button label={tx('studio_light_reset_light')} variant="ghost" icon="refresh" onPress={() => onChange({ preset: value.preset, strength: 1 })} testID="light-reset" />
         </>
       ) : null}
     </View>
@@ -152,10 +153,10 @@ export function FinishPanel({
           />
         ))}
       </View>
-      <ValueSlider label="Vignette" value={value.vignette} min={-1} max={1} onChange={v => onChange({ ...value, vignette: v })} format={signed} testID="finish-vignette" />
-      <ValueSlider label="Warmth" value={value.warmth} min={-1} max={1} onChange={v => onChange({ ...value, warmth: v })} format={signed} testID="finish-warmth" />
-      <ValueSlider label="Tint" value={value.tint} min={-1} max={1} onChange={v => onChange({ ...value, tint: v })} format={signed} testID="finish-tint" />
-      <Button label="Reset finish" variant="ghost" icon="refresh" onPress={() => onChange(NO_FINISH)} testID="finish-reset" />
+      <ValueSlider label={tx('studio_light_vignette')} value={value.vignette} min={-1} max={1} onChange={v => onChange({ ...value, vignette: v })} format={signed} testID="finish-vignette" />
+      <ValueSlider label={tx('studio_light_warmth')} value={value.warmth} min={-1} max={1} onChange={v => onChange({ ...value, warmth: v })} format={signed} testID="finish-warmth" />
+      <ValueSlider label={tx('studio_light_tint')} value={value.tint} min={-1} max={1} onChange={v => onChange({ ...value, tint: v })} format={signed} testID="finish-tint" />
+      <Button label={tx('studio_light_reset_finish')} variant="ghost" icon="refresh" onPress={() => onChange(NO_FINISH)} testID="finish-reset" />
     </View>
   );
 }
@@ -165,7 +166,7 @@ export function TemplateRow({ onApply, premium, onLocked }: { onApply: (id: stri
   return (
     <View style={{ gap: 8 }} testID="templates">
       <AppText variant="caption" tone="secondary">
-        Composition
+        {tx('studio_light_composition')}
       </AppText>
       <View style={styles.wrap}>
         {TEMPLATES.map(t => (

@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * Film & Collage (Photoshoot Studio): photos as frames on a film strip, or
  * in a collage, each frame with its own transformation (a look, a zoom, a
@@ -6,16 +7,16 @@
 
 /** The looks a frame can take, in the engine's order (pp_frame_look). */
 export const FRAME_LOOKS = [
-  { id: 'original', name: 'Original' },
-  { id: 'bw', name: 'Black & white' },
-  { id: 'sepia', name: 'Sepia' },
-  { id: 'vintage', name: 'Vintage' },
-  { id: 'cool', name: 'Cool' },
-  { id: 'punch', name: 'Punchy' },
-  { id: 'cross', name: 'Cross process' },
-  { id: 'faded', name: 'Faded' },
-  { id: 'golden', name: 'Golden' },
-  { id: 'noir', name: 'Noir' },
+  { id: 'original', name: tx('film_original') },
+  { id: 'bw', name: tx('film_black_white') },
+  { id: 'sepia', name: tx('film_sepia') },
+  { id: 'vintage', name: tx('film_vintage') },
+  { id: 'cool', name: tx('film_cool') },
+  { id: 'punch', name: tx('film_punchy') },
+  { id: 'cross', name: tx('film_cross_process') },
+  { id: 'faded', name: tx('film_faded') },
+  { id: 'golden', name: tx('film_golden') },
+  { id: 'noir', name: tx('film_noir') },
 ] as const;
 export type FrameLook = (typeof FRAME_LOOKS)[number]['id'];
 export const lookIndex = (id: FrameLook) => FRAME_LOOKS.findIndex(l => l.id === id);
@@ -54,20 +55,26 @@ export const plainFrame = (photo: number): FilmFrame => ({
 export const FILM_STYLES = [
   {
     id: 'classic',
-    name: 'Classic 35mm',
-    about: 'Black film, sprocket holes and edge numbers',
+    name: tx('film_classic_35mm'),
+    about: tx('film_black_film_sprocket_holes_and'),
     premium: false,
     portrait: false,
   },
-  { id: 'booth', name: 'Photo booth', about: 'A paper strip of portraits', premium: false, portrait: true },
+  {
+    id: 'booth',
+    name: tx('film_photo_booth'),
+    about: tx('film_a_paper_strip_of_portraits'),
+    premium: false,
+    portrait: true,
+  },
   {
     id: 'amber',
-    name: 'Amber negative',
-    about: 'The warm orange base of colour negative film',
+    name: tx('film_amber_negative'),
+    about: tx('film_the_warm_orange_base_of'),
     premium: true,
     portrait: false,
   },
-  { id: 'cinema', name: 'Cinema', about: 'Wide, cinematic frames', premium: true, portrait: false },
+  { id: 'cinema', name: tx('film_cinema'), about: tx('film_wide_cinematic_frames'), premium: true, portrait: false },
 ] as const;
 export type FilmStyle = (typeof FILM_STYLES)[number]['id'];
 export const filmStyle = (id: FilmStyle) => FILM_STYLES.find(s => s.id === id)!;
@@ -152,11 +159,11 @@ const grid = (cols: number, rows: number): [number, number, number, number][] =>
   Array.from({ length: cols * rows }, (_, i) => [(i % cols) / cols, Math.floor(i / cols) / rows, 1 / cols, 1 / rows]);
 
 export const COLLAGE_LAYOUTS: CollageLayout[] = [
-  { id: 'duo', name: 'Side by side', cells: grid(2, 1) },
-  { id: 'stack', name: 'Stacked', cells: grid(1, 2) },
+  { id: 'duo', name: tx('film_side_by_side'), cells: grid(2, 1) },
+  { id: 'stack', name: tx('film_stacked'), cells: grid(1, 2) },
   {
     id: 'hero3',
-    name: 'One big, two small',
+    name: tx('film_one_big_two_small'),
     cells: [
       [0, 0, 1, 0.6],
       [0, 0.6, 0.5, 0.4],
@@ -165,17 +172,17 @@ export const COLLAGE_LAYOUTS: CollageLayout[] = [
   },
   {
     id: 'side3',
-    name: 'Tall and two',
+    name: tx('film_tall_and_two'),
     cells: [
       [0, 0, 0.6, 1],
       [0.6, 0, 0.4, 0.5],
       [0.6, 0.5, 0.4, 0.5],
     ],
   },
-  { id: 'grid4', name: 'Grid of four', cells: grid(2, 2) },
+  { id: 'grid4', name: tx('film_grid_of_four'), cells: grid(2, 2) },
   {
     id: 'hero4',
-    name: 'One big, three small',
+    name: tx('film_one_big_three_small'),
     cells: [
       [0, 0, 1, 0.62],
       [0, 0.62, 1 / 3, 0.38],
@@ -183,10 +190,10 @@ export const COLLAGE_LAYOUTS: CollageLayout[] = [
       [2 / 3, 0.62, 1 / 3, 0.38],
     ],
   },
-  { id: 'strip4', name: 'Four in a row', cells: grid(1, 4) },
+  { id: 'strip4', name: tx('film_four_in_a_row'), cells: grid(1, 4) },
   {
     id: 'mosaic5',
-    name: 'Mosaic',
+    name: tx('film_mosaic'),
     cells: [
       [0, 0, 0.6, 0.55],
       [0.6, 0, 0.4, 0.3],
@@ -195,8 +202,8 @@ export const COLLAGE_LAYOUTS: CollageLayout[] = [
       [0.4, 0.55, 0.6, 0.45],
     ],
   },
-  { id: 'grid6', name: 'Grid of six', cells: grid(2, 3) },
-  { id: 'grid9', name: 'Grid of nine', cells: grid(3, 3) },
+  { id: 'grid6', name: tx('film_grid_of_six'), cells: grid(2, 3) },
+  { id: 'grid9', name: tx('film_grid_of_nine'), cells: grid(3, 3) },
 ];
 export const collageLayout = (id: string) => COLLAGE_LAYOUTS.find(l => l.id === id) ?? COLLAGE_LAYOUTS[0];
 

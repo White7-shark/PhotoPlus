@@ -73,6 +73,7 @@ import { BeautyEditPanel } from './BeautyPanel';
 import { WatermarkUnlock } from '../WatermarkUnlock';
 import { WatermarkPanel } from './WatermarkPanel';
 import { recordActivity } from '../../services/rewards/RewardsService';
+import { t as tx } from '../../i18n';
 
 const log = createLogger('editor');
 
@@ -297,7 +298,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
     try {
       const vertical = await getProcessingService().detectPerspective(base, doc);
       if (Math.abs(vertical) < 0.02) {
-        Alert.alert('Lines look straight', 'No leaning walls or buildings to fix in this photo.');
+        Alert.alert(tx('editor_lines_look_straight'), tx('editor_no_leaning_walls_or_buildings'));
         return;
       }
       // Props were placed on the old geometry: keep them, the user can move them.
@@ -494,7 +495,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
       void loadProjects();
       navigation.replace('PhotoPreview', { imageId: record.id });
     } catch (e) {
-      Alert.alert('Couldn’t save', friendlyMessage(errorCode(e)));
+      Alert.alert(tx('editor_couldn_t_save'), friendlyMessage(errorCode(e)));
     } finally {
       setBusy(null);
     }
@@ -516,10 +517,13 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
       if (destination === 'share') {
         await getStorageService().share([out.outputPath], 'Share your photo');
       } else {
-        Alert.alert('Saved to your gallery', 'Find it in Pictures › Photo Plus.');
+        Alert.alert(tx('editor_saved_to_your_gallery'), tx('editor_find_it_in_pictures_photo'));
       }
     } catch (e) {
-      Alert.alert(destination === 'share' ? 'Couldn’t share' : 'Couldn’t save', friendlyMessage(errorCode(e)));
+      Alert.alert(
+        destination === 'share' ? tx('editor_couldn_t_share') : tx('editor_couldn_t_save'),
+        friendlyMessage(errorCode(e)),
+      );
     } finally {
       setBusy(null);
     }
@@ -530,9 +534,9 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
       navigation.goBack();
       return;
     }
-    Alert.alert('Discard your edits?', 'Your original photo stays as it is.', [
-      { text: 'Keep editing', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: () => navigation.goBack() },
+    Alert.alert(tx('editor_discard_your_edits'), tx('editor_your_original_photo_stays_as'), [
+      { text: tx('editor_keep_editing'), style: 'cancel' },
+      { text: tx('editor_discard'), style: 'destructive', onPress: () => navigation.goBack() },
     ]);
   };
 
@@ -556,15 +560,19 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
   // ---- render -------------------------------------------------------------------------
   if (status === 'loading') {
     return (
-      <Screen title="Edit" onBack={() => navigation.goBack()} bottomInset={24}>
-        <LoadingState label="Opening photo…" />
+      <Screen title={tx('editor_edit')} onBack={() => navigation.goBack()} bottomInset={24}>
+        <LoadingState label={tx('editor_opening_photo')} />
       </Screen>
     );
   }
   if (!image || !base) {
     return (
-      <Screen title="Edit" onBack={() => navigation.goBack()} bottomInset={24}>
-        <ErrorState title="Photo not found" message="It may have been deleted." onRetry={() => navigation.goBack()} />
+      <Screen title={tx('editor_edit')} onBack={() => navigation.goBack()} bottomInset={24}>
+        <ErrorState
+          title={tx('editor_photo_not_found')}
+          message={tx('editor_it_may_have_been_deleted')}
+          onRetry={() => navigation.goBack()}
+        />
       </Screen>
     );
   }
@@ -578,13 +586,13 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
 
   return (
     <Screen
-      title="Edit"
+      title={tx('editor_edit')}
       onBack={leave}
       headerRight={
         <View style={{ flexDirection: 'row', gap: 6 }}>
           <IconButton
             icon="undo"
-            label="Undo"
+            label={tx('editor_undo')}
             onPress={() => dispatch({ type: 'undo' })}
             disabled={!canUndo(history)}
             size={40}
@@ -592,7 +600,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
           />
           <IconButton
             icon="redo"
-            label="Redo"
+            label={tx('editor_redo')}
             onPress={() => dispatch({ type: 'redo' })}
             disabled={!canRedo(history)}
             size={40}
@@ -610,10 +618,10 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
           }
           accessibilityLabel={
             tool === 'spotlight'
-              ? 'Photo. Tap what should shine'
+              ? tx('editor_photo_tap_what_should_shine')
               : tool === 'focus'
-                ? 'Photo. Tap what stays sharp'
-                : 'Photo being edited'
+                ? tx('editor_photo_tap_what_stays_sharp')
+                : tx('editor_photo_being_edited')
           }
           testID="editor-photo"
           style={{ width: '100%', aspectRatio: 0.9, borderRadius: 18, overflow: 'hidden', backgroundColor: '#000' }}
@@ -625,7 +633,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
               resizeMode="contain"
             />
           ) : (
-            <LoadingState label="Preparing your photo…" />
+            <LoadingState label={tx('editor_preparing_your_photo')} />
           )}
           {photoArea && !comparing ? (
             <>
@@ -770,7 +778,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
             onPressIn={() => setComparing(true)}
             onPressOut={() => setComparing(false)}
             accessibilityRole="button"
-            accessibilityLabel="Hold to see the original"
+            accessibilityLabel={tx('editor_hold_to_see_the_original')}
             testID="compare"
             style={{
               flexDirection: 'row',
@@ -783,10 +791,10 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
             }}
           >
             <Icon name="compare" size={16} color={theme.colors.textPrimary} />
-            <AppText variant="caption">Original</AppText>
+            <AppText variant="caption">{tx('editor_original')}</AppText>
           </Pressable>
           <Button
-            label="Save"
+            label={tx('editor_save')}
             icon="check"
             onPress={() => void save()}
             loading={busy === 'save'}
@@ -812,7 +820,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
                   setSelectedProp(null);
                 }}
                 accessibilityRole="tab"
-                accessibilityLabel={`${t.label}${t.premium ? ', premium' : ''}`}
+                accessibilityLabel={`${t.label}${t.premium ? tx('editor_premium') : ''}`}
                 accessibilityState={{ selected: active }}
                 testID={`editor-tool-${t.id}`}
                 style={{
@@ -980,7 +988,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Button
-            label="Share"
+            label={tx('editor_share')}
             icon="share"
             variant="glass"
             onPress={() => void exportTo('share')}
@@ -990,7 +998,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
             testID="editor-share"
           />
           <Button
-            label="Save to gallery"
+            label={tx('editor_save_to_gallery')}
             icon="image"
             variant="glass"
             onPress={() => void exportTo('gallery')}
@@ -1001,7 +1009,7 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
           />
         </View>
         <Button
-          label={lookSaved ? 'Look saved' : 'Save this look to reuse'}
+          label={lookSaved ? tx('editor_look_saved') : tx('editor_save_this_look_to_reuse')}
           icon={lookSaved ? 'check' : 'drop'}
           variant="ghost"
           onPress={() => void saveLook()}
@@ -1012,9 +1020,9 @@ export function EditorScreen({ navigation, route }: RootScreenProps<'Editor'>) {
         <AppText variant="caption" tone="secondary" align="center">
           {premiumPlan
             ? spec.enabled
-              ? 'Your branding goes on photos you share.'
-              : 'Photos you share have no watermark.'
-            : 'Photos you share carry the Photo Plus mark. Your original stays untouched.'}
+              ? tx('editor_your_branding_goes_on_photos')
+              : tx('editor_photos_you_share_have_no')
+            : tx('editor_photos_you_share_carry_the')}
         </AppText>
       </View>
       <PremiumSheet

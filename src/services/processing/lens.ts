@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * Lens awareness: tells people, in plain words, when their camera's lens
  * (not their photography) is what holds a photo back, and points them to
@@ -106,15 +107,15 @@ export function lensNotice(report: LensReport | null, profile?: LensProfile): Le
   if (lensIsBasic(profile)) {
     return {
       scope: 'lens',
-      title: 'Your camera’s lens is holding your photos back',
-      body: 'Its lens captures less detail than high-end cameras, so even with Clarity your photos may not look their best. Transform gives them the look of a high-end camera, and keeps your effects.',
+      title: tx('lens_your_camera_s_lens_is'),
+      body: tx('lens_its_lens_captures_less_detail'),
       signs,
     };
   }
   return {
     scope: 'photo',
-    title: 'This photo could look sharper',
-    body: 'It shows signs of a basic camera lens, so it may not reach top quality as it is. Transform gives it the look of a high-end camera, and keeps your effects.',
+    title: tx('lens_this_photo_could_look_sharper'),
+    body: tx('lens_it_shows_signs_of_a'),
     signs,
   };
 }

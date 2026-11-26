@@ -5,6 +5,7 @@ import { AppText } from '../../components';
 import { ValueSlider } from '../../components/ValueSlider';
 import { hexToHsv, hsvToHex, normalizeHex, type Hsv } from '../../services/studio/colors';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 const HUES = ['#FF0000', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#FF00FF', '#FF0000'];
 
@@ -37,7 +38,7 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
         <View style={[styles.swatch, { backgroundColor: hex }]} testID="color-swatch" />
         <View style={{ flex: 1, gap: 2 }}>
           <AppText variant="caption" tone="secondary">
-            Colour code
+            {tx('color_picker_colour_code')}
           </AppText>
           <TextInput
             value={code}
@@ -55,14 +56,14 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
             autoCapitalize="characters"
             autoCorrect={false}
             maxLength={7}
-            accessibilityLabel="Colour code"
+            accessibilityLabel={tx('color_picker_colour_code')}
             testID="color-code"
             style={[styles.code, { color: theme.colors.textPrimary, borderColor: theme.colors.glassStroke }]}
           />
         </View>
       </View>
       <ValueSlider
-        label="Colour"
+        label={tx('color_picker_colour')}
         value={hsv.h}
         min={0}
         max={359}
@@ -75,7 +76,7 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
         testID="color-hue"
       />
       <ValueSlider
-        label="Richness"
+        label={tx('color_picker_richness')}
         value={hsv.s}
         track={[hsvToHex({ ...hsv, s: 0 }), hsvToHex({ ...hsv, s: 1 })]}
         thumbColor={hex}
@@ -84,7 +85,7 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
         testID="color-richness"
       />
       <ValueSlider
-        label="Brightness"
+        label={tx('color_picker_brightness')}
         value={hsv.v}
         track={['#000000', hsvToHex({ ...hsv, v: 1 })]}
         thumbColor={hex}

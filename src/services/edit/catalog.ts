@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * What the editor offers, under app names: looks, props, frames, fonts and
  * watermark styles. Free/Premium is decided here (and enforced natively for
@@ -13,18 +14,18 @@ export interface LookDef {
 }
 
 export const LOOKS: readonly LookDef[] = [
-  { id: 'natural', engineId: 1, name: 'Natural', premium: false },
-  { id: 'vivid', engineId: 2, name: 'Vivid', premium: false },
-  { id: 'warm', engineId: 3, name: 'Warm', premium: false },
-  { id: 'cool', engineId: 4, name: 'Cool', premium: false },
-  { id: 'mono', engineId: 5, name: 'Mono', premium: false },
-  { id: 'fade', engineId: 6, name: 'Fade', premium: false },
-  { id: 'soft', engineId: 7, name: 'Soft', premium: false },
-  { id: 'noir', engineId: 8, name: 'Noir', premium: false },
-  { id: 'cinema', engineId: 9, name: 'Cinema', premium: true },
-  { id: 'golden', engineId: 10, name: 'Golden Hour', premium: true },
-  { id: 'film', engineId: 11, name: 'Film', premium: true },
-  { id: 'lush', engineId: 12, name: 'Lush', premium: true },
+  { id: 'natural', engineId: 1, name: tx('catalog_natural'), premium: false },
+  { id: 'vivid', engineId: 2, name: tx('catalog_vivid'), premium: false },
+  { id: 'warm', engineId: 3, name: tx('catalog_warm'), premium: false },
+  { id: 'cool', engineId: 4, name: tx('catalog_cool'), premium: false },
+  { id: 'mono', engineId: 5, name: tx('catalog_mono'), premium: false },
+  { id: 'fade', engineId: 6, name: tx('catalog_fade'), premium: false },
+  { id: 'soft', engineId: 7, name: tx('catalog_soft'), premium: false },
+  { id: 'noir', engineId: 8, name: tx('catalog_noir'), premium: false },
+  { id: 'cinema', engineId: 9, name: tx('catalog_cinema'), premium: true },
+  { id: 'golden', engineId: 10, name: tx('catalog_golden_hour'), premium: true },
+  { id: 'film', engineId: 11, name: tx('catalog_film'), premium: true },
+  { id: 'lush', engineId: 12, name: tx('catalog_lush'), premium: true },
 ];
 
 export type PropCategory = 'hats' | 'glasses' | 'outfit' | 'mine';
@@ -59,7 +60,7 @@ export const PROPS: readonly PropDef[] = [
   // front edge lands just above the eyebrows (head width ≈ 1.3 face widths).
   {
     id: 'fedora',
-    name: 'Fedora',
+    name: tx('catalog_fedora'),
     category: 'hats',
     premium: false,
     aspect: 0.56,
@@ -71,7 +72,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'beanie',
-    name: 'Beanie',
+    name: tx('catalog_beanie'),
     category: 'hats',
     premium: false,
     aspect: 0.6,
@@ -83,7 +84,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'cap',
-    name: 'Cap',
+    name: tx('catalog_cap'),
     category: 'hats',
     premium: false,
     aspect: 0.56,
@@ -95,7 +96,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'sunhat',
-    name: 'Sun hat',
+    name: tx('catalog_sun_hat'),
     category: 'hats',
     premium: true,
     aspect: 0.48,
@@ -107,7 +108,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'beret',
-    name: 'Beret',
+    name: tx('catalog_beret'),
     category: 'hats',
     premium: true,
     aspect: 0.44,
@@ -119,7 +120,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'crown',
-    name: 'Crown',
+    name: tx('catalog_crown'),
     category: 'hats',
     premium: true,
     aspect: 0.47,
@@ -131,7 +132,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'laurel',
-    name: 'Gold laurel',
+    name: tx('catalog_gold_laurel'),
     category: 'hats',
     premium: true,
     aspect: 0.42,
@@ -143,7 +144,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'tophat',
-    name: 'Top hat',
+    name: tx('catalog_top_hat'),
     category: 'hats',
     premium: true,
     aspect: 0.64,
@@ -155,7 +156,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'bucket',
-    name: 'Bucket hat',
+    name: tx('catalog_bucket_hat'),
     category: 'hats',
     premium: false,
     aspect: 0.52,
@@ -167,7 +168,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'cowboy',
-    name: 'Cowboy hat',
+    name: tx('catalog_cowboy_hat'),
     category: 'hats',
     premium: true,
     aspect: 0.56,
@@ -179,7 +180,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'flowers',
-    name: 'Flower crown',
+    name: tx('catalog_flower_crown'),
     category: 'hats',
     premium: false,
     aspect: 0.42,
@@ -192,7 +193,7 @@ export const PROPS: readonly PropDef[] = [
   // Glasses: the midpoint between the lens centres goes between the eyes.
   {
     id: 'aviators',
-    name: 'Aviators',
+    name: tx('catalog_aviators'),
     category: 'glasses',
     premium: false,
     aspect: 0.38,
@@ -204,7 +205,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'round',
-    name: 'Round',
+    name: tx('catalog_round'),
     category: 'glasses',
     premium: false,
     aspect: 0.36,
@@ -216,7 +217,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'cateye',
-    name: 'Cat-eye',
+    name: tx('catalog_cat_eye'),
     category: 'glasses',
     premium: true,
     aspect: 0.38,
@@ -228,7 +229,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'tortoise',
-    name: 'Tortoise',
+    name: tx('catalog_tortoise'),
     category: 'glasses',
     premium: true,
     aspect: 0.36,
@@ -240,7 +241,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'hearts',
-    name: 'Heart shades',
+    name: tx('catalog_heart_shades'),
     category: 'glasses',
     premium: false,
     aspect: 0.38,
@@ -252,7 +253,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'shield',
-    name: 'Sport shield',
+    name: tx('catalog_sport_shield'),
     category: 'glasses',
     premium: true,
     aspect: 0.34,
@@ -264,7 +265,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'rimless',
-    name: 'Gold rimless',
+    name: tx('catalog_gold_rimless'),
     category: 'glasses',
     premium: true,
     aspect: 0.36,
@@ -277,7 +278,7 @@ export const PROPS: readonly PropDef[] = [
   // Outfit pieces sit below the chin.
   {
     id: 'bowtie',
-    name: 'Bow tie',
+    name: tx('catalog_bow_tie'),
     category: 'outfit',
     premium: false,
     aspect: 0.32,
@@ -289,7 +290,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'chain',
-    name: 'Gold chain',
+    name: tx('catalog_gold_chain'),
     category: 'outfit',
     premium: false,
     aspect: 0.4,
@@ -301,7 +302,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'necktie',
-    name: 'Tie',
+    name: tx('catalog_tie'),
     category: 'outfit',
     premium: true,
     aspect: 0.7,
@@ -313,7 +314,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'pearls',
-    name: 'Pearls',
+    name: tx('catalog_pearls'),
     category: 'outfit',
     premium: true,
     aspect: 0.42,
@@ -325,7 +326,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'scarf',
-    name: 'Silk scarf',
+    name: tx('catalog_silk_scarf'),
     category: 'outfit',
     premium: true,
     aspect: 0.46,
@@ -337,7 +338,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'choker',
-    name: 'Velvet choker',
+    name: tx('catalog_velvet_choker'),
     category: 'outfit',
     premium: false,
     aspect: 0.26,
@@ -349,7 +350,7 @@ export const PROPS: readonly PropDef[] = [
   },
   {
     id: 'medal',
-    name: 'Gold medal',
+    name: tx('catalog_gold_medal'),
     category: 'outfit',
     premium: false,
     aspect: 0.78,
@@ -362,10 +363,10 @@ export const PROPS: readonly PropDef[] = [
 ];
 
 export const PROP_CATEGORIES: readonly { id: PropCategory; label: string }[] = [
-  { id: 'hats', label: 'Hats' },
-  { id: 'glasses', label: 'Glasses' },
-  { id: 'outfit', label: 'Outfit' },
-  { id: 'mine', label: 'Mine' },
+  { id: 'hats', label: tx('catalog_hats') },
+  { id: 'glasses', label: tx('catalog_glasses') },
+  { id: 'outfit', label: tx('catalog_outfit') },
+  { id: 'mine', label: tx('catalog_mine') },
 ];
 
 /** Where the artwork is bundled (Android assets). */
@@ -452,28 +453,28 @@ export interface FrameDef {
 // The designs themselves (shapes, backdrops, borders) live in the native
 // renderer (FrameStyles.kt) so preview and export are identical.
 export const FRAMES: readonly FrameDef[] = [
-  { id: 'gallery', name: 'Gallery', premium: false },
-  { id: 'polaroid', name: 'Instant', premium: false },
-  { id: 'arch', name: 'Arch', premium: false },
-  { id: 'circle', name: 'Halo', premium: false },
-  { id: 'soft', name: 'Soft square', premium: false },
-  { id: 'story', name: 'Story', premium: false },
-  { id: 'tilted', name: 'Tilted print', premium: false },
-  { id: 'noir', name: 'Noir', premium: false },
-  { id: 'doublemat', name: 'Double mat', premium: false },
-  { id: 'capsule', name: 'Capsule', premium: false },
-  { id: 'star', name: 'Star', premium: true },
-  { id: 'heart', name: 'Heart', premium: true },
-  { id: 'hexagon', name: 'Hexagon', premium: true },
-  { id: 'film', name: 'Film', premium: true },
-  { id: 'diamond', name: 'Diamond', premium: true },
-  { id: 'window', name: 'Window', premium: true },
-  { id: 'scallop', name: 'Wavy', premium: true },
-  { id: 'octagon', name: 'Octagon', premium: true },
-  { id: 'sparkle', name: 'Sparkle', premium: true },
-  { id: 'neon', name: 'Neon', premium: true },
-  { id: 'cameo', name: 'Cameo', premium: true },
-  { id: 'sunset', name: 'Sunset arch', premium: true },
+  { id: 'gallery', name: tx('catalog_gallery'), premium: false },
+  { id: 'polaroid', name: tx('catalog_instant'), premium: false },
+  { id: 'arch', name: tx('catalog_arch'), premium: false },
+  { id: 'circle', name: tx('catalog_halo'), premium: false },
+  { id: 'soft', name: tx('catalog_soft_square'), premium: false },
+  { id: 'story', name: tx('catalog_story'), premium: false },
+  { id: 'tilted', name: tx('catalog_tilted_print'), premium: false },
+  { id: 'noir', name: tx('catalog_noir'), premium: false },
+  { id: 'doublemat', name: tx('catalog_double_mat'), premium: false },
+  { id: 'capsule', name: tx('catalog_capsule'), premium: false },
+  { id: 'star', name: tx('catalog_star'), premium: true },
+  { id: 'heart', name: tx('catalog_heart'), premium: true },
+  { id: 'hexagon', name: tx('catalog_hexagon'), premium: true },
+  { id: 'film', name: tx('catalog_film'), premium: true },
+  { id: 'diamond', name: tx('catalog_diamond'), premium: true },
+  { id: 'window', name: tx('catalog_window'), premium: true },
+  { id: 'scallop', name: tx('catalog_wavy'), premium: true },
+  { id: 'octagon', name: tx('catalog_octagon'), premium: true },
+  { id: 'sparkle', name: tx('catalog_sparkle'), premium: true },
+  { id: 'neon', name: tx('catalog_neon'), premium: true },
+  { id: 'cameo', name: tx('catalog_cameo'), premium: true },
+  { id: 'sunset', name: tx('catalog_sunset_arch'), premium: true },
 ];
 
 export interface FontDef {
@@ -484,18 +485,18 @@ export interface FontDef {
 }
 export type WatermarkFont = 'modern' | 'elegant' | 'signature' | 'bold' | 'type';
 export const FONTS: readonly FontDef[] = [
-  { id: 'modern', name: 'Modern', family: 'Poppins-SemiBold' },
-  { id: 'elegant', name: 'Elegant', family: 'DMSerifDisplay-Regular' },
-  { id: 'signature', name: 'Signature', family: 'GreatVibes-Regular' },
-  { id: 'bold', name: 'Bold', family: 'BebasNeue-Regular' },
-  { id: 'type', name: 'Type', family: 'SpaceMono-Regular' },
+  { id: 'modern', name: tx('catalog_modern'), family: 'Poppins-SemiBold' },
+  { id: 'elegant', name: tx('catalog_elegant'), family: 'DMSerifDisplay-Regular' },
+  { id: 'signature', name: tx('catalog_signature'), family: 'GreatVibes-Regular' },
+  { id: 'bold', name: tx('catalog_bold'), family: 'BebasNeue-Regular' },
+  { id: 'type', name: tx('catalog_type'), family: 'SpaceMono-Regular' },
 ];
 
 export type WatermarkStyle = 'classic' | 'pill' | 'signature' | 'minimal' | 'badge';
 export const WATERMARK_STYLES: readonly { id: WatermarkStyle; name: string }[] = [
-  { id: 'classic', name: 'Classic' },
-  { id: 'pill', name: 'Pill' },
-  { id: 'signature', name: 'Signature' },
-  { id: 'minimal', name: 'Minimal' },
-  { id: 'badge', name: 'Badge' },
+  { id: 'classic', name: tx('catalog_classic') },
+  { id: 'pill', name: tx('catalog_pill') },
+  { id: 'signature', name: tx('catalog_signature') },
+  { id: 'minimal', name: tx('catalog_minimal') },
+  { id: 'badge', name: tx('catalog_badge') },
 ];

@@ -18,6 +18,7 @@ import {
 } from '../../services/studio/scene';
 import { useTheme } from '../../theme';
 import { ColorPicker } from './ColorPicker';
+import { t as tx } from '../../i18n';
 
 type Tab = SceneCategory;
 
@@ -165,7 +166,7 @@ export function BackgroundPicker({
       {tab === 'plain' && suits.length > 0 ? (
         <View style={{ gap: 6 }} testID="outfit-suggestions">
           <AppText variant="caption" tone="secondary">
-            Suits your outfit
+            {tx('background_picker_suits_your_outfit')}
           </AppText>
           <View style={styles.suits}>
             {suits.map(c => {
@@ -178,7 +179,7 @@ export function BackgroundPicker({
                     onChoose({ kind: 'plain', plain: { id: `plain-${c.id}`, name: c.name, color: c.color, vignette: true, light: plain && !lit ? 0 : STUDIO_LIGHT } });
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={`${c.name}, suits your outfit`}
+                  accessibilityLabel={tx('background_picker_suits_your_outfit_2', { name: c.name })}
                   accessibilityState={{ selected: chosen }}
                   testID={`suit-${c.id}`}
                   style={[styles.suit, { borderColor: chosen ? theme.colors.accent : 'rgba(255,255,255,0.15)' }]}
@@ -198,7 +199,7 @@ export function BackgroundPicker({
         <Pressable
           onPress={() => onChoose({ kind: 'plain', plain: withLight(plain, !lit) })}
           accessibilityRole="switch"
-          accessibilityLabel="Studio light"
+          accessibilityLabel={tx('background_picker_studio_light')}
           accessibilityState={{ checked: lit }}
           testID="studio-light"
           style={[styles.toggle, { backgroundColor: lit ? theme.colors.accent : 'rgba(255,255,255,0.08)' }]}
@@ -206,17 +207,17 @@ export function BackgroundPicker({
           <Icon name="sun" size={16} color={lit ? '#FFFFFF' : theme.colors.textSecondary} />
           <View style={{ flex: 1 }}>
             <AppText variant="caption" style={{ fontWeight: '700', color: lit ? '#FFFFFF' : theme.colors.textPrimary }}>
-              {`Studio light · ${lit ? 'on' : 'off'}`}
+              {tx('background_picker_studio_light_2', { value: lit ? 'on' : 'off' })}
             </AppText>
             <AppText variant="caption" style={{ color: lit ? 'rgba(255,255,255,0.85)' : theme.colors.textSecondary }}>
-              {lit ? 'Lit like studio paper, its colour glowing softly on you' : 'A flat colour'}
+              {lit ? tx('background_picker_lit_like_studio_paper_its') : tx('background_picker_a_flat_colour')}
             </AppText>
           </View>
         </Pressable>
       ) : null}
       {tab === 'mine' ? (
         <AppText variant="caption" tone="secondary">
-          Use a photo of an empty place, taken at about eye level. Hold a background to remove it.
+          {tx('background_picker_use_a_photo_of_an')}
         </AppText>
       ) : null}
     </View>

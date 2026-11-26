@@ -26,13 +26,14 @@ import { DownloadSize } from './DownloadSize';
 import { LipstickPanel, PinkLipsPanel } from './LipsPanel';
 import { FinishPanel, LightPanel } from './StudioLightPanel';
 import { recordActivity } from '../../services/rewards/RewardsService';
+import { t as tx } from '../../i18n';
 
 type Panel = 'light' | 'background' | 'lips' | 'finish';
 const PANELS: { value: Panel; label: string }[] = [
   { value: 'light', label: 'Light' },
-  { value: 'background', label: 'Background' },
-  { value: 'lips', label: 'Lips' },
-  { value: 'finish', label: 'Finish' },
+  { value: 'background', label: tx('relight_background') },
+  { value: 'lips', label: tx('relight_lips') },
+  { value: 'finish', label: tx('relight_finish') },
 ];
 const signed = (v: number) => (Math.abs(v) < 0.005 ? '0' : `${v > 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`);
 const pct = (v: number) => `${Math.round(v * 100)}`;
@@ -74,8 +75,8 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
     } catch (e) {
       setError(
         e instanceof StudioError && e.code === 'NO_PERSON'
-          ? 'Nobody was found in this photo. Choose one with a person in it.'
-          : 'This photo couldn’t be opened.',
+          ? tx('relight_nobody_was_found_in_this')
+          : tx('relight_this_photo_couldn_t_be'),
       );
     } finally {
       setBusy(null);
@@ -124,7 +125,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
         setError(
           e instanceof StudioError && e.code === 'NO_FACE'
             ? friendlyMessage('NO_FACE')
-            : 'This couldn’t be drawn. Please try again.',
+            : tx('relight_this_couldn_t_be_drawn'),
         );
     } finally {
       if (n === request.current) setBusy(x => (x === 'preview' ? null : x));
@@ -182,7 +183,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
     } catch (e) {
       if (e instanceof StudioError && e.code === 'PREMIUM_REQUIRED')
         setPremiumOpen(exportSize(size).premium && !premiumSizes ? 'exportHd' : 'relight');
-      else setError('Your photo couldn’t be saved. Please try again.');
+      else setError(tx('relight_your_photo_couldn_t_be'));
     } finally {
       setBusy(null);
     }
@@ -197,18 +198,17 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
               source={{ uri: `file://${shown.outputPath}` }}
               style={{ width: '100%', aspectRatio: shown.width / shown.height, maxHeight: 440 }}
               resizeMode="contain"
-              accessibilityLabel="Your photo, relit"
+              accessibilityLabel={tx('relight_your_photo_relit')}
               testID="relight-preview"
             />
           ) : (
             <View style={{ gap: 12, alignItems: 'stretch', width: '100%' }}>
-              <AppText variant="title2">Studio light on your own photo</AppText>
+              <AppText variant="title2">{tx('relight_studio_light_on_your_own')}</AppText>
               <AppText variant="body" tone="secondary">
-                Choose or take a photo of a person. They are lit like a studio shoot, right where they stand, and the
-                background follows.
+                {tx('relight_choose_or_take_a_photo')}
               </AppText>
               <Button
-                label="Choose a photo"
+                label={tx('relight_choose_a_photo')}
                 icon="image"
                 size="lg"
                 loading={busy === 'start'}
@@ -216,7 +216,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
                 testID="relight-pick"
               />
               <Button
-                label="Take a photo"
+                label={tx('relight_take_a_photo')}
                 icon="camera"
                 size="lg"
                 variant="glass"
@@ -269,10 +269,10 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
               {panel === 'background' ? (
                 <View style={{ gap: 10 }} testID="relight-background">
                   <AppText variant="caption" tone="secondary">
-                    The room behind the person: darker like a studio backdrop, softer like a fast lens.
+                    {tx('relight_the_room_behind_the_person')}
                   </AppText>
                   <ValueSlider
-                    label="Brightness"
+                    label={tx('relight_brightness')}
                     value={background.brightness}
                     min={-1}
                     max={1}
@@ -282,7 +282,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
                     testID="relight-bg-brightness"
                   />
                   <ValueSlider
-                    label="Soften"
+                    label={tx('relight_soften')}
                     value={background.blur}
                     min={0}
                     max={1}
@@ -292,7 +292,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
                     testID="relight-bg-blur"
                   />
                   <ValueSlider
-                    label="Colour"
+                    label={tx('relight_colour')}
                     value={background.colour}
                     min={-1}
                     max={1}
@@ -302,7 +302,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
                     testID="relight-bg-colour"
                   />
                   <Button
-                    label="Reset background"
+                    label={tx('relight_reset_background')}
                     variant="ghost"
                     icon="refresh"
                     onPress={() => setBackground(PLAIN_BACKGROUND)}
@@ -333,7 +333,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
             />
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Button
-                label="Another photo"
+                label={tx('relight_another_photo')}
                 variant="glass"
                 icon="image"
                 onPress={() => void pick()}
@@ -341,7 +341,7 @@ export function RelightScreen({ navigation, route }: RootScreenProps<'Relight'>)
               />
               <View style={{ flex: 1 }}>
                 <Button
-                  label="Save"
+                  label={tx('relight_save')}
                   icon="download"
                   size="lg"
                   loading={busy === 'save'}

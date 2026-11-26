@@ -26,6 +26,7 @@ import { importPhoto } from '../services/library/importPhoto';
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
 import { greetingFor, PILLARS } from './pillars';
+import { t as tx } from '../i18n';
 
 export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
   const theme = useTheme();
@@ -52,7 +53,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
         navigation.navigate('PhotoPreview', { imageId: id });
       }
     } catch (e) {
-      Alert.alert('Couldn’t open that photo', friendlyMessage(errorCode(e)));
+      Alert.alert(tx('home_couldn_t_open_that_photo'), friendlyMessage(errorCode(e)));
     } finally {
       setImporting(false);
     }
@@ -67,7 +68,12 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
           <Logo size={34} />
         </View>
         {DEVELOPER_TOOLS ? (
-          <IconButton icon="cpu" label="Developer tools" onPress={() => navigation.navigate('DeviceInfo')} size={44} />
+          <IconButton
+            icon="cpu"
+            label={tx('home_developer_tools')}
+            onPress={() => navigation.navigate('DeviceInfo')}
+            size={44}
+          />
         ) : null}
       </View>
 
@@ -82,7 +88,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
           <AppText variant="callout" tone="secondary" style={{ flex: 1 }}>
             {w}
           </AppText>
-          <IconButton icon="close" label="Dismiss notice" size={36} onPress={() => dismissWarning(i)} />
+          <IconButton icon="close" label={tx('home_dismiss_notice')} size={36} onPress={() => dismissWarning(i)} />
         </GlassSurface>
       ))}
 
@@ -102,34 +108,38 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
               'linear-gradient(120deg, rgba(255,122,69,0.30) 0%, rgba(242,71,126,0.18) 45%, rgba(139,92,246,0.10) 100%)',
           }}
         >
-          <Badge label="New shoot" tone="accent" icon="sparkles" />
+          <Badge label={tx('home_new_shoot')} tone="accent" icon="sparkles" />
           <AppText variant="title2" style={{ marginTop: 14 }}>
-            Start a photoshoot
+            {tx('home_start_a_photoshoot')}
           </AppText>
           <AppText variant="body" tone="secondary" style={{ marginTop: 6, marginBottom: 18, maxWidth: 420 }}>
-            Shoot with Clarity, Spotlight and more — or bring in a photo from your gallery. Everything stays private on
-            this device.
+            {tx('home_shoot_with_clarity_spotlight_and')}
           </AppText>
           <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-            <Button label="Open camera" icon="camera" size="lg" onPress={() => navigation.navigate('Camera')} />
             <Button
-              label="Edit a photo"
+              label={tx('home_open_camera')}
+              icon="camera"
+              size="lg"
+              onPress={() => navigation.navigate('Camera')}
+            />
+            <Button
+              label={tx('home_edit_a_photo')}
               icon="image"
               variant="glass"
               loading={importing}
               onPress={() => void editPhoto()}
-              accessibilityHint="Choose a photo from your gallery to make it shine"
+              accessibilityHint={tx('home_choose_a_photo_from_your')}
             />
           </View>
         </View>
       </GlassSurface>
 
-      <SectionHeader overline="The four pillars" title="Your studio" />
+      <SectionHeader overline={tx('home_the_four_pillars')} title={tx('home_your_studio')} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap, marginBottom: 28 }}>
         {PILLARS.map(p => (
           <PressableCard
             key={p.id}
-            label={`${p.title}. ${p.tagline}. ${p.premium ? 'Premium. ' : ''}${p.availability}.`}
+            label={`${p.title}. ${p.tagline}. ${p.premium ? tx('home_premium') : ''}${p.availability}.`}
             onPress={() =>
               p.id === 'camera'
                 ? navigation.navigate('Camera')
@@ -171,11 +181,11 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
       </View>
 
       <SectionHeader
-        overline="Library"
-        title="Recent projects"
+        overline={tx('home_library')}
+        title={tx('home_recent_projects')}
         action={
           projects.length ? (
-            <Button label="See all" variant="ghost" onPress={() => navigation.navigate('Projects')} />
+            <Button label={tx('home_see_all')} variant="ghost" onPress={() => navigation.navigate('Projects')} />
           ) : undefined
         }
       />
@@ -187,9 +197,9 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
       ) : projects.length === 0 ? (
         <EmptyState
           icon="image"
-          title="No projects yet"
-          message="Your captures land in a Captures project automatically."
-          actionLabel="Take your first photo"
+          title={tx('home_no_projects_yet')}
+          message={tx('home_your_captures_land_in_a')}
+          actionLabel={tx('home_take_your_first_photo')}
           onAction={() => navigation.navigate('Camera')}
         />
       ) : (
@@ -199,7 +209,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
               key={p.id}
               onPress={() => navigation.navigate('Projects')}
               accessibilityRole="button"
-              accessibilityLabel={`${p.name}, ${p.imageCount} photos`}
+              accessibilityLabel={tx('home_photos', { name: p.name, imageCount: p.imageCount })}
               style={{ width: cardWidth }}
             >
               <GlassSurface radius={theme.radii.lg} style={{ height: 150, justifyContent: 'flex-end' }}>
@@ -228,7 +238,7 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
         <Pressable
           onPress={() => navigation.navigate('DeviceInfo')}
           accessibilityRole="button"
-          accessibilityLabel={`Device readiness: ${tierLabel[tier]}. View details`}
+          accessibilityLabel={tx('home_device_readiness_view_details', { value: tierLabel[tier] })}
           style={{ marginTop: 28 }}
         >
           <GlassSurface
@@ -248,11 +258,11 @@ export function HomeScreen({ navigation }: TabScreenProps<'Studio'>) {
               <Icon name="shield" size={22} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
-              <AppText variant="bodyStrong">Device readiness</AppText>
+              <AppText variant="bodyStrong">{tx('home_device_readiness')}</AppText>
               <AppText variant="caption" tone="secondary">
                 {tier === 'unsupported'
-                  ? 'Below the recommended specs — heavy features will be limited.'
-                  : `${tierLabel[tier]} tier · all core features available offline`}
+                  ? tx('home_below_the_recommended_specs_heavy')
+                  : tx('home_tier_all_core_features_available', { value: tierLabel[tier] })}
               </AppText>
             </View>
             <Icon name="chevronRight" size={18} color={theme.colors.textTertiary} />

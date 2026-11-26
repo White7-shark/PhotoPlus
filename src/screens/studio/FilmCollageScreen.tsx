@@ -35,6 +35,7 @@ import { useTheme } from '../../theme';
 
 import { DownloadSize } from './DownloadSize';
 import { recordActivity } from '../../services/rewards/RewardsService';
+import { t as tx } from '../../i18n';
 
 type Mode = 'film' | 'collage';
 const pct = (v: number) => `${Math.round(v * 100)}`;
@@ -60,7 +61,7 @@ function Chip({
     <Pressable
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityLabel={locked ? `${label}, Premium` : label}
+      accessibilityLabel={locked ? tx('film_collage_premium', { label }) : label}
       accessibilityState={{ selected }}
       testID={testID}
       style={[styles.chip, { borderColor: selected ? theme.colors.accent : 'rgba(255,255,255,0.14)' }]}
@@ -174,7 +175,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
       setPreview(r);
       setError(null);
     } catch {
-      if (id === request.current) setError('This couldn’t be drawn. Please try again.');
+      if (id === request.current) setError(tx('film_collage_this_couldn_t_be_drawn'));
     } finally {
       if (id === request.current) setBusy(b => (b === 'preview' ? null : b));
     }
@@ -224,7 +225,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
     } catch (e) {
       if (e instanceof StudioError && e.code === 'PREMIUM_REQUIRED')
         setPremiumOpen(exportSize(size).premium ? 'exportHd' : 'filmPremium');
-      else setError('Your photo couldn’t be saved. Please try again.');
+      else setError(tx('film_collage_your_photo_couldn_t_be'));
     } finally {
       setBusy(null);
     }
@@ -252,7 +253,9 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               style={[styles.segmentItem, mode === m && { backgroundColor: 'rgba(255,255,255,0.12)' }]}
             >
               <Icon name={m === 'film' ? 'film' : 'grid'} size={16} color={theme.colors.textPrimary} />
-              <AppText variant="bodyStrong">{m === 'film' ? 'Film strip' : 'Collage'}</AppText>
+              <AppText variant="bodyStrong">
+                {m === 'film' ? tx('film_collage_film_strip') : tx('film_collage_collage')}
+              </AppText>
             </Pressable>
           ))}
         </View>
@@ -263,14 +266,16 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               source={{ uri: `file://${shown.outputPath}` }}
               style={{ width: '100%', aspectRatio: shown.width / shown.height, maxHeight: 460 }}
               resizeMode="contain"
-              accessibilityLabel={mode === 'film' ? 'Your film strip' : 'Your collage'}
+              accessibilityLabel={
+                mode === 'film' ? tx('film_collage_your_film_strip') : tx('film_collage_your_collage')
+              }
               testID="film-preview"
             />
           ) : (
             <AppText variant="body" tone="secondary" align="center">
               {mode === 'film'
-                ? 'Add photos and they become frames on a strip of film. One photo is enough: Mix it up makes every frame different.'
-                : 'Add photos and choose a layout.'}
+                ? tx('film_collage_add_photos_and_they_become')
+                : tx('film_collage_add_photos_and_choose_a')}
             </AppText>
           )}
           {busy === 'preview' ? <ActivityIndicator style={styles.spinner} color={theme.colors.accent} /> : null}
@@ -284,15 +289,21 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
 
         {/* Photos */}
         <View style={{ gap: 8 }}>
-          <AppText variant="bodyStrong">Photos {photos.length > 0 ? `· ${photos.length}` : ''}</AppText>
+          <AppText variant="bodyStrong">
+            {tx('film_collage_photos')} {photos.length > 0 ? `· ${photos.length}` : ''}
+          </AppText>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             {photos.map((p, i) => (
               <View key={`${p}-${i}`}>
-                <Image source={{ uri: `file://${p}` }} style={styles.thumb} accessibilityLabel={`Photo ${i + 1}`} />
+                <Image
+                  source={{ uri: `file://${p}` }}
+                  style={styles.thumb}
+                  accessibilityLabel={tx('film_collage_photo', { value: i + 1 })}
+                />
                 <Pressable
                   onPress={() => removePhoto(i)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Remove photo ${i + 1}`}
+                  accessibilityLabel={tx('film_collage_remove_photo', { value: i + 1 })}
                   style={styles.remove}
                   testID={`remove-photo-${i}`}
                 >
@@ -305,25 +316,25 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
                 <Pressable
                   onPress={() => void pick()}
                   accessibilityRole="button"
-                  accessibilityLabel="Add a photo"
+                  accessibilityLabel={tx('film_collage_add_a_photo')}
                   style={styles.add}
                   testID="film-add"
                 >
                   <Icon name="image" size={20} color={theme.colors.textSecondary} />
                   <AppText variant="caption" tone="secondary">
-                    Add
+                    {tx('film_collage_add')}
                   </AppText>
                 </Pressable>
                 <Pressable
                   onPress={shoot}
                   accessibilityRole="button"
-                  accessibilityLabel="Take a photo"
+                  accessibilityLabel={tx('film_collage_take_a_photo')}
                   style={styles.add}
                   testID="film-shoot"
                 >
                   <Icon name="camera" size={20} color={theme.colors.textSecondary} />
                   <AppText variant="caption" tone="secondary">
-                    Camera
+                    {tx('film_collage_camera')}
                   </AppText>
                 </Pressable>
               </>
@@ -333,7 +344,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
 
         {photos.length > 0 && mode === 'film' ? (
           <GlassSurface radius={18} style={styles.section}>
-            <AppText variant="bodyStrong">Film</AppText>
+            <AppText variant="bodyStrong">{tx('film_collage_film')}</AppText>
             <View style={styles.wrap} accessibilityRole="radiogroup">
               {FILM_STYLES.map(s => (
                 <Chip
@@ -355,32 +366,32 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
             </AppText>
             <View style={styles.wrap}>
               <Chip
-                label="Vertical"
+                label={tx('film_collage_vertical')}
                 selected={film.vertical}
                 onPress={() => setFilm(f => ({ ...f, vertical: true }))}
                 testID="film-vertical"
               />
               <Chip
-                label="Horizontal"
+                label={tx('film_collage_horizontal')}
                 selected={!film.vertical}
                 onPress={() => setFilm(f => ({ ...f, vertical: false }))}
                 testID="film-horizontal"
               />
               <Chip
-                label="Portrait frames"
+                label={tx('film_collage_portrait_frames')}
                 selected={film.portrait}
                 onPress={() => setFilm(f => ({ ...f, portrait: !f.portrait }))}
                 testID="film-portrait"
               />
               <Chip
-                label="Edge numbers"
+                label={tx('film_collage_edge_numbers')}
                 selected={film.markings}
                 onPress={() => setFilm(f => ({ ...f, markings: !f.markings }))}
                 testID="film-markings"
               />
             </View>
             <ValueSlider
-              label="Grain"
+              label={tx('film_collage_grain')}
               value={film.grain}
               min={0}
               max={3}
@@ -390,7 +401,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               testID="film-grain"
             />
             <ValueSlider
-              label="Spacing between frames"
+              label={tx('film_collage_spacing_between_frames')}
               value={film.spacing}
               min={0.3}
               max={4}
@@ -400,11 +411,11 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               testID="film-spacing"
             />
             <AppText variant="caption" tone="secondary">
-              Film colour
+              {tx('film_collage_film_colour')}
             </AppText>
             <View style={styles.wrap} accessibilityRole="radiogroup">
               <Chip
-                label="As the film"
+                label={tx('film_collage_as_the_film')}
                 selected={film.filmColor === null}
                 onPress={() => setFilm(f => ({ ...f, filmColor: null }))}
                 testID="film-color-own"
@@ -414,7 +425,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
                   key={c}
                   onPress={() => setFilm(f => ({ ...f, filmColor: c }))}
                   accessibilityRole="radio"
-                  accessibilityLabel={`Film colour ${c}`}
+                  accessibilityLabel={tx('film_collage_film_colour_2', { c })}
                   accessibilityState={{ selected: film.filmColor === c }}
                   testID={`film-color-${c.slice(1)}`}
                   style={[
@@ -430,28 +441,28 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
             <TextInput
               value={film.label}
               onChangeText={t => setFilm(f => ({ ...f, label: cleanLabel(t) }))}
-              placeholder="Your text on the film edge (e.g. ANNA * 2026)"
+              placeholder={tx('film_collage_your_text_on_the_film')}
               placeholderTextColor={theme.colors.textTertiary}
               autoCapitalize="characters"
               maxLength={FILM_LABEL_MAX}
-              accessibilityLabel="Text on the film edge"
+              accessibilityLabel={tx('film_collage_text_on_the_film_edge')}
               style={[styles.input, { color: theme.colors.textPrimary, borderColor: 'rgba(255,255,255,0.14)' }]}
               testID="film-label"
             />
             <View style={styles.row}>
               <AppText variant="body" style={{ flex: 1 }}>
-                Frames · {film.frames.length}
+                {tx('film_collage_frames')} {film.frames.length}
               </AppText>
               <IconButton
                 icon="minus"
-                label="Fewer frames"
+                label={tx('film_collage_fewer_frames')}
                 size={36}
                 disabled={film.frames.length <= 1}
                 onPress={() => setFilm(f => ({ ...f, frames: f.frames.slice(0, -1) }))}
               />
               <IconButton
                 icon="plus"
-                label="More frames"
+                label={tx('film_collage_more_frames')}
                 size={36}
                 disabled={film.frames.length >= MAX_FRAMES}
                 onPress={() =>
@@ -467,7 +478,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
 
         {photos.length > 0 && mode === 'collage' ? (
           <GlassSurface radius={18} style={styles.section}>
-            <AppText variant="bodyStrong">Layout</AppText>
+            <AppText variant="bodyStrong">{tx('film_collage_layout')}</AppText>
             <View style={styles.wrap} accessibilityRole="radiogroup">
               {COLLAGE_LAYOUTS.map(l => (
                 <Pressable
@@ -514,7 +525,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               ))}
             </View>
             <ValueSlider
-              label="Spacing"
+              label={tx('film_collage_spacing')}
               value={collage.gap}
               min={0}
               max={0.06}
@@ -524,7 +535,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               testID="collage-gap"
             />
             <ValueSlider
-              label="Border"
+              label={tx('film_collage_border')}
               value={collage.margin}
               min={0}
               max={0.12}
@@ -534,7 +545,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               testID="collage-margin"
             />
             <ValueSlider
-              label="Round corners"
+              label={tx('film_collage_round_corners')}
               value={collage.radius}
               min={0}
               max={0.3}
@@ -549,7 +560,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
                   key={b}
                   onPress={() => setCollage(c => ({ ...c, background: b }))}
                   accessibilityRole="radio"
-                  accessibilityLabel={`Background ${b}`}
+                  accessibilityLabel={tx('film_collage_background', { b })}
                   accessibilityState={{ selected: collage.background === b }}
                   style={[
                     styles.colour,
@@ -568,10 +579,10 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
           <GlassSurface radius={18} style={styles.section}>
             <View style={styles.row}>
               <AppText variant="bodyStrong" style={{ flex: 1 }}>
-                Transform each frame
+                {tx('film_collage_transform_each_frame')}
               </AppText>
               <Button
-                label="Mix it up"
+                label={tx('film_collage_mix_it_up')}
                 icon="sparkles"
                 variant="glass"
                 onPress={() => setFrames(mixedFrames(photos.length, count))}
@@ -582,7 +593,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               {frames.map((f, i) => (
                 <Chip
                   key={i}
-                  label={`${mode === 'film' ? 'Frame' : 'Cell'} ${i + 1}`}
+                  label={`${mode === 'film' ? tx('film_collage_frame') : tx('film_collage_cell')} ${i + 1}`}
                   selected={i === Math.min(selected, frames.length - 1)}
                   onPress={() => setSelected(i)}
                   testID={`frame-${i}`}
@@ -596,7 +607,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
                     key={`${p}-${i}`}
                     onPress={() => editFrame({ photo: i })}
                     accessibilityRole="radio"
-                    accessibilityLabel={`Use photo ${i + 1}`}
+                    accessibilityLabel={tx('film_collage_use_photo', { value: i + 1 })}
                     accessibilityState={{ selected: current.photo === i }}
                   >
                     <Image
@@ -619,7 +630,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               ))}
             </View>
             <ValueSlider
-              label="Zoom"
+              label={tx('film_collage_zoom')}
               value={current.zoom}
               min={1}
               max={3}
@@ -629,7 +640,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               testID="frame-zoom"
             />
             <ValueSlider
-              label="Left or right"
+              label={tx('film_collage_left_or_right')}
               value={current.panX}
               min={-1}
               max={1}
@@ -639,7 +650,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
               testID="frame-pan-x"
             />
             <ValueSlider
-              label="Up or down"
+              label={tx('film_collage_up_or_down')}
               value={current.panY}
               min={-1}
               max={1}
@@ -650,20 +661,20 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
             />
             <View style={styles.wrap}>
               <Chip
-                label="Mirror"
+                label={tx('film_collage_mirror')}
                 selected={current.flip}
                 onPress={() => editFrame({ flip: !current.flip })}
                 testID="frame-flip"
               />
               <Chip
-                label="Reset this frame"
+                label={tx('film_collage_reset_this_frame')}
                 selected={false}
                 onPress={() => editFrame({ ...NO_ADJUST, zoom: 1, panX: 0, panY: 0, flip: false })}
                 testID="frame-reset"
               />
             </View>
             <ValueSlider
-              label="Look strength"
+              label={tx('film_collage_look_strength')}
               value={current.lookStrength}
               min={0}
               max={1}
@@ -705,7 +716,7 @@ export function FilmCollageScreen({ navigation, route }: RootScreenProps<'FilmCo
         ) : null}
         {photos.length > 0 ? (
           <Button
-            label={mode === 'film' ? 'Save film strip' : 'Save collage'}
+            label={mode === 'film' ? tx('film_collage_save_film_strip') : tx('film_collage_save_collage')}
             icon="download"
             size="lg"
             loading={busy === 'save'}

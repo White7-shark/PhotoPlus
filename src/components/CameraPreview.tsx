@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 
 import NativeCameraPreview from '../native/specs/PhotoPlusCameraPreviewNativeComponent';
+import { t as tx } from '../i18n';
 
 export interface CameraPreviewProps {
   lensFacing: 'back' | 'front';
@@ -28,7 +29,7 @@ export function CameraPreview({
   return (
     <View
       style={[StyleSheet.absoluteFill, style]}
-      accessibilityLabel="Camera viewfinder. Pinch to zoom, tap to focus."
+      accessibilityLabel={tx('camera_preview_camera_viewfinder_pinch_to_zoom')}
       accessible
     >
       <NativeCameraPreview

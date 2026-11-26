@@ -1,5 +1,7 @@
 package com.photoplus.rewards
 
+import com.photoplus.R
+import com.photoplus.i18n.Words
 import android.content.ClipData
 import android.content.ComponentName
 import android.content.Intent
@@ -34,17 +36,18 @@ class RewardsModule(reactContext: ReactApplicationContext) : NativePhotoPlusRewa
   /** Rewards are for the free plan: a subscriber has Premium already. */
   private inline fun freeOnly(promise: Promise, run: () -> Unit) {
     if (com.photoplus.integrity.Integrity.blocked()) {
-      promise.reject("BLOCKED", "Photo Plus needs to check in online first.")
+      promise.reject("BLOCKED", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_check_in))
       return
     }
     if (Entitlements.subscribed) {
-      promise.reject("SUBSCRIBED", "You have Premium: every tool is already yours.")
+      promise.reject("SUBSCRIBED", Words.get(reactApplicationContext, R.string.native_you_have_premium_every_tool_is))
       return
     }
     try {
       run()
     } catch (e: RewardsLedger.RewardsException) {
-      promise.reject(e.code, e.message, e)
+      val message = if (e.word != 0) Words.get(reactApplicationContext, e.word, *e.args) else e.message
+      promise.reject(e.code, message, e)
     }
   }
 
@@ -121,15 +124,15 @@ class RewardsModule(reactContext: ReactApplicationContext) : NativePhotoPlusRewa
   override fun share(target: String, activity: String, asset: String, text: String, promise: Promise) = freeOnly(promise) {
     val host = reactApplicationContext.currentActivity
     if (host == null) {
-      promise.reject("NO_ACTIVITY", "Photo Plus needs to be open")
+      promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_be_open))
       return@freeOnly
     }
     if (!ASSET.matches(asset) || !NAME_RE.matches(target) || (activity.isNotEmpty() && !NAME_RE.matches(activity))) {
-      promise.reject("INVALID_ARGUMENT", "Unknown app or picture")
+      promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_unknown_app_or_picture))
       return@freeOnly
     }
     if (ledger.shareOpensAt(target) != 0L) {
-      promise.reject("LOCKED", "You shared to this app recently. It opens again in a few hours.")
+      promise.reject("LOCKED", Words.get(reactApplicationContext, R.string.native_you_shared_to_this_app_recently))
       return@freeOnly
     }
     val file = promoFile(asset)
@@ -151,10 +154,10 @@ class RewardsModule(reactContext: ReactApplicationContext) : NativePhotoPlusRewa
     try {
       host.startActivity(send)
     } catch (_: android.content.ActivityNotFoundException) {
-      promise.reject("APP_NOT_FOUND", "That app isn't on this phone any more")
+      promise.reject("APP_NOT_FOUND", Words.get(reactApplicationContext, R.string.native_that_app_isn_t_on_this))
       return@freeOnly
     } catch (_: SecurityException) {
-      promise.reject("APP_NOT_FOUND", "That app can't take shares from other apps")
+      promise.reject("APP_NOT_FOUND", Words.get(reactApplicationContext, R.string.native_that_app_can_t_take_shares))
       return@freeOnly
     }
     val counted = ledger.shared(target)

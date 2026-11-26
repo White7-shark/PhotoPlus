@@ -12,13 +12,14 @@ import {
 } from '../../services/studio/hair';
 import { HairEditor } from './HairEditor';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 type Tab = 'colour' | HairGroup | 'edit';
 const TABS: { value: Tab; label: string }[] = [
-  { value: 'colour', label: 'Colour' },
-  { value: 'women', label: 'Women' },
-  { value: 'men', label: 'Men' },
-  { value: 'edit', label: 'Edit' },
+  { value: 'colour', label: tx('hair_picker_colour') },
+  { value: 'women', label: tx('hair_picker_women') },
+  { value: 'men', label: tx('hair_picker_men') },
+  { value: 'edit', label: tx('hair_picker_edit') },
 ];
 
 /** The brush state the screen keeps (it shows the canvas). */
@@ -138,10 +139,10 @@ export function HairPicker({
       )}
       <AppText variant="caption" tone="tertiary">
         {tab === 'colour'
-          ? 'Colours your own hair, or a new style. The strands and shine stay.'
+          ? tx('hair_picker_colours_your_own_hair_or')
           : tab === 'edit'
-            ? 'Make it right by hand: shape the style, fit it to the head, finish the colour, and paint where it should or should not be.'
-            : 'Your own hair is taken away and the new style drawn in, fitted to your head.'}
+            ? tx('hair_picker_make_it_right_by_hand')
+            : tx('hair_picker_your_own_hair_is_taken')}
       </AppText>
     </View>
   );

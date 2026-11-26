@@ -5,6 +5,7 @@ import { AppText, Button } from '../../components';
 import { ValueSlider } from '../../components/ValueSlider';
 import { DEFAULT_LIPSTICK_STRENGTH, DEFAULT_NATURAL, LIPSTICKS, type LipsChoice } from '../../services/studio/lips';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 const pct = (v: number) => `${Math.round(v * 100)}`;
 
@@ -23,15 +24,15 @@ export function PinkLipsPanel({
   const on = value?.kind === 'natural';
   return (
     <View style={{ gap: 10 }} testID="pink-lips-panel">
-      <AppText variant="bodyStrong">Pink lips</AppText>
+      <AppText variant="bodyStrong">{tx('lips_pink_lips')}</AppText>
       <AppText variant="caption" tone="secondary">
-        A natural soft pink, made for each face: darker lips get the most, lips that are already pink barely change.
-        {value?.kind === 'lipstick' ? ' This replaces the lipstick.' : ''}
+        {tx('lips_a_natural_soft_pink_made')}
+        {value?.kind === 'lipstick' ? tx('lips_this_replaces_the_lipstick') : ''}
       </AppText>
       {on ? (
         <>
           <ValueSlider
-            label="Strength"
+            label={tx('lips_strength')}
             value={value.strength}
             min={0.1}
             max={1}
@@ -41,7 +42,7 @@ export function PinkLipsPanel({
             testID="pink-lips-strength"
           />
           <Button
-            label="Natural lips"
+            label={tx('lips_natural_lips')}
             variant="ghost"
             icon="refresh"
             onPress={() => onChange(null)}
@@ -50,7 +51,7 @@ export function PinkLipsPanel({
         </>
       ) : (
         <Button
-          label="Add pink lips"
+          label={tx('lips_add_pink_lips')}
           icon="sparkles"
           variant="glass"
           onPress={() => onChange(DEFAULT_NATURAL)}
@@ -73,7 +74,7 @@ export function LipstickPanel({
   const current = value?.kind === 'lipstick' ? value : null;
   return (
     <View style={{ gap: 10 }} testID="lipstick-panel">
-      <AppText variant="bodyStrong">Lipstick</AppText>
+      <AppText variant="bodyStrong">{tx('lips_lipstick')}</AppText>
       <View style={styles.wrap} accessibilityRole="radiogroup">
         {LIPSTICKS.map(s => {
           const selected = current?.shade === s.id;
@@ -100,7 +101,7 @@ export function LipstickPanel({
       {current ? (
         <>
           <ValueSlider
-            label="Strength"
+            label={tx('lips_strength')}
             value={current.strength}
             min={0.1}
             max={1}
@@ -110,7 +111,7 @@ export function LipstickPanel({
             testID="lipstick-strength"
           />
           <Button
-            label="No lipstick"
+            label={tx('lips_no_lipstick')}
             variant="ghost"
             icon="refresh"
             onPress={() => onChange(null)}
@@ -119,7 +120,7 @@ export function LipstickPanel({
         </>
       ) : (
         <AppText variant="caption" tone="secondary">
-          Choose a shade. It keeps the lips’ own shine and lines.
+          {tx('lips_choose_a_shade_it_keeps')}
         </AppText>
       )}
     </View>

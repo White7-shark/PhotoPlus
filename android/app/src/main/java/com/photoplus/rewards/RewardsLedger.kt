@@ -1,6 +1,7 @@
 package com.photoplus.rewards
 
 import android.content.Context
+import com.photoplus.R
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import kotlin.math.max
@@ -30,7 +31,13 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
     fun keys(): Set<String>
   }
 
-  class RewardsException(val code: String, message: String) : Exception(message)
+  /** [word]: the message as a string resource ({name} placeholders from [args]), for the app's language. */
+  class RewardsException(
+    val code: String,
+    message: String,
+    @androidx.annotation.StringRes val word: Int = 0,
+    vararg val args: Pair<String, Any?>,
+  ) : Exception(message)
 
   enum class Task(val points: Int, val daily: Boolean, val event: String, val goal: Int) {
     FIRST_PHOTO(30, false, "photo", 1),
@@ -96,7 +103,7 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
 
   fun checkIn(): Int = synchronized(lock) {
     val (next, done) = checkInStatus()
-    if (done) throw RewardsException("ALREADY_DONE", "You've checked in today. Come back tomorrow.")
+    if (done) throw RewardsException("ALREADY_DONE", "You've checked in today. Come back tomorrow.", R.string.native_rewards_checked_in)
     store.putLong(K_CHECKIN_DAY, day(now()))
     store.putLong(K_STREAK, next.toLong())
     val pts = STREAK[next - 1]
@@ -153,8 +160,8 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
 
   fun claim(id: String): Int = synchronized(lock) {
     val t = Task.entries.firstOrNull { it.id == id } ?: throw RewardsException("INVALID_ARGUMENT", "Unknown task")
-    if (claimed(t)) throw RewardsException("ALREADY_DONE", "You've already collected this.")
-    if (progress(t) < t.goal) throw RewardsException("NOT_YET", "Finish the task first.")
+    if (claimed(t)) throw RewardsException("ALREADY_DONE", "You've already collected this.", R.string.native_rewards_collected)
+    if (progress(t) < t.goal) throw RewardsException("NOT_YET", "Finish the task first.", R.string.native_rewards_finish_task)
     store.putLong("$K_TASK${t.id}", if (t.daily) day(now()) else now())
     add(t.points)
     t.points
@@ -198,7 +205,7 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
   }
 
   fun claimSharePass(): Long = synchronized(lock) {
-    if (!sharePassReady()) throw RewardsException("NOT_YET", "Share Photo Plus $SHARE_GOAL times first.")
+    if (!sharePassReady()) throw RewardsException("NOT_YET", "Share Photo Plus $SHARE_GOAL times first.", R.string.native_rewards_share_first, "goal" to SHARE_GOAL)
     val until = grant(SHARE_DAYS)
     store.putLong(K_SHARE_PASS_READY, 0)
     until
@@ -228,7 +235,7 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
 
   private fun grant(days: Int): Long {
     if (daysUsed() + days > CAP_DAYS) {
-      throw RewardsException("CAP_REACHED", "Rewards give up to $CAP_DAYS days of Premium in 30 days. Premium itself has no limit.")
+      throw RewardsException("CAP_REACHED", "Rewards give up to $CAP_DAYS days of Premium in 30 days. Premium itself has no limit.", R.string.native_rewards_cap, "days" to CAP_DAYS)
     }
     val t = now()
     val until = max(t, premiumUntil()) + days * DAY_MS
@@ -240,8 +247,8 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
 
   fun redeem(itemId: String, tool: String?): Long = synchronized(lock) {
     val item = Item.entries.firstOrNull { it.id == itemId } ?: throw RewardsException("INVALID_ARGUMENT", "Unknown reward")
-    if (item == Item.TOOL && (tool == null || tool !in TOOLS)) throw RewardsException("INVALID_ARGUMENT", "Choose a tool")
-    if (points() < item.cost) throw RewardsException("NOT_ENOUGH", "You need ${item.cost - points()} more points.")
+    if (item == Item.TOOL && (tool == null || tool !in TOOLS)) throw RewardsException("INVALID_ARGUMENT", "Choose a tool", R.string.native_rewards_choose_tool)
+    if (points() < item.cost) throw RewardsException("NOT_ENOUGH", "You need ${item.cost - points()} more points.", R.string.native_rewards_more_points, "points" to item.cost - points())
     val until = if (item == Item.TOOL) {
       val t = now()
       val u = max(t, toolUntil(tool!!)) + TOOL_HOURS * HOUR_MS

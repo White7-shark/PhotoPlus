@@ -1,5 +1,7 @@
 package com.photoplus.studio
 
+import com.photoplus.R
+import com.photoplus.i18n.Words
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -266,7 +268,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
     val map = request.toHashMap()
     val full = map["quality"] == "full"
     if (full && !Entitlements.allows("sceneSwap")) {
-      promise.reject("PREMIUM_REQUIRED", "Saving studio photos is part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_saving_studio_photos_is_part_of))
       return
     }
     val resolution = try {
@@ -297,7 +299,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     if (hair != null && !Entitlements.allows("hair")) {
-      promise.reject("PREMIUM_REQUIRED", "Hair colours and hairstyles are part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_hair_colours_and_hairstyles_are_part))
       return
     }
     @Suppress("UNCHECKED_CAST")
@@ -316,7 +318,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
     }
     val (light, finish) = lightAndFinish
     if (!Entitlements.allows("studioLight") && (light?.premium == true || finish?.premium == true)) {
-      promise.reject("PREMIUM_REQUIRED", "This light or film look is part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_this_light_or_film_look_is))
       return
     }
     jobs.submit(jobId, listener(promise)) { token ->
@@ -602,11 +604,11 @@ class StudioModule(reactContext: ReactApplicationContext) :
     }
     val (light, finish, lips) = parsed
     if (full && !Entitlements.allows("relight")) {
-      promise.reject("PREMIUM_REQUIRED", "Saving relit photos is part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_saving_relit_photos_is_part_of))
       return
     }
     if (!Entitlements.allows("studioLight") && (light?.premium == true || finish?.premium == true)) {
-      promise.reject("PREMIUM_REQUIRED", "This light or film look is part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_this_light_or_film_look_is))
       return
     }
     val resolution = resolutionFor(map, full, promise) ?: return
@@ -656,7 +658,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     if (spec.style.premium && Entitlements.plan != Plan.PREMIUM) {
-      promise.reject("PREMIUM_REQUIRED", "This film is part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_this_film_is_part_of_premium))
       return
     }
     val full = map["quality"] == "full"
@@ -715,7 +717,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return null
     }
     if (ExportSize.needsPremium(px) && !Entitlements.allows("exportHd")) {
-      promise.reject("PREMIUM_REQUIRED", "720p, 1080p, HD and 4K downloads are part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_720p_1080p_hd_and_4k_downloads))
       return null
     }
     return Resolution(px)

@@ -11,6 +11,7 @@
  * the rear camera, the screen's left is their right.
  */
 import type { PoseDef, PosePoint } from './library';
+import { t as tx } from '../../i18n';
 
 export type PosePart =
   | 'body' | 'head' | 'leftHand' | 'rightHand' | 'leftElbow' | 'rightElbow' | 'leftFoot' | 'rightFoot'
@@ -187,14 +188,14 @@ export interface FaceTip {
  * the frame with room around it.
  */
 export function faceTip(face: [number, number] | null): FaceTip {
-  if (!face) return { text: 'Point the camera at a face', ok: false };
+  if (!face) return { text: tx('guidance_point_the_camera_at_a'), ok: false };
   const [x, y] = face;
-  if (x < 0.12) return { text: 'Move the face away from the edge', ok: false };
-  if (x > 0.88) return { text: 'Move the face away from the edge', ok: false };
+  if (x < 0.12) return { text: tx('guidance_move_the_face_away_from'), ok: false };
+  if (x > 0.88) return { text: tx('guidance_move_the_face_away_from'), ok: false };
   // The nose sits a little below the eye line: aim for 0.3–0.45.
-  if (y < 0.24) return { text: 'Tilt the phone up a little: leave room above the head', ok: false };
-  if (y > 0.52) return { text: 'Tilt the phone down a little: eyes near the top third', ok: false };
-  return { text: 'Nice framing', ok: true };
+  if (y < 0.24) return { text: tx('guidance_tilt_the_phone_up_a'), ok: false };
+  if (y > 0.52) return { text: tx('guidance_tilt_the_phone_down_a'), ok: false };
+  return { text: tx('guidance_nice_framing'), ok: true };
 }
 
 export interface LevelReading {
@@ -205,9 +206,9 @@ export interface LevelReading {
 
 export function levelTip(level: LevelReading | null): FaceTip {
   if (!level) return { text: '', ok: true };
-  if (Math.abs(level.roll) < 1) return { text: 'Level', ok: true };
+  if (Math.abs(level.roll) < 1) return { text: tx('guidance_level'), ok: true };
   // Gravity reads as a negative roll when the phone is turned clockwise.
-  return { text: level.roll < 0 ? 'Turn the phone a little to the left' : 'Turn the phone a little to the right', ok: false };
+  return { text: level.roll < 0 ? tx('guidance_turn_the_phone_a_little') : tx('guidance_turn_the_phone_a_little_2'), ok: false };
 }
 
 // --------------------------------------------------------------- auto capture

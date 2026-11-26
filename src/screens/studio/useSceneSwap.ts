@@ -39,6 +39,7 @@ import {
   type FinishChoice,
   type LightChoice,
 } from '../../services/studio/light';
+import { t as tx } from '../../i18n';
 
 export type Step = 'pick' | 'cutout' | 'scene';
 
@@ -135,7 +136,7 @@ export function useSceneSwap(studio: StudioService) {
       setCut(await studio.refine(id, s, e));
       setError(null);
     } catch (err) {
-      setError(err instanceof StudioError ? 'That correction couldn’t be applied. Please try again.' : String(err));
+      setError(err instanceof StudioError ? tx('use_scene_swap_that_correction_couldn_t_be') : String(err));
     } finally {
       setBusy(b => (b === 'cut' ? null : b));
     }
@@ -161,7 +162,7 @@ export function useSceneSwap(studio: StudioService) {
         if (!s.report.found) setError(NO_PERSON);
         setStep('cutout');
       } catch (err) {
-        setError(err instanceof StudioError && err.code === 'NO_PERSON' ? NO_PERSON : 'That photo couldn’t be opened. Please try another.');
+        setError(err instanceof StudioError && err.code === 'NO_PERSON' ? NO_PERSON : tx('use_scene_swap_that_photo_couldn_t_be'));
       } finally {
         setBusy(null);
       }
@@ -270,7 +271,7 @@ export function useSceneSwap(studio: StudioService) {
       setEmpty(without);
       setError(null);
     } catch (err) {
-      setError(err instanceof StudioError && err.code === 'NO_FACE' ? friendlyMessage('NO_FACE') : 'The scene couldn’t be drawn. Please try again.');
+      setError(err instanceof StudioError && err.code === 'NO_FACE' ? friendlyMessage('NO_FACE') : tx('use_scene_swap_the_scene_couldn_t_be'));
     } finally {
       setBusy(b => (b === 'render' ? null : b));
     }
@@ -356,7 +357,7 @@ export function useSceneSwap(studio: StudioService) {
       return await studio.render(session.sessionId, { background, crop, placement, look, aspect: frameAspect, hair, lips, light, finish, resolution }, 'full');
     } catch (err) {
       if (err instanceof StudioError && err.code === 'PREMIUM_REQUIRED') throw err;
-      setError('Your photo couldn’t be saved. Please try again.');
+      setError(tx('use_scene_swap_your_photo_couldn_t_be'));
       return null;
     } finally {
       setBusy(null);
@@ -375,7 +376,7 @@ export function useSceneSwap(studio: StudioService) {
       );
     } catch (err) {
       if (err instanceof StudioError && err.code === 'PREMIUM_REQUIRED') throw err;
-      setError('Your cut-out couldn’t be saved. Please try again.');
+      setError(tx('use_scene_swap_your_cut_out_couldn_t'));
       return null;
     } finally {
       setBusy(null);

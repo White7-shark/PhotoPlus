@@ -15,6 +15,7 @@ import {
 import { formatBytes } from '../services/storage/StorageService';
 import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
+import { t as tx } from '../i18n';
 
 const yesNo = (v: boolean) => (v ? 'Supported' : 'Not available');
 
@@ -40,12 +41,12 @@ export function DeviceInfoScreen({ navigation }: RootScreenProps<'DeviceInfo'>) 
 
   if (!caps) {
     return (
-      <Screen title="Device" onBack={navigation.goBack} bottomInset={24}>
+      <Screen title={tx('device_info_device')} onBack={navigation.goBack} bottomInset={24}>
         <EmptyState
           icon="cpu"
-          title="Device profile unavailable"
-          message="Capabilities could not be detected on this launch."
-          actionLabel="Try again"
+          title={tx('device_info_device_profile_unavailable')}
+          message={tx('device_info_capabilities_could_not_be_detected')}
+          actionLabel={tx('device_info_try_again')}
           onAction={refresh}
         />
       </Screen>
@@ -61,7 +62,7 @@ export function DeviceInfoScreen({ navigation }: RootScreenProps<'DeviceInfo'>) 
 
   return (
     <Screen
-      title="Device"
+      title={tx('device_info_device')}
       overline={`${caps.os.manufacturer} ${caps.os.model}`}
       onBack={navigation.goBack}
       bottomInset={24}
@@ -70,77 +71,108 @@ export function DeviceInfoScreen({ navigation }: RootScreenProps<'DeviceInfo'>) 
     >
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <Badge label={`${tierLabel[tier]} tier`} tone={tierTone} icon="shield" />
-        <Badge label={`Android ${caps.os.release} · API ${caps.os.sdkInt}`} />
-        {stale ? <Badge label="Cached profile" tone="warning" /> : null}
+        <Badge label={tx('device_info_android_api', { release: caps.os.release, sdkInt: caps.os.sdkInt })} />
+        {stale ? <Badge label={tx('device_info_cached_profile')} tone="warning" /> : null}
       </View>
 
       <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-        <StatTile icon="memory" label="RAM" value={formatBytes(caps.memory.totalBytes, 1)} />
+        <StatTile icon="memory" label={tx('device_info_ram')} value={formatBytes(caps.memory.totalBytes, 1)} />
         <StatTile
           icon="storage"
-          label="Free storage"
+          label={tx('device_info_free_storage')}
           value={formatBytes(caps.storage.availableBytes, 1)}
           tint={storage.level === 'ok' ? theme.colors.accentCool : theme.colors.warning}
         />
       </View>
       <View style={{ flexDirection: 'row', gap: 10, marginBottom: 24 }}>
-        <StatTile icon="cpu" label="CPU cores" value={String(caps.cpu.cores)} tint={theme.colors.info} />
-        <StatTile icon="camera" label="Cameras" value={String(caps.cameras.length)} tint={theme.colors.premium} />
+        <StatTile
+          icon="cpu"
+          label={tx('device_info_cpu_cores')}
+          value={String(caps.cpu.cores)}
+          tint={theme.colors.info}
+        />
+        <StatTile
+          icon="camera"
+          label={tx('device_info_cameras')}
+          value={String(caps.cameras.length)}
+          tint={theme.colors.premium}
+        />
       </View>
 
       <SectionHeader
-        title="Camera controls"
-        overline={back ? `Main sensor · ${back.hardwareLevel}` : 'No back camera'}
+        title={tx('device_info_camera_controls')}
+        overline={
+          back ? tx('device_info_main_sensor', { hardwareLevel: back.hardwareLevel }) : tx('device_info_no_back_camera')
+        }
       />
       <GlassSurface style={{ marginBottom: 24 }}>
-        <ListRow title="Manual shutter speed" value={yesNo(support.manualExposure)} />
+        <ListRow title={tx('device_info_manual_shutter_speed')} value={yesNo(support.manualExposure)} />
         <ListRow
-          title="Manual ISO"
+          title={tx('device_info_manual_iso')}
           value={back?.ranges.iso ? `${back.ranges.iso[0]}–${back.ranges.iso[1]}` : yesNo(false)}
         />
-        <ListRow title="Manual focus" value={yesNo(support.manualFocus)} />
-        <ListRow title="White balance control" value={yesNo(support.manualWhiteBalance)} />
-        <ListRow title="RAW capture" value={yesNo(support.rawCapture)} />
-        <ListRow title="Exposure compensation" value={yesNo(support.exposureCompensation)} />
+        <ListRow title={tx('device_info_manual_focus')} value={yesNo(support.manualFocus)} />
+        <ListRow title={tx('device_info_white_balance_control')} value={yesNo(support.manualWhiteBalance)} />
+        <ListRow title={tx('device_info_raw_capture')} value={yesNo(support.rawCapture)} />
+        <ListRow title={tx('device_info_exposure_compensation')} value={yesNo(support.exposureCompensation)} />
         <ListRow
-          title="Zoom"
+          title={tx('device_info_zoom')}
           value={
             back?.ranges.zoomRatio ? `${back.ranges.zoomRatio[0]}× – ${back.ranges.zoomRatio[1]}×` : yesNo(support.zoom)
           }
         />
-        <ListRow title="Flash" value={yesNo(support.flash)} />
-        <ListRow title="Front camera" value={yesNo(support.frontCamera)} last />
+        <ListRow title={tx('device_info_flash')} value={yesNo(support.flash)} />
+        <ListRow title={tx('device_info_front_camera')} value={yesNo(support.frontCamera)} last />
       </GlassSurface>
 
-      <SectionHeader title="Formats & acceleration" />
+      <SectionHeader title={tx('device_info_formats_acceleration')} />
       <GlassSurface style={{ marginBottom: 24 }}>
-        <ListRow title="Decode" value={caps.imageFormats.decode.join(', ').toUpperCase()} />
-        <ListRow title="Export" value={caps.imageFormats.encode.join(', ').toUpperCase()} />
-        <ListRow title="OpenGL ES" value={caps.acceleration.glEsVersion} />
-        <ListRow title="Vulkan" value={caps.acceleration.vulkan ? (caps.acceleration.vulkanVersion ?? 'Yes') : 'No'} />
+        <ListRow title={tx('device_info_decode')} value={caps.imageFormats.decode.join(', ').toUpperCase()} />
+        <ListRow title={tx('device_info_export')} value={caps.imageFormats.encode.join(', ').toUpperCase()} />
+        <ListRow title={tx('device_info_opengl_es')} value={caps.acceleration.glEsVersion} />
         <ListRow
-          title="Processing engine"
+          title={tx('device_info_vulkan')}
           value={
-            engine ? `v${engine.version} · ${engine.workers} worker${engine.workers > 1 ? 's' : ''}` : 'Unavailable'
+            caps.acceleration.vulkan ? (caps.acceleration.vulkanVersion ?? tx('device_info_yes')) : tx('device_info_no')
+          }
+        />
+        <ListRow
+          title={tx('device_info_processing_engine')}
+          value={
+            engine
+              ? tx('device_info_v_worker', {
+                  version: engine.version,
+                  workers: engine.workers,
+                  value: engine.workers > 1 ? 's' : '',
+                })
+              : tx('device_info_unavailable')
           }
           last
         />
       </GlassSurface>
 
-      <SectionHeader title="On-device AI models" overline="Planned for later phases" />
+      <SectionHeader
+        title={tx('device_info_on_device_ai_models')}
+        overline={tx('device_info_planned_for_later_phases')}
+      />
       <GlassSurface>
         {models.map((m, i) => (
           <ListRow
             key={m.model.id}
             title={m.model.name}
             subtitle={m.compatible ? `${m.model.purpose} · ${m.delegate?.toUpperCase()}` : m.reason}
-            right={<Badge label={m.compatible ? 'Ready' : 'Limited'} tone={m.compatible ? 'success' : 'warning'} />}
+            right={
+              <Badge
+                label={m.compatible ? tx('device_info_ready') : tx('device_info_limited')}
+                tone={m.compatible ? 'success' : 'warning'}
+              />
+            }
             last={i === models.length - 1}
           />
         ))}
       </GlassSurface>
       <AppText variant="caption" tone="tertiary" style={{ marginTop: 12 }}>
-        Profiles are measured on this device and stay on it.
+        {tx('device_info_profiles_are_measured_on_this')}
       </AppText>
     </Screen>
   );

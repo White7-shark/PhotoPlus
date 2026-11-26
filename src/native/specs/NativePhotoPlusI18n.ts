@@ -14,7 +14,7 @@ export interface Spec extends TurboModule {
   getLanguage(): string;
   /** The phone's own language (a BCP 47 tag). */
   getSystemLanguage(): string;
-  /** Sets the app's language ("" to follow the phone); Android redraws the app in it. */
+  /** Sets the app's language ("" to follow the phone); the app starts again in it. */
   setLanguage(tag: string): void;
 }
 

@@ -21,12 +21,13 @@ import { useAppStore } from '../state/store';
 import { useTheme } from '../theme';
 import { SpotlightMarkers } from './camera/SpotlightControls';
 import { containRect } from './editor/geometry';
+import { t as tx } from '../i18n';
 
 const PLACES: { value: PropAnchor; label: string }[] = [
-  { value: 'head', label: 'Head' },
-  { value: 'eyes', label: 'Eyes' },
-  { value: 'neck', label: 'Neck' },
-  { value: 'free', label: 'Anywhere' },
+  { value: 'head', label: tx('create_prop_head') },
+  { value: 'eyes', label: tx('create_prop_eyes') },
+  { value: 'neck', label: tx('create_prop_neck') },
+  { value: 'free', label: tx('create_prop_anywhere') },
 ];
 
 const MAX_TAPS = 4;
@@ -66,7 +67,7 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
           setTaps([]);
           setCut(null);
         },
-        () => setError('That photo couldn’t be opened.'),
+        () => setError(tx('create_prop_that_photo_couldn_t_be')),
       );
     } finally {
       setBusy(null);
@@ -98,7 +99,7 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
       if (errorCode(e) === 'PREMIUM_REQUIRED') {
         setPremiumOpen(true);
       } else {
-        setError('Nothing could be cut out there. Tap right on the object and try again.');
+        setError(tx('create_prop_nothing_could_be_cut_out'));
       }
     } finally {
       setBusy(null);
@@ -110,7 +111,7 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
     setBusy('save');
     const prop: CustomProp = {
       id: cut.id,
-      name: name.trim().slice(0, 40) || `My prop ${mine.length + 1}`,
+      name: name.trim().slice(0, 40) || tx('create_prop_my_prop', { value: mine.length + 1 }),
       anchor: place,
       path: cut.path,
       aspect: cut.height / Math.max(1, cut.width),
@@ -120,7 +121,7 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
       await updateSetting('customProps', [...mine, prop].slice(-MAX_CUSTOM_PROPS));
       navigation.goBack();
     } catch {
-      setError('Your prop couldn’t be saved. Please try again.');
+      setError(tx('create_prop_your_prop_couldn_t_be'));
       setBusy(null);
     }
   };
@@ -134,15 +135,15 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
   };
 
   return (
-    <Screen title="Make a prop" onBack={() => navigation.goBack()} bottomInset={32}>
+    <Screen title={tx('create_prop_make_a_prop')} onBack={() => navigation.goBack()} bottomInset={32}>
       <View style={{ gap: 14 }}>
         <AppText variant="body" tone="secondary">
-          Turn anything in a photo into a prop you can wear in the camera and the editor.
+          {tx('create_prop_turn_anything_in_a_photo')}
         </AppText>
 
         {!photo ? (
           <Button
-            label="Choose a photo"
+            label={tx('create_prop_choose_a_photo')}
             icon="image"
             onPress={() => void pick()}
             loading={busy === 'pick'}
@@ -157,7 +158,7 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
               }
               onStartShouldSetResponder={() => !cut}
               onResponderRelease={onTap}
-              accessibilityLabel="Photo. Tap the object to use"
+              accessibilityLabel={tx('create_prop_photo_tap_the_object_to')}
               testID="create-prop-photo"
               style={{ width: '100%', aspectRatio: 0.9, borderRadius: 18, overflow: 'hidden', backgroundColor: '#000' }}
             >
@@ -199,19 +200,19 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
               <>
                 <AppText variant="caption" tone="secondary" align="center">
                   {taps.length === 0
-                    ? 'Tap the object you want to use.'
-                    : 'Tap again to add more of it, or cut it out.'}
+                    ? tx('create_prop_tap_the_object_you_want')
+                    : tx('create_prop_tap_again_to_add_more')}
                 </AppText>
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <Button
-                    label="Other photo"
+                    label={tx('create_prop_other_photo')}
                     icon="image"
                     variant="glass"
                     onPress={() => void pick()}
                     style={{ flex: 1 }}
                   />
                   <Button
-                    label="Cut it out"
+                    label={tx('create_prop_cut_it_out')}
                     icon="sparkles"
                     onPress={() => void cutOut()}
                     loading={busy === 'cut'}
@@ -226,9 +227,9 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
                 <TextInput
                   value={name}
                   onChangeText={t => setName(t.slice(0, 40))}
-                  placeholder="Name"
+                  placeholder={tx('create_prop_name')}
                   placeholderTextColor={theme.colors.textSecondary}
-                  accessibilityLabel="Prop name"
+                  accessibilityLabel={tx('create_prop_prop_name')}
                   testID="create-prop-name"
                   style={{
                     borderWidth: 1,
@@ -239,17 +240,22 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
                     color: theme.colors.textPrimary,
                   }}
                 />
-                <SegmentedControl label="Where it goes" value={place} onChange={setPlace} options={PLACES} />
+                <SegmentedControl
+                  label={tx('create_prop_where_it_goes')}
+                  value={place}
+                  onChange={setPlace}
+                  options={PLACES}
+                />
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <Button
-                    label="Try again"
+                    label={tx('create_prop_try_again')}
                     icon="refresh"
                     variant="glass"
                     onPress={() => setCut(null)}
                     style={{ flex: 1 }}
                   />
                   <Button
-                    label="Save prop"
+                    label={tx('create_prop_save_prop')}
                     icon="check"
                     onPress={() => void save()}
                     loading={busy === 'save'}
@@ -270,7 +276,7 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
 
         {mine.length > 0 ? (
           <View style={{ gap: 8 }}>
-            <AppText variant="bodyStrong">Your props</AppText>
+            <AppText variant="bodyStrong">{tx('create_prop_your_props')}</AppText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
               {mine.map(p => (
                 <View key={p.id} style={{ width: 76, alignItems: 'center', gap: 6 }}>
@@ -294,7 +300,7 @@ export function CreatePropScreen({ navigation }: RootScreenProps<'CreateProp'>) 
                     <Pressable
                       onPress={() => void remove(p)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Delete ${p.name}`}
+                      accessibilityLabel={tx('create_prop_delete', { name: p.name })}
                       hitSlop={8}
                       style={{
                         position: 'absolute',

@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { AppText, Button, Icon } from '../components';
 import { getAdsService, type RewardProgress } from '../services/ads/AdsService';
 import { useTheme } from '../theme';
+import { t as tx } from '../i18n';
 
 /**
  * Free plan: watch four short ads to share, save or export this photo
@@ -42,10 +43,10 @@ export function WatermarkUnlock({
     try {
       const r = await ads.watch(photoPath);
       setProgress(r);
-      if (!r.rewarded) setNote('Watch the ad to the end for it to count.');
+      if (!r.rewarded) setNote(tx('watermark_unlock_watch_the_ad_to_the'));
       if (r.unlocked) onUnlocked?.();
     } catch {
-      setNote('No ad is available right now. Please try again in a moment.');
+      setNote(tx('watermark_unlock_no_ad_is_available_right'));
     } finally {
       setWatching(false);
     }
@@ -61,7 +62,7 @@ export function WatermarkUnlock({
         testID={`${testID}-done`}
       >
         <Icon name="check" size={16} color={theme.colors.success} />
-        <AppText variant="caption">This photo goes out without the watermark.</AppText>
+        <AppText variant="caption">{tx('watermark_unlock_this_photo_goes_out_without')}</AppText>
       </View>
     );
   }
@@ -69,8 +70,11 @@ export function WatermarkUnlock({
   return (
     <View style={{ gap: 8 }} testID={testID}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <AppText variant="bodyStrong">Remove the watermark</AppText>
-        <View style={{ flexDirection: 'row', gap: 5 }} accessibilityLabel={`${watched} of ${required} ads watched`}>
+        <AppText variant="bodyStrong">{tx('watermark_unlock_remove_the_watermark')}</AppText>
+        <View
+          style={{ flexDirection: 'row', gap: 5 }}
+          accessibilityLabel={tx('watermark_unlock_of_ads_watched', { watched, required })}
+        >
           {Array.from({ length: required }, (_, i) => (
             <View
               key={i}
@@ -86,11 +90,15 @@ export function WatermarkUnlock({
       </View>
       <AppText variant="caption" tone="secondary">
         {watched === 0
-          ? `Watch ${required} short ads to share or save this photo without the Photo Plus mark.`
-          : `${required - watched} more to go. Your progress is kept for this photo.`}
+          ? tx('watermark_unlock_watch_short_ads_to_share', { required })
+          : tx('watermark_unlock_more_to_go_your_progress', { value: required - watched })}
       </AppText>
       <Button
-        label={watched === 0 ? 'Watch an ad' : `Watch ad ${watched + 1} of ${required}`}
+        label={
+          watched === 0
+            ? tx('watermark_unlock_watch_an_ad')
+            : tx('watermark_unlock_watch_ad_of', { value: watched + 1, required })
+        }
         icon="play"
         variant="glass"
         loading={watching}

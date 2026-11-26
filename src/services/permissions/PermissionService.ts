@@ -1,4 +1,5 @@
 import { Linking, PermissionsAndroid, Platform, type Permission } from 'react-native';
+import { t as tx } from '../../i18n';
 
 /**
  * Runtime permission management.
@@ -56,18 +57,18 @@ export function permissionsFor(permission: AppPermission, sdkInt: number): strin
 
 export const RATIONALES: Record<AppPermission, Rationale> = {
   camera: {
-    title: 'Camera access',
-    message: 'Photo Plus uses the camera to take photos. Nothing is uploaded — your shots stay on this device.',
+    title: tx('permission_camera_access'),
+    message: tx('permission_photo_plus_uses_the_camera'),
     buttonPositive: 'Continue',
   },
   microphone: {
-    title: 'Microphone access',
-    message: 'Glide clips keep their sound when the microphone is on. Without it, clips are silent.',
+    title: tx('permission_microphone_access'),
+    message: tx('permission_glide_clips_keep_their_sound'),
     buttonPositive: 'Continue',
   },
   photos: {
-    title: 'Photo library access',
-    message: 'Allow access to import photos you want to edit. You can choose specific photos.',
+    title: tx('permission_photo_library_access'),
+    message: tx('permission_allow_access_to_import_photos'),
     buttonPositive: 'Continue',
   },
 };

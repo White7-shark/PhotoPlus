@@ -7,6 +7,7 @@ import { BEAUTY_PRESETS, presetCover } from '../../services/beauty/catalog';
 import type { CameraBeauty } from '../../services/beauty/camera';
 import { GROUP_MAX, type BeautyAdjust, type PortraitControls } from '../../services/beauty/recipe';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const signed = (v: number) => (Math.round(v * 100) === 0 ? '0' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}`);
@@ -35,7 +36,7 @@ export function BeautyTray({
     <View style={styles.panel} testID="beauty-tray">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         <PreviewTile
-          label="Off"
+          label={tx('beauty_off')}
           placeholderIcon="close"
           width={64}
           height={64}
@@ -63,7 +64,7 @@ export function BeautyTray({
       {beauty.on ? (
         <>
           <ValueSlider
-            label="Intensity"
+            label={tx('beauty_intensity')}
             value={beauty.adjust.intensity}
             onChange={v => setAdjust({ intensity: v })}
             format={pct}
@@ -72,7 +73,9 @@ export function BeautyTray({
           <Pressable
             onPress={() => setAdjusting(a => !a)}
             accessibilityRole="button"
-            accessibilityLabel={adjusting ? 'Hide fine adjustments' : 'Adjust skin, face, lighting and background'}
+            accessibilityLabel={
+              adjusting ? tx('beauty_hide_fine_adjustments') : tx('beauty_adjust_skin_face_lighting_and')
+            }
             accessibilityState={{ expanded: adjusting }}
             style={styles.adjustRow}
             hitSlop={8}
@@ -80,7 +83,7 @@ export function BeautyTray({
           >
             <Icon name="sliders" size={14} color="#FFFFFF" strokeWidth={2} />
             <AppText variant="caption" style={styles.adjustLabel}>
-              {adjusting ? 'Less' : 'Adjust'}
+              {adjusting ? tx('beauty_less') : tx('beauty_adjust')}
             </AppText>
           </Pressable>
           {adjusting ? (
@@ -129,7 +132,7 @@ export function OriginalButton({ onHold }: { onHold: (held: boolean) => void }) 
       onPressIn={() => set(true)}
       onPressOut={() => set(false)}
       accessibilityRole="button"
-      accessibilityLabel="Hold to see the original"
+      accessibilityLabel={tx('beauty_hold_to_see_the_original')}
       accessibilityState={{ selected: held }}
       hitSlop={8}
       style={[
@@ -140,7 +143,7 @@ export function OriginalButton({ onHold }: { onHold: (held: boolean) => void }) 
     >
       <Icon name="compare" size={14} color="#FFFFFF" strokeWidth={2} />
       <AppText variant="caption" style={styles.adjustLabel}>
-        {held ? 'Original' : 'Hold: original'}
+        {held ? tx('beauty_original') : tx('beauty_hold_original')}
       </AppText>
     </Pressable>
   );
@@ -178,30 +181,43 @@ export function PortraitControlsPanel({
           style={{ color: 'rgba(255,255,255,0.86)', flex: 1 }}
           accessibilityLiveRegion="polite"
         >
-          {points === 0 ? 'Tap what should shine — or let us find it' : `${points} chosen · tap again to remove`}
+          {points === 0 ? tx('beauty_tap_what_should_shine_or') : tx('beauty_chosen_tap_again_to_remove', { points })}
         </AppText>
         {points > 0 ? (
-          <Pressable onPress={onClear} accessibilityRole="button" accessibilityLabel="Clear choices" hitSlop={10}>
+          <Pressable
+            onPress={onClear}
+            accessibilityRole="button"
+            accessibilityLabel={tx('beauty_clear_choices')}
+            hitSlop={10}
+          >
             <AppText variant="caption" style={{ color: '#FFFFFF', fontWeight: '800' }}>
-              Clear
+              {tx('beauty_clear')}
             </AppText>
           </Pressable>
         ) : null}
       </View>
       <ValueSlider
-        label="Depth blur"
+        label={tx('beauty_depth_blur')}
         value={controls.depthBlur}
         onChange={v => set({ depthBlur: v })}
         format={pct}
         testID="portrait-blur"
       />
       {intensity !== null ? (
-        <ValueSlider label="Beauty" value={intensity} onChange={onIntensity} format={pct} testID="portrait-beauty" />
+        <ValueSlider
+          label={tx('beauty_beauty')}
+          value={intensity}
+          onChange={onIntensity}
+          format={pct}
+          testID="portrait-beauty"
+        />
       ) : null}
       <Pressable
         onPress={() => setMore(m => !m)}
         accessibilityRole="button"
-        accessibilityLabel={more ? 'Fewer portrait controls' : 'More portrait controls: light, tone and edges'}
+        accessibilityLabel={
+          more ? tx('beauty_fewer_portrait_controls') : tx('beauty_more_portrait_controls_light_tone')
+        }
         accessibilityState={{ expanded: more }}
         style={styles.adjustRow}
         hitSlop={8}
@@ -209,13 +225,13 @@ export function PortraitControlsPanel({
       >
         <Icon name="sliders" size={14} color="#FFFFFF" strokeWidth={2} />
         <AppText variant="caption" style={styles.adjustLabel}>
-          {more ? 'Less' : 'Light, tone & edges'}
+          {more ? tx('beauty_less') : tx('beauty_light_tone_edges')}
         </AppText>
       </Pressable>
       {more ? (
         <View style={{ gap: 8 }}>
           <ValueSlider
-            label="Subject light"
+            label={tx('beauty_subject_light')}
             value={controls.subjectLight}
             min={-1}
             onChange={v => set({ subjectLight: v })}
@@ -223,7 +239,7 @@ export function PortraitControlsPanel({
             testID="portrait-subject-light"
           />
           <ValueSlider
-            label="Background light"
+            label={tx('beauty_background_light')}
             value={controls.backgroundLight}
             min={-1}
             onChange={v => set({ backgroundLight: v })}
@@ -231,7 +247,7 @@ export function PortraitControlsPanel({
             testID="portrait-bg-light"
           />
           <ValueSlider
-            label="Background tone"
+            label={tx('beauty_background_tone')}
             value={controls.backgroundTone}
             min={-1}
             onChange={v => set({ backgroundTone: v })}
@@ -241,7 +257,7 @@ export function PortraitControlsPanel({
             testID="portrait-bg-tone"
           />
           <ValueSlider
-            label="Edge refinement"
+            label={tx('beauty_edge_refinement')}
             value={controls.edge}
             onChange={v => set({ edge: v })}
             format={pct}

@@ -88,6 +88,7 @@ import { LivePropOverlay, PropTray, livePlacement, propRequest, useLiveProp } fr
 import { allProps, findProp, type PropCategory, type PropDef } from '../../services/edit/catalog';
 import { VibeSheet } from './VibeSheet';
 import { recordActivity } from '../../services/rewards/RewardsService';
+import { t as tx } from '../../i18n';
 
 const log = createLogger('camera');
 const FLASH_CYCLE: FlashMode[] = ['off', 'auto', 'on'];
@@ -500,8 +501,8 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
       }
       setToast({
         text: shot.rawPath
-          ? 'Saved with RAW'
-          : `${look ? 'Vibe Match · ' : ''}${lightToast(shot.light?.label) ?? `${modeLabel(shot.mode)} photo saved`}`,
+          ? tx('camera_saved_with_raw')
+          : `${look ? tx('camera_vibe_match') : ''}${lightToast(shot.light?.label) ?? tx('camera_photo_saved', { modeLabel: modeLabel(shot.mode) })}`,
         tone: 'success',
       });
     } catch (e) {
@@ -577,7 +578,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
     onDone: clip => {
       setLastClip(clip);
       setToast({
-        text: clip.galleryUri ? `Glide saved · ${glideSummary(clip)}` : `Glide ready · ${glideSummary(clip)}`,
+        text: clip.galleryUri ? tx('camera_glide_saved', { glideSummary: glideSummary(clip) }) : tx('camera_glide_ready', { glideSummary: glideSummary(clip) }),
         tone: 'success',
       });
       if (focusedRef.current) {
@@ -649,7 +650,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
         return;
       }
       if (crafting) {
-        setToast({ text: 'Still crafting your last Glide — one moment.', tone: 'danger' });
+        setToast({ text: tx('camera_still_crafting_your_last_glide'), tone: 'danger' });
         return;
       }
     }
@@ -716,30 +717,30 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
       <View style={{ flex: 1, justifyContent: 'center', padding: 24, paddingTop: insets.top + 24 }}>
         <AuroraBackground variant="calm" />
         {permission === 'checking' ? (
-          <LoadingState label="Preparing camera…" />
+          <LoadingState label={tx('camera_preparing_camera')} />
         ) : (
           <GlassSurface style={{ padding: 28, alignItems: 'center', gap: 14 }}>
             <View style={[styles.permissionIcon, { backgroundImage: theme.gradients.spectrum }]}>
               <Icon name="camera" size={32} color="#FFFFFF" />
             </View>
             <AppText variant="title2" align="center" accessibilityRole="header">
-              {permission === 'blocked' ? 'Camera access is off' : 'Allow camera access'}
+              {permission === 'blocked' ? tx('camera_camera_access_is_off') : tx('camera_allow_camera_access')}
             </AppText>
             <AppText variant="body" tone="secondary" align="center">
               {permission === 'blocked'
-                ? 'Turn on camera access for Photo Plus in system settings to start shooting.'
-                : 'Photo Plus needs the camera to take photos. Everything stays on your device.'}
+                ? tx('camera_turn_on_camera_access_for')
+                : tx('camera_photo_plus_needs_the_camera')}
             </AppText>
             {permission === 'blocked' ? (
-              <Button label="Open settings" icon="gear" onPress={() => void permissions.openSettings()} />
+              <Button label={tx('camera_open_settings')} icon="gear" onPress={() => void permissions.openSettings()} />
             ) : (
               <Button
-                label="Allow camera"
+                label={tx('camera_allow_camera')}
                 icon="camera"
                 onPress={() => void permissions.request('camera').then(setPermission)}
               />
             )}
-            <Button label="Back to studio" variant="ghost" onPress={() => navigation.navigate('Studio')} />
+            <Button label={tx('camera_back_to_studio')} variant="ghost" onPress={() => navigation.navigate('Studio')} />
           </GlassSurface>
         )}
       </View>
@@ -832,8 +833,8 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
       {state === 'error' ? (
         <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', padding: 24 }]}>
           <ErrorState
-            title="Camera unavailable"
-            message={sessionError ?? 'Another app may be using the camera.'}
+            title={tx('camera_camera_unavailable')}
+            message={sessionError ?? tx('camera_another_app_may_be_using')}
             onRetry={() => {
               setState('starting');
               setPreviewKey(k => k + 1); // remount: a fresh bind
@@ -850,7 +851,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
           testID="camera-for-studio"
         >
           <AppText variant="caption" style={{ fontWeight: '600' }}>
-            Photoshoot Studio · your photo opens there next
+            {tx('camera_photoshoot_studio_your_photo_opens')}
           </AppText>
         </View>
       ) : null}
@@ -859,7 +860,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <Chip
           icon="close"
-          accessibilityLabel={forStudio ? 'Back to the Photoshoot Studio' : 'Close camera'}
+          accessibilityLabel={forStudio ? tx('camera_back_to_the_photoshoot_studio') : tx('camera_close_camera')}
           onPress={leave}
           rotation={rotation}
         />
@@ -872,8 +873,8 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
               tint={flash === 'on' ? theme.colors.premium : undefined}
               accessibilityLabel={
                 lens === 'front'
-                  ? `Selfie Light ${flash}: the screen lights your face. Double tap to change`
-                  : `Flash ${flash}. Double tap to change`
+                  ? tx('camera_selfie_light_the_screen_lights', { flash })
+                  : tx('camera_flash_double_tap_to_change', { flash })
               }
               onPress={() => setFlash(FLASH_CYCLE[(FLASH_CYCLE.indexOf(flash) + 1) % FLASH_CYCLE.length])}
               rotation={rotation}
@@ -883,7 +884,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
             icon="timer"
             label={timer ? `${timer}s` : undefined}
             active={timer > 0}
-            accessibilityLabel={timer ? `Timer ${timer} seconds` : 'Timer off'}
+            accessibilityLabel={timer ? tx('camera_timer_seconds', { timer }) : tx('camera_timer_off')}
             onPress={() => setTimer(TIMER_CYCLE[(TIMER_CYCLE.indexOf(timer) + 1) % TIMER_CYCLE.length])}
             rotation={rotation}
           />
@@ -892,7 +893,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
               icon="hat"
               active={propsOpen || worn !== null}
               tint={worn ? theme.colors.premium : undefined}
-              accessibilityLabel={worn ? `Wearing ${worn.name}. Change props` : 'Props. Try on hats, glasses and more'}
+              accessibilityLabel={worn ? tx('camera_wearing_change_props', { name: worn.name }) : tx('camera_props_try_on_hats_glasses')}
               onPress={() => {
                 setPropsOpen(o => !o);
                 setBeautyOpen(false);
@@ -908,8 +909,8 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
             tint={beauty.on ? theme.colors.premium : undefined}
             accessibilityLabel={
               beauty.on
-                ? `Beauty: ${beautyChipLabel(beauty, premiumBeauty)}. Change filter`
-                : 'Beauty. Choose a beauty filter'
+                ? tx('camera_beauty_change_filter', { beautyChipLabel: beautyChipLabel(beauty, premiumBeauty) })
+                : tx('camera_beauty_choose_a_beauty_filter')
             }
             onPress={() => {
               setBeautyOpen(o => !o);
@@ -923,7 +924,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
               icon="wand"
               active={!!vibe}
               tint={vibe ? theme.colors.premium : undefined}
-              accessibilityLabel={vibe ? 'Vibe Match on. Change style' : 'Vibe Match. Shoot in the style of any photo'}
+              accessibilityLabel={vibe ? tx('camera_vibe_match_on_change_style') : tx('camera_vibe_match_shoot_in_the')}
               onPress={() => (can('vibeMatch').allowed ? setVibeOpen(true) : setPremiumFor('vibeMatch'))}
               rotation={rotation}
               testID="vibe-chip"
@@ -934,7 +935,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
               icon="figure"
               active={assistantOn || assistantOpen}
               tint={pose.reference ? theme.colors.premium : undefined}
-              accessibilityLabel="Photo assistant: grid, level, face position and poses"
+              accessibilityLabel={tx('camera_photo_assistant_grid_level_face')}
               onPress={() => setAssistantOpen(true)}
               rotation={rotation}
               testID="assistant-chip"
@@ -943,7 +944,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
             <Chip
               icon="grid"
               active={settings.cameraGrid}
-              accessibilityLabel={settings.cameraGrid ? 'Hide grid' : 'Show grid'}
+              accessibilityLabel={settings.cameraGrid ? tx('camera_hide_grid') : tx('camera_show_grid')}
               onPress={() => updateSetting('cameraGrid', !settings.cameraGrid).catch(() => undefined)}
               rotation={rotation}
             />
@@ -957,7 +958,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
                   : undefined
               }
               active={menu === 'ev' || evIndex !== 0}
-              accessibilityLabel="Exposure compensation"
+              accessibilityLabel={tx('camera_exposure_compensation')}
               onPress={() => setMenu(m => (m === 'ev' ? null : 'ev'))}
               rotation={rotation}
             />
@@ -966,7 +967,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
             <Chip
               label={aspect}
               active={menu === 'aspect'}
-              accessibilityLabel={`Aspect ratio ${aspect}`}
+              accessibilityLabel={tx('camera_aspect_ratio', { aspect })}
               onPress={() => setMenu(m => (m === 'aspect' ? null : 'aspect'))}
               rotation={rotation}
             />
@@ -975,7 +976,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
             <Chip
               label={`${Math.round(currentResolution.megapixels)}MP`}
               active={menu === 'resolution'}
-              accessibilityLabel={`Resolution ${resolutionLabel(currentResolution)}`}
+              accessibilityLabel={tx('camera_resolution', { resolutionLabel: resolutionLabel(currentResolution) })}
               onPress={() => setMenu(m => (m === 'resolution' ? null : 'resolution'))}
               rotation={rotation}
             />
@@ -1021,7 +1022,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
                   key={a}
                   label={a}
                   active={a === aspect}
-                  accessibilityLabel={`Aspect ratio ${a}`}
+                  accessibilityLabel={tx('camera_aspect_ratio_2', { a })}
                   onPress={() => {
                     setMenu(null);
                     // Only a real change rebinds natively (and fires onReady again).
@@ -1037,7 +1038,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
                   key={r.id}
                   label={resolutionLabel(r)}
                   active={r.id === currentResolution?.id}
-                  accessibilityLabel={`Resolution ${resolutionLabel(r)}, ${r.width} by ${r.height}`}
+                  accessibilityLabel={tx('camera_resolution_by', { resolutionLabel: resolutionLabel(r), width: r.width, height: r.height })}
                   onPress={() => {
                     setMenu(null);
                     if (r.id !== resolution) {
@@ -1053,18 +1054,18 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
       {/* Status */}
       <View style={[styles.status, { top: topBarHeight + 8 }]} pointerEvents="box-none">
         {recovering ? (
-          <StatusPill label={`Reconnecting camera… (attempt ${session.recoveringAttempt})`} tone="warning" busy />
+          <StatusPill label={tx('camera_reconnecting_camera_attempt', { recoveringAttempt: session.recoveringAttempt })} tone="warning" busy />
         ) : null}
         {recording ? (
           <View
             style={styles.recBadge}
             accessibilityLiveRegion="polite"
-            accessibilityLabel="Recording"
+            accessibilityLabel={tx('camera_recording')}
             testID="glide-recording"
           >
             <View style={styles.recDot} />
             <AppText variant="mono" style={styles.readoutText}>
-              {`${secondsLeft(glide.elapsedMs, glideMaxMs(plan))}s left`}
+              {tx('camera_s_left', { secondsLeft: secondsLeft(glide.elapsedMs, glideMaxMs(plan)) })}
             </AppText>
           </View>
         ) : null}
@@ -1088,7 +1089,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
           <Badge label={toast.text} tone={toast.tone} icon={toast.tone === 'danger' ? 'alert' : 'check'} />
         ) : null}
         {effectiveMode === 'pro' && md ? (
-          <View style={styles.readout} accessibilityLabel="Live exposure">
+          <View style={styles.readout} accessibilityLabel={tx('camera_live_exposure')}>
             <AppText variant="mono" style={styles.readoutText}>
               {[
                 md.iso ? `ISO ${md.iso}` : null,
@@ -1110,7 +1111,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
         {menu === 'ev' && caps?.exposureCompensation ? (
           <View style={styles.evPanel}>
             <StopDial
-              label="Exposure compensation"
+              label={tx('camera_exposure_compensation')}
               values={evValues}
               value={evIndex}
               format={i => formatEv(i, caps.exposureCompensation?.step ?? 1)}
@@ -1229,8 +1230,8 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
             {glideMode && lastClip ? (
               <Chip
                 icon="play"
-                label="Watch"
-                accessibilityLabel="Watch your last Glide"
+                label={tx('camera_watch')}
+                accessibilityLabel={tx('camera_watch_your_last_glide')}
                 onPress={() => navigation.navigate('GlidePreview', { clip: lastClip })}
                 rotation={rotation}
                 testID="watch-last-clip"
@@ -1238,8 +1239,8 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
             ) : lastShot?.imageId ? (
               <Chip
                 icon="sliders"
-                label="Edit"
-                accessibilityLabel="Edit this photo"
+                label={tx('camera_edit')}
+                accessibilityLabel={tx('camera_edit_this_photo')}
                 onPress={() => lastShot.imageId && navigation.navigate('Editor', { imageId: lastShot.imageId })}
                 rotation={rotation}
                 testID="edit-last-shot"
@@ -1259,7 +1260,7 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
             {!recording ? (
               <Chip
                 icon="flip"
-                accessibilityLabel={lens === 'back' ? 'Switch to front camera' : 'Switch to back camera'}
+                accessibilityLabel={lens === 'back' ? tx('camera_switch_to_front_camera') : tx('camera_switch_to_back_camera')}
                 onPress={switchLens}
               />
             ) : null}
@@ -1267,8 +1268,8 @@ function CameraStudio({ navigation, route }: TabScreenProps<'Camera'>) {
         </View>
         <AppText variant="caption" align="center" style={styles.caption} numberOfLines={1}>
           {state === 'starting'
-            ? 'Starting camera…'
-            : `${vibe ? 'Vibe Match on · ' : ''}${modes.find(m => m.id === effectiveMode)?.description ?? ''}`}
+            ? tx('camera_starting_camera')
+            : `${vibe ? tx('camera_vibe_match_on') : ''}${modes.find(m => m.id === effectiveMode)?.description ?? ''}`}
         </AppText>
       </View>
 

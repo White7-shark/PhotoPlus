@@ -3,13 +3,14 @@ import { getProcessingService } from '../processing/ImageProcessingService';
 import { getStorageService } from '../storage/StorageService';
 import { useAppStore } from '../../state/store';
 import type { VibeLook } from './types';
+import { t as tx } from '../../i18n';
 
 export { isVibeLook, type VibeLook } from './types';
 
 export const VIBE_STRENGTHS = [
-  { id: 'subtle', label: 'Subtle', value: 0.5 },
-  { id: 'balanced', label: 'Balanced', value: 0.8 },
-  { id: 'full', label: 'Full', value: 1 },
+  { id: 'subtle', label: tx('look_subtle'), value: 0.5 },
+  { id: 'balanced', label: tx('look_balanced'), value: 0.8 },
+  { id: 'full', label: tx('look_full'), value: 1 },
 ] as const;
 
 export function lookDescription(look: VibeLook): { summary: LookSummary; text: string } {

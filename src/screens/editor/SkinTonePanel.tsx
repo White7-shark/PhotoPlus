@@ -6,6 +6,7 @@ import { ValueSlider } from '../../components/ValueSlider';
 import type { EditDocument } from '../../services/edit/document';
 import { findShade, SKIN_SHADES, shadeCover } from '../../services/skintones/catalog';
 import type { Update } from './panels';
+import { t as tx } from '../../i18n';
 
 /** Skin Tone: a shade for the person's skin (face and body), and how strongly. */
 export function SkinTonePanel({
@@ -30,7 +31,7 @@ export function SkinTonePanel({
     <View style={{ gap: 12 }} testID="skintone-panel">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         <PreviewTile
-          label="None"
+          label={tx('skin_tone_none')}
           placeholderIcon="close"
           width={68}
           height={68}
@@ -57,10 +58,10 @@ export function SkinTonePanel({
       {current ? (
         <>
           <AppText variant="caption" tone="secondary">
-            {noFace ? 'No face found in this photo, so the skin was left as it is.' : findShade(current.id)?.note}
+            {noFace ? tx('skin_tone_no_face_found_in_this') : findShade(current.id)?.note}
           </AppText>
           <ValueSlider
-            label="Strength"
+            label={tx('skin_tone_strength')}
             value={strength}
             onChange={v => update({ skinTone: { id: current.id, strength: v } }, 'skintone-strength')}
             onEnd={commit}
@@ -70,7 +71,7 @@ export function SkinTonePanel({
         </>
       ) : (
         <AppText variant="caption" tone="secondary">
-          Changes the colour of the skin on the face and body. Hair, eyes, lips and clothes keep theirs.
+          {tx('skin_tone_changes_the_colour_of_the')}
         </AppText>
       )}
     </View>

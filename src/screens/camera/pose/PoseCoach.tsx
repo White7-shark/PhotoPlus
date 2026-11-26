@@ -8,6 +8,7 @@ import { shown } from '../../../services/pose/library';
 import type { PoseAssistantSettings } from '../../../services/pose/settings';
 import { PoseSilhouette } from './PoseSilhouette';
 import type { PoseAssistant } from './usePoseAssistant';
+import { t as tx } from '../../../i18n';
 
 const GOOD = '#5BE49B';
 const NEAR = '#F5C66B';
@@ -78,7 +79,7 @@ export function PoseCoach({
     return (
       <GlassSurface radius={18} style={[styles.panel, turn]}>
         <AppText variant="caption" style={styles.text}>
-          Pose guidance isn’t available on this phone. The grid and level still work.
+          {tx('pose_coach_pose_guidance_isn_t_available')}
         </AppText>
       </GlassSurface>
     );
@@ -96,7 +97,11 @@ export function PoseCoach({
             {settings.guided ? GUIDE_WORDS[assistant.step] : m ? scoreWords(m.score) : reference.name}
           </AppText>
           <AppText variant="bodyStrong" style={styles.text}>
-            {!live?.person ? 'Step into the frame' : first ? adviceText(first, mirrored) : 'Hold it there'}
+            {!live?.person
+              ? tx('pose_coach_step_into_the_frame')
+              : first
+                ? adviceText(first, mirrored)
+                : tx('pose_coach_hold_it_there')}
           </AppText>
           {second ? (
             <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.8)' }}>
@@ -105,7 +110,7 @@ export function PoseCoach({
           ) : null}
           {assistant.autoProgress > 0 ? (
             <AppText variant="caption" style={{ color: GOOD, fontWeight: '700' }}>
-              Taking the photo…
+              {tx('pose_coach_taking_the_photo')}
             </AppText>
           ) : null}
         </View>
@@ -152,11 +157,11 @@ export function PoseCoach({
           <Pressable
             onPress={onUpgrade}
             accessibilityRole="button"
-            accessibilityLabel="Live pose matching with Premium"
+            accessibilityLabel={tx('pose_coach_live_pose_matching_with_premium')}
             hitSlop={8}
           >
             <AppText variant="caption" style={{ color: NEAR, fontWeight: '700' }}>
-              See how well you match: Premium
+              {tx('pose_coach_see_how_well_you_match')}
             </AppText>
           </Pressable>
         ) : null}

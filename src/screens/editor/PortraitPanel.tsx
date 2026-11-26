@@ -12,6 +12,7 @@ import {
 } from '../../services/edit/document';
 import { useTheme } from '../../theme';
 import type { Update } from './panels';
+import { t as tx } from '../../i18n';
 
 const glowOf = (v: number): GlowLevel =>
   GLOW_LEVELS.reduce((a, b) => (Math.abs(b.retouch - v) < Math.abs(a.retouch - v) ? b : a)).id;
@@ -21,29 +22,29 @@ const signed = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v * 100)}`;
 type Key = keyof PortraitAdvanced;
 const SECTIONS: readonly { title: string; rows: readonly { key: Key; label: string }[] }[] = [
   {
-    title: 'Skin',
+    title: tx('portrait_skin'),
     rows: [
-      { key: 'smooth', label: 'Smooth' },
-      { key: 'blemish', label: 'Blemishes' },
-      { key: 'even', label: 'Even tone' },
-      { key: 'shine', label: 'Shine' },
-      { key: 'underEye', label: 'Under-eyes' },
+      { key: 'smooth', label: tx('portrait_smooth') },
+      { key: 'blemish', label: tx('portrait_blemishes') },
+      { key: 'even', label: tx('portrait_even_tone') },
+      { key: 'shine', label: tx('portrait_shine') },
+      { key: 'underEye', label: tx('portrait_under_eyes') },
     ],
   },
   {
-    title: 'Face',
+    title: tx('portrait_face'),
     rows: [
-      { key: 'eyes', label: 'Eyes' },
-      { key: 'teeth', label: 'Teeth' },
-      { key: 'lips', label: 'Lips' },
-      { key: 'slim', label: 'Slim' },
+      { key: 'eyes', label: tx('portrait_eyes') },
+      { key: 'teeth', label: tx('portrait_teeth') },
+      { key: 'lips', label: tx('portrait_lips') },
+      { key: 'slim', label: tx('portrait_slim') },
     ],
   },
   {
     title: 'Light',
     rows: [
-      { key: 'faceLight', label: 'Face light' },
-      { key: 'studio', label: 'Studio light' },
+      { key: 'faceLight', label: tx('portrait_face_light') },
+      { key: 'studio', label: tx('portrait_studio_light') },
     ],
   },
 ];
@@ -64,7 +65,13 @@ function LockedCard({ text, onPremium, testID }: { text: string; onPremium: () =
       <AppText variant="caption" tone="secondary">
         {text}
       </AppText>
-      <Button label="Unlock with Premium" icon="crown" variant="glass" onPress={onPremium} testID={testID} />
+      <Button
+        label={tx('portrait_unlock_with_premium')}
+        icon="crown"
+        variant="glass"
+        onPress={onPremium}
+        testID={testID}
+      />
     </View>
   );
 }
@@ -98,7 +105,7 @@ export function PortraitPanel({
   return (
     <View style={{ gap: 12 }}>
       <SegmentedControl
-        label="Controls"
+        label={tx('portrait_controls')}
         value={mode}
         onChange={m => {
           if (m === 'advanced' && locked) {
@@ -108,14 +115,14 @@ export function PortraitPanel({
           setMode(m);
         }}
         options={[
-          { value: 'basic', label: 'Basic' },
-          { value: 'advanced', label: 'Advanced' },
+          { value: 'basic', label: tx('portrait_basic') },
+          { value: 'advanced', label: tx('portrait_advanced') },
         ]}
       />
       {mode === 'basic' ? (
         <>
           <AppText variant="body" tone="secondary">
-            Glow smooths skin, clears blemishes and evens tone, keeping each person’s own colour.
+            {tx('portrait_glow_smooths_skin_clears_blemishes')}
           </AppText>
           <SegmentedControl
             label="Glow"
@@ -126,16 +133,12 @@ export function PortraitPanel({
           />
           {adv ? (
             <AppText variant="caption" tone="secondary" testID="portrait-finetuned">
-              Fine-tuned in Advanced. Choosing a Glow level replaces those settings.
+              {tx('portrait_fine_tuned_in_advanced_choosing')}
             </AppText>
           ) : null}
         </>
       ) : locked ? (
-        <LockedCard
-          text="Shape every detail on its own: skin, eyes, teeth, lips, under-eyes, shine, face shape and light."
-          onPremium={onPremium}
-          testID="portrait-unlock"
-        />
+        <LockedCard text={tx('portrait_shape_every_detail_on_its')} onPremium={onPremium} testID="portrait-unlock" />
       ) : (
         <>
           {SECTIONS.map(section => (
@@ -154,7 +157,7 @@ export function PortraitPanel({
               ))}
               {section.title === 'Light' && current.studio > 0 ? (
                 <ValueSlider
-                  label="Light from"
+                  label={tx('portrait_light_from')}
                   value={current.lightAngle}
                   min={-1}
                   max={1}
@@ -168,7 +171,7 @@ export function PortraitPanel({
           ))}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button
-              label="Reset to Glow"
+              label={tx('portrait_reset_to_glow')}
               icon="refresh"
               variant="glass"
               style={{ flex: 1 }}
@@ -182,7 +185,7 @@ export function PortraitPanel({
       )}
       {touched ? (
         <Button
-          label="Restore original"
+          label={tx('portrait_restore_original')}
           icon="undo"
           variant="ghost"
           onPress={() => update({ retouch: 0, portrait: adv ? backgroundOnly(adv) : null })}
@@ -229,19 +232,15 @@ export function SpotlightAdvanced({
     update({ portrait: { ...current, ...patch } }, group);
   if (locked) {
     return (
-      <LockedCard
-        text="Set any blur amount, relight or recolour the background (even black and white), and refine edges around hair."
-        onPremium={onPremium}
-        testID="spotlight-unlock"
-      />
+      <LockedCard text={tx('portrait_set_any_blur_amount_relight')} onPremium={onPremium} testID="spotlight-unlock" />
     );
   }
   return (
     <View style={{ gap: 10 }}>
-      <Section title="Background" />
+      <Section title={tx('portrait_background')} />
       {s ? (
         <ValueSlider
-          label="Blur amount"
+          label={tx('portrait_blur_amount')}
           value={s.blur}
           min={0.1}
           max={1}
@@ -252,7 +251,7 @@ export function SpotlightAdvanced({
         />
       ) : null}
       <ValueSlider
-        label="Background light"
+        label={tx('portrait_background_light')}
         value={current.bgLight}
         min={-1}
         max={1}
@@ -262,7 +261,7 @@ export function SpotlightAdvanced({
         testID="portrait-bgLight"
       />
       <ValueSlider
-        label="Background colour"
+        label={tx('portrait_background_colour')}
         value={current.bgColor}
         min={-1}
         max={1}
@@ -272,7 +271,7 @@ export function SpotlightAdvanced({
         testID="portrait-bgColor"
       />
       <ValueSlider
-        label="Edge refinement"
+        label={tx('portrait_edge_refinement')}
         value={current.edge}
         format={pct}
         onChange={v => set({ edge: Math.round(v * 100) / 100 }, 'portrait-edge')}

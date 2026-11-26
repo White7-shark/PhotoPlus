@@ -6,6 +6,7 @@ import { errorCode } from '../../native';
 import { friendlyMessage } from '../../services/errors';
 import { lookDescription, pickVibeLook, VIBE_STRENGTHS, type VibeLook } from '../../services/looks/LookService';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 /**
  * Vibe Match: pick any photo whose style you love; the camera adjusts its
@@ -47,7 +48,7 @@ export function VibeSheet({
         style={styles.scrim}
         onPress={onClose}
         accessibilityRole="button"
-        accessibilityLabel="Close Vibe Match"
+        accessibilityLabel={tx('vibe_close_vibe_match')}
       >
         <Pressable onPress={() => undefined} style={styles.wrap}>
           <GlassSurface intensity="strong" radius={28} style={{ padding: 20, gap: 14 }}>
@@ -69,16 +70,16 @@ export function VibeSheet({
                   <Image
                     source={{ uri: `file://${look.referencePath}` }}
                     style={styles.thumb}
-                    accessibilityLabel="Your style photo"
+                    accessibilityLabel={tx('vibe_your_style_photo')}
                   />
                   <View style={{ flex: 1, gap: 4 }}>
                     <AppText variant="bodyStrong">{lookDescription(look).text}</AppText>
                     <AppText variant="caption" tone="secondary">
-                      Your camera now shoots in this style.
+                      {tx('vibe_your_camera_now_shoots_in')}
                     </AppText>
                   </View>
                 </View>
-                <View style={styles.strengths} accessibilityRole="radiogroup" accessibilityLabel="Strength">
+                <View style={styles.strengths} accessibilityRole="radiogroup" accessibilityLabel={tx('vibe_strength')}>
                   {VIBE_STRENGTHS.map(s => {
                     const selected = Math.abs(look.strength - s.value) < 0.01;
                     return (
@@ -107,23 +108,27 @@ export function VibeSheet({
                 </View>
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <Button
-                    label="Change photo"
+                    label={tx('vibe_change_photo')}
                     variant="glass"
                     icon="image"
                     onPress={() => void pick()}
                     loading={busy}
                     style={{ flex: 1 }}
                   />
-                  <Button label="Turn off" variant="ghost" onPress={() => onChange(null)} />
+                  <Button label={tx('vibe_turn_off')} variant="ghost" onPress={() => onChange(null)} />
                 </View>
               </>
             ) : (
               <>
                 <AppText variant="body" tone="secondary">
-                  Pick any photo whose style you love. Your camera adjusts its light and colour to match, and every shot
-                  is finished in that style.
+                  {tx('vibe_pick_any_photo_whose_style')}
                 </AppText>
-                <Button label="Choose a style photo" icon="image" onPress={() => void pick()} loading={busy} />
+                <Button
+                  label={tx('vibe_choose_a_style_photo')}
+                  icon="image"
+                  onPress={() => void pick()}
+                  loading={busy}
+                />
               </>
             )}
             {error ? (

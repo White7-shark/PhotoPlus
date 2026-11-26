@@ -13,7 +13,7 @@
   "language_overline": "Paramètres",
   "language_system": "Langue du téléphone",
   "language_system_detail": "Comme votre téléphone : {name}",
-  "language_note": "Photo Plus change de langue immédiatement. Certains mots peuvent rester en anglais jusqu’à la prochaine mise à jour.",
+  "language_note": "Photo Plus redémarre dans la langue choisie. Vos photos, projets et paramètres restent inchangés.",
   "language_failed": "Impossible de changer la langue",
   "settings_title": "Paramètres",
   "settings_overline": "Préférences",

@@ -4,6 +4,7 @@ import { Image, Pressable, View, type ImageSourcePropType } from 'react-native';
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
+import { t as tx } from '../i18n';
 
 /**
  * A picture-first choice (props, frames): a preview of exactly what will be
@@ -42,7 +43,7 @@ export function PreviewTile({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${label}${locked ? ', premium' : ''}`}
+      accessibilityLabel={`${label}${locked ? tx('preview_tile_premium') : ''}`}
       accessibilityState={{ selected: !!selected }}
       testID={testID}
       style={{ width, alignItems: 'center', gap: 6 }}

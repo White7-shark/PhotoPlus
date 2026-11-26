@@ -15,6 +15,7 @@ import {
 import type { EditDocument } from '../../services/edit/document';
 import { useTheme } from '../../theme';
 import { CROP_ASPECTS } from './geometry';
+import { t as tx } from '../../i18n';
 
 export type ToolId =
   | 'adjust'
@@ -32,19 +33,19 @@ export type ToolId =
   | 'watermark';
 
 export const EDITOR_TOOLS: readonly { id: ToolId; label: string; icon: IconName; premium?: boolean }[] = [
-  { id: 'adjust', label: 'Adjust', icon: 'sliders' },
-  { id: 'crop', label: 'Crop', icon: 'aspect' },
-  { id: 'looks', label: 'Looks', icon: 'image' },
-  { id: 'beauty', label: 'Beauty', icon: 'sun' },
-  { id: 'backdrop', label: 'Backdrop', icon: 'compare' },
-  { id: 'skintone', label: 'Skin Tone', icon: 'drop' },
+  { id: 'adjust', label: tx('panels_adjust'), icon: 'sliders' },
+  { id: 'crop', label: tx('panels_crop'), icon: 'aspect' },
+  { id: 'looks', label: tx('panels_looks'), icon: 'image' },
+  { id: 'beauty', label: tx('panels_beauty'), icon: 'sun' },
+  { id: 'backdrop', label: tx('panels_backdrop'), icon: 'compare' },
+  { id: 'skintone', label: tx('panels_skin_tone'), icon: 'drop' },
   { id: 'spotlight', label: 'Spotlight', icon: 'target' },
-  { id: 'retouch', label: 'Portrait', icon: 'sparkles' },
-  { id: 'focus', label: 'Focus', icon: 'exposure' },
+  { id: 'retouch', label: tx('panels_portrait'), icon: 'sparkles' },
+  { id: 'focus', label: tx('panels_focus'), icon: 'exposure' },
   { id: 'transform', label: 'Transform', icon: 'aperture', premium: true },
-  { id: 'props', label: 'Props', icon: 'wand' },
-  { id: 'frames', label: 'Frames', icon: 'grid' },
-  { id: 'watermark', label: 'Watermark', icon: 'layers' },
+  { id: 'props', label: tx('panels_props'), icon: 'wand' },
+  { id: 'frames', label: tx('panels_frames'), icon: 'grid' },
+  { id: 'watermark', label: tx('panels_watermark'), icon: 'layers' },
 ];
 
 export type Update = (patch: Partial<EditDocument>, group?: string) => void;
@@ -73,7 +74,7 @@ function Chip({
       onPress={onPress}
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={`${label}${premium ? ', premium' : ''}`}
+      accessibilityLabel={`${label}${premium ? tx('panels_premium') : ''}`}
       accessibilityState={{ selected }}
       style={{
         minWidth: 76,
@@ -97,12 +98,12 @@ function Chip({
 
 export function AdjustPanel({ doc, update, commit }: { doc: EditDocument; update: Update; commit: () => void }) {
   const rows: { key: keyof EditDocument; label: string; min: number; max: number }[] = [
-    { key: 'exposure', label: 'Exposure', min: -2, max: 2 },
-    { key: 'brightness', label: 'Brightness', min: -1, max: 1 },
-    { key: 'contrast', label: 'Contrast', min: -1, max: 1 },
-    { key: 'saturation', label: 'Saturation', min: -1, max: 1 },
-    { key: 'warmth', label: 'Warmth', min: -1, max: 1 },
-    { key: 'sharpen', label: 'Sharpen', min: 0, max: 1 },
+    { key: 'exposure', label: tx('panels_exposure'), min: -2, max: 2 },
+    { key: 'brightness', label: tx('panels_brightness'), min: -1, max: 1 },
+    { key: 'contrast', label: tx('panels_contrast'), min: -1, max: 1 },
+    { key: 'saturation', label: tx('panels_saturation'), min: -1, max: 1 },
+    { key: 'warmth', label: tx('panels_warmth'), min: -1, max: 1 },
+    { key: 'sharpen', label: tx('panels_sharpen'), min: 0, max: 1 },
   ];
   return (
     <View style={{ gap: 10 }}>
@@ -165,7 +166,7 @@ export function CropPanel({
         ))}
       </ScrollView>
       <ValueSlider
-        label="Crop size"
+        label={tx('panels_crop_size')}
         value={cropSize}
         min={0.3}
         max={1}
@@ -174,7 +175,7 @@ export function CropPanel({
         format={pct}
       />
       <ValueSlider
-        label="Straighten"
+        label={tx('panels_straighten')}
         value={doc.straighten}
         min={-45}
         max={45}
@@ -185,7 +186,7 @@ export function CropPanel({
       />
       {perspectiveLocked ? (
         <Button
-          label="Fix leaning walls & buildings"
+          label={tx('panels_fix_leaning_walls_buildings')}
           icon="crown"
           variant="glass"
           onPress={() => onPremium?.()}
@@ -203,7 +204,7 @@ export function CropPanel({
       )}
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <Button
-          label="Rotate"
+          label={tx('panels_rotate')}
           icon="refresh"
           variant="glass"
           onPress={() =>
@@ -213,7 +214,7 @@ export function CropPanel({
           testID="rotate"
         />
         <Button
-          label="Mirror"
+          label={tx('panels_mirror')}
           icon="flip"
           variant="glass"
           onPress={() => update({ flipH: !doc.flipH })}
@@ -221,7 +222,7 @@ export function CropPanel({
         />
       </View>
       <AppText variant="caption" tone="secondary">
-        Drag on the photo to move the crop.
+        {tx('panels_drag_on_the_photo_to')}
       </AppText>
     </View>
   );
@@ -246,7 +247,7 @@ function PerspectiveControls({
   return (
     <>
       <ValueSlider
-        label="Vertical perspective"
+        label={tx('panels_vertical_perspective')}
         value={doc.perspectiveV}
         min={-1}
         max={1}
@@ -256,7 +257,7 @@ function PerspectiveControls({
         testID="perspective-v"
       />
       <ValueSlider
-        label="Horizontal perspective"
+        label={tx('panels_horizontal_perspective')}
         value={doc.perspectiveH}
         min={-1}
         max={1}
@@ -267,7 +268,7 @@ function PerspectiveControls({
       />
       {onAuto ? (
         <Button
-          label={busy ? 'Finding lines…' : 'Auto straighten lines'}
+          label={busy ? tx('panels_finding_lines') : tx('panels_auto_straighten_lines')}
           icon="wand"
           variant="glass"
           onPress={onAuto}
@@ -295,7 +296,7 @@ export function LooksPanel({
   return (
     <View style={{ gap: 12 }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-        <Chip label="None" selected={!doc.look} onPress={() => update({ look: null })} />
+        <Chip label={tx('panels_none')} selected={!doc.look} onPress={() => update({ look: null })} />
         {LOOKS.map(l => (
           <Chip
             key={l.id}
@@ -311,7 +312,7 @@ export function LooksPanel({
       </ScrollView>
       {doc.look ? (
         <ValueSlider
-          label="Strength"
+          label={tx('panels_strength')}
           value={doc.look.strength}
           onChange={v =>
             doc.look && update({ look: { ...doc.look, strength: Math.round(v * 100) / 100 } }, 'look-strength')
@@ -343,12 +344,10 @@ export function SpotlightEditPanel({
   return (
     <View style={{ gap: 12 }}>
       <AppText variant="body" tone="secondary">
-        {count > 0
-          ? `${count} chosen · tap again to remove`
-          : 'Tap what should shine. Untapped, the people (or the main subject) stand out.'}
+        {count > 0 ? tx('panels_chosen_tap_again_to_remove', { count }) : tx('panels_tap_what_should_shine_untapped')}
       </AppText>
       <SegmentedControl
-        label="Background blur"
+        label={tx('panels_background_blur')}
         value={s ? blurOf(s.blur) : 'off'}
         onChange={id =>
           update({
@@ -356,7 +355,10 @@ export function SpotlightEditPanel({
               id === 'off' ? null : { points: s?.points ?? [], blur: BLUR_LEVELS.find(b => b.id === id)?.value ?? 0.6 },
           })
         }
-        options={[{ value: 'off', label: 'Off' }, ...BLUR_LEVELS.map(b => ({ value: b.id, label: b.label }))]}
+        options={[
+          { value: 'off', label: tx('panels_off') },
+          ...BLUR_LEVELS.map(b => ({ value: b.id, label: b.label })),
+        ]}
       />
       <SegmentedControl
         label="Glow"
@@ -366,7 +368,7 @@ export function SpotlightEditPanel({
       />
       {count > 0 && s ? (
         <Button
-          label="Clear choices"
+          label={tx('panels_clear_choices')}
           variant="ghost"
           icon="close"
           onPress={() => update({ spotlight: { ...s, points: [] } })}
@@ -382,7 +384,7 @@ export function FocusPanel({ doc, update, commit }: { doc: EditDocument; update:
   return (
     <View style={{ gap: 12 }}>
       <SegmentedControl
-        label="Focus"
+        label={tx('panels_focus')}
         value={f?.kind ?? 'off'}
         onChange={k =>
           update({
@@ -400,15 +402,15 @@ export function FocusPanel({ doc, update, commit }: { doc: EditDocument; update:
           })
         }
         options={[
-          { value: 'off', label: 'Off' },
-          { value: 'radial', label: 'Round' },
-          { value: 'tilt', label: 'Band' },
+          { value: 'off', label: tx('panels_off') },
+          { value: 'radial', label: tx('panels_round') },
+          { value: 'tilt', label: tx('panels_band') },
         ]}
       />
       {f ? (
         <>
           <ValueSlider
-            label="Sharp area"
+            label={tx('panels_sharp_area')}
             value={f.size}
             min={0.05}
             max={0.8}
@@ -416,13 +418,13 @@ export function FocusPanel({ doc, update, commit }: { doc: EditDocument; update:
             onEnd={commit}
           />
           <ValueSlider
-            label="Softness"
+            label={tx('panels_softness')}
             value={f.strength}
             onChange={v => update({ focus: { ...f, strength: v } }, 'focus-strength')}
             onEnd={commit}
           />
           <AppText variant="caption" tone="secondary">
-            Tap the photo to choose what stays sharp.
+            {tx('panels_tap_the_photo_to_choose')}
           </AppText>
         </>
       ) : null}
@@ -444,16 +446,15 @@ export function TransformEditPanel({
   return (
     <View style={{ gap: 12 }}>
       <AppText variant="body" tone="secondary">
-        The look of a high-end camera: restores fine detail, sharpens soft edges, removes colour fringes and grain. Your
-        other edits are applied on top.
+        {tx('panels_the_look_of_a_high')}
       </AppText>
       <SegmentedControl
         label="Transform"
         value={doc.transform ? 'on' : 'off'}
         onChange={v => (v === 'on' && allowance === 'none' ? onPremium() : update({ transform: v === 'on' }))}
         options={[
-          { value: 'off', label: 'Off' },
-          { value: 'on', label: 'On' },
+          { value: 'off', label: tx('panels_off') },
+          { value: 'on', label: tx('panels_on') },
         ]}
       />
       {allowance && allowance !== 'none' ? <Badge label={allowance} tone="premium" icon="crown" /> : null}
@@ -499,7 +500,7 @@ export function PropsPanel({
   return (
     <View style={{ gap: 12 }}>
       <SegmentedControl
-        label="Category"
+        label={tx('panels_category')}
         value={category}
         onChange={onCategory}
         options={PROP_CATEGORIES.map(c => ({ value: c.id, label: c.label }))}
@@ -507,7 +508,7 @@ export function PropsPanel({
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         {category === 'mine' ? (
           <PreviewTile
-            label="Make your own"
+            label={tx('panels_make_your_own')}
             placeholderIcon="plus"
             locked={locked}
             onPress={() => (locked ? onPremium() : onCreate())}
@@ -531,13 +532,13 @@ export function PropsPanel({
       </ScrollView>
       {category === 'mine' && !props.some(p => p.category === 'mine') ? (
         <AppText variant="caption" tone="secondary">
-          Turn anything in your photos into a prop: a hat, a pair of glasses, a pet, a logo.
+          {tx('panels_turn_anything_in_your_photos')}
         </AppText>
       ) : null}
       {selected ? (
         <View style={{ gap: 10 }}>
           <ValueSlider
-            label="Size"
+            label={tx('panels_size')}
             value={selected.width}
             min={0.05}
             max={1.2}
@@ -546,7 +547,7 @@ export function PropsPanel({
             format={pct}
           />
           <ValueSlider
-            label="Turn"
+            label={tx('panels_turn')}
             value={selected.rotation}
             min={-45}
             max={45}
@@ -557,16 +558,16 @@ export function PropsPanel({
           />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button
-              label="Fit to face"
+              label={tx('panels_fit_to_face')}
               icon="target"
               variant="glass"
               onPress={onFit}
               style={{ flex: 1 }}
               testID="prop-fit"
             />
-            <Button label="Mirror" icon="flip" variant="glass" onPress={onFlip} style={{ flex: 1 }} />
+            <Button label={tx('panels_mirror')} icon="flip" variant="glass" onPress={onFlip} style={{ flex: 1 }} />
             <Button
-              label="Remove"
+              label={tx('panels_remove')}
               icon="trash"
               variant="glass"
               onPress={onRemove}
@@ -575,12 +576,12 @@ export function PropsPanel({
             />
           </View>
           <AppText variant="caption" tone="secondary">
-            Drag on the photo to move it.
+            {tx('panels_drag_on_the_photo_to_2')}
           </AppText>
         </View>
       ) : (
         <AppText variant="caption" tone="secondary">
-          {placed > 0 ? 'Tap a prop on the photo to adjust it.' : 'Choose a prop: it fits itself to the face.'}
+          {placed > 0 ? tx('panels_tap_a_prop_on_the') : tx('panels_choose_a_prop_it_fits')}
         </AppText>
       )}
     </View>
@@ -607,7 +608,7 @@ export function FramesPanel({
     <View style={{ gap: 12 }}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         <PreviewTile
-          label="None"
+          label={tx('panels_none')}
           placeholderIcon="close"
           width={68}
           height={86}
@@ -637,7 +638,7 @@ export function FramesPanel({
       {doc.frame ? (
         <>
           <ValueSlider
-            label="Zoom"
+            label={tx('panels_zoom')}
             value={doc.frame.zoom}
             min={1}
             max={2.5}
@@ -646,7 +647,7 @@ export function FramesPanel({
             format={v => `${v.toFixed(1)}×`}
           />
           <AppText variant="caption" tone="secondary">
-            Drag on the photo to move it inside the frame.
+            {tx('panels_drag_on_the_photo_to_3')}
           </AppText>
         </>
       ) : null}

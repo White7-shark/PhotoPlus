@@ -6,6 +6,7 @@ import type { IconName } from '../../components/Icon';
 import type { RootScreenProps } from '../../navigation/types';
 import { PLATES, thumbAsset } from '../../services/studio/scene';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 export interface StudioTool {
   id: string;
@@ -22,8 +23,7 @@ export const STUDIO_TOOLS: StudioTool[] = [
   {
     id: 'scene-swap',
     title: 'Scene Swap',
-    about:
-      'You, in a new place: cut out of your photo and set in a studio, a park at golden hour, a café or a background of your own.',
+    about: tx('photoshoot_studio_you_in_a_new_place'),
     icon: 'layers',
     available: true,
     premium: true,
@@ -32,8 +32,7 @@ export const STUDIO_TOOLS: StudioTool[] = [
   {
     id: 'film-collage',
     title: 'Film & Collage',
-    about:
-      'Turn photos into a film strip or a collage. Every frame gets its own look, crop, colour and light; Mix it up does it for you.',
+    about: tx('photoshoot_studio_turn_photos_into_a_film'),
     icon: 'film',
     available: true,
     premium: false,
@@ -42,8 +41,7 @@ export const STUDIO_TOOLS: StudioTool[] = [
   {
     id: 'relight',
     title: 'Relight',
-    about:
-      'Studio lighting on your own photo, right where you stand: soft, Rembrandt, rim or neon light, with the background darkened or softened.',
+    about: tx('photoshoot_studio_studio_lighting_on_your_own'),
     icon: 'sun',
     available: true,
     premium: true,
@@ -52,8 +50,7 @@ export const STUDIO_TOOLS: StudioTool[] = [
   {
     id: 'product',
     title: 'Product Studio',
-    about:
-      'Catalogue shots of what you sell: the product cut out onto white, paper or a tabletop, with a natural shadow, true colour and the right size for every shop.',
+    about: tx('photoshoot_studio_catalogue_shots_of_what_you'),
     icon: 'bag',
     available: true,
     premium: false,
@@ -61,8 +58,8 @@ export const STUDIO_TOOLS: StudioTool[] = [
   },
   {
     id: 'batch',
-    title: 'Batch edit',
-    about: 'One setup or look on many photos at once, every result saved beside its untouched original.',
+    title: tx('photoshoot_studio_batch_edit'),
+    about: tx('photoshoot_studio_one_setup_or_look_on'),
     icon: 'wand',
     available: true,
     premium: false,
@@ -70,8 +67,8 @@ export const STUDIO_TOOLS: StudioTool[] = [
   },
   {
     id: 'recreate',
-    title: 'Recreate a shoot',
-    about: 'Follow a pack’s scenes, poses and light, shot by shot, to recreate a professional photoshoot. Coming soon.',
+    title: tx('photoshoot_studio_recreate_a_shoot'),
+    about: tx('photoshoot_studio_follow_a_pack_s_scenes'),
     icon: 'sparkles',
     available: false,
     premium: true,
@@ -90,7 +87,7 @@ export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'Photosho
     <Screen title="Photoshoot Studio" onBack={() => navigation.goBack()} bottomInset={32}>
       <View style={{ gap: 16 }}>
         <AppText variant="body" tone="secondary">
-          Recreate a professional shoot from your own photos, right on this phone.
+          {tx('photoshoot_studio_recreate_a_professional_shoot_from')}
         </AppText>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {PLATES.slice(0, 8).map(p => (
@@ -110,8 +107,8 @@ export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'Photosho
                 onPress={() => (t.available && t.route ? navigation.navigate(t.route) : setTip(t.id))}
                 onLongPress={() => setTip(t.id)}
                 accessibilityRole="button"
-                accessibilityLabel={`${t.title}${t.premium ? ', Premium' : ''}${t.available ? '' : ', coming soon'}`}
-                accessibilityHint="Long press to read what it is"
+                accessibilityLabel={`${t.title}${t.premium ? tx('photoshoot_studio_premium') : ''}${t.available ? '' : tx('photoshoot_studio_coming_soon')}`}
+                accessibilityHint={tx('photoshoot_studio_long_press_to_read_what')}
                 testID={`studio-${t.id}`}
                 style={({ pressed }) => [
                   styles.tile,
@@ -134,14 +131,14 @@ export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'Photosho
                 ) : null}
                 {!t.available ? (
                   <AppText variant="caption" tone="tertiary" style={{ fontSize: 10 }}>
-                    Soon
+                    {tx('photoshoot_studio_soon')}
                   </AppText>
                 ) : null}
               </Pressable>
               <Pressable
                 onPress={() => setTip(cur => (cur === t.id ? null : t.id))}
                 accessibilityRole="button"
-                accessibilityLabel={`What is ${t.title}?`}
+                accessibilityLabel={tx('photoshoot_studio_what_is', { title: t.title })}
                 hitSlop={8}
                 testID={`studio-info-${t.id}`}
                 style={styles.info}
@@ -160,13 +157,13 @@ export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'Photosho
                 {tipTool.title}
               </AppText>
               <AppText variant="caption" tone="tertiary">
-                {tipTool.premium ? 'Premium' : 'Free'}
-                {tipTool.available ? '' : ' · Coming soon'}
+                {tipTool.premium ? 'Premium' : tx('photoshoot_studio_free')}
+                {tipTool.available ? '' : tx('photoshoot_studio_coming_soon_2')}
               </AppText>
               <Pressable
                 onPress={() => setTip(null)}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
+                accessibilityLabel={tx('photoshoot_studio_close')}
                 hitSlop={8}
                 testID="studio-tip-close"
               >
@@ -179,15 +176,14 @@ export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'Photosho
           </GlassSurface>
         ) : (
           <AppText variant="caption" tone="tertiary">
-            Tap a tool to open it, or the i to read what it does.
+            {tx('photoshoot_studio_tap_a_tool_to_open')}
           </AppText>
         )}
 
         <GlassSurface radius={18} style={{ padding: 14, gap: 6 }}>
-          <AppText variant="bodyStrong">Real places, nobody in them</AppText>
+          <AppText variant="bodyStrong">{tx('photoshoot_studio_real_places_nobody_in_them')}</AppText>
           <AppText variant="caption" tone="secondary">
-            Every scene is a real photograph of an empty place, so nothing behind you has to be invented. Packs will
-            bring more; you can add your own too.
+            {tx('photoshoot_studio_every_scene_is_a_real')}
           </AppText>
         </GlassSurface>
       </View>

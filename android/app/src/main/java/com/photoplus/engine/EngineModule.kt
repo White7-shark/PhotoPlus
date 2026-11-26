@@ -1,5 +1,7 @@
 package com.photoplus.engine
 
+import com.photoplus.R
+import com.photoplus.i18n.Words
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.core.graphics.createBitmap
@@ -523,7 +525,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
     // 10 s; Premium goes to 30 s and can move the person into a new scene.
     val plan = Entitlements.plan
     if (options.scene != null && plan != Plan.PREMIUM) {
-      promise.reject("PREMIUM_REQUIRED", "A new scene for Glide is part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_a_new_scene_for_glide_is))
       return
     }
     val mark = if (plan == Plan.FREE || map["watermark"] != null) ExportPolicy.resolve(watermarkOf(map), plan) else null
@@ -802,7 +804,7 @@ class EngineModule(reactContext: ReactApplicationContext) :
   override fun createCustomProp(jobId: String, request: ReadableMap, promise: Promise) {
     if (!requireEngine(promise)) return
     if (Entitlements.plan != Plan.PREMIUM) {
-      promise.reject("PREMIUM_REQUIRED", "Making your own props is part of Premium")
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_making_your_own_props_is_part))
       return
     }
     val map = request.toHashMap()

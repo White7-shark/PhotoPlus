@@ -1,3 +1,4 @@
+import { t as tx } from '../../i18n';
 /**
  * Hair in the Photoshoot Studio (Premium): a new colour for the person's
  * own hair, or a new hairstyle in its place: 23 for women, and dreadlocks,
@@ -55,24 +56,24 @@ export interface HairColour {
 }
 
 export const HAIR_COLOURS: readonly HairColour[] = [
-  { id: 'jet-black', name: 'Jet black', color: '#121012' },
-  { id: 'soft-black', name: 'Soft black', color: '#2A2220' },
-  { id: 'dark-brown', name: 'Dark brown', color: '#3B2A20' },
-  { id: 'chestnut', name: 'Chestnut', color: '#6A3E25' },
-  { id: 'caramel', name: 'Caramel', color: '#A86B3C' },
-  { id: 'honey-blonde', name: 'Honey blonde', color: '#C99A5B' },
-  { id: 'golden-blonde', name: 'Golden blonde', color: '#D8B26E' },
-  { id: 'platinum', name: 'Platinum', color: '#E6DFD2' },
-  { id: 'ash-grey', name: 'Ash grey', color: '#A9A6A2' },
-  { id: 'copper', name: 'Copper', color: '#B85C2E' },
-  { id: 'auburn', name: 'Auburn', color: '#7D2E1E' },
-  { id: 'burgundy', name: 'Burgundy', color: '#5E1A2A' },
-  { id: 'rose-gold', name: 'Rose gold', color: '#C98B7E' },
-  { id: 'pink', name: 'Pink', color: '#D46A9A' },
-  { id: 'purple', name: 'Purple', color: '#5D3A8E' },
-  { id: 'blue', name: 'Blue', color: '#2F5DA8' },
-  { id: 'teal', name: 'Teal', color: '#1F7A78' },
-  { id: 'ginger', name: 'Ginger', color: '#C4642C' },
+  { id: 'jet-black', name: tx('hair_jet_black'), color: '#121012' },
+  { id: 'soft-black', name: tx('hair_soft_black'), color: '#2A2220' },
+  { id: 'dark-brown', name: tx('hair_dark_brown'), color: '#3B2A20' },
+  { id: 'chestnut', name: tx('hair_chestnut'), color: '#6A3E25' },
+  { id: 'caramel', name: tx('hair_caramel'), color: '#A86B3C' },
+  { id: 'honey-blonde', name: tx('hair_honey_blonde'), color: '#C99A5B' },
+  { id: 'golden-blonde', name: tx('hair_golden_blonde'), color: '#D8B26E' },
+  { id: 'platinum', name: tx('hair_platinum'), color: '#E6DFD2' },
+  { id: 'ash-grey', name: tx('hair_ash_grey'), color: '#A9A6A2' },
+  { id: 'copper', name: tx('hair_copper'), color: '#B85C2E' },
+  { id: 'auburn', name: tx('hair_auburn'), color: '#7D2E1E' },
+  { id: 'burgundy', name: tx('hair_burgundy'), color: '#5E1A2A' },
+  { id: 'rose-gold', name: tx('hair_rose_gold'), color: '#C98B7E' },
+  { id: 'pink', name: tx('hair_pink'), color: '#D46A9A' },
+  { id: 'purple', name: tx('hair_purple'), color: '#5D3A8E' },
+  { id: 'blue', name: tx('hair_blue'), color: '#2F5DA8' },
+  { id: 'teal', name: tx('hair_teal'), color: '#1F7A78' },
+  { id: 'ginger', name: tx('hair_ginger'), color: '#C4642C' },
 ];
 
 /**

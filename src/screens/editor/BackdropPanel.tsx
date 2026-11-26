@@ -6,6 +6,7 @@ import { ValueSlider } from '../../components/ValueSlider';
 import { BACKDROPS, backdropCover, findBackdrop } from '../../services/backdrops/catalog';
 import type { EditDocument } from '../../services/edit/document';
 import type { Update } from './panels';
+import { t as tx } from '../../i18n';
 
 /** Backdrops: a new background behind the person, and how strongly it shows. */
 export function BackdropEditPanel({
@@ -27,7 +28,7 @@ export function BackdropEditPanel({
     <View style={{ gap: 12 }} testID="backdrop-panel">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         <PreviewTile
-          label="None"
+          label={tx('backdrop_none')}
           placeholderIcon="close"
           width={68}
           height={68}
@@ -57,7 +58,7 @@ export function BackdropEditPanel({
             {findBackdrop(current.id)?.description}
           </AppText>
           <ValueSlider
-            label="Strength"
+            label={tx('backdrop_strength')}
             value={strength}
             onChange={v => update({ backdrop: { id: current.id, strength: v } }, 'backdrop-strength')}
             onEnd={commit}
@@ -67,7 +68,7 @@ export function BackdropEditPanel({
         </>
       ) : (
         <AppText variant="caption" tone="secondary">
-          Works best with a person in the photo. Nothing leaves your phone.
+          {tx('backdrop_works_best_with_a_person')}
         </AppText>
       )}
     </View>

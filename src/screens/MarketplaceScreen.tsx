@@ -5,6 +5,7 @@ import { AppText, Badge, GlassSurface, Icon, PremiumBadge, Screen, SectionHeader
 import { useResponsive } from '../hooks/useResponsive';
 import { PREMIUM_PRICE } from '../services/entitlements/features';
 import { useTheme } from '../theme';
+import { t as tx } from '../i18n';
 
 interface PackPreview {
   id: string;
@@ -23,7 +24,7 @@ interface PackPreview {
 const SAMPLE_PACKS: PackPreview[] = [
   {
     id: 'golden-coast',
-    title: 'Golden Coast',
+    title: tx('marketplace_golden_coast'),
     mood: 'Warm beach editorial',
     shots: 24,
     gradient: 'linear-gradient(160deg, #FFB36B 0%, #FF5E7E 55%, #5A2A6E 100%)',
@@ -31,7 +32,7 @@ const SAMPLE_PACKS: PackPreview[] = [
   },
   {
     id: 'neon-noir',
-    title: 'Neon Noir',
+    title: tx('marketplace_neon_noir'),
     mood: 'Cinematic city night',
     shots: 18,
     gradient: 'linear-gradient(160deg, #2DD4BF 0%, #5B5BF7 50%, #120A2A 100%)',
@@ -39,7 +40,7 @@ const SAMPLE_PACKS: PackPreview[] = [
   },
   {
     id: 'studio-ivory',
-    title: 'Studio Ivory',
+    title: tx('marketplace_studio_ivory'),
     mood: 'Clean high-key portraits',
     shots: 30,
     gradient: 'linear-gradient(160deg, #FFF3E2 0%, #E8C9A8 50%, #8E6B55 100%)',
@@ -47,7 +48,7 @@ const SAMPLE_PACKS: PackPreview[] = [
   },
   {
     id: 'kente-royale',
-    title: 'Kente Royale',
+    title: tx('marketplace_kente_royale'),
     mood: 'Bold heritage colour',
     shots: 20,
     gradient: 'linear-gradient(160deg, #F5C66B 0%, #2F9E5B 45%, #B4232F 100%)',
@@ -63,7 +64,7 @@ export function MarketplaceScreen() {
   const width = (r.contentWidth - gap * (cols - 1)) / cols;
 
   return (
-    <Screen title="Photoshoot Packs" overline="Marketplace">
+    <Screen title={tx('marketplace_photoshoot_packs')} overline={tx('marketplace_marketplace')}>
       <GlassSurface radius={theme.radii.xl} glow="rgba(245,198,107,0.25)" style={{ marginBottom: 24 }}>
         <View
           style={{
@@ -73,32 +74,41 @@ export function MarketplaceScreen() {
           }}
         >
           <PremiumBadge />
-          <AppText variant="title2">Recreate iconic shoots</AppText>
+          <AppText variant="title2">{tx('marketplace_recreate_iconic_shoots')}</AppText>
           <AppText variant="body" tone="secondary">
-            Packs bring backdrops, lighting recipes, poses and styling to your camera. Unlocking packs is part of
-            Premium — {PREMIUM_PRICE.currency} {PREMIUM_PRICE.amount}/{PREMIUM_PRICE.period}.
+            {tx('marketplace_packs_bring_backdrops_lighting_recipes')} {PREMIUM_PRICE.currency} {PREMIUM_PRICE.amount}/
+            {PREMIUM_PRICE.period}.
           </AppText>
           <View
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}
             accessible
-            accessibilityLabel="Premium subscriptions arrive in a later update"
+            accessibilityLabel={tx('marketplace_premium_subscriptions_arrive_in_a')}
           >
             <Icon name="crown" size={16} color={theme.colors.premium} />
             <AppText variant="callout" tone="premium" style={{ fontWeight: '700' }}>
-              Premium subscriptions arrive in a later update
+              {tx('marketplace_premium_subscriptions_arrive_in_a')}
             </AppText>
           </View>
         </View>
       </GlassSurface>
 
-      <SectionHeader overline="Preview" title="Featured packs" action={<Badge label="Coming soon" />} />
+      <SectionHeader
+        overline={tx('marketplace_preview')}
+        title={tx('marketplace_featured_packs')}
+        action={<Badge label="Coming soon" />}
+      />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
         {SAMPLE_PACKS.map(pack => (
           <View
             key={pack.id}
             style={{ width }}
             accessible
-            accessibilityLabel={`${pack.title}. ${pack.mood}. ${pack.shots} looks. ${pack.included ? 'Included with Premium' : 'Separate purchase'}. Coming soon.`}
+            accessibilityLabel={tx('marketplace_looks_coming_soon', {
+              title: pack.title,
+              mood: pack.mood,
+              shots: pack.shots,
+              value: pack.included ? tx('marketplace_included_with_premium') : tx('marketplace_separate_purchase'),
+            })}
           >
             <GlassSurface radius={theme.radii.lg} style={{ padding: 0 }}>
               <View
@@ -111,7 +121,7 @@ export function MarketplaceScreen() {
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Badge
-                    label={pack.included ? 'Included' : 'Add-on'}
+                    label={pack.included ? tx('marketplace_included') : tx('marketplace_add_on')}
                     tone="media"
                     icon={pack.included ? 'crown' : 'plus'}
                   />

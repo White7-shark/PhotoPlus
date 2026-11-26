@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.UiThreadUtil
@@ -41,8 +42,13 @@ class I18nModule(reactContext: ReactApplicationContext) : NativePhotoPlusI18nSpe
   override fun setLanguage(tag: String) {
     if (!TAG.matches(tag)) return
     val locales = if (tag.isEmpty()) LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(tag)
-    // AppCompat applies it to the activity (it is recreated in the new language).
-    UiThreadUtil.runOnUiThread { AppCompatDelegate.setApplicationLocales(locales) }
+    // AppCompat applies it to the activity (it is recreated in the new
+    // language); the app's JS starts again so every word, including the
+    // tool and catalogue names it reads once, comes in the new language.
+    UiThreadUtil.runOnUiThread {
+      AppCompatDelegate.setApplicationLocales(locales)
+      (reactApplicationContext.applicationContext as? ReactApplication)?.reactHost?.reload("language")
+    }
   }
 
   private fun currentTag(): String = getLanguage().ifEmpty { getSystemLanguage() }

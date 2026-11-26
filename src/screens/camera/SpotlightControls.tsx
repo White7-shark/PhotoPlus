@@ -5,6 +5,7 @@ import { AppText, Icon } from '../../components';
 import { GLIDE_SPEEDS, GLIDE_SPOTLIGHT_LEVELS, type GlideSpeed, type GlideSpotlight } from '../../services/camera/glide';
 import { BLUR_LEVELS, GLOW_LEVELS, type BlurLevel, type GlowLevel } from '../../services/camera/model';
 import { useTheme } from '../../theme';
+import { t as tx } from '../../i18n';
 
 /** Numbered markers on what the user chose to make stand out. */
 export function SpotlightMarkers({
@@ -16,7 +17,7 @@ export function SpotlightMarkers({
 }) {
   const theme = useTheme();
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLabel={`${points.length} subjects chosen`}>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} accessibilityLabel={tx('spotlight_subjects_chosen', { length: points.length })}>
       {points.map((p, i) => (
         <View
           key={`${p.x.toFixed(3)}-${p.y.toFixed(3)}`}
@@ -82,25 +83,25 @@ export function SpotlightPanel({
           style={{ color: 'rgba(255,255,255,0.86)', flex: 1 }}
           accessibilityLiveRegion="polite"
         >
-          {points === 0 ? 'Tap what should shine — or let us find it' : `${points} chosen · tap again to remove`}
+          {points === 0 ? tx('spotlight_tap_what_should_shine_or') : tx('spotlight_chosen_tap_again_to_remove', { points })}
         </AppText>
         {points > 0 ? (
-          <Pressable onPress={onClear} accessibilityRole="button" accessibilityLabel="Clear choices" hitSlop={10}>
+          <Pressable onPress={onClear} accessibilityRole="button" accessibilityLabel={tx('spotlight_clear_choices')} hitSlop={10}>
             <AppText variant="caption" style={{ color: '#FFFFFF', fontWeight: '800' }}>
-              Clear
+              {tx('spotlight_clear')}
             </AppText>
           </Pressable>
         ) : null}
       </View>
-      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Background blur">
+      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={tx('spotlight_background_blur')}>
         <AppText variant="caption" style={styles.rowLabel}>
-          Blur
+          {tx('spotlight_blur')}
         </AppText>
         {BLUR_LEVELS.map(l => (
           <Pill key={l.id} label={l.label} selected={blur === l.id} onPress={() => onBlur(l.id)} />
         ))}
       </View>
-      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Glow skin">
+      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={tx('spotlight_glow_skin')}>
         <AppText variant="caption" style={styles.rowLabel}>
           Glow
         </AppText>
@@ -138,13 +139,13 @@ export function GlidePanel({
       <View style={styles.hintRow}>
         <Icon name="play" size={14} color="#FFFFFF" strokeWidth={2} />
         <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.86)', flex: 1 }}>
-          {`Up to ${maxSeconds} seconds · steadied, cleaned and sharpened${look ? ` · ${look}` : ''}${silent ? ' · no sound' : ''}`}
+          {tx('spotlight_up_to_seconds_steadied_cleaned', { maxSeconds, value: look ? ` · ${look}` : '', value2: silent ? ' · no sound' : '' })}
         </AppText>
       </View>
       <AppText variant="caption" style={[styles.rowLabel, { width: undefined }]}>
-        Spotlight · background blur
+        {tx('spotlight_spotlight_background_blur')}
       </AppText>
-      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Spotlight background blur">
+      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={tx('spotlight_spotlight_background_blur_2')}>
         {GLIDE_SPOTLIGHT_LEVELS.map(l => (
           <Pill key={l.id} label={l.label} selected={spotlight === l.id} onPress={() => onSpotlight(l.id)} />
         ))}
@@ -152,9 +153,9 @@ export function GlidePanel({
       {onSpeed ? (
         <>
           <AppText variant="caption" style={[styles.rowLabel, { width: undefined }]}>
-            Speed
+            {tx('spotlight_speed')}
           </AppText>
-          <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Glide speed">
+          <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={tx('spotlight_glide_speed')}>
             {GLIDE_SPEEDS.map(l => (
               <Pill key={l.id} label={l.label} selected={speed === l.id} onPress={() => onSpeed(l.id)} />
             ))}

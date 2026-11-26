@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { createLogger } from '../services/logging/logger';
 import { ErrorState } from './States';
+import { t as tx } from '../i18n';
 
 const log = createLogger('ui');
 
@@ -42,8 +43,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
       return (
         <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
           <ErrorState
-            title={`${this.props.area ?? 'This screen'} ran into a problem`}
-            message="Your photos and projects are safe. You can try again — we’ve noted the problem."
+            title={tx('error_boundary_ran_into_a_problem', {
+              value: this.props.area ?? tx('error_boundary_this_screen'),
+            })}
+            message={tx('error_boundary_your_photos_and_projects_are')}
             onRetry={this.reset}
           />
         </View>
