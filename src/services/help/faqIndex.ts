@@ -3,7 +3,7 @@ import type { IconName } from '../../components/Icon';
 
 /** FAQ topics: id, icon and how many questions (keys faq_<id>_<n>_q / _a, title faq_cat_<id>). */
 export const FAQ_TOPICS: readonly { id: string; icon: IconName; count: number }[] = [
-  { id: 'start', icon: 'sparkles', count: 6 },
+  { id: 'start', icon: 'sparkles', count: 8 },
   { id: 'camera', icon: 'camera', count: 10 },
   { id: 'pose', icon: 'figure', count: 3 },
   { id: 'glide', icon: 'film', count: 4 },

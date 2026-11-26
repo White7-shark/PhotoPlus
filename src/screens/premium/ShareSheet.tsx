@@ -85,7 +85,7 @@ export function ShareSheet({
   const list = useMemo(() => targets ?? [], [targets]);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <Pressable
         style={styles.scrim}
         onPress={onClose}

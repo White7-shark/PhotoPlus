@@ -13,6 +13,7 @@ import {
   Skeleton,
   ToggleRow,
 } from '../components';
+import { LucidPanel } from '../components/LucidPanel';
 import type { TabScreenProps } from '../navigation/types';
 import { errorMessage } from '../native';
 import type { AppSettings } from '../services/database/repositories/SettingsRepository';
@@ -111,11 +112,13 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
             { value: 'dark', label: t('settings_theme_dark'), icon: 'moon' },
             { value: 'light', label: t('settings_theme_light'), icon: 'sun' },
             { value: 'system', label: t('settings_theme_auto'), icon: 'refresh' },
+            { value: 'lucid', label: 'Lucid', icon: 'drop' },
           ]}
         />
         <AppText variant="caption" tone="tertiary">
-          {t('settings_theme_note')}
+          {settings.themePreference === 'lucid' ? t('settings_theme_note_lucid') : t('settings_theme_note')}
         </AppText>
+        {settings.themePreference === 'lucid' ? <LucidPanel /> : null}
       </GlassSurface>
 
       <SectionHeader title={t('settings_section_camera')} />

@@ -13,6 +13,7 @@ import NativeDevice from './specs/NativePhotoPlusDevice';
 import NativeEngine from './specs/NativePhotoPlusEngine';
 import NativeI18n from './specs/NativePhotoPlusI18n';
 import NativeIntegrity from './specs/NativePhotoPlusIntegrity';
+import NativeLucid from './specs/NativePhotoPlusLucid';
 import NativeProduct from './specs/NativePhotoPlusProduct';
 import NativeRewards from './specs/NativePhotoPlusRewards';
 import NativeStorage from './specs/NativePhotoPlusStorage';
@@ -25,6 +26,7 @@ export type { Spec as DeviceSpec } from './specs/NativePhotoPlusDevice';
 export type { Spec as EngineSpec } from './specs/NativePhotoPlusEngine';
 export type { Spec as I18nSpec } from './specs/NativePhotoPlusI18n';
 export type { Spec as IntegritySpec } from './specs/NativePhotoPlusIntegrity';
+export type { Spec as LucidSpec } from './specs/NativePhotoPlusLucid';
 export type { Spec as ProductSpec } from './specs/NativePhotoPlusProduct';
 export type { Spec as RewardsSpec } from './specs/NativePhotoPlusRewards';
 export type { Spec as StorageSpec } from './specs/NativePhotoPlusStorage';
@@ -53,6 +55,7 @@ export const nativeModules = {
   engine: NativeEngine,
   i18n: NativeI18n,
   integrity: NativeIntegrity,
+  lucid: NativeLucid,
   product: NativeProduct,
   rewards: NativeRewards,
   storage: NativeStorage,

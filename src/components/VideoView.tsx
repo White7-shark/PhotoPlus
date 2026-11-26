@@ -9,6 +9,8 @@ export interface VideoViewProps {
   paused?: boolean;
   loop?: boolean;
   muted?: boolean;
+  /** Fill the view, cropping the clip's edges (default: fit inside it). */
+  cover?: boolean;
   onReady?: (info: { durationMs: number; width: number; height: number }) => void;
   onError?: (message: string) => void;
   accessibilityLabel?: string;
@@ -22,6 +24,7 @@ export function VideoView({
   paused = false,
   loop = true,
   muted = false,
+  cover = false,
   onReady,
   onError,
   accessibilityLabel = 'Video',
@@ -37,6 +40,7 @@ export function VideoView({
         paused={paused}
         loop={loop}
         muted={muted}
+        cover={cover}
         onVideoReady={e =>
           onReady?.({
             durationMs: e.nativeEvent.durationMs,

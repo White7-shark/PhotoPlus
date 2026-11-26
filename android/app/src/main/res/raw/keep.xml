@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resources the resource shrinker must keep: React Native packs the
+     pictures the JS code uses (require('...png')) as drawables and loads
+     them by name, which the shrinker can't see. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/src_*,@drawable/node_modules_*,@raw/src_*,@raw/node_modules_*,@drawable/assets_*,@raw/assets_*" />

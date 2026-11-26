@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image, Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, GlassSurface, Icon } from '../../components';
@@ -24,6 +25,8 @@ export function VibeSheet({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  // Edge to edge: the sheet stays clear of the navigation bar.
+  const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,9 +46,9 @@ export function VibeSheet({
   };
 
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose} statusBarTranslucent>
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <Pressable
-        style={styles.scrim}
+        style={[styles.scrim, { paddingBottom: insets.bottom + 40 }]}
         onPress={onClose}
         accessibilityRole="button"
         accessibilityLabel={tx('vibe_close_vibe_match')}

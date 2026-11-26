@@ -32,6 +32,7 @@ const BRANDS = new Set([
   'Photo Plus',
   'Premium',
   'Photo Plus Premium',
+  'Lucid',
   // Apps people share to.
   'WhatsApp Business',
   'Messenger',

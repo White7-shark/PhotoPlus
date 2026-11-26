@@ -12,7 +12,11 @@ import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
 import java.io.File
 
-/** A looping player for local clips (Glide results), letterboxed inside the view. */
+/**
+ * A looping player for local clips (Glide results), letterboxed inside the
+ * view — or, with [cover], filling it (the clip's edges cropped), as for the
+ * Lucid theme's background clip.
+ */
 class VideoPlayerView(context: Context) : FrameLayout(context) {
   private val video = VideoView(context)
   private var player: MediaPlayer? = null
@@ -33,11 +37,22 @@ class VideoPlayerView(context: Context) : FrameLayout(context) {
       field = v
       applyPaused()
     }
+  var cover = false
+    set(v) {
+      field = v
+      fitVideo()
+    }
+  private var clipW = 0
+  private var clipH = 0
 
   init {
+    clipChildren = true
     addView(video, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER))
     video.setOnPreparedListener { mp ->
       player = mp
+      clipW = mp.videoWidth
+      clipH = mp.videoHeight
+      fitVideo()
       mp.isLooping = loop
       val vol = if (muted) 0f else 1f
       mp.setVolume(vol, vol)
@@ -63,6 +78,26 @@ class VideoPlayerView(context: Context) : FrameLayout(context) {
       return
     }
     video.setVideoURI(Uri.fromFile(File(path)))
+  }
+
+  /** Letterboxed (VideoView's own fit), or scaled to cover the view and centred (the parent clips the rest). */
+  private fun fitVideo() {
+    val lp = video.layoutParams as LayoutParams
+    if (cover && clipW > 0 && clipH > 0 && width > 0 && height > 0) {
+      val k = maxOf(width.toFloat() / clipW, height.toFloat() / clipH)
+      lp.width = Math.ceil((clipW * k).toDouble()).toInt()
+      lp.height = Math.ceil((clipH * k).toDouble()).toInt()
+    } else {
+      lp.width = LayoutParams.MATCH_PARENT
+      lp.height = LayoutParams.MATCH_PARENT
+    }
+    lp.gravity = Gravity.CENTER
+    video.layoutParams = lp
+  }
+
+  override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+    super.onSizeChanged(w, h, oldw, oldh)
+    if (cover) post { fitVideo() }
   }
 
   private fun applyPaused() {

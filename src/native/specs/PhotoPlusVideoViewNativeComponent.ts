@@ -18,6 +18,8 @@ export interface NativeProps extends ViewProps {
   paused?: CodegenTypes.WithDefault<boolean, false>;
   loop?: CodegenTypes.WithDefault<boolean, true>;
   muted?: CodegenTypes.WithDefault<boolean, false>;
+  /** Fill the view (cropping the clip's edges) instead of fitting inside it. */
+  cover?: CodegenTypes.WithDefault<boolean, false>;
   onVideoReady?: CodegenTypes.DirectEventHandler<VideoReadyEvent>;
   onVideoError?: CodegenTypes.DirectEventHandler<VideoErrorEvent>;
 }

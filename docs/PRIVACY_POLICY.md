@@ -18,7 +18,7 @@ Photos and videos you take, open or edit are processed on your phone. Photo Plus
 
 ## 4. Information stored on your phone
 
-Photo Plus stores your settings, language, projects, edits, saved setups, reward points and plan status on your phone. This information is not sent to us.
+Photo Plus stores your settings, language, projects, edits, saved setups, reward points and plan status on your phone. With the Lucid theme it also reads your wallpaper’s colours (and, where Android allows, the wallpaper picture) and keeps the photo or clip you choose, all on your phone. This information is not sent to us.
 
 ## 5. Permissions
 

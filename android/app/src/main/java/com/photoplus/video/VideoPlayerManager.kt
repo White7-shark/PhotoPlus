@@ -25,6 +25,9 @@ class VideoPlayerManager : SimpleViewManager<VideoPlayerView>(), PhotoPlusVideoV
   override fun setMuted(view: VideoPlayerView, value: Boolean) {
     view.muted = value
   }
+  override fun setCover(view: VideoPlayerView, value: Boolean) {
+    view.cover = value
+  }
 
   override fun getExportedCustomDirectEventTypeConstants(): Map<String, Any> = mapOf(
     VideoPlayerView.EVENT_READY to mapOf("registrationName" to "onVideoReady"),

@@ -75,8 +75,8 @@ export function Screen({
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      {aurora !== 'none' ? <AuroraBackground variant={aurora === 'calm' ? 'calm' : 'default'} /> : null}
+    <View style={{ flex: 1, backgroundColor: theme.lucid ? 'transparent' : theme.colors.background }}>
+      {aurora !== 'none' || theme.lucid ? <AuroraBackground variant={aurora === 'calm' ? 'calm' : 'default'} /> : null}
       {scroll ? (
         <ScrollView
           contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: bottom }}

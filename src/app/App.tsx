@@ -12,6 +12,8 @@ import { createLogger } from '../services/logging/logger';
 import { useAppStore } from '../state/store';
 import { ThemeProvider, useTheme } from '../theme';
 import { t as tx } from '../i18n';
+import { applyLucidWindow, ensureLucid, useLucid } from '../services/lucid/LucidService';
+import { getStorageService } from '../services/storage/StorageService';
 
 const log = createLogger('app');
 
@@ -29,7 +31,7 @@ function BootGate() {
     );
   }
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.lucid ? 'transparent' : theme.colors.background }}>
       <AuroraBackground />
       {status === 'error' ? (
         <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
@@ -48,8 +50,22 @@ function BootGate() {
 
 function ThemedApp() {
   const preference = useAppStore(s => s.settings.themePreference);
+  const status = useAppStore(s => s.status);
+  const foreground = useAppStore(s => s.isForeground);
+  const look = useLucid(s => s.look);
+  const lucid = preference === 'lucid';
+  // Lucid chosen: keep it showing (start-up and each return to the app).
+  useEffect(() => {
+    if (lucid && status === 'ready' && foreground) {
+      void ensureLucid(path => getStorageService().exists(path)).catch(() => undefined);
+    }
+  }, [lucid, status, foreground]);
+  // The see-through window only while Lucid shows the wallpaper itself.
+  useEffect(() => {
+    if (foreground) void applyLucidWindow(lucid && look != null);
+  }, [lucid, look, foreground]);
   return (
-    <ThemeProvider preference={preference}>
+    <ThemeProvider preference={preference} lucid={look}>
       <ThemedStatusBar />
       <ErrorBoundary area="Photo Plus" onReset={() => void useAppStore.getState().start()}>
         <BootGate />

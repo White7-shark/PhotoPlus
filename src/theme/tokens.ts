@@ -1,7 +1,9 @@
+import type { LucidLook } from './lucid';
 import { palette } from './palette';
 
 export type ThemeMode = 'dark' | 'light';
-export type ThemePreference = ThemeMode | 'system';
+/** 'lucid': see-through, over the phone's wallpaper or a chosen photo or clip (see lucid.ts). */
+export type ThemePreference = ThemeMode | 'system' | 'lucid';
 
 export interface ColorTokens {
   background: string;
@@ -37,6 +39,8 @@ export interface ColorTokens {
 
 export interface Theme {
   mode: ThemeMode;
+  /** Set while the Lucid theme shows (its veil and glass over the picture). */
+  lucid: LucidLook | null;
   colors: ColorTokens;
   gradients: typeof gradients;
   spacing: typeof spacing;
@@ -175,10 +179,13 @@ export const layout = {
   tabBarHeight: 68,
 } as const;
 
-export function createTheme(mode: ThemeMode): Theme {
+export function createTheme(mode: ThemeMode, lucid: LucidLook | null = null): Theme {
+  const scheme = lucid?.scheme ?? mode;
+  const base = scheme === 'dark' ? darkColors : lightColors;
   return {
-    mode,
-    colors: mode === 'dark' ? darkColors : lightColors,
+    mode: scheme,
+    lucid,
+    colors: lucid ? { ...base, ...lucid.colors } : base,
     gradients,
     spacing,
     radii,

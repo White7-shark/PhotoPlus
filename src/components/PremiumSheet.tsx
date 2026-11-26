@@ -28,7 +28,7 @@ export function PremiumSheet({
     return null;
   }
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose} statusBarTranslucent>
+    <Modal transparent animationType="fade" visible onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <Pressable
         style={styles.scrim}
         onPress={onClose}

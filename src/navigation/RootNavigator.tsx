@@ -99,7 +99,8 @@ export function RootNavigator() {
       ...base,
       colors: {
         ...base.colors,
-        background: theme.colors.background,
+        // Lucid: the picture (or the wallpaper itself) shows behind every screen.
+        background: theme.lucid ? 'transparent' : theme.colors.background,
         card: theme.colors.backgroundRaised,
         text: theme.colors.textPrimary,
         primary: theme.colors.accent,
@@ -115,7 +116,7 @@ export function RootNavigator() {
         screenOptions={{
           headerShown: false,
           animation: 'fade_from_bottom',
-          contentStyle: { backgroundColor: theme.colors.background },
+          contentStyle: { backgroundColor: theme.lucid ? 'transparent' : theme.colors.background },
         }}
       >
         <Stack.Screen name="Onboarding" component={Onboarding} />

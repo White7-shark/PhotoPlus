@@ -27,7 +27,8 @@ import {
   type PoseAssistantSettings,
 } from '../../pose/settings';
 
-export type ThemePreference = 'dark' | 'light' | 'system';
+/** 'lucid': the see-through theme (src/theme/lucid.ts). */
+export type ThemePreference = 'dark' | 'light' | 'system' | 'lucid';
 export type ExportFormat = 'jpeg' | 'png' | 'webp';
 
 export interface AppSettings {
@@ -109,7 +110,7 @@ const oneOf =
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 
 const VALIDATORS: Validators = {
-  themePreference: oneOf('dark', 'light', 'system'),
+  themePreference: oneOf('dark', 'light', 'system', 'lucid'),
   onboardingCompleted: isBool,
   haptics: isBool,
   reduceMotion: oneOf('system', 'on', 'off'),

@@ -1581,6 +1581,23 @@
     <string name="privacy_ad_choices_none">No ad choices are needed where you are. You can still reset your advertising ID in your phone’s settings.</string>
     <string name="privacy_ad_choices_failed">Ad privacy choices couldn’t be opened. Please try again.</string>
     <string name="privacy_contents">Contents</string>
+    <string name="lucid_title">Lucid background</string>
+    <string name="lucid_wallpaper">Phone wallpaper</string>
+    <string name="lucid_photo">Photo</string>
+    <string name="lucid_video">Video</string>
+    <string name="lucid_colours">Colours taken from it · <xliff:g id="text">{text}</xliff:g></string>
+    <string name="lucid_light_text">light text</string>
+    <string name="lucid_dark_text">dark text</string>
+    <string name="lucid_note_see_through">Your wallpaper shows through Photo Plus, live wallpapers too. Set a new wallpaper? Tap Phone wallpaper again.</string>
+    <string name="lucid_note">Lucid takes light or dark, colours and accents from the picture, with glass cards over it. A video plays silently on a loop (up to 30 MB).</string>
+    <string name="lucid_failed">Couldn’t use that</string>
+    <string name="lucid_premium">Your own photo or clip behind Lucid is part of Premium. Lucid with your phone’s wallpaper is free.</string>
+    <string name="settings_theme_note_lucid">Lucid makes Photo Plus see-through: your wallpaper, a photo or a clip shows behind the glass, and the text adapts so it’s always easy to read.</string>
+    <string name="native_lucid_wallpaper_failed">The wallpaper couldn’t be read. Please try again.</string>
+    <string name="native_lucid_video_too_big">That video is too big for a background. Choose one under 30 MB (a short clip that loops).</string>
+    <string name="native_lucid_video_unreadable">Photo Plus couldn’t read that video. Try another short clip; an MP4 works best.</string>
+    <string name="native_lucid_photo_unreadable">Photo Plus couldn’t read that picture. Try another photo: a JPEG, PNG, WebP or HEIC.</string>
+    <string name="native_lucid_copy_failed">Photo Plus couldn’t copy that. Check there’s some free space, then try again.</string>
     <string name="faq_cat_start">Getting started</string>
     <string name="faq_start_1_q">What is Photo Plus?</string>
     <string name="faq_start_1_a">Photo Plus turns your phone into a photo studio. Take photos and videos with a smarter camera, then retouch, relight, change the background, make product photos, film strips and collages — all on your phone, in seconds.</string>
@@ -1592,8 +1609,12 @@
     <string name="faq_start_4_a">Almost everything works offline, because your photos are processed on your phone. Photo Plus goes online to check the time and for updates (at least once every 7 days), to show ads, and for Google Play purchases.</string>
     <string name="faq_start_5_q">Which phones does Photo Plus work on?</string>
     <string name="faq_start_5_a">Android 10 or newer. Newer phones run the heavier tools (Scene Swap, Glide in a new scene, 4K downloads) faster; older phones run them at a smaller size so they never run out of memory.</string>
-    <string name="faq_start_6_q">Where are my photos saved?</string>
-    <string name="faq_start_6_a">Photos you take or edit are kept in Photo Plus (Projects). When you save or download one, it also goes to your phone’s gallery. Your originals are always kept, untouched.</string>
+    <string name="faq_start_6_q">What is Lucid?</string>
+    <string name="faq_start_6_a">Lucid makes Photo Plus see-through: your phone’s wallpaper (live wallpapers too), a photo or a short looping clip shows behind the app, with glass cards over it. Lucid takes light or dark, colours and accents from the picture and adjusts them so every word stays easy to read. Choose it in Settings &gt; Appearance &gt; Theme.</string>
+    <string name="faq_start_7_q">How do I put my own photo or clip behind Lucid?</string>
+    <string name="faq_start_7_a">Settings &gt; Appearance &gt; Lucid, then tap Photo or Video and pick one. Lucid with your phone’s wallpaper is free; your own photo or clip (a video up to 30 MB, playing silently on a loop) is part of Premium. Changed your wallpaper? Tap Phone wallpaper again.</string>
+    <string name="faq_start_8_q">Where are my photos saved?</string>
+    <string name="faq_start_8_a">Photos you take or edit are kept in Photo Plus (Projects). When you save or download one, it also goes to your phone’s gallery. Your originals are always kept, untouched.</string>
     <string name="faq_cat_camera">Camera</string>
     <string name="faq_camera_1_q">What do the camera modes do?</string>
     <string name="faq_camera_1_a">Photo: bright, lively colour in one tap. Clarity: sharper, cleaner, brighter single photos. Ultra Detail: several shots combined for fine detail (Premium). Moonlight: clear photos in the dark from several shots (Premium). Glide: a short, steady pro video. Pro: full manual control of ISO, shutter, focus and white balance (Premium).</string>
@@ -1770,7 +1791,7 @@
     <string name="privacy_3_title">Your photos and videos</string>
     <string name="privacy_3_body">Photos and videos you take, open or edit are processed on your phone. Photo Plus keeps them in its own storage on your phone (Projects) and saves them to your gallery when you choose. They leave your phone only when you share them to another app or save them somewhere yourself.</string>
     <string name="privacy_4_title">Information stored on your phone</string>
-    <string name="privacy_4_body">Photo Plus stores your settings, language, projects, edits, saved setups, reward points and plan status on your phone. This information is not sent to us.</string>
+    <string name="privacy_4_body">Photo Plus stores your settings, language, projects, edits, saved setups, reward points and plan status on your phone. With the Lucid theme it also reads your wallpaper’s colours (and, where Android allows, the wallpaper picture) and keeps the photo or clip you choose, all on your phone. This information is not sent to us.</string>
     <string name="privacy_5_title">Permissions</string>
     <string name="privacy_5_body">Camera: to take photos and videos. Microphone: to record sound in Glide videos. Photos and videos: to open the ones you choose (on newer Android versions you can allow only selected photos). Notifications: to remind you about updates. Internet: for ads, purchases, the time and update checks. You can change permissions at any time in your phone’s settings.</string>
     <string name="privacy_6_title">Advertising</string>

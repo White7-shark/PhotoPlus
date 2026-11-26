@@ -1,6 +1,7 @@
 package com.photoplus
 
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultReactActivityDelegate
@@ -19,6 +20,12 @@ class MainActivity : ReactActivity() {
    * while JS state is re-hydrated from the local database during bootstrap.
    */
   override fun onCreate(savedInstanceState: Bundle?) {
+    // Edge to edge on every Android version (required from Android 15, the
+    // only mode from Android 16): the app draws behind the status and
+    // navigation bars and keeps its content clear of them with the system's
+    // insets (react-native-safe-area-context). AndroidX's API, not the
+    // deprecated status/navigation bar colours Google Play warns about.
+    enableEdgeToEdge()
     super.onCreate(null)
   }
 }

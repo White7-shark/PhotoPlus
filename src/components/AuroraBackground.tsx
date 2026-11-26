@@ -1,7 +1,9 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
+import { useLucid } from '../services/lucid/LucidService';
 import { useTheme } from '../theme';
+import { VideoView } from './VideoView';
 
 interface Blob {
   color: string;
@@ -20,6 +22,7 @@ interface Blob {
  */
 export function AuroraBackground({ variant = 'default' }: { variant?: 'default' | 'camera' | 'calm' }) {
   const theme = useTheme();
+  if (theme.lucid) return <LucidBackground />;
   const { auroraA, auroraB, auroraC } = theme.colors;
   const strength = theme.mode === 'dark' ? 1 : 0.8;
   const blobs: Blob[] =
@@ -73,3 +76,61 @@ export function AuroraBackground({ variant = 'default' }: { variant?: 'default' 
     </View>
   );
 }
+
+/**
+ * Lucid: the background is the chosen photo or clip (a clip loops, silent),
+ * or nothing at all while the window shows the phone's wallpaper — under a
+ * veil just strong enough that text on it stays readable (theme/lucid.ts).
+ */
+export function LucidBackground() {
+  const theme = useTheme();
+  const media = useLucid(s => s.media);
+  const source = useLucid(s => s.source);
+  const look = theme.lucid;
+  if (!look) return null;
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      testID="lucid-background"
+    >
+      {media && source === 'video' ? (
+        <VideoView source={media} muted loop cover style={StyleSheet.absoluteFill} testID="lucid-video" />
+      ) : media ? (
+        <Image
+          source={{ uri: `file://${media}` }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          fadeDuration={0}
+          testID="lucid-picture"
+        />
+      ) : null}
+      <View
+        style={[StyleSheet.absoluteFill, { backgroundColor: look.veilColor, opacity: look.veil }]}
+        testID="lucid-veil"
+      />
+      {/* Titles and the status bar sit at the top, over whatever the picture has there: a soft
+          fade in the veil's colour keeps them readable however busy that part is. */}
+      <View
+        style={[
+          styles.headFade,
+          {
+            backgroundImage: `linear-gradient(180deg, ${fade(look.veilColor, 0.82)} 0%, ${fade(look.veilColor, 0)} 100%)`,
+          },
+        ]}
+        testID="lucid-head-fade"
+      />
+    </View>
+  );
+}
+
+const fade = (hex: string, a: number) => {
+  const n = parseInt(hex.slice(1, 7), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+const styles = StyleSheet.create({
+  headFade: { position: 'absolute', top: 0, left: 0, right: 0, height: 190 },
+});

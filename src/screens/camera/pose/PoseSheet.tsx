@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Svg from 'react-native-svg';
 
@@ -117,6 +118,8 @@ export function PoseSheet({
   onPremium: () => void;
 }) {
   const theme = useTheme();
+  // Edge to edge: the sheet stays clear of the navigation bar.
+  const insets = useSafeAreaInsets();
   const groups = posesByCategory(myPoses);
   const [category, setCategory] = useState<PoseCategory>(groups.find(g => g.category !== 'mine')?.category ?? 'portrait');
   const [busy, setBusy] = useState(false);
@@ -160,8 +163,8 @@ export function PoseSheet({
   };
 
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel={tx('pose_close_the_photo_assistant')}>
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+      <Pressable style={[styles.scrim, { paddingBottom: insets.bottom + 12 }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={tx('pose_close_the_photo_assistant')}>
         <Pressable onPress={() => undefined} style={styles.wrap}>
           <GlassSurface intensity="strong" radius={28} style={{ paddingVertical: 18 }}>
             <ScrollView style={{ maxHeight: 620 }} contentContainerStyle={{ gap: 14, paddingHorizontal: 18 }}>

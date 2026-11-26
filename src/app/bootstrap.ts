@@ -1,4 +1,5 @@
 import { detectCapabilities, parseCapabilities, type DeviceCapabilities } from '../services/capabilities';
+import { hydrateLucid } from '../services/lucid/LucidService';
 import { openDatabase, type Repositories } from '../services/database/Database';
 import { DEFAULT_SETTINGS, type AppSettings } from '../services/database/repositories/SettingsRepository';
 import { createLogger } from '../services/logging/logger';
@@ -60,6 +61,8 @@ export async function bootstrap(deps: BootstrapDeps): Promise<BootstrapResult> {
     warnings.push('Settings could not be loaded; defaults are in use.');
     log.warn('settings load failed', error);
   }
+  // The Lucid theme's saved background and look (shown from the first frame).
+  await hydrateLucid(repositories.settings).catch(e => log.warn('lucid load failed', e));
 
   const [capsResult, engineResult, pathsResult] = await Promise.allSettled([
     deps.detectCapabilities(),
