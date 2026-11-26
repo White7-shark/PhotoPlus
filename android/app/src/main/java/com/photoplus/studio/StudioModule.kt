@@ -23,6 +23,7 @@ import com.photoplus.engine.MemoryBudgetPolicy
 import com.photoplus.engine.NativeCancelTokens
 import com.photoplus.engine.NativeEngine
 import com.photoplus.engine.OutputFormat
+import com.photoplus.entitlement.ArtAllowance
 import com.photoplus.entitlement.Entitlements
 import com.photoplus.specs.NativePhotoPlusStudioSpec
 import com.photoplus.storage.AppPaths
@@ -642,6 +643,68 @@ class StudioModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  // ------------------------------------------------------------ Masters
+
+  /** Faces and person masks of the photos painted lately, by path (each artist reuses them). */
+  private val artSubjects = object : LinkedHashMap<String, Pair<Bitmap?, FloatArray>>(4, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Bitmap?, FloatArray>>?) = size > 3
+  }
+
+  /**
+   * Masters: the photo painted as a great artist worked. request: { inputPath,
+   * artist (0..19), level (0 study, 1 painting, 2 masterpiece), quality
+   * ('thumb' | 'preview' | 'full'), seed }. Thumbs and previews are free and
+   * unlimited; a finished painting is Premium, or one a day on the free plan.
+   */
+  override fun renderMasters(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val artist = (map["artist"] as? Number)?.toInt() ?: -1
+    val level = (map["level"] as? Number)?.toInt() ?: 1
+    val quality = map["quality"] as? String ?: "preview"
+    val seed = (map["seed"] as? Number)?.toInt() ?: 7
+    if (artist !in 0 until ARTISTS || level !in 0..2 || quality !in setOf("thumb", "preview", "full")) {
+      promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_masters_unknown_artist))
+      return
+    }
+    val full = quality == "full"
+    if (full && !ArtAllowance.allowed(reactApplicationContext)) {
+      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_masters_daily_used))
+      return
+    }
+    val file = paths.resolve(map["inputPath"] as? String ?: "")
+    jobs.submit(jobId, listener(promise)) { token ->
+      // Big enough for the level's brushes, within the phone's memory.
+      val edge = when (quality) {
+        "thumb" -> MASTERS_THUMB
+        "preview" -> MASTERS_PREVIEW
+        else -> min(budget.maxDecodeDimension, MASTERS_FULL[level])
+      }
+      val decoded = ImageCodec.decode(file, edge).bitmap
+      val bitmap = if (decoded.isMutable && decoded.config == Bitmap.Config.ARGB_8888) decoded
+      else decoded.copy(Bitmap.Config.ARGB_8888, true).also { decoded.recycle() }
+      try {
+        val (mask, faces) = synchronized(artSubjects) { artSubjects[file.absolutePath] } ?: portraitProcessor.personAndFaces(bitmap).also { found ->
+          synchronized(artSubjects) { artSubjects[file.absolutePath] = found }
+        }
+        NativeEngine.nativeArtPaint(bitmap, artist, if (quality == "thumb") 0 else level, mask, faces, seed, token)
+        val out = if (full) encodeStudio(bitmap, true, "Masters") else encodeStudio(bitmap, false, if (quality == "thumb") "MastersThumb$artist" else "Masters")
+        if (full) ArtAllowance.use(reactApplicationContext)
+        out + mapOf("remaining" to ArtAllowance.remaining(reactApplicationContext))
+      } finally {
+        bitmap.recycle()
+      }
+    }
+  }
+
+  /** { remaining (-1 unlimited), limit } — the free plan's finished paintings left today. */
+  override fun mastersAllowance(promise: Promise) {
+    promise.resolve(com.facebook.react.bridge.Arguments.createMap().apply {
+      putInt("remaining", ArtAllowance.remaining(reactApplicationContext))
+      putInt("limit", ArtAllowance.FREE_PER_DAY)
+    })
+  }
+
   // ------------------------------------------------------------ Film & Collage
 
   /** Faces found in Film & Collage photos, by path (crops and zooms centre on them). */
@@ -764,6 +827,10 @@ class StudioModule(reactContext: ReactApplicationContext) :
   private fun stamp() = java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.US).format(java.util.Date())
 
   companion object {
+    private const val ARTISTS = 20
+    private const val MASTERS_THUMB = 300
+    private const val MASTERS_PREVIEW = 760
+    private val MASTERS_FULL = intArrayOf(1100, 1500, 1800)
     const val NAME = "PhotoPlusStudio"
     const val NO_PERSON = "NO_PERSON"
     const val NO_FACE = "NO_FACE"

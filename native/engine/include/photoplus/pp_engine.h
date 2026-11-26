@@ -1365,6 +1365,18 @@ typedef struct pp_product_render_report {
 pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const pp_product_render_params* params,
                             const pp_cancel_token* token, pp_image** out, pp_product_render_report* report);
 
+/* ---- Masters: a photo painted as a great artist worked --------------------
+ * artist: 0 Leonardo da Vinci, 1 Michelangelo, 2 Raphael, 3 Albrecht Dürer,
+ * 4 Titian, 5 Caravaggio, 6 Rembrandt, 7 Vermeer, 8 Velázquez, 9 Goya,
+ * 10 Hokusai, 11 Turner, 12 Monet, 13 Degas, 14 Renoir, 15 Cézanne,
+ * 16 Seurat, 17 Van Gogh, 18 Gauguin, 19 Klimt.
+ * level: 0 study, 1 painting, 2 masterpiece. subject: optional GRAY8 person
+ * mask (any size). faces: optional normalised boxes (x, y, w, h each), count
+ * boxes. Paints `image` (RGBA/BGRA) in place; deterministic for a seed. */
+#define PP_ART_ARTISTS 20
+pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
+                       uint32_t seed, const pp_cancel_token* token);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

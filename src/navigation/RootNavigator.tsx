@@ -19,6 +19,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { PhotoshootStudioScreen } from '../screens/studio/PhotoshootStudioScreen';
 import { FilmCollageScreen } from '../screens/studio/FilmCollageScreen';
 import { RelightScreen } from '../screens/studio/RelightScreen';
+import { MastersScreen } from '../screens/studio/MastersScreen';
 import { BatchScreen } from '../screens/product/BatchScreen';
 import { ProductStudioScreen } from '../screens/product/ProductStudioScreen';
 import { ProjectScreen } from '../screens/product/ProjectScreen';
@@ -64,6 +65,7 @@ const PhotoshootStudio = guarded(PhotoshootStudioScreen, 'Photoshoot Studio');
 const SceneSwap = guarded(SceneSwapScreen, 'Scene Swap');
 const FilmCollage = guarded(FilmCollageScreen, 'Film & Collage');
 const Relight = guarded(RelightScreen, 'Relight');
+const Masters = guarded(MastersScreen, 'Masters');
 const ProductStudio = guarded(ProductStudioScreen, 'Product Studio');
 const Batch = guarded(BatchScreen, 'Batch edit');
 const Project = guarded(ProjectScreen, 'Project');
@@ -131,6 +133,7 @@ export function RootNavigator() {
         <Stack.Screen name="SceneSwap" component={SceneSwap} />
         <Stack.Screen name="FilmCollage" component={FilmCollage} />
         <Stack.Screen name="Relight" component={Relight} />
+        <Stack.Screen name="Masters" component={Masters} />
         <Stack.Screen name="ProductStudio" component={ProductStudio} />
         <Stack.Screen name="Batch" component={Batch} />
         <Stack.Screen name="Project" component={Project} options={{ animation: 'slide_from_right' }} />

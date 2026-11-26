@@ -16,6 +16,10 @@ export interface Spec extends TurboModule {
   renderScene(jobId: string, request: Object): Promise<Object>;
   /** Relight: the person, relit, back in their own photo (a preview, or the saved photo). */
   renderRelight(jobId: string, request: Object): Promise<Object>;
+  /** Masters: { inputPath, artist 0..19, level 0..2, quality 'thumb' | 'preview' | 'full', seed } → { outputPath, cleanPath, width, height, remaining }. */
+  renderMasters(jobId: string, request: Object): Promise<Object>;
+  /** { remaining (-1: unlimited), limit }: finished Masters paintings left today on the free plan. */
+  mastersAllowance(): Promise<Object>;
   /** Film & Collage: photos as frames on a film strip (a preview, or the saved photo). */
   renderFilm(jobId: string, request: Object): Promise<Object>;
   /** Film & Collage: photos in a collage (a preview, or the saved photo). */

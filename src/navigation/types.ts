@@ -32,6 +32,8 @@ export type RootStackParamList = {
   /** Relight: studio light on the person in their own photo; photo: one just taken in the camera. */
   Relight: { photo?: string } | undefined;
   FilmCollage: { photo?: string } | undefined;
+  /** Masters: the photo painted as one of twenty great artists worked; photo: one to open straight away. */
+  Masters: { photo?: string } | undefined;
   /**
    * Product Studio: a product photo made a catalogue shot. photo: one just
    * taken in the camera; imageId: a library photo; projectId: the project it

@@ -36,6 +36,7 @@
 #include "photoplus/gpu.hpp"
 #include "photoplus/filters.hpp"
 #include "photoplus/codec.hpp"
+#include "photoplus/art.hpp"
 #include "photoplus/portrait.hpp"
 #include "photoplus/pp_engine.h"
 #include "photoplus/profiler.hpp"
@@ -2013,3 +2014,22 @@ pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const
 }
 
 }  // extern "C"
+
+pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count, uint32_t seed,
+                       const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is required");
+    if (artist < 0 || artist >= PP_ART_ARTISTS || level < 0 || level > 2) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown artist or level");
+    if (face_count > 0 && faces == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "faces are missing");
+    photoplus::art::Options o;
+    o.artist = static_cast<photoplus::art::Artist>(artist);
+    o.level = static_cast<photoplus::art::Level>(level);
+    o.seed = seed;
+    o.subject = subject != nullptr ? &subject->buffer : nullptr;
+    for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i)
+      o.faces.push_back({faces[i * 4], faces[i * 4 + 1], faces[i * 4 + 2], faces[i * 4 + 3]});
+    photoplus::Error e = photoplus::art::paint(image->buffer, o, token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
+    return succeed();
+  });
+}

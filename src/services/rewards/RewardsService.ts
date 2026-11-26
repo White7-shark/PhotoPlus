@@ -9,7 +9,7 @@ import { t as tx } from '../../i18n';
 
 export type ActivityEvent = 'photo' | 'edit' | 'studio' | 'product' | 'film' | 'project' | 'glide';
 export type RewardItem = 'tool' | 'premium-1' | 'premium-3' | 'premium-7';
-export type RewardTool = 'sceneSwap' | 'relight' | 'productPro' | 'exportHd' | 'studioLight' | 'hair' | 'batch';
+export type RewardTool = 'sceneSwap' | 'relight' | 'productPro' | 'exportHd' | 'studioLight' | 'hair' | 'batch' | 'masters';
 
 export interface TaskState {
   id: string;
@@ -112,11 +112,12 @@ export const TASK_TEXT: Record<string, { title: string; hint: string }> = {
 export const TOOL_TEXT: Record<RewardTool, string> = {
   sceneSwap: 'Scene Swap',
   relight: 'Relight',
-  productPro: 'Pro product setups',
-  exportHd: 'HD & 4K downloads',
-  studioLight: 'Studio light & film looks',
-  hair: 'Hair colours & styles',
-  batch: 'Batch editing',
+  productPro: tx('rewards_tool_product_pro'),
+  exportHd: tx('rewards_tool_export_hd'),
+  studioLight: tx('rewards_tool_studio_light'),
+  hair: tx('rewards_tool_hair'),
+  batch: tx('rewards_tool_batch'),
+  masters: 'Masters',
 };
 
 export class RewardsService {

@@ -4,12 +4,16 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { TRIAL_DAYS } from '../services/billing/plans';
 import { FEATURES, PREMIUM_PRICE, type FeatureKey } from '../services/entitlements/features';
 import { openScreen } from '../navigation/ref';
-import { useT } from '../i18n';
+import { useT, type StringKey } from '../i18n';
 import { useTheme } from '../theme';
 import { AppText } from './AppText';
 import { Button } from './Button';
 import { GlassSurface } from './GlassSurface';
 import { Icon } from './Icon';
+
+/** A feature's title as a string resource: feature_<snake_case key>. */
+export const featureTitleKey = (feature: FeatureKey) =>
+  `feature_${feature.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`)}` as StringKey;
 
 /** Explains a Premium feature when the free plan can't use it. */
 export function PremiumSheet({
@@ -41,7 +45,7 @@ export function PremiumSheet({
               <Icon name="crown" size={26} color="#1A1206" strokeWidth={2} />
             </View>
             <AppText variant="title2" align="center" accessibilityRole="header">
-              {FEATURES[feature].title}
+              {t(featureTitleKey(feature)) || FEATURES[feature].title}
             </AppText>
             {message ? (
               <AppText variant="bodyStrong" align="center">

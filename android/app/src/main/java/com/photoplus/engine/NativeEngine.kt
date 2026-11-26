@@ -496,6 +496,14 @@ object NativeEngine {
   external fun nativeStudioRelightCompose(photo: Bitmap, lit: Bitmap, brightness: Float, colour: Float, blur: Float, token: Long)
 
   /**
+   * Masters: paints [bitmap] in place as [artist] worked (0 Leonardo … 19
+   * Klimt; see pp_art_paint), at [level] (0 study, 1 painting, 2
+   * masterpiece). [mask]: the person (ALPHA_8) or null; [faces]: normalised
+   * boxes (x, y, w, h each).
+   */
+  external fun nativeArtPaint(bitmap: Bitmap, artist: Int, level: Int, mask: Bitmap?, faces: FloatArray?, seed: Int, token: Long)
+
+  /**
    * Film strip (Photoshoot Studio): [photos] as frames, returns a result
    * handle (see [nativeResultWidth], [nativeCopyResultToBitmap],
    * [nativeReleaseResult]). [frames]: 13 floats per frame (photo, look, zoom,

@@ -43,6 +43,8 @@ add_library(photoplus_engine STATIC
   src/studio/film.cpp
   src/studio/relight_compose.cpp
   src/studio/product.cpp
+  src/art/core.cpp
+  src/art/art.cpp
   src/skintone/skintone.cpp
   src/light/light.cpp
   src/pose/pose.cpp
@@ -105,7 +107,7 @@ endif()
 if(PP_ENGINE_BUILD_TESTS)
   enable_testing()
   find_package(Threads REQUIRED)
-  add_executable(photoplus_engine_tests tests/test_main.cpp tests/engine_tests.cpp tests/enhance_tests.cpp tests/portrait_tests.cpp tests/lens_tests.cpp tests/edit_tests.cpp tests/core_tests.cpp tests/gpu_tests.cpp tests/face_tests.cpp tests/video_tests.cpp tests/beauty_tests.cpp tests/backdrop_tests.cpp tests/skintone_tests.cpp tests/light_tests.cpp tests/pose_tests.cpp tests/studio_tests.cpp tests/product_tests.cpp)
+  add_executable(photoplus_engine_tests tests/test_main.cpp tests/engine_tests.cpp tests/enhance_tests.cpp tests/portrait_tests.cpp tests/lens_tests.cpp tests/edit_tests.cpp tests/core_tests.cpp tests/gpu_tests.cpp tests/face_tests.cpp tests/video_tests.cpp tests/beauty_tests.cpp tests/backdrop_tests.cpp tests/skintone_tests.cpp tests/light_tests.cpp tests/pose_tests.cpp tests/studio_tests.cpp tests/product_tests.cpp tests/art_tests.cpp)
   target_link_libraries(photoplus_engine_tests PRIVATE photoplus_engine Threads::Threads)
   add_test(NAME photoplus_engine_tests COMMAND photoplus_engine_tests)
 endif()
@@ -127,6 +129,8 @@ if(PP_ENGINE_BUILD_TOOLS)
   target_link_libraries(light_demo PRIVATE photoplus_engine Threads::Threads)
   add_executable(pose_demo tools/pose_demo.cpp)
   add_executable(studio_demo tools/studio_demo.cpp)
+  add_executable(art_demo tools/art_demo.cpp)
+  target_link_libraries(art_demo PRIVATE photoplus_engine Threads::Threads)
   add_executable(scene_video_demo tools/scene_video_demo.cpp)
   target_link_libraries(scene_video_demo PRIVATE photoplus_engine Threads::Threads)
   target_link_libraries(studio_demo PRIVATE photoplus_engine Threads::Threads)

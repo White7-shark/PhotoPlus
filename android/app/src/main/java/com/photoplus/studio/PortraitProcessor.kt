@@ -235,6 +235,34 @@ class PortraitProcessor {
   }
 
   /** Landmarks of every face, in the bitmap's own orientation (no segmentation needed). */
+/**
+   * For Masters: the person (an ALPHA_8 mask at the analysis size, or null)
+   * and the faces (normalised boxes x, y, w, h), from one look at the
+   * upright photo.
+   */
+  fun personAndFaces(bitmap: Bitmap): Pair<Bitmap?, FloatArray> {
+    val upright = scaledUpright(bitmap, 0, ANALYSIS_EDGE)
+    try {
+      val image = InputImage.fromBitmap(upright, 0)
+      val faceTask = runCatching { faceDetector.process(image) }.getOrNull()
+      val subjectTask = runCatching { subjectSegmenter.process(image) }.getOrNull()
+      val faces = runCatching { faceTask?.let { Tasks.await(it, ML_TIMEOUT_S, TimeUnit.SECONDS) } }.getOrNull() ?: emptyList()
+      val subjects = runCatching { subjectTask?.let { Tasks.await(it, ML_TIMEOUT_S, TimeUnit.SECONDS) } }.getOrNull()
+      val shapes = faces.map { FaceShape.of(it) }
+      val bytes = subjectMask(image, upright.width, upright.height, emptyList(), shapes, subjects)?.first
+      val mask = bytes?.let { alphaBitmap(it, upright.width, upright.height) }
+      val w = upright.width.toFloat()
+      val h = upright.height.toFloat()
+      val boxes = faces.take(8).flatMap { f ->
+        val b = f.boundingBox
+        listOf(b.left / w, b.top / h, b.width() / w, b.height() / h)
+      }.toFloatArray()
+      return mask to boxes
+    } finally {
+      upright.recycle()
+    }
+  }
+
   fun findLandmarks(bitmap: Bitmap, rotation: Int): List<FaceLandmarks> {
     val rot = MaskGeometry.normalise(rotation)
     val upright = scaledUpright(bitmap, rot, ANALYSIS_EDGE)

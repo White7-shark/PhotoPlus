@@ -8,7 +8,7 @@ export const FAQ_TOPICS: readonly { id: string; icon: IconName; count: number }[
   { id: 'pose', icon: 'figure', count: 3 },
   { id: 'glide', icon: 'film', count: 4 },
   { id: 'editor', icon: 'sliders', count: 9 },
-  { id: 'studio', icon: 'layers', count: 10 },
+  { id: 'studio', icon: 'layers', count: 12 },
   { id: 'product', icon: 'bag', count: 6 },
   { id: 'projects', icon: 'folder', count: 5 },
   { id: 'packs', icon: 'image', count: 1 },

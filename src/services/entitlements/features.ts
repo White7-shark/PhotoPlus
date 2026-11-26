@@ -118,6 +118,7 @@ export const FEATURES = {
   batchEditing: f('editing.batch', 'Batch editing: one setup or look on up to 50 photos at once', 'editing', 'premium'),
   savedSetups: f('editing.savedSetups', 'Save your setups and looks, and reuse them in every project', 'editing', 'premium'),
   clothingTransform: f('replication.clothing', 'Clothing transformation (compatible packs)', 'replication', 'premium'),
+  masters: f('studio.masters', 'Masters: your photo painted as twenty great artists worked', 'replication', 'premium'),
   lucidCustom: f('appearance.lucidCustom', 'Lucid with your own photo or video clip behind the glass', 'editing', 'premium'),
 } as const;
 
@@ -129,6 +130,7 @@ export type FeatureKey = keyof typeof FEATURES;
  */
 export const FREE_DAILY_ALLOWANCE: Partial<Record<FeatureKey, number>> = {
   transform: 2,
+  masters: 1,
 };
 
 export const PREMIUM_PRICE = { amount: 50, currency: 'GHS', period: 'month' } as const;
