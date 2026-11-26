@@ -20,6 +20,8 @@ import type { AppSettings } from '../services/database/repositories/SettingsRepo
 import { formatBytes, getStorageService, type StorageUsage } from '../services/storage/StorageService';
 import { useAppStore } from '../state/store';
 import { TRIAL_DAYS } from '../services/billing/plans';
+import { levelName, type MastersLevel } from '../services/masters/catalog';
+import { ARTIST_WAY } from '../services/masters/controls';
 import { useI18n, useT } from '../i18n';
 import { useTheme } from '../theme';
 import { t as tx } from '../i18n';
@@ -36,6 +38,9 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
   const [usage, setUsage] = useState<StorageUsage | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const simulation = useAppStore(s => s.premiumSimulation);
+  const setPremiumSimulation = useAppStore(s => s.setPremiumSimulation);
+  const ms = settings.masterstroke;
 
   const save = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) =>
     updateSetting(key, value).catch(e => Alert.alert(t('settings_not_saved'), errorMessage(e)));
@@ -91,6 +96,23 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
           last
         />
       </GlassSurface>
+      {simulation.available ? (
+        <>
+          <SectionHeader title={t('settings_section_testing')} />
+          <GlassSurface style={{ marginBottom: 24 }} testID="settings-testing">
+            <ToggleRow
+              icon="crown"
+              title={t('settings_sim_title')}
+              subtitle={simulation.on ? t('settings_sim_on') : t('settings_sim_detail')}
+              value={simulation.on}
+              onChange={on =>
+                setPremiumSimulation(on).catch(e => Alert.alert(t('settings_sim_failed'), errorMessage(e)))
+              }
+              last
+            />
+          </GlassSurface>
+        </>
+      ) : null}
       <SectionHeader title={t('settings_section_language')} />
       <GlassSurface style={{ marginBottom: 24 }}>
         <ListRow
@@ -119,6 +141,40 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
           {settings.themePreference === 'lucid' ? t('settings_theme_note_lucid') : t('settings_theme_note')}
         </AppText>
         {settings.themePreference === 'lucid' ? <LucidPanel /> : null}
+      </GlassSurface>
+
+      <SectionHeader title="Masterstroke" overline={t('settings_ms_detail')} />
+      <GlassSurface style={{ padding: 16, gap: 14, marginBottom: 24 }} testID="settings-masterstroke">
+        <SegmentedControl
+          label={t('settings_ms_level')}
+          value={String(ms.level) as '0' | '1' | '2'}
+          onChange={v => save('masterstroke', { ...ms, level: Number(v) as MastersLevel })}
+          options={([0, 1, 2] as const).map(l => ({ value: String(l) as '0' | '1' | '2', label: levelName(l) }))}
+        />
+      </GlassSurface>
+      <GlassSurface style={{ marginBottom: 24 }}>
+        <ToggleRow
+          icon="sliders"
+          title={t('settings_ms_remember')}
+          subtitle={t('settings_ms_remember_detail')}
+          value={ms.remember}
+          onChange={v => save('masterstroke', { ...ms, remember: v })}
+        />
+        <ToggleRow
+          icon="image"
+          title={t('settings_ms_cards')}
+          subtitle={t('settings_ms_cards_detail')}
+          value={ms.cardPreviews}
+          onChange={v => save('masterstroke', { ...ms, cardPreviews: v })}
+        />
+        <ListRow
+          icon="refresh"
+          title={t('settings_ms_reset')}
+          subtitle={t('settings_ms_reset_detail')}
+          onPress={() => save('masterstroke', { ...ms, controls: { ...ARTIST_WAY } })}
+          testID="settings-ms-reset"
+          last
+        />
       </GlassSurface>
 
       <SectionHeader title={t('settings_section_camera')} />

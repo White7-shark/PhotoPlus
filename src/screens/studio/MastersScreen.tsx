@@ -30,12 +30,15 @@ import { createId } from '../../services/database/ids';
 import { recordActivity } from '../../services/rewards/RewardsService';
 import { getStorageService } from '../../services/storage/StorageService';
 import { getStudioService } from '../../services/studio/StudioService';
+import { ARTIST_WAY, clampControls, type ArtControls } from '../../services/masters/controls';
+import { useAppStore } from '../../state/store';
+import { MasterstrokeTouch } from './MasterstrokeTouch';
 import { useTheme } from '../../theme';
 
 const LEVELS: readonly MastersLevel[] = [0, 1, 2];
 
 /**
- * Masters: the person's photo painted the way one of twenty great artists
+ * Masterstroke: the person's photo painted the way one of twenty great artists
  * worked. Movements group the artists; each card shows the photo already in
  * that artist's hand. Previews are free; the finished painting (Study,
  * Painting or Masterpiece) is Premium, or one a day on the free plan.
@@ -44,10 +47,23 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const theme = useTheme();
   const t = useT();
   const masters = useMemo(() => getMastersService(), []);
+  const prefs = useAppStore(s => s.settings.masterstroke);
+  const updateSetting = useAppStore(s => s.updateSetting);
   const [photo, setPhoto] = useState<string | null>(null);
   const [movement, setMovement] = useState<Movement>('renaissance');
   const [artist, setArtist] = useState(0);
-  const [level, setLevel] = useState<MastersLevel>(1);
+  const [level, setLevel] = useState<MastersLevel>(prefs.level);
+  // Your touch: remembered from last time when the person keeps it.
+  const [controls, setControls] = useState<ArtControls>(() =>
+    prefs.remember ? clampControls(prefs.controls) : { ...ARTIST_WAY },
+  );
+  const [touchOpen, setTouchOpen] = useState(false);
+  // The latest touch, for when a finger lifts right after the last move (and for screen readers' steps).
+  const touch = useRef(controls);
+  const changeTouch = (k: ArtControls) => {
+    touch.current = k;
+    setControls(k);
+  };
   const [seed, setSeed] = useState(FIRST_SEED);
   const [preview, setPreview] = useState<Painting | null>(null);
   const [finished, setFinished] = useState<Painting | null>(null);
@@ -70,7 +86,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
 
   // The preview follows each choice (a newer one cancels the older).
   const job = useRef<string | null>(null);
-  const draw = (path: string, a: number, l: MastersLevel, sd: number) => {
+  const draw = (path: string, a: number, l: MastersLevel, sd: number, k: ArtControls = touch.current) => {
     const id = createId('masters');
     if (job.current) masters.cancel(job.current);
     job.current = id;
@@ -78,7 +94,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     setSaved(false);
     setBusy('preview');
     masters
-      .paint(path, a, l, 'preview', sd, id)
+      .paint(path, a, l, 'preview', sd, id, k)
       .then(p => {
         if (job.current !== id) return;
         setPreview(p);
@@ -110,6 +126,22 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     [masters],
   );
 
+  // Your touch: the preview repaints when the finger lifts; kept for next time when remembered.
+  const keepTouch = (k: ArtControls) => {
+    if (prefs.remember)
+      void updateSetting('masterstroke', { ...prefs, controls: clampControls(k) }).catch(() => undefined);
+  };
+  const touchDone = () => {
+    if (photo) draw(photo, artist, level, seed, touch.current);
+    keepTouch(touch.current);
+  };
+  const touchReset = () => {
+    const k = { ...ARTIST_WAY };
+    changeTouch(k);
+    if (photo) draw(photo, artist, level, seed, k);
+    keepTouch(k);
+  };
+
   const openPhoto = (path: string) => {
     setPhoto(path);
     setThumbs({});
@@ -135,7 +167,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
 
   // Each card shows the photo in that artist's hand: the movement on show, one at a time.
   useEffect(() => {
-    if (!photo) return;
+    if (!photo || !prefs.cardPreviews) return;
     let live = true;
     const todo = artistsOf(movement).filter(a => !thumbs[a.id]);
     void (async () => {
@@ -154,7 +186,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     };
     // thumbs is read for what is missing; a new thumb must not restart the queue.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photo, movement, masters]);
+  }, [photo, movement, masters, prefs.cardPreviews]);
 
   const chooseMovement = (m: Movement) => {
     setMovement(m);
@@ -173,7 +205,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     setBusy('full');
     setError(null);
     try {
-      const p = await masters.paint(photo, artist, level, 'full', seed);
+      const p = await masters.paint(photo, artist, level, 'full', seed, undefined, touch.current);
       setFinished(p);
       recordActivity('studio', 'edit');
       if (p.remaining !== undefined && allowance) setAllowance({ ...allowance, remaining: p.remaining });
@@ -207,7 +239,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const accent = theme.colors.accent;
 
   return (
-    <Screen title="Masters" onBack={() => navigation.goBack()} bottomInset={32}>
+    <Screen title="Masterstroke" onBack={() => navigation.goBack()} bottomInset={32}>
       <View style={{ gap: 16 }}>
         {!photo ? (
           <GlassSurface radius={24} style={styles.intro} glow="rgba(245,198,107,0.22)">
@@ -336,8 +368,13 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
                     <View style={styles.thumb}>
                       {thumb ? (
                         <Image source={{ uri: `file://${thumb}` }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                      ) : (
+                      ) : prefs.cardPreviews ? (
                         <ActivityIndicator color={accent} />
+                      ) : (
+                        // Cards without paintings (Settings): the artist's initial.
+                        <AppText variant="title1" style={{ color: accent }}>
+                          {artistName(a).charAt(0)}
+                        </AppText>
                       )}
                     </View>
                     <AppText variant="caption" style={{ fontWeight: '700' }} numberOfLines={1}>
@@ -397,6 +434,16 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
                 {levelAbout(level)}
               </AppText>
             </View>
+
+            <MasterstrokeTouch
+              value={controls}
+              open={touchOpen}
+              onToggle={() => setTouchOpen(o => !o)}
+              onChange={changeTouch}
+              onEnd={touchDone}
+              onReset={touchReset}
+              disabled={busy === 'full'}
+            />
 
             <View style={styles.allowance} testID="masters-allowance">
               <Icon name="crown" size={14} color={accent} />

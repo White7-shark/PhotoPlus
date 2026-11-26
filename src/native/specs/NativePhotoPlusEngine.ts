@@ -39,8 +39,10 @@ export interface Spec extends TurboModule {
   deleteCustomProp(id: string): Promise<boolean>;
   /** The plan held natively ("free" | "premium"). */
   getPlan(): Promise<string>;
-  /** Debug builds only: switch plan to test Premium. */
+  /** Testers: simulate Premium ("premium") or stop ("free"); false where the build doesn't allow it. */
   setDebugPlan(plan: string): Promise<boolean>;
+  /** Testers: { available, on } — whether this build can simulate Premium, and whether it is. */
+  getPremiumSimulation(): Promise<Object>;
   cancel(jobId: string): void;
   cancelAll(): void;
   getMemoryStats(): Promise<Object>;

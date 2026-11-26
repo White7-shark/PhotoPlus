@@ -840,6 +840,14 @@ class EngineModule(reactContext: ReactApplicationContext) :
     promise.resolve(Entitlements.setDebugPlan(if (plan == "premium") Plan.PREMIUM else Plan.FREE))
   }
 
+  /** Testers: { available (this build allows it), on (Premium is simulated) }. */
+  override fun getPremiumSimulation(promise: Promise) {
+    promise.resolve(com.facebook.react.bridge.Arguments.createMap().apply {
+      putBoolean("available", Entitlements.simulationAvailable)
+      putBoolean("on", Entitlements.simulating)
+    })
+  }
+
   /** Applies a look ("Vibe Match") to a saved photo. */
   override fun applyLook(jobId: String, request: ReadableMap, promise: Promise) {
     if (!requireEngine(promise)) return

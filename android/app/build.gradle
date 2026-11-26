@@ -97,6 +97,13 @@ android {
         manifestPlaceholders["admobAppId"] = admobAppId
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"${admobRewardedId}\"")
 
+        // Premium simulation for testers: a Settings switch that gives this
+        // phone Premium without a subscription. ON for testing builds now;
+        // set it to false (or pass -Pphotoplus.premiumSimulation=false)
+        // before the production release.
+        def premiumSimulation = (project.findProperty("photoplus.premiumSimulation") ?: "true").toString().toBoolean()
+        buildConfigField("boolean", "PREMIUM_SIMULATION", premiumSimulation.toString())
+
         externalNativeBuild {
             cmake {
                 // Must match React Native's STL to avoid duplicate runtimes.

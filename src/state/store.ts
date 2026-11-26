@@ -38,6 +38,8 @@ export interface AppStore {
 
   // ---- plan (Play Billing arrives later; everyone is on the free plan now)
   entitlements: EntitlementState;
+  /** Testers: whether this build can simulate Premium, and whether it is (to be removed for production). */
+  premiumSimulation: { available: boolean; on: boolean };
 
   // ---- projects
   projects: Project[];
@@ -53,6 +55,8 @@ export interface AppStore {
   setMemoryPressure: (level: MemoryPressure) => void;
   setForeground: (active: boolean) => void;
   dismissWarning: (index: number) => void;
+  /** Testers: simulate Premium on this phone (or stop). */
+  setPremiumSimulation: (on: boolean) => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -71,6 +75,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   settings: DEFAULT_SETTINGS,
 
   entitlements: FREE_STATE,
+  premiumSimulation: { available: false, on: false },
 
   projects: [],
   projectsStatus: 'idle',
@@ -101,6 +106,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
           .plan()
           .then(plan => set(s => ({ entitlements: { ...s.entitlements, plan } })))
           .catch(() => undefined);
+        void getProcessingService()
+          .premiumSimulation()
+          .then(premiumSimulation => set({ premiumSimulation }))
+          .catch(() => undefined);
       } catch {
         // No engine (e.g. an unsupported device): keep the free plan.
       }
@@ -111,6 +120,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
         bootError: error instanceof BootstrapError ? error.message : `Startup failed: ${errorMessage(error)}`,
       });
     }
+  },
+
+  async setPremiumSimulation(on) {
+    const plan = await getProcessingService().simulatePremium(on);
+    const sim = await getProcessingService().premiumSimulation();
+    set(s => ({ entitlements: { ...s.entitlements, plan }, premiumSimulation: sim }));
   },
 
   async updateSetting(key, value) {

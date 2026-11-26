@@ -2016,7 +2016,7 @@ pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const
 }  // extern "C"
 
 pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count, uint32_t seed,
-                       const pp_cancel_token* token) {
+                       const pp_art_controls* controls, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
     if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is required");
     if (artist < 0 || artist >= PP_ART_ARTISTS || level < 0 || level > 2) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown artist or level");
@@ -2025,6 +2025,8 @@ pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* s
     o.artist = static_cast<photoplus::art::Artist>(artist);
     o.level = static_cast<photoplus::art::Level>(level);
     o.seed = seed;
+    if (controls != nullptr)
+      o.controls = {controls->brush, controls->palette, controls->vivid, controls->likeness, controls->texture, controls->age, controls->background};
     o.subject = subject != nullptr ? &subject->buffer : nullptr;
     for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i)
       o.faces.push_back({faces[i * 4], faces[i * 4 + 1], faces[i * 4 + 2], faces[i * 4 + 3]});

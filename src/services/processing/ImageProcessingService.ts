@@ -248,10 +248,30 @@ export class ImageProcessingService {
   /** Where the person usually is in a clip (to frame them in a new scene). */
   async glideSubject(inputPath: string): Promise<GlideSubject> {
     const r = (await this.engine.glideSubject(createId('gsub'), { inputPath })) as Partial<GlideSubject>;
-    const box = Array.isArray(r.box) && r.box.length === 4 && r.box.every(v => typeof v === 'number' && Number.isFinite(v)) ? r.box : null;
+    const box =
+      Array.isArray(r.box) && r.box.length === 4 && r.box.every(v => typeof v === 'number' && Number.isFinite(v))
+        ? r.box
+        : null;
     const aspect = typeof r.aspect === 'number' && r.aspect > 0 ? r.aspect : 9 / 16;
-    if (!r.found || !box) return { found: false, box: [0, 0, 1, 1], cutLeft: false, cutTop: false, cutRight: false, cutBottom: false, aspect };
-    return { found: true, box, cutLeft: !!r.cutLeft, cutTop: !!r.cutTop, cutRight: !!r.cutRight, cutBottom: !!r.cutBottom, aspect };
+    if (!r.found || !box)
+      return {
+        found: false,
+        box: [0, 0, 1, 1],
+        cutLeft: false,
+        cutTop: false,
+        cutRight: false,
+        cutBottom: false,
+        aspect,
+      };
+    return {
+      found: true,
+      box,
+      cutLeft: !!r.cutLeft,
+      cutTop: !!r.cutTop,
+      cutRight: !!r.cutRight,
+      cutBottom: !!r.cutBottom,
+      aspect,
+    };
   }
 
   /** Editor: renders a photo with its edits (a preview, or a copy for the library). */
@@ -340,6 +360,22 @@ export class ImageProcessingService {
     } catch {
       return 'free';
     }
+  }
+
+  /** Testers: whether this build can simulate Premium, and whether it is. */
+  async premiumSimulation(): Promise<{ available: boolean; on: boolean }> {
+    try {
+      const r = (await this.engine.getPremiumSimulation()) as { available?: unknown; on?: unknown } | null;
+      return { available: r?.available === true, on: r?.on === true };
+    } catch {
+      return { available: false, on: false };
+    }
+  }
+
+  /** Testers: simulate Premium, or go back to the real plan. Resolves with the plan now held. */
+  async simulatePremium(on: boolean): Promise<'free' | 'premium'> {
+    await this.engine.setDebugPlan(on ? 'premium' : 'free');
+    return this.plan();
   }
 
   /** What the camera's lens left in a photo. */

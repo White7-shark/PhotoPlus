@@ -53,6 +53,18 @@ struct FaceBox {
   float x = 0, y = 0, w = 0, h = 0;
 };
 
+// The person's own say over the painting. The defaults are the artist's own
+// way; every control stays within what that artist would do.
+struct Controls {
+  float brush = 1.0f;       // 0.6 finer marks .. 1.6 bolder marks (strokes, hatching, dots, tesserae)
+  float palette = 1.0f;     // 0 the photo's own colours .. 1 the artist's palette (light and marks stay the artist's)
+  float vivid = 0.0f;       // -1 muted .. +1 vivid colour
+  float likeness = 0.5f;    // 0 the artist's freedom .. 1 the face kept closest to the sitter
+  float texture = 1.0f;     // 0 smooth .. 1.5 heavy canvas, paper grain and paint relief
+  float age = 1.0f;         // 0 freshly painted .. 1.5 old varnish and craquelure
+  float background = 1.0f;  // 0 the photo's own background, painted .. 1 the artist's (dark ground, haze, gold)
+};
+
 struct Options {
   Artist artist = Artist::Leonardo;
   Level level = Level::Painting;
@@ -62,6 +74,7 @@ struct Options {
   // haze, gold leaf) while the person stays the subject.
   const ImageBuffer* subject = nullptr;
   std::vector<FaceBox> faces;
+  Controls controls;
 };
 
 // Paints `image` (RGBA8 or BGRA8) in place. Alpha is kept.

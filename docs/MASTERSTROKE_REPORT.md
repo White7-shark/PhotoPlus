@@ -1,6 +1,8 @@
-# Masters: your photo painted as twenty great artists worked
+# Masterstroke: your photo painted as twenty great artists worked
 
-Masters is a Photoshoot Studio tool. It is Premium; the free plan gets **one finished painting a day**. Previews and the artist cards are free and unlimited.
+(The tool was first called Masters. Code identifiers still say `masters`, but the name people see is **Masterstroke**.)
+
+Masterstroke is a Photoshoot Studio tool. It is Premium; the free plan gets **one finished painting a day**. Previews and the artist cards are free and unlimited.
 
 It is not a filter laid over the photo. The engine paints a new picture from it the way each artist worked:
 - the ground they painted on;
@@ -66,7 +68,7 @@ At every level the face gets its own fine-brush pass, so it stays true to the pe
   - `preview`: 760 px;
   - `full`: the finished painting.
 - A full render needs `ArtAllowance.allowed`. Otherwise it is refused with `PREMIUM_REQUIRED` and a translated message.
-- `ArtAllowance` counts one painting per local calendar day, using the trusted clock (Integrity), so changing the phone's date doesn't reset it. Premium, or Masters redeemed with Rewards points, has no limit.
+- `ArtAllowance` counts one painting per local calendar day, using the trusted clock (Integrity), so changing the phone's date doesn't reset it. Premium, or Masterstroke redeemed with Rewards points, has no limit.
 - The free plan's finished paintings carry the watermark, like every other free export.
 - The person mask and faces are cached for the last three photos, so changing the artist doesn't run detection again.
 - R8 keeps the JNI method through the existing `native <methods>` keep rule (checked with `minifyReleaseWithR8`).
@@ -85,25 +87,69 @@ At every level the face gets its own fine-brush pass, so it stays true to the pe
 - A newer preview cancels the older one.
 - The catalogue (`src/services/masters/catalog.ts`) holds names, techniques, descriptions and movements as string resources. Years are numbers.
 
+## Your touch: the person's controls
+
+A collapsible panel on the screen ("Your touch") guides the artist's hand. Every control starts at the artist's own way. Each slider shows how far it is from that (0, +30, −20) and names its two ends.
+
+| Control | Range (default) | What it does in the engine |
+|---|---|---|
+| Brush size | 0.6–1.6 (1) | Scales every mark: strokes, hatching, dots, tesserae, contours. Places in the picture (where the light falls, the haze) don't move. |
+| Colours | your photo's 0 – artist's palette 1 (1) | Takes the photo's hue and colourfulness at the painting's own light, so there is no glaring colour in the shadows. |
+| Vividness | −1–1 (0) | Raises quiet colours most and strong ones (skin, a red dress) little, so skin stays natural. Lower values mute. |
+| Likeness | artistic 0 – true to you 1 (0.5) | Uses finer brushes and a lower repaint threshold on the face. Above the middle, the photo's fine light and shade are drawn back into the face. |
+| Texture | 0–1.5 (1) | Canvas weave, paint relief, paper grain. |
+| Age | fresh paint 0 – centuries old 1.5 (1) | Varnish and craquelure. |
+| Background | your scene 0 – artist's 1 (1) | How far the artist takes over the background (Caravaggio's black ground, Leonardo's haze, Klimt's gold). At 0 your own background is painted as it is. |
+
+How the controls behave:
+- The preview repaints when the finger lifts, and screen readers can step each slider.
+- "Paint it the artist's way" resets everything.
+- The finished painting uses the same touch.
+- The artist cards always show each artist's own way.
+- **Engine:**
+  - `pp_art_controls` is the C struct; pass `NULL` for the artist's way.
+  - Values out of range are refused.
+  - Android clamps the values and passes them through JNI.
+  - A test checks that each control changes what it says and that the defaults give exactly the artist's picture.
+
+## Settings
+
+Settings has a Masterstroke section, stored as the validated `masterstroke` setting:
+- **Finish to start with:** Study, Painting or Masterpiece.
+- **Remember my touch:** keeps your controls for next time. When it's off, every session starts at the artist's way.
+- **Paint the artist cards:** when it's off, cards show the artist's initial. This saves battery.
+- **Reset my touch.**
+
+## Premium simulation (testers; to be removed for production)
+
+- **Where:** Settings has a Testing section with a **Simulate Premium** switch. It gives this phone Premium without a subscription: unlimited Masterstroke paintings, no watermark, and every Premium tool, because the native plan is what decides these.
+- **When it shows:** only where the build allows it. That is debug builds, and builds made with `PREMIUM_SIMULATION`, which `android/app/build.gradle` sets to `true` for now.
+- **Before the production release**, do one of these:
+  - set the default to `false`, or
+  - build with `-Pphotoplus.premiumSimulation=false`.
+
+  The switch then disappears and any simulation already stored on a phone has no effect.
+
 ## Words and languages
 
-Every new text was written by hand in English and translated by hand into Spanish, Brazilian Portuguese, French, Arabic, Hindi, Indonesian, Russian and Simplified Chinese. That is about 108 strings, including:
+Every new text was written by hand in English and translated by hand into Spanish, Brazilian Portuguese, French, Arabic, Hindi, Indonesian, Russian and Simplified Chinese. That is about 146 strings, including:
 - the artist names as each language writes them (Léonard de Vinci, Miguel Ángel, 葛饰北斋, …);
 - the techniques and descriptions;
 - the two new FAQ entries;
 - the native messages;
-- the Rewards tool names.
+- the Rewards tool names;
+- the Your touch controls, the Masterstroke settings and the Premium simulation texts.
 
 The source is `tools/i18n/content/masters.py`, which merges into `src/i18n/strings/*.json`. `tools/i18n/build-strings.mjs` then generates `strings.xml` for each language.
 
-The titles of Premium features are now string resources too (`feature_<name>`, all 59), and the Premium sheet shows them in the app's language. Masters' title is translated by hand; the rest are in `values/strings.xml` for Google Play to translate.
+The titles of Premium features are now string resources too (`feature_<name>`, all 59), and the Premium sheet shows them in the app's language. Masterstroke's title is translated by hand; the rest are in `values/strings.xml` for Google Play to translate.
 
 ## Checks
 
-- Engine: 6 art tests pass. On the host, a 900×960 photo takes about 0.4–4 s, depending on the artist.
+- Engine: 7 art tests pass (244 engine tests in all). On the host, a 900×960 photo takes about 0.4–4 s, depending on the artist.
 - App:
   - `tsc` and `eslint` are clean.
-  - Jest: 36 suites, 400 tests. The new `__tests__/masters.test.tsx` covers the catalogue, all 8 translations (with their placeholders), the service, the studio tile, the full screen flow (free painting, then Premium) and Premium without limits.
+  - Jest: 37 suites, 406 tests. The new `__tests__/masters.test.tsx` covers the catalogue, all 8 translations (with their placeholders), the service, the studio tile, the full screen flow (free painting, then Premium) and Premium without limits.
   - The i18n checks pass: no text left in code, and strings are up to date.
 - Android:
   - `buildCMakeDebug`, `compileDebugKotlin`, `testDebugUnitTest` (with the new `ArtAllowanceTest`), `lintDebug` and `minifyReleaseWithR8` pass.

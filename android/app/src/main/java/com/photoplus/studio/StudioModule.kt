@@ -663,6 +663,11 @@ class StudioModule(reactContext: ReactApplicationContext) :
     val level = (map["level"] as? Number)?.toInt() ?: 1
     val quality = map["quality"] as? String ?: "preview"
     val seed = (map["seed"] as? Number)?.toInt() ?: 7
+    val controls = artControls(map["controls"])
+    if (controls == null) {
+      promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_masters_unknown_artist))
+      return
+    }
     if (artist !in 0 until ARTISTS || level !in 0..2 || quality !in setOf("thumb", "preview", "full")) {
       promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_masters_unknown_artist))
       return
@@ -687,13 +692,30 @@ class StudioModule(reactContext: ReactApplicationContext) :
         val (mask, faces) = synchronized(artSubjects) { artSubjects[file.absolutePath] } ?: portraitProcessor.personAndFaces(bitmap).also { found ->
           synchronized(artSubjects) { artSubjects[file.absolutePath] = found }
         }
-        NativeEngine.nativeArtPaint(bitmap, artist, if (quality == "thumb") 0 else level, mask, faces, seed, token)
+        // Cards show each artist's own way; the preview and the painting follow the person's controls.
+        NativeEngine.nativeArtPaint(bitmap, artist, if (quality == "thumb") 0 else level, mask, faces, seed, if (quality == "thumb") null else controls, token)
         val out = if (full) encodeStudio(bitmap, true, "Masters") else encodeStudio(bitmap, false, if (quality == "thumb") "MastersThumb$artist" else "Masters")
         if (full) ArtAllowance.use(reactApplicationContext)
         out + mapOf("remaining" to ArtAllowance.remaining(reactApplicationContext))
       } finally {
         bitmap.recycle()
       }
+    }
+  }
+
+  /**
+   * The person's painting controls from { brush, palette, vivid, likeness,
+   * texture, age, background } (each optional, the artist's own way when
+   * absent), clamped to the engine's ranges; null if a value isn't a number.
+   */
+  private fun artControls(raw: Any?): FloatArray? {
+    val m = raw as? Map<*, *> ?: return ART_DEFAULTS.copyOf()
+    return FloatArray(ART_CONTROLS.size) { i ->
+      val (name, lo, hi) = ART_CONTROLS[i]
+      val v = m[name] ?: return@FloatArray ART_DEFAULTS[i]
+      val f = (v as? Number)?.toFloat() ?: return null
+      if (!f.isFinite()) return null
+      f.coerceIn(lo, hi)
     }
   }
 
@@ -831,6 +853,17 @@ class StudioModule(reactContext: ReactApplicationContext) :
     private const val MASTERS_THUMB = 300
     private const val MASTERS_PREVIEW = 760
     private val MASTERS_FULL = intArrayOf(1100, 1500, 1800)
+    /** The painting controls, in the engine's order, with their ranges (pp_art_controls). */
+    private val ART_CONTROLS = listOf(
+      Triple("brush", 0.6f, 1.6f),
+      Triple("palette", 0f, 1f),
+      Triple("vivid", -1f, 1f),
+      Triple("likeness", 0f, 1f),
+      Triple("texture", 0f, 1.5f),
+      Triple("age", 0f, 1.5f),
+      Triple("background", 0f, 1f),
+    )
+    private val ART_DEFAULTS = floatArrayOf(1f, 1f, 0f, 0.5f, 1f, 1f, 1f)
     const val NAME = "PhotoPlusStudio"
     const val NO_PERSON = "NO_PERSON"
     const val NO_FACE = "NO_FACE"

@@ -24,7 +24,9 @@ namespace {
 
 struct Ctx {
   int w = 0, h = 0;
-  float S = 1;  // the short side, px: every size is relative to it
+  float S = 1;  // the mark unit, px (the short side times the brush control): every mark size is relative to it
+  float G = 1;  // the short side, px: for places and distances in the picture
+  Controls ctl;
   Level level = Level::Painting;
   uint32_t seed = 1;
   const CancellationToken* token = nullptr;
@@ -70,14 +72,17 @@ Img inverse(const Img& m) {
 
 // The background: where the person isn't (or, unknown, nowhere).
 Img background(const Ctx& c) {
-  if (c.subject.d.empty()) return Img(c.w, c.h, 1, 0.0f);
-  return inverse(c.subject);
+  if (c.subject.d.empty() || c.ctl.background <= 0) return Img(c.w, c.h, 1, 0.0f);
+  Img bg = inverse(c.subject);
+  if (c.ctl.background < 1)
+    for (float& v : bg.d) v *= c.ctl.background;
+  return bg;
 }
 
 // Where the light falls: a pool on the face (or the person, or the upper
 // middle), from the upper left — for the chiaroscuro painters.
 Img lightPool(const Ctx& c, float spread, float floorLight) {
-  float cx = 0.5f * static_cast<float>(c.w), cy = 0.4f * static_cast<float>(c.h), r = 0.42f * c.S;
+  float cx = 0.5f * static_cast<float>(c.w), cy = 0.4f * static_cast<float>(c.h), r = 0.42f * c.G;
   if (!c.faceBoxes.empty()) {
     const FaceBox& f = c.faceBoxes.front();
     cx = (f.x + f.w * 0.5f) * static_cast<float>(c.w), cy = (f.y + f.h * 0.5f) * static_cast<float>(c.h);
@@ -98,7 +103,7 @@ Img lightPool(const Ctx& c, float spread, float floorLight) {
       r = 0.45f * static_cast<float>(bottom - top);
     }
   }
-  cx -= 0.08f * c.S, cy -= 0.08f * c.S;  // the light comes from the upper left
+  cx -= 0.08f * c.G, cy -= 0.08f * c.G;  // the light comes from the upper left
   r *= spread;
   Img out(c.w, c.h, 1);
   for (int y = 0; y < c.h; ++y)
@@ -151,7 +156,7 @@ Img skinMask(const Ctx& c) {
 
 // Edge-preserving smoothing at a size that keeps it quick, back at full size.
 Img flatten(const Ctx& c, const Img& rgb, float radiusFrac, int passes) {
-  const float scale = std::min(1.0f, 900.0f / c.S);
+  const float scale = std::min(1.0f, 900.0f / c.G);
   Img small = scale < 1 ? resize(rgb, std::max(16, static_cast<int>(static_cast<float>(c.w) * scale)), std::max(16, static_cast<int>(static_cast<float>(c.h) * scale))) : rgb;
   const int r = std::max(2, static_cast<int>(radiusFrac * c.S * scale + 0.5f));
   for (int i = 0; i < passes && !c.cancelled(); ++i) small = kuwahara(small, r, c.token);
@@ -190,8 +195,9 @@ Canvas paintOil(const Ctx& c, const Img& ref, const Field& field, const Oil& o) 
   // The face, with the finest brush, so it stays the sitter.
   if (o.faceDetail && !c.faces.d.empty()) {
     Brush b = o.brush;
-    b.radius = std::max(1.0f, o.minFrac * c.S * (c.level == Level::Masterpiece ? 0.55f : c.level == Level::Painting ? 0.8f : 1.2f));
-    b.threshold *= 0.6f;
+    const float keep = mix(1.35f, 0.65f, c.ctl.likeness);  // finer brushes for a closer likeness
+    b.radius = std::max(1.0f, o.minFrac * c.S * keep * (c.level == Level::Masterpiece ? 0.55f : c.level == Level::Painting ? 0.8f : 1.2f));
+    b.threshold *= mix(0.9f, 0.3f, c.ctl.likeness);
     b.maxLen = std::min(b.maxLen, 4.0f);
     strokeLayer(cv, ref, field, b, c.seed * 977U + 99U, &c.faces, c.token);
   }
@@ -200,11 +206,13 @@ Canvas paintOil(const Ctx& c, const Img& ref, const Field& field, const Oil& o) 
 
 void finishOil(Img& rgb, Canvas& cv, const Ctx& c, float weave, float weavePx, float relief, float gloss, float varnishAmt, float crack,
                float vignetteAmt, Rgb3 vignetteColour, bool panel = false) {
+  weave *= c.ctl.texture, relief *= c.ctl.texture, gloss *= std::min(1.0f, c.ctl.texture);
+  varnishAmt = clamp01(varnishAmt * c.ctl.age), crack = std::min(1.0f, crack * c.ctl.age);
   if (panel) woodPanel(cv.height, weave, c.seed + 41U);
   else if (weave > 0) canvasWeave(cv.height, std::max(2.5f, weavePx), weave, c.seed + 43U);
   if (relief > 0) lightRelief(rgb, cv.height, relief, gloss, c.token);
   if (varnishAmt > 0) varnish(rgb, varnishAmt);
-  if (crack > 0 && c.level != Level::Study) craquelure(rgb, c.S / 40.0f, crack, c.seed + 47U, c.token);
+  if (crack > 0 && c.level != Level::Study) craquelure(rgb, c.G / 40.0f, crack, c.seed + 47U, c.token);
   if (vignetteAmt > 0) vignette(rgb, vignetteAmt, vignetteColour);
 }
 
@@ -429,7 +437,7 @@ Img turner(Ctx& c) {
   mixColour(ref, hex(0xE6D2A0), 1.0f, &haze);
   for (int y = 0; y < c.h; ++y)
     for (int x = 0; x < c.w; ++x) {
-      const float d = std::hypot(static_cast<float>(x - bx), static_cast<float>(y - by)) / (c.S * 0.55f);
+      const float d = std::hypot(static_cast<float>(x - bx), static_cast<float>(y - by)) / (c.G * 0.55f);
       const float g = 0.55f * std::exp(-d * d);
       float* p = ref.px(x, y);
       const Rgb3 sun = hex(0xFFE7A3);
@@ -644,9 +652,9 @@ Img gauguin(Ctx& c) {
   const Img l = lines(blur(lumaOf(c.photo), 1.0f, c.token), std::max(1.0f, c.S / 450.0f), 1.6f, 0.012f, 0.03f, c.token);
   for (size_t i = 0; i < edge.d.size(); ++i) edge.d[i] = 0.85f * std::max(edge.d[i] * 0.8f, l.d[i]);
   mixColour(rgb, hex(0x1F2A5A), 1.0f, &edge);  // bold dark-blue contours (cloisonnism)
-  canvasWeave(cv.height, std::max(3.0f, c.S / 130.0f), 0.35f, c.seed + 13U);  // coarse burlap
-  lightRelief(rgb, cv.height, 0.4f, 0.0f, c.token);
-  grain(rgb, 0.03f, c.seed + 17U);
+  canvasWeave(cv.height, std::max(3.0f, c.S / 130.0f), 0.35f * c.ctl.texture, c.seed + 13U);  // coarse burlap
+  lightRelief(rgb, cv.height, 0.4f * c.ctl.texture, 0.0f, c.token);
+  grain(rgb, 0.03f * c.ctl.texture, c.seed + 17U);
   return rgb;
 }
 
@@ -673,7 +681,7 @@ Img hokusai(Ctx& c) {
       if (skin.d[i] > 0.5f && luma(&c.photo.d[i * 3]) > 0.08f) idx[i] = skinBlock;
   }
   Img paperTooth;
-  Img rgb = paper(c.w, c.h, hex(0xF1E8D6), 0.08f, false, c.seed + 19U, &paperTooth);
+  Img rgb = paper(c.w, c.h, hex(0xF1E8D6), 0.08f * c.ctl.texture, false, c.seed + 19U, &paperTooth);
   const Img bg = background(c);
   // Colour blocks, printed a hair off the key block, with the wood's grain in the flat areas.
   const int off = std::max(1, static_cast<int>(c.S / 900.0f));
@@ -729,7 +737,7 @@ Img michelangelo(Ctx& c) {
   l = blur(l, std::max(0.6f, c.S / 900.0f), c.token);
   Img tooth;
   const Rgb3 cream = hex(0xE9DCC0), chalk = hex(0xA2412B), deep = hex(0x7E2E1C);
-  Img rgb = paper(c.w, c.h, cream, 0.1f, true, c.seed + 29U, &tooth);
+  Img rgb = paper(c.w, c.h, cream, 0.1f * c.ctl.texture, true, c.seed + 29U, &tooth);
   // The study: the figure drawn; the paper left bare around it.
   Img fade = c.subject.d.empty() ? Img(c.w, c.h, 1, 1.0f) : c.subject;
   if (c.subject.d.empty())
@@ -786,7 +794,7 @@ Img durer(Ctx& c) {
   l = blur(l, std::max(0.6f, c.S / 1200.0f), c.token);
   const Field f = orientation(c.photo, std::max(1.0f, c.S / 250.0f), std::max(3.0f, c.S / 60.0f), c.token);
   const Img bg = background(c);
-  Img rgb = paper(c.w, c.h, hex(0xF2ECDD), 0.06f, false, c.seed + 37U, nullptr);
+  Img rgb = paper(c.w, c.h, hex(0xF2ECDD), 0.06f * c.ctl.texture, false, c.seed + 37U, nullptr);
   const float period = std::max(3.0f, c.S / 170.0f);
   const Rgb3 ink = hex(0x1A1612);
   constexpr int kDirs = 6;
@@ -838,7 +846,7 @@ Img degas(Ctx& c) {
   const Rgb3 base = hex(0x9AA0A0);
   Rgb3 tone{};
   for (size_t k = 0; k < 3; ++k) tone[k] = mix(base[k], static_cast<float>(mean[k] / n) * 0.85f, 0.6f);
-  cv.rgb = paper(c.w, c.h, tone, 0.12f, false, c.seed + 43U, &cv.tooth);
+  cv.rgb = paper(c.w, c.h, tone, 0.12f * c.ctl.texture, false, c.seed + 43U, &cv.tooth);
   cv.height = Img(c.w, c.h, 1, 0.0f);
   cv.empty = false;  // the toned paper shows wherever it is already right
   const Field f = formField(c, ref);
@@ -855,7 +863,7 @@ Img degas(Ctx& c) {
   Img contour = lines(blur(lumaOf(c.photo), 1.0f, c.token), std::max(1.0f, c.S / 600.0f), 1.6f, 0.015f, 0.04f, c.token);
   for (size_t i = 0; i < contour.d.size(); ++i) contour.d[i] *= 0.8f * smoothstep(0.25f, 0.6f, cv.tooth.d[i]);
   mixColour(rgb, hex(0x2B2A2A), 1.0f, &contour);  // charcoal
-  grain(rgb, 0.02f, c.seed + 47U);
+  grain(rgb, 0.02f * c.ctl.texture, c.seed + 47U);
   return rgb;
 }
 
@@ -949,9 +957,9 @@ Img klimt(Ctx& c) {
         height.at(x, y) = hgt * (1 - s);
       }
   });
-  canvasWeave(height, std::max(2.5f, c.S / 240.0f), 0.08f, c.seed + 61U);
-  lightRelief(rgb, height, 0.35f, 0.25f, c.token);  // metal catches the light
-  varnish(rgb, 0.15f);
+  canvasWeave(height, std::max(2.5f, c.S / 240.0f), 0.08f * c.ctl.texture, c.seed + 61U);
+  lightRelief(rgb, height, 0.35f * std::max(0.4f, c.ctl.texture), 0.25f, c.token);  // metal catches the light
+  varnish(rgb, clamp01(0.15f * c.ctl.age));
   return rgb;
 }
 
@@ -981,6 +989,47 @@ Img paintArtist(Ctx& c, Artist a) {
   return c.photo;
 }
 
+// The person's colour and likeness choices, over the finished painting.
+void personalise(Img& out, const Ctx& c) {
+  const Controls& k = c.ctl;
+  const bool colour = k.palette < 0.999f || std::fabs(k.vivid) > 0.001f;
+  if (colour)
+    for (int y = 0; y < c.h; ++y)
+      for (int x = 0; x < c.w; ++x) {
+        float lab[3], ph[3];
+        float* p = out.px(x, y);
+        rgbToLab(p, lab);
+        if (k.palette < 0.999f) {
+          rgbToLab(c.photo.px(x, y), ph);
+          // The photo's hue and colourfulness, at the painting's own light (no glaring colour in its shadows).
+          const float fit = std::clamp(lab[0] / std::max(ph[0], 5.0f), 0.0f, 1.1f);
+          lab[1] = mix(ph[1] * fit, lab[1], k.palette), lab[2] = mix(ph[2] * fit, lab[2], k.palette);
+        }
+        if (std::fabs(k.vivid) > 0.001f) {
+          // Vibrance: quiet colours gain most, strong ones (skin, a red dress) little, so skin stays natural.
+          const float chroma = std::hypot(lab[1], lab[2]);
+          const float sat = k.vivid > 0 ? 1.0f + 0.55f * k.vivid * (1.0f - smoothstep(15.0f, 55.0f, chroma)) : 1.0f + 0.6f * k.vivid;
+          lab[1] *= sat, lab[2] *= sat;
+        }
+        labToRgb(lab, p);
+        for (int i = 0; i < 3; ++i) p[i] = clamp01(p[i]);
+      }
+  // A closer likeness: the sitter's features (the photo's fine light and shade) drawn back into the face.
+  if (k.likeness > 0.5f && !c.faces.d.empty()) {
+    const Img l = lumaOf(c.photo);
+    const Img soft = blur(l, std::max(1.0f, c.G / 160.0f), c.token);
+    const float amt = (k.likeness - 0.5f) * 1.4f;
+    for (int y = 0; y < c.h; ++y)
+      for (int x = 0; x < c.w; ++x) {
+        const float a = amt * c.faces.at(x, y);
+        if (a <= 0) continue;
+        const float d = std::clamp(l.at(x, y) - soft.at(x, y), -0.2f, 0.2f) * a;
+        float* p = out.px(x, y);
+        for (int i = 0; i < 3; ++i) p[i] = clamp01(p[i] + d);
+      }
+  }
+}
+
 }  // namespace
 
 Error paint(ImageBuffer& image, const Options& options, const CancellationToken* token) {
@@ -997,7 +1046,16 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
   const bool bgra = image.format() == PixelFormat::BGRA8;
   Ctx c;
   c.w = image.width(), c.h = image.height();
-  c.S = static_cast<float>(std::min(c.w, c.h));
+  {
+    Controls k = options.controls;
+    auto ok = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (!ok(k.brush, 0.5f, 2.0f) || !ok(k.palette, 0, 1) || !ok(k.vivid, -1, 1) || !ok(k.likeness, 0, 1) || !ok(k.texture, 0, 2) ||
+        !ok(k.age, 0, 2) || !ok(k.background, 0, 1))
+      return {PP_ERROR_INVALID_ARGUMENT, "A painting control is out of range"};
+    c.ctl = k;
+  }
+  c.G = static_cast<float>(std::min(c.w, c.h));
+  c.S = c.G * c.ctl.brush;
   c.level = options.level;
   c.seed = options.seed == 0 ? 1U : options.seed;
   c.token = token;
@@ -1016,7 +1074,7 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
     Img mask(m.width(), m.height(), 1);
     for (int y = 0; y < m.height(); ++y)
       for (int x = 0; x < m.width(); ++x) mask.at(x, y) = static_cast<float>(m.row(y)[x]) / 255.0f;
-    c.subject = blur(resize(mask, c.w, c.h), std::max(1.0f, c.S / 300.0f), token);
+    c.subject = blur(resize(mask, c.w, c.h), std::max(1.0f, c.G / 300.0f), token);
   }
   for (const FaceBox& f : options.faces) {
     if (!(f.w > 0 && f.h > 0) || !std::isfinite(f.x) || !std::isfinite(f.y)) continue;
@@ -1035,7 +1093,9 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
     for (size_t i = 0; i < c.subject.d.size(); ++i) c.subject.d[i] = std::max(c.subject.d[i], c.faces.d[i]);
   if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
 
-  const Img out = paintArtist(c, options.artist);
+  Img out = paintArtist(c, options.artist);
+  if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
+  personalise(out, c);
   if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
   for (int y = 0; y < c.h; ++y) {
     uint8_t* row = image.row(y);

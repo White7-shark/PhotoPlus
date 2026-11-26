@@ -77,11 +77,11 @@ double meanDiff(const std::vector<unsigned char>& a, const std::vector<unsigned 
   return d / static_cast<double>(n * 3);
 }
 
-std::vector<unsigned char> paint(int artist, int level = 1, uint32_t seed = 7, bool mask = true) {
+std::vector<unsigned char> paint(int artist, int level = 1, uint32_t seed = 7, bool mask = true, const pp_art_controls* controls = nullptr) {
   pp_image* img = portrait();
   pp_image* m = mask ? personMask() : nullptr;
   const float face[4] = {68.0f / kW, 40.0f / kH, 84.0f / kW, 110.0f / kH};
-  EXPECT_EQ(pp_art_paint(img, artist, level, m, face, 1, seed, nullptr), PP_OK);
+  EXPECT_EQ(pp_art_paint(img, artist, level, m, face, 1, seed, controls, nullptr), PP_OK);
   auto out = pixels(img);
   pp_image_destroy(img);
   if (m) pp_image_destroy(m);
@@ -161,23 +161,83 @@ TEST(art_masterpiece_goes_further_than_a_study) {
 
 TEST(art_works_without_a_mask_or_faces) {
   pp_image* img = portrait();
-  EXPECT_EQ(pp_art_paint(img, 19, 1, nullptr, nullptr, 0, 3, nullptr), PP_OK);
+  EXPECT_EQ(pp_art_paint(img, 19, 1, nullptr, nullptr, 0, 3, nullptr, nullptr), PP_OK);
   pp_image_destroy(img);
 }
 
 TEST(art_refuses_bad_input_and_honours_cancel) {
   pp_image* img = portrait();
-  EXPECT_EQ(pp_art_paint(nullptr, 0, 1, nullptr, nullptr, 0, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_art_paint(img, PP_ART_ARTISTS, 1, nullptr, nullptr, 0, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_art_paint(img, 0, 3, nullptr, nullptr, 0, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 1, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(nullptr, 0, 1, nullptr, nullptr, 0, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, PP_ART_ARTISTS, 1, nullptr, nullptr, 0, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, 0, 3, nullptr, nullptr, 0, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 1, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image* wrong = nullptr;
   pp_image_create(20, 20, PP_FORMAT_RGBA8, &wrong);
-  EXPECT_EQ(pp_art_paint(img, 0, 1, wrong, nullptr, 0, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, 0, 1, wrong, nullptr, 0, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_cancel_token* t = pp_cancel_token_create();
   pp_cancel_token_cancel(t);
-  EXPECT_EQ(pp_art_paint(img, 6, 1, nullptr, nullptr, 0, 1, t), PP_ERROR_CANCELLED);
+  EXPECT_EQ(pp_art_paint(img, 6, 1, nullptr, nullptr, 0, 1, nullptr, t), PP_ERROR_CANCELLED);
   pp_cancel_token_destroy(t);
   pp_image_destroy(wrong);
+  pp_image_destroy(img);
+}
+
+// The person's controls: the defaults are the artist's own way; each control
+// changes what it says; out-of-range values are refused.
+TEST(art_controls_change_what_they_say) {
+  const pp_art_controls same{1, 1, 0, 0.5f, 1, 1, 1};
+  const auto base = paint(6);
+  EXPECT_EQ(meanDiff(base, paint(6, 1, 7, true, &same)), 0.0);
+
+  // Bolder brushes paint a different picture.
+  pp_art_controls k = same;
+  k.brush = 1.6f;
+  EXPECT_TRUE((meanDiff(base, paint(6, 1, 7, true, &k))) > (1.0));
+
+  // The photo's own colours: the red top stays red under Hokusai's palette, and closer to the photo.
+  pp_art_controls own = same;
+  own.palette = 0;
+  const auto h = paint(10), hOwn = paint(10, 1, 7, true, &own);
+  const double redArtist = meanIn(h, 0, 60, 180, 160, 250) - meanIn(h, 1, 60, 180, 160, 250);
+  const double redOwn = meanIn(hOwn, 0, 60, 180, 160, 250) - meanIn(hOwn, 1, 60, 180, 160, 250);
+  EXPECT_TRUE((redOwn) > (redArtist - 1.0));
+  EXPECT_TRUE((redOwn) > (60.0));
+
+  // Vivid and muted.
+  pp_art_controls vivid = same, muted = same;
+  vivid.vivid = 1, muted.vivid = -1;
+  auto chroma = [](const std::vector<unsigned char>& px) {
+    double s = 0;
+    for (size_t i = 0; i < px.size(); i += 4) s += std::max({px[i], px[i + 1], px[i + 2]}) - std::min({px[i], px[i + 1], px[i + 2]});
+    return s / static_cast<double>(px.size() / 4);
+  };
+  EXPECT_TRUE((chroma(paint(12, 1, 7, true, &vivid))) > (chroma(paint(12)) + 2));
+  EXPECT_TRUE((chroma(paint(12, 1, 7, true, &muted))) < (chroma(paint(12)) - 2));
+
+  // The photo's own background: Caravaggio no longer plunges the wall into black.
+  pp_art_controls keep = same;
+  keep.background = 0;
+  EXPECT_TRUE((lumaIn(paint(5, 1, 7, true, &keep), 0, 0, 40, 60)) > (lumaIn(paint(5), 0, 0, 40, 60) + 25));
+
+  // Age: no varnish, no cracks — a fresher, less yellow Leonardo.
+  pp_art_controls fresh = same;
+  fresh.age = 0;
+  const auto leo = paint(0), leoFresh = paint(0, 1, 7, true, &fresh);
+  EXPECT_TRUE((meanIn(leoFresh, 2, 0, 0, kW, kH) - meanIn(leoFresh, 0, 0, 0, kW, kH)) > (meanIn(leo, 2, 0, 0, kW, kH) - meanIn(leo, 0, 0, 0, kW, kH)));
+
+  // Texture and likeness change the picture.
+  pp_art_controls smooth = same, close = same;
+  smooth.texture = 0, close.likeness = 1;
+  EXPECT_TRUE((meanDiff(base, paint(6, 1, 7, true, &smooth))) > (0.3));
+  EXPECT_TRUE((meanDiff(base, paint(6, 1, 7, true, &close))) > (0.1));
+
+  // Refused when out of range.
+  pp_image* img = portrait();
+  pp_art_controls bad = same;
+  bad.brush = 3;
+  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 0, 1, &bad, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  bad = same;
+  bad.vivid = NAN;
+  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 0, 1, &bad, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image_destroy(img);
 }

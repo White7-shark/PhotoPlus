@@ -1374,8 +1374,15 @@ pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const
  * mask (any size). faces: optional normalised boxes (x, y, w, h each), count
  * boxes. Paints `image` (RGBA/BGRA) in place; deterministic for a seed. */
 #define PP_ART_ARTISTS 20
+/* The person's controls (NULL: the artist's own way). Ranges: brush 0.5..2
+ * (1), palette 0 photo colours..1 artist's (1), vivid -1..1 (0), likeness
+ * 0..1 (0.5), texture 0..2 (1), age 0..2 (1), background 0 photo's..1
+ * artist's (1). Out of range: PP_ERROR_INVALID_ARGUMENT. */
+typedef struct pp_art_controls {
+  float brush, palette, vivid, likeness, texture, age, background;
+} pp_art_controls;
 pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
-                       uint32_t seed, const pp_cancel_token* token);
+                       uint32_t seed, const pp_art_controls* controls, const pp_cancel_token* token);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -499,9 +499,10 @@ object NativeEngine {
    * Masters: paints [bitmap] in place as [artist] worked (0 Leonardo … 19
    * Klimt; see pp_art_paint), at [level] (0 study, 1 painting, 2
    * masterpiece). [mask]: the person (ALPHA_8) or null; [faces]: normalised
-   * boxes (x, y, w, h each).
+   * boxes (x, y, w, h each). [controls]: the person's say (brush, palette,
+   * vivid, likeness, texture, age, background), or null for the artist's own way.
    */
-  external fun nativeArtPaint(bitmap: Bitmap, artist: Int, level: Int, mask: Bitmap?, faces: FloatArray?, seed: Int, token: Long)
+  external fun nativeArtPaint(bitmap: Bitmap, artist: Int, level: Int, mask: Bitmap?, faces: FloatArray?, seed: Int, controls: FloatArray?, token: Long)
 
   /**
    * Film strip (Photoshoot Studio): [photos] as frames, returns a result

@@ -62,7 +62,12 @@ int main(int argc, char** argv) {
   }
   const uint32_t seed = argc > 10 ? static_cast<uint32_t>(std::strtoul(argv[10], nullptr, 10)) : 7U;
   const auto t0 = std::chrono::steady_clock::now();
-  const pp_status s = pp_art_paint(img, std::atoi(argv[3]), std::atoi(argv[4]), mask, faces ? face : nullptr, faces, seed, nullptr);
+  // ART_CONTROLS="brush palette vivid likeness texture age background" for the person's controls.
+  pp_art_controls k{1, 1, 0, 0.5f, 1, 1, 1};
+  const char* env = std::getenv("ART_CONTROLS");
+  if (env != nullptr)
+    std::sscanf(env, "%f %f %f %f %f %f %f", &k.brush, &k.palette, &k.vivid, &k.likeness, &k.texture, &k.age, &k.background);
+  const pp_status s = pp_art_paint(img, std::atoi(argv[3]), std::atoi(argv[4]), mask, faces ? face : nullptr, faces, seed, &k, nullptr);
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   if (s != PP_OK) {
     std::fprintf(stderr, "failed: %s\n", pp_last_error_message());

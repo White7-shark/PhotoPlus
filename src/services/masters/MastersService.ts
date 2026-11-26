@@ -7,6 +7,7 @@
 import { errorCode, errorMessage, nativeModules, requireNative, type StudioSpec } from '../../native';
 import { createId } from '../database/ids';
 import { ARTISTS, type MastersLevel } from './catalog';
+import { clampControls, type ArtControls } from './controls';
 
 export type MastersQuality = 'thumb' | 'preview' | 'full';
 
@@ -64,11 +65,19 @@ export class MastersService {
     quality: MastersQuality,
     seed = FIRST_SEED,
     jobId: string = createId('masters'),
+    controls?: ArtControls,
   ): Promise<Painting> {
     if (!ARTISTS.some(a => a.id === artist)) throw new MastersError('Unknown artist', 'INVALID_ARGUMENT');
     let out: unknown;
     try {
-      out = await this.native.renderMasters(jobId, { inputPath, artist, level, quality, seed });
+      out = await this.native.renderMasters(jobId, {
+        inputPath,
+        artist,
+        level,
+        quality,
+        seed,
+        ...(controls ? { controls: clampControls(controls) } : {}),
+      });
     } catch (e) {
       throw new MastersError(errorMessage(e), errorCode(e) ?? 'INTERNAL');
     }
