@@ -66,6 +66,7 @@ export class MastersService {
     seed = FIRST_SEED,
     jobId: string = createId('masters'),
     controls?: ArtControls,
+    frame = 0,
   ): Promise<Painting> {
     if (!ARTISTS.some(a => a.id === artist)) throw new MastersError('Unknown artist', 'INVALID_ARGUMENT');
     let out: unknown;
@@ -77,6 +78,7 @@ export class MastersService {
         quality,
         seed,
         ...(controls ? { controls: clampControls(controls) } : {}),
+        ...(frame > 0 ? { frame } : {}),
       });
     } catch (e) {
       throw new MastersError(errorMessage(e), errorCode(e) ?? 'INTERNAL');

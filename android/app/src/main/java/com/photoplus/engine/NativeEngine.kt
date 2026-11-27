@@ -501,8 +501,12 @@ object NativeEngine {
    * masterpiece). [mask]: the person (ALPHA_8) or null; [faces]: 12 floats
    * per face, normalised: box x, y, w, h; mouth opening x0, y0, x1, y1; eye
    * centres lx, ly, rx, ry (zeros when unknown). [controls]: the person's say (brush, palette,
-   * vivid, likeness, texture, age, background), or null for the artist's own way.
+   * vivid, likeness, texture, age, background, intensity, surface, backdrop: 10 floats), or
+   * null for the artist's own way.
    */
+  /** A finished painting in a museum frame ([style] 1..5): a result handle (nativeResultWidth/Height, nativeCopyResultToBitmap, nativeReleaseResult). */
+  external fun nativeArtFrame(bitmap: Bitmap, style: Int, token: Long): Long
+
   external fun nativeArtPaint(bitmap: Bitmap, artist: Int, level: Int, mask: Bitmap?, faces: FloatArray?, seed: Int, controls: FloatArray?, token: Long)
 
   /**

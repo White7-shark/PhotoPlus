@@ -83,10 +83,11 @@ int main(int argc, char** argv) {
   const uint32_t seed = argc > 10 ? static_cast<uint32_t>(std::strtoul(argv[10], nullptr, 10)) : 7U;
   const auto t0 = std::chrono::steady_clock::now();
   // ART_CONTROLS="brush palette vivid likeness texture age background" for the person's controls.
-  pp_art_controls k{1, 1, 0, 0.5f, 0.4f, 1, 1};
+  pp_art_controls k{1, 1, 0, 0.5f, 0.4f, 1, 1, 0.6f, 0, 0};
   const char* env = std::getenv("ART_CONTROLS");
   if (env != nullptr)
-    std::sscanf(env, "%f %f %f %f %f %f %f", &k.brush, &k.palette, &k.vivid, &k.likeness, &k.texture, &k.age, &k.background);
+    std::sscanf(env, "%f %f %f %f %f %f %f %f %d %d", &k.brush, &k.palette, &k.vivid, &k.likeness, &k.texture, &k.age, &k.background,
+                &k.intensity, &k.surface, &k.backdrop);
   const pp_status s = pp_art_paint(img, std::atoi(argv[3]), std::atoi(argv[4]), mask, faces ? face : nullptr, faces, stride, seed, &k, nullptr);
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   if (s != PP_OK) {
@@ -94,6 +95,17 @@ int main(int argc, char** argv) {
     return 1;
   }
   std::fprintf(stderr, "artist %s level %s: %dx%d in %.0f ms\n", argv[3], argv[4], w, h, ms);
+  // ART_FRAME=1..5: the finished painting in a museum frame.
+  if (const char* fr = std::getenv("ART_FRAME"); fr != nullptr && std::atoi(fr) > 0) {
+    pp_image* framed = nullptr;
+    if (pp_art_frame(img, std::atoi(fr), nullptr, &framed) == PP_OK) {
+      pp_image_destroy(img);
+      img = framed;
+      pp_image_get_info(img, &info);
+      w = info.width, h = info.height;
+      px = static_cast<unsigned char*>(pp_image_pixels(img));
+    }
+  }
   std::ofstream out(argv[2], std::ios::binary);
   out << "P6\n" << w << " " << h << "\n255\n";
   for (int y = 0; y < h; ++y)

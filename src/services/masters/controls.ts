@@ -17,11 +17,16 @@ export interface ArtControls {
   texture: number;
   /** 0 fresh paint .. 1.5 old varnish and cracks. */
   age: number;
-  /** 0 the photo's own background, painted .. 1 the artist's. */
-  background: number;
+  /** How far the photo is transformed: 0 natural .. 1 the full transformation. */
+  intensity: number;
+  /** What it is painted on (SURFACES index; 0 the artist's own). */
+  surface: number;
+  /** Behind the person (BACKDROPS index; 0 the artist's). */
+  backdrop: number;
 }
 
-export type ControlKey = keyof ArtControls;
+/** The touch's sliders. */
+export type ControlKey = 'brush' | 'palette' | 'vivid' | 'likeness' | 'texture' | 'age';
 
 export const ARTIST_WAY: Readonly<ArtControls> = {
   brush: 1,
@@ -30,8 +35,42 @@ export const ARTIST_WAY: Readonly<ArtControls> = {
   likeness: 0.5,
   texture: 0.4,
   age: 1,
-  background: 1,
+  intensity: 0.6,
+  surface: 0,
+  backdrop: 0,
 };
+
+/** How far the painting goes. */
+export const INTENSITIES = [
+  { id: 'natural', value: 0.3 },
+  { id: 'balanced', value: 0.6 },
+  { id: 'full', value: 1 },
+] as const;
+export type IntensityId = (typeof INTENSITIES)[number]['id'];
+/** The choice nearest a stored value. */
+export const intensityOf = (v: number): IntensityId =>
+  INTENSITIES.reduce((best, i) => (Math.abs(i.value - v) < Math.abs(best.value - v) ? i : best)).id;
+
+/** Painted on (engine order, pp_art_controls.surface). */
+export const SURFACES = ['artist', 'linen', 'paper', 'watercolour', 'rough', 'parchment', 'board'] as const;
+/** Behind the person (engine order, pp_art_controls.backdrop). */
+export const BACKDROPS = ['artist', 'scene', 'studio', 'umber', 'sky', 'landscape', 'gold'] as const;
+/** Museum frames (engine order, pp_art_frame) and each one's border as a share of the painting's short side. */
+export const FRAMES = ['none', 'gilded', 'baroque', 'black', 'walnut', 'mat'] as const;
+const FRAME_BORDER = [0, 0.085, 0.13, 0.05, 0.075, 0.122];
+
+/**
+ * Where the painting sits inside a framed picture of [w] x [h]: its inset
+ * on every side, as a share of the framed width and height (for comparing
+ * with the photo).
+ */
+export function frameInset(frame: number, w: number, h: number): { x: number; y: number } {
+  const r = FRAME_BORDER[frame] ?? 0;
+  if (r <= 0 || w <= 0 || h <= 0) return { x: 0, y: 0 };
+  // b = r * min(W, H), with W = w - 2b and H = h - 2b.
+  const b = (r * Math.min(w, h)) / (1 + 2 * r);
+  return { x: b / w, y: b / h };
+}
 
 /** Range and step of each control, in the order shown. */
 export const CONTROL_RANGES: readonly { key: ControlKey; min: number; max: number; step: number }[] = [
@@ -41,18 +80,26 @@ export const CONTROL_RANGES: readonly { key: ControlKey; min: number; max: numbe
   { key: 'likeness', min: 0, max: 1, step: 0.05 },
   { key: 'texture', min: 0, max: 1.5, step: 0.05 },
   { key: 'age', min: 0, max: 1.5, step: 0.05 },
-  { key: 'background', min: 0, max: 1, step: 0.05 },
 ];
+
+const choice = (v: unknown, n: number) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < n;
 
 export function isArtControls(v: unknown): v is ArtControls {
   if (!v || typeof v !== 'object') return false;
   const c = v as Record<string, unknown>;
-  return CONTROL_RANGES.every(
-    r =>
-      typeof c[r.key] === 'number' &&
-      Number.isFinite(c[r.key]) &&
-      (c[r.key] as number) >= r.min &&
-      (c[r.key] as number) <= r.max,
+  return (
+    CONTROL_RANGES.every(
+      r =>
+        typeof c[r.key] === 'number' &&
+        Number.isFinite(c[r.key]) &&
+        (c[r.key] as number) >= r.min &&
+        (c[r.key] as number) <= r.max,
+    ) &&
+    typeof c.intensity === 'number' &&
+    c.intensity >= 0 &&
+    c.intensity <= 1 &&
+    choice(c.surface, SURFACES.length) &&
+    choice(c.backdrop, BACKDROPS.length)
   );
 }
 
@@ -67,6 +114,10 @@ export function clampControls(c: Partial<ArtControls>): ArtControls {
     if (typeof v === 'number' && Number.isFinite(v))
       out[r.key] = Math.min(r.max, Math.max(r.min, Math.round(v * 1000) / 1000));
   }
+  if (typeof c.intensity === 'number' && Number.isFinite(c.intensity))
+    out.intensity = Math.min(1, Math.max(0, c.intensity));
+  if (choice(c.surface, SURFACES.length)) out.surface = c.surface as number;
+  if (choice(c.backdrop, BACKDROPS.length)) out.backdrop = c.backdrop as number;
   return out;
 }
 
@@ -80,6 +131,8 @@ export interface PhotoArtsSettings {
   controls: ArtControls;
   /** Paint the artist cards with the person's photo (off: names only, lighter on the battery). */
   cardPreviews: boolean;
+  /** The museum frame (FRAMES index; 0 none). */
+  frame: number;
 }
 
 export const DEFAULT_PHOTO_ARTS: PhotoArtsSettings = {
@@ -87,6 +140,7 @@ export const DEFAULT_PHOTO_ARTS: PhotoArtsSettings = {
   remember: true,
   controls: { ...ARTIST_WAY },
   cardPreviews: true,
+  frame: 0,
 };
 
 export function isPhotoArtsSettings(v: unknown): v is PhotoArtsSettings {
@@ -96,6 +150,7 @@ export function isPhotoArtsSettings(v: unknown): v is PhotoArtsSettings {
     (s.level === 0 || s.level === 1 || s.level === 2) &&
     typeof s.remember === 'boolean' &&
     typeof s.cardPreviews === 'boolean' &&
+    choice(s.frame, FRAMES.length) &&
     isArtControls(s.controls)
   );
 }

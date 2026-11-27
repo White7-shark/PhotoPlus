@@ -81,7 +81,9 @@ describe('the twenty masters', () => {
     expect(ARTISTS.map(a => a.id)).toEqual([...Array(20).keys()]);
     expect(new Set(ARTISTS.map(a => a.key)).size).toBe(20);
     expect(MOVEMENTS.flatMap(m => artistsOf(m)).length).toBe(20);
-    for (const m of MOVEMENTS) expect(artistsOf(m).length).toBeGreaterThanOrEqual(3);
+    for (const m of MOVEMENTS) expect(artistsOf(m).length).toBeGreaterThanOrEqual(1);
+    expect(MOVEMENTS).toHaveLength(7);
+    expect(artistsOf('drama').map(a => a.key)).toEqual(['caravaggio']);
     for (const a of ARTISTS) {
       expect(a.years).toMatch(/^\d{4}–\d{4}$/);
       expect(artistName(a)).not.toMatch(/^masters_/);
@@ -165,16 +167,24 @@ describe('the Masters screen', () => {
     expect(screen.getByText('1 free painting today')).toBeTruthy();
 
     // Another movement and artist, a Masterpiece.
-    await step(() => fireEvent.press(screen.getByTestId('masters-movement-baroque')));
+    await step(() => fireEvent.press(screen.getByTestId('masters-movement-classical')));
     await step(() => fireEvent.press(screen.getByTestId('masters-artist-rembrandt')));
     await step(() => fireEvent.press(screen.getByTestId('masters-level-2')));
     expect(screen.getByText('Chiaroscuro and impasto')).toBeTruthy();
     expect(mockStudio.renderMasters.mock.calls.at(-1)![1]).toMatchObject({ artist: 6, level: 2, quality: 'preview' });
 
-    // Hold to compare with the photo.
-    await step(() => fireEvent(screen.getByTestId('masters-canvas'), 'pressIn'));
-    expect(screen.getByTestId('masters-painting').props.source.uri).toBe('file:///files/imports/me.jpg');
-    await step(() => fireEvent(screen.getByTestId('masters-canvas'), 'pressOut'));
+    // Drag to compare with the photo (here a screen reader's steps): the photo shows from the left.
+    expect(screen.queryByTestId('masters-before')).toBeNull();
+    await step(() =>
+      fireEvent(screen.getByTestId('masters-canvas-area'), 'layout', { nativeEvent: { layout: { width: 400 } } }),
+    );
+    await step(() =>
+      fireEvent(screen.getByTestId('masters-canvas'), 'accessibilityAction', {
+        nativeEvent: { actionName: 'increment' },
+      }),
+    );
+    expect(screen.getByTestId('masters-before').props.source.uri).toBe('file:///files/imports/me.jpg');
+    expect(screen.getByTestId('masters-painting').props.source.uri).toBe('file:///cache/masters_preview_6.jpg');
 
     // The finished painting: today's free one.
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
@@ -182,7 +192,9 @@ describe('the Masters screen', () => {
     expect(screen.getByTestId('masters-painting').props.source.uri).toBe('file:///cache/masters_full_6.jpg');
     await step(() => fireEvent.press(screen.getByTestId('masters-save')));
     expect(mockStudio.saveToGallery).toHaveBeenCalledWith('/cache/masters_full_6.jpg');
-    expect(screen.getByText('Saved to your gallery')).toBeTruthy();
+    // Saved, here and on its card in the session's gallery.
+    expect(screen.getAllByText('Saved to your gallery')).toHaveLength(2);
+    expect(screen.getByTestId('masters-gallery')).toBeTruthy();
     await step(() => fireEvent.press(screen.getByTestId('masters-share')));
     expect(mockStorage.shareImages).toHaveBeenCalledWith(['/cache/masters_full_6.jpg'], 'Rembrandt');
 

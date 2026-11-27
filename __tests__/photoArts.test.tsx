@@ -6,6 +6,12 @@ import { offset } from '../src/screens/studio/PhotoArtsTouch';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import {
   ARTIST_WAY,
+  BACKDROPS,
+  FRAMES,
+  INTENSITIES,
+  SURFACES,
+  frameInset,
+  intensityOf,
   CONTROL_RANGES,
   DEFAULT_PHOTO_ARTS,
   clampControls,
@@ -130,12 +136,12 @@ describe('your touch: the controls', () => {
     expect(screen.getByText('Brush size')).toBeTruthy();
     expect(screen.getByText('Bolder')).toBeTruthy();
     await nudge('masters-ctl-brush', 'increment', 2);
-    await nudge('masters-ctl-background', 'decrement', 1);
+    await nudge('masters-ctl-age', 'decrement', 1);
     const req = lastRequest();
     expect(req.quality).toBe('preview');
-    expect(req.controls).toMatchObject({ brush: 1.1, background: 0.95 });
+    expect(req.controls).toMatchObject({ brush: 1.1, age: 0.95 });
     // Remembered for next time.
-    expect(useAppStore.getState().settings.photoArts.controls).toMatchObject({ brush: 1.1, background: 0.95 });
+    expect(useAppStore.getState().settings.photoArts.controls).toMatchObject({ brush: 1.1, age: 0.95 });
 
     // The finished painting uses the touch too.
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
@@ -197,5 +203,67 @@ describe('Settings', () => {
     expect(await getProcessingService().premiumSimulation()).toEqual({ available: true, on: false });
     mockSim = { available: false, on: false };
     expect(await getProcessingService().simulatePremium(true)).toBe('free');
+  });
+});
+
+describe('the Photo Arts studio', () => {
+  it('chooses how far it goes, what it is painted on, what is behind and a frame, and keeps a gallery', async () => {
+    await wrap(<MastersScreen navigation={navigation as never} route={{ key: 'm', name: 'Masters' } as never} />);
+    await step(() => fireEvent.press(screen.getByTestId('masters-pick')));
+    expect(lastRequest()).toMatchObject({ controls: { intensity: 0.6, surface: 0, backdrop: 0 } });
+    expect((lastRequest() as { frame?: number }).frame).toBeUndefined();
+
+    // Natural, then Full art.
+    expect(screen.getByText('A true painting that keeps you')).toBeTruthy();
+    await step(() => fireEvent.press(screen.getByTestId('masters-intensity-natural')));
+    expect(lastRequest().controls).toMatchObject({ intensity: 0.3 });
+    expect(screen.getByText('Close to your photo, gently painted')).toBeTruthy();
+    await step(() => fireEvent.press(screen.getByTestId('masters-intensity-full')));
+    expect(lastRequest().controls).toMatchObject({ intensity: 1 });
+
+    // Watercolour paper, a landscape behind, a gilded frame: each repaints the preview.
+    await step(() => fireEvent.press(screen.getByTestId('masters-studio-toggle')));
+    expect(screen.getByText('Vintage parchment')).toBeTruthy();
+    await step(() => fireEvent.press(screen.getByTestId('masters-surface-watercolour')));
+    await step(() => fireEvent.press(screen.getByTestId('masters-backdrop-landscape')));
+    await step(() => fireEvent.press(screen.getByTestId('masters-frame-gilded')));
+    expect(lastRequest()).toMatchObject({
+      quality: 'preview',
+      frame: 1,
+      controls: { surface: 3, backdrop: 5, intensity: 1 },
+    });
+    expect(useAppStore.getState().settings.photoArts.frame).toBe(1);
+    expect(useAppStore.getState().settings.photoArts.controls).toMatchObject({ surface: 3, backdrop: 5 });
+
+    // "Paint it the artist's way" resets the sliders, not these choices.
+    await step(() => fireEvent.press(screen.getByTestId('masters-touch-toggle')));
+    await nudge('masters-ctl-brush', 'increment', 1);
+    await step(() => fireEvent.press(screen.getByTestId('masters-touch-reset')));
+    expect(lastRequest().controls).toMatchObject({ brush: 1, surface: 3, backdrop: 5, intensity: 1 });
+
+    // Two finished paintings in the gallery, each saved on its own.
+    await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
+    expect(lastRequest()).toMatchObject({ quality: 'full', frame: 1 });
+    await step(() => fireEvent.press(screen.getByTestId('masters-again')));
+    mockStudio.renderMasters.mockClear();
+    await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
+    expect(screen.getByTestId('masters-gallery-save-1')).toBeTruthy();
+    await step(() => fireEvent.press(screen.getByTestId('masters-gallery-save-1')));
+    expect(mockStudio.saveToGallery).toHaveBeenCalledTimes(1);
+  });
+
+  it('places the photo inside a frame for comparing', () => {
+    expect(frameInset(0, 1000, 1200)).toEqual({ x: 0, y: 0 });
+    const i = frameInset(1, 1170, 1370);
+    // 0.085 of a 1000-wide painting is 85 px each side.
+    expect(i.x * 1170).toBeCloseTo(85, 0);
+    expect(i.y * 1370).toBeCloseTo(85, 0);
+    expect(intensityOf(0.62)).toBe('balanced');
+    expect(INTENSITIES.map(x => x.id)).toEqual(['natural', 'balanced', 'full']);
+    expect(SURFACES).toHaveLength(7);
+    expect(BACKDROPS).toHaveLength(7);
+    expect(FRAMES).toHaveLength(6);
+    expect(isArtControls({ ...ARTIST_WAY, surface: 7 })).toBe(false);
+    expect(isArtControls({ ...ARTIST_WAY, backdrop: 1.5 })).toBe(false);
   });
 });

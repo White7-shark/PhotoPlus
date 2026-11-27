@@ -45,6 +45,7 @@ add_library(photoplus_engine STATIC
   src/studio/product.cpp
   src/art/core.cpp
   src/art/art.cpp
+  src/art/frame.cpp
   src/skintone/skintone.cpp
   src/light/light.cpp
   src/pose/pose.cpp

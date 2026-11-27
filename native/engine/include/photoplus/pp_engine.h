@@ -1377,10 +1377,21 @@ pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const
 /* The person's controls (NULL: the artist's own way). Ranges: brush 0.5..2
  * (1), palette 0 photo colours..1 artist's (1), vivid -1..1 (0), likeness
  * 0..1 (0.5), texture 0..2 (0.4: smooth), age 0..2 (1), background 0 photo's..1
- * artist's (1). Out of range: PP_ERROR_INVALID_ARGUMENT. */
+ * artist's (1), intensity 0..1 (0.6), surface 0..6 (0), backdrop 0..6 (0).
+ * Out of range: PP_ERROR_INVALID_ARGUMENT. */
 typedef struct pp_art_controls {
   float brush, palette, vivid, likeness, texture, age, background;
+  float intensity; /* 0 natural .. 1 full transformation (0.6) */
+  int surface;     /* 0 the artist's own, 1 linen, 2 fine art paper, 3 watercolour paper, 4 rough canvas, 5 parchment, 6 smooth board */
+  int backdrop;    /* 0 the artist's, 1 the photo's scene, 2 dark studio, 3 warm umber, 4 sky, 5 landscape, 6 gold */
 } pp_art_controls;
+#define PP_ART_SURFACES 7
+#define PP_ART_BACKDROPS 7
+#define PP_ART_FRAMES 6
+/* Frames a finished painting (RGBA/BGRA): *out is a new, larger image (the
+ * painting inside the frame). style: 1 gilded, 2 baroque gold, 3 black
+ * gallery, 4 walnut, 5 white gallery mat (0 refused: nothing to frame). */
+pp_status pp_art_frame(const pp_image* painting, int style, const pp_cancel_token* token, pp_image** out);
 /* faces: face_count faces of face_stride floats each (4 or 12): x, y, w, h,
  * then (stride 12) the mouth x0, y0, x1, y1 and the eye centres lx, ly, rx,
  * ry, normalised (zeros when unknown). */

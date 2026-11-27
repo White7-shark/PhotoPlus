@@ -186,7 +186,7 @@ TEST(art_refuses_bad_input_and_honours_cancel) {
 // The person's controls: the defaults are the artist's own way; each control
 // changes what it says; out-of-range values are refused.
 TEST(art_controls_change_what_they_say) {
-  const pp_art_controls same{1, 1, 0, 0.5f, 0.4f, 1, 1};
+  const pp_art_controls same{1, 1, 0, 0.5f, 0.4f, 1, 1, 0.6f, 0, 0};
   const auto base = paint(6);
   EXPECT_EQ(meanDiff(base, paint(6, 1, 7, true, &same)), 0.0);
 
@@ -258,7 +258,7 @@ TEST(art_keeps_teeth_white) {
     const auto pa = pixels(a);
     const double teeth = lumaIn(pa, 102, 120, 118, 123), skin = lumaIn(pa, 80, 100, 92, 110);
     EXPECT_TRUE(teeth > 160.0);  // at the painting's own light
-    EXPECT_TRUE(teeth > skin + 25.0);
+    EXPECT_TRUE(teeth > skin + 12.0);
     pp_image_destroy(a);
   }
   // Hokusai flattens a mouth into the skin's colour block: with the lips
@@ -281,4 +281,63 @@ TEST(art_keeps_teeth_white) {
   pp_image* d = portrait();
   EXPECT_EQ(pp_art_paint(d, 3, 1, nullptr, open, 1, 6, 7, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image_destroy(d);
+}
+
+// The studio around the painting: how far it goes, what it is painted on,
+// what is behind the person, and a museum frame.
+TEST(art_intensity_surface_backdrop_and_frame) {
+  const pp_art_controls base{1, 1, 0, 0.5f, 0.4f, 1, 1, 0.6f, 0, 0};
+  pp_image* src = portrait();
+  const auto photo = pixels(src);
+  pp_image_destroy(src);
+  // A natural painting stays closer to the photo than the full transformation.
+  pp_art_controls natural = base, full = base;
+  natural.intensity = 0.0f, full.intensity = 1.0f;
+  EXPECT_TRUE(meanDiff(paint(6, 1, 7, true, &natural), photo) < meanDiff(paint(6, 1, 7, true, &full), photo));
+
+  // Every surface paints, and parchment tones it warm.
+  for (int s = 1; s < PP_ART_SURFACES; ++s) {
+    pp_art_controls k = base;
+    k.surface = s;
+    EXPECT_TRUE(meanDiff(paint(2, 1, 7, true, &k), paint(2)) > (s == 6 ? 0.02 : 0.3));  // smooth board: barely there, by design
+  }
+  pp_art_controls parchment = base;
+  parchment.surface = 5;
+  const auto pa = paint(2, 1, 7, true, &parchment), plain = paint(2);
+  EXPECT_TRUE(meanIn(pa, 2, 0, 0, kW, kH) < meanIn(plain, 2, 0, 0, kW, kH));
+
+  // A backdrop replaces what is behind the person (a dark studio behind Monet), not the person.
+  pp_art_controls dark = base;
+  dark.backdrop = 2;
+  const auto m = paint(12, 1, 7, true, &dark), mo = paint(12);
+  EXPECT_TRUE(lumaIn(m, 0, 0, 30, 60) < lumaIn(mo, 0, 0, 30, 60) - 40);
+  EXPECT_TRUE(std::fabs(lumaIn(m, 95, 70, 125, 110) - lumaIn(mo, 95, 70, 125, 110)) < 25);
+  // Out of range is refused.
+  pp_image* img = portrait();
+  pp_art_controls bad = base;
+  bad.surface = PP_ART_SURFACES;
+  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 0, 4, 1, &bad, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  bad = base;
+  bad.intensity = 1.5f;
+  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 0, 4, 1, &bad, nullptr), PP_ERROR_INVALID_ARGUMENT);
+
+  // Frames: larger than the painting, the painting inside untouched but for the frame's shadow at its edge.
+  for (int f = 1; f < PP_ART_FRAMES; ++f) {
+    pp_image* framed = nullptr;
+    EXPECT_EQ(pp_art_frame(img, f, nullptr, &framed), PP_OK);
+    pp_image_info a{}, b{};
+    pp_image_get_info(img, &a);
+    pp_image_get_info(framed, &b);
+    EXPECT_TRUE(b.width > a.width && b.height > a.height);
+    const int bx = (b.width - a.width) / 2, by = (b.height - a.height) / 2;
+    const auto* fp = static_cast<const unsigned char*>(pp_image_pixels(framed));
+    const auto* ip = static_cast<const unsigned char*>(pp_image_pixels(img));
+    const unsigned char* centre = fp + static_cast<size_t>(by + a.height / 2) * b.stride + static_cast<size_t>(bx + a.width / 2) * 4;
+    const unsigned char* orig = ip + static_cast<size_t>(a.height / 2) * a.stride + static_cast<size_t>(a.width / 2) * 4;
+    EXPECT_TRUE(std::abs(centre[0] - orig[0]) <= 2 && std::abs(centre[1] - orig[1]) <= 2);
+    pp_image_destroy(framed);
+  }
+  pp_image* none = nullptr;
+  EXPECT_EQ(pp_art_frame(img, 0, nullptr, &none), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(img);
 }

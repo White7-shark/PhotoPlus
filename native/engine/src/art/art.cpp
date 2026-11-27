@@ -35,8 +35,16 @@ struct Ctx {
   Img subject;  // the person (1 channel), empty if unknown
   Img faces;    // the faces (1 channel, soft), empty if none
   std::vector<FaceBox> faceBoxes;
+  float faceUnit = 0;  // the largest face's width, px (0: no face): brushes on faces are sized by it
+  float faceMin = 0;   // the smallest face's width, px: features are drawn at a scale every face keeps
+  Img features;        // eyes, brows, nose and mouth of every face (soft), empty if no face
+  Img detail;          // where detail lives (faces, strong edges): only there do the finest brushes go
+  Artist artist = Artist::Leonardo;
+  float textureFloor = 0;  // an artist whose paint is their signature (Rembrandt's impasto) keeps at least this much
   bool cancelled() const { return isCancelled(token); }
 };
+
+Img rankFilter(const Img& src, int r, bool max);
 
 std::vector<Rgb3> pal(std::initializer_list<uint32_t> hexes) {
   std::vector<Rgb3> out;
@@ -144,10 +152,14 @@ Img skinMask(const Ctx& c) {
     for (int x = 0; x < c.w; ++x) {
       const float* p = c.photo.px(x, y);
       const float Y = luma(p), cb = 0.5f + (-0.1687f * p[0] - 0.3313f * p[1] + 0.5f * p[2]), cr = 0.5f + (0.5f * p[0] - 0.4187f * p[1] - 0.0813f * p[2]);
-      float s = smoothstep(0.27f, 0.32f, cb) * (1 - smoothstep(0.48f, 0.53f, cb)) * smoothstep(0.51f, 0.55f, cr) * (1 - smoothstep(0.76f, 0.82f, cr)) *
+      float s = smoothstep(0.27f, 0.32f, cb) * (1 - smoothstep(0.48f, 0.53f, cb)) * smoothstep(0.525f, 0.56f, cr) * (1 - smoothstep(0.76f, 0.82f, cr)) *
                 smoothstep(0.06f, 0.14f, Y);
       if (!c.subject.d.empty()) s *= c.subject.at(x, y);
-      if (!c.faces.d.empty()) s = std::max(s, c.faces.at(x, y) * smoothstep(0.06f, 0.14f, Y));
+      if (!c.faces.d.empty()) {
+        // Within a face, any skin-like colour counts (shade, warm light, a flash), but not hair or the wall.
+        const float loose = smoothstep(0.2f, 0.26f, cb) * (1 - smoothstep(0.54f, 0.6f, cb)) * smoothstep(0.49f, 0.52f, cr) * (1 - smoothstep(0.84f, 0.9f, cr));
+        s = std::max(s, c.faces.at(x, y) * loose * smoothstep(0.06f, 0.14f, Y));
+      }
       skin.at(x, y) = s;
     }
   skin = blur(skin, c.S / 200.0f, c.token);
@@ -178,7 +190,7 @@ std::vector<float> radii(const Ctx& c, float maxFrac, float minFrac) {
 // smoother means fewer bristle streaks, no dry broken tails, flatter paint
 // (the artist's handling stays: stroke size, direction and colour).
 bool strokes(const Ctx& c, Canvas& cv, const Img& ref, const Field& field, Brush b, uint32_t seed, const Img* where) {
-  const float t = std::clamp(c.ctl.texture, 0.0f, 1.0f);
+  const float t = std::clamp(std::max(c.ctl.texture, c.textureFloor), 0.0f, 1.0f);
   b.bristleAmp *= 0.25f + 0.75f * t;
   b.dryness *= t;
   b.ridge *= t;
@@ -192,9 +204,71 @@ bool strokes(const Ctx& c, Canvas& cv, const Img& ref, const Field& field, Brush
 struct Oil {
   Rgb3 ground{0.5f, 0.42f, 0.32f};
   float maxFrac = 1.0f / 30, minFrac = 1.0f / 400;
+  // Edge-preserving simplification (a fraction of the short side) before the
+  // broad and middle layers: the photo's micro-texture (pores, noise, fabric
+  // weave) gives way to painted areas.
+  float abstraction = 1.0f / 320;
   Brush brush;
   bool faceDetail = true;
 };
+
+// One face's own area (the same soft oval as c.faces).
+Img faceArea(const Ctx& c, const FaceBox& f, float grow = 1.0f) {
+  Img m(c.w, c.h, 1, 0.0f);
+  const float cx = (f.x + f.w * 0.5f) * static_cast<float>(c.w), cy = (f.y + f.h * 0.5f) * static_cast<float>(c.h);
+  const float rx = f.w * static_cast<float>(c.w) * 0.55f * grow, ry = f.h * static_cast<float>(c.h) * 0.6f * grow;
+  const int x0 = std::max(0, static_cast<int>(cx - rx)), x1 = std::min(c.w - 1, static_cast<int>(cx + rx));
+  const int y0 = std::max(0, static_cast<int>(cy - ry)), y1 = std::min(c.h - 1, static_cast<int>(cy + ry));
+  for (int y = y0; y <= y1; ++y)
+    for (int x = x0; x <= x1; ++x) {
+      const float dx = (static_cast<float>(x) - cx) / rx, dy = (static_cast<float>(y) - cy) / ry;
+      m.at(x, y) = 1 - smoothstep(0.75f, 1.0f, std::sqrt(dx * dx + dy * dy));
+    }
+  return m;
+}
+
+// Eyes, brows, nose and mouth of one face (soft), from its landmarks, or
+// where they sit in a face box. Sized by the distance between the eyes.
+void addFeatures(Img& m, const Ctx& c, const FaceBox& f) {
+  const float W = static_cast<float>(c.w), H = static_cast<float>(c.h);
+  const float fw = f.w * W, fh = f.h * H, bx = f.x * W, by = f.y * H;
+  const bool eyesKnown = f.eyes[0] > 0 && f.eyes[2] > 0;
+  float ex[2], ey[2];
+  for (int e = 0; e < 2; ++e) {
+    ex[e] = eyesKnown ? f.eyes[e * 2] * W : bx + (e == 0 ? 0.31f : 0.69f) * fw;
+    ey[e] = eyesKnown ? f.eyes[e * 2 + 1] * H : by + 0.4f * fh;
+  }
+  const float d = std::max(std::hypot(ex[1] - ex[0], ey[1] - ey[0]), 0.25f * fw);
+  float mx = bx + 0.5f * fw, my = by + 0.76f * fh, mw = 0.4f * fw;
+  if (f.mouth[2] > f.mouth[0]) {
+    mx = (f.mouth[0] + f.mouth[2]) * 0.5f * W, my = (f.mouth[1] + f.mouth[3]) * 0.5f * H, mw = (f.mouth[2] - f.mouth[0]) * W;
+  }
+  struct E { float cx, cy, rx, ry; };
+  std::vector<E> es;
+  for (int e = 0; e < 2; ++e) {
+    es.push_back({ex[e], ey[e], 0.34f * d, 0.2f * d});                // the eye
+    es.push_back({ex[e], ey[e] - 0.3f * d, 0.38f * d, 0.13f * d});    // the brow
+  }
+  const float emx = 0.5f * (ex[0] + ex[1]), emy = 0.5f * (ey[0] + ey[1]);
+  es.push_back({mix(emx, mx, 0.6f), mix(emy, my, 0.6f), 0.27f * d, 0.32f * d});  // the nose
+  es.push_back({mx, my, std::max(0.62f * mw, 0.42f * d), 0.3f * d});             // the mouth
+  for (const E& e : es) {
+    const int x0 = std::max(0, static_cast<int>(e.cx - e.rx)), x1 = std::min(c.w - 1, static_cast<int>(e.cx + e.rx));
+    const int y0 = std::max(0, static_cast<int>(e.cy - e.ry)), y1 = std::min(c.h - 1, static_cast<int>(e.cy + e.ry));
+    for (int y = y0; y <= y1; ++y)
+      for (int x = x0; x <= x1; ++x) {
+        const float dx = (static_cast<float>(x) - e.cx) / e.rx, dy = (static_cast<float>(y) - e.cy) / e.ry;
+        m.at(x, y) = std::max(m.at(x, y), 1 - smoothstep(0.6f, 1.0f, std::sqrt(dx * dx + dy * dy)));
+      }
+  }
+}
+
+// A face's features alone.
+Img featuresOf(const Ctx& c, const FaceBox& f) {
+  Img m(c.w, c.h, 1, 0.0f);
+  addFeatures(m, c, f);
+  return m;
+}
 
 Canvas paintOil(const Ctx& c, const Img& ref, const Field& field, const Oil& o) {
   Canvas cv;
@@ -202,27 +276,54 @@ Canvas paintOil(const Ctx& c, const Img& ref, const Field& field, const Oil& o) 
   for (size_t i = 0; i < cv.rgb.d.size(); i += 3)
     for (size_t k = 0; k < 3; ++k) cv.rgb.d[i + k] = o.ground[k];
   cv.height = Img(c.w, c.h, 1, 0.0f);
+  const float k = c.ctl.intensity;
+  // A painted surface, not the photograph's: simplified before the broad and middle strokes.
+  const Img flat = o.abstraction > 0 ? flatten(c, ref, o.abstraction * mix(0.6f, 1.5f, k), 1) : ref;
+  if (c.cancelled()) return cv;
+  // Bolder brushes the further the transformation goes.
+  const float bold = mix(0.85f, 1.35f, k);
+  const std::vector<float> rs = radii(c, o.maxFrac * bold, o.minFrac * bold);
+  // Middle strokes everywhere; the finest only where detail lives (faces, strong edges),
+  // so a background, a shirt or a wall stays visibly painted.
+  const float general = rs.size() > 2 ? rs[rs.size() - 3] : rs.back();
   uint32_t layer = 0;
-  for (float r : radii(c, o.maxFrac, o.minFrac)) {
+  for (float r : rs) {
     Brush b = o.brush;
     b.radius = r;
-    if (!strokes(c, cv, ref, field, b, c.seed * 977U + ++layer, nullptr)) return cv;
+    const bool fine = r < general * 0.99f && !c.detail.d.empty();
+    if (!strokes(c, cv, fine ? ref : flat, field, b, c.seed * 977U + ++layer, fine ? &c.detail : nullptr)) return cv;
   }
-  // The face, with the finest brush, so it stays the sitter.
-  if (o.faceDetail && !c.faces.d.empty()) {
-    Brush b = o.brush;
-    const float keep = mix(1.35f, 0.65f, c.ctl.likeness);  // finer brushes for a closer likeness
-    b.radius = std::max(1.0f, o.minFrac * c.S * keep * (c.level == Level::Masterpiece ? 0.55f : c.level == Level::Painting ? 0.8f : 1.2f));
-    b.threshold *= mix(0.9f, 0.3f, c.ctl.likeness);
-    b.maxLen = std::min(b.maxLen, 4.0f);
-    strokes(c, cv, ref, field, b, c.seed * 977U + 99U, &c.faces);
+  // Each face with brushes sized to that face (a couple's two faces each keep their own features),
+  // then its eyes, brows, nose and mouth with the finest, so the sitter stays recognisable.
+  if (o.faceDetail) {
+    const float div = c.level == Level::Masterpiece ? 95.0f : c.level == Level::Painting ? 75.0f : 55.0f;
+    uint32_t n = 0;
+    for (const FaceBox& f : c.faceBoxes) {
+      const float fw = f.w * static_cast<float>(c.w);
+      if (fw < 8) continue;
+      const Img area = faceArea(c, f);
+      Brush b = o.brush;
+      b.radius = std::max(1.0f, fw / div * mix(1.25f, 0.8f, c.ctl.likeness) * mix(0.9f, 1.2f, k));
+      b.threshold *= mix(0.9f, 0.4f, c.ctl.likeness);
+      b.maxLen = std::min(b.maxLen, 4.0f);
+      if (!strokes(c, cv, ref, field, b, c.seed * 977U + 99U + n, &area)) return cv;
+      const Img feat = featuresOf(c, f);
+      Brush fb = b;
+      fb.radius = std::max(1.0f, b.radius * 0.55f);
+      fb.threshold *= 0.6f;
+      fb.maxLen = std::min(fb.maxLen, 2.5f);
+      if (!strokes(c, cv, ref, field, fb, c.seed * 977U + 199U + n, &feat)) return cv;
+      ++n;
+    }
   }
   return cv;
 }
 
 void finishOil(Img& rgb, Canvas& cv, const Ctx& c, float weave, float weavePx, float relief, float gloss, float varnishAmt, float crack,
                float vignetteAmt, Rgb3 vignetteColour, bool panel = false) {
-  weave *= c.ctl.texture, relief *= c.ctl.texture, gloss *= std::min(1.0f, c.ctl.texture);
+  const float tex = std::max(c.ctl.texture, c.textureFloor);
+  weave *= c.ctl.texture, relief *= tex, gloss *= std::min(1.0f, tex);
+  if (c.ctl.surface != Surface::Artist) weave = 0, panel = false;  // the chosen surface brings its own
   varnishAmt = clamp01(varnishAmt * c.ctl.age), crack = std::min(1.0f, crack * c.ctl.age);
   if (panel) woodPanel(cv.height, weave, c.seed + 41U);
   else if (weave > 0) canvasWeave(cv.height, std::max(2.5f, weavePx), weave, c.seed + 43U);
@@ -242,7 +343,7 @@ Img leonardo(Ctx& c) {
   Img ref = c.photo;
   grade(ref, {.lift = 0.04f, .gain = 0.92f, .gamma = 1.05f, .contrast = 0.15f, .saturation = 0.55f, .warmth = 0.4f,
               .shadowTint = {0.48f, 0.44f, 0.32f}, .highlightTint = {0.56f, 0.52f, 0.42f}, .tintStrength = 0.1f}, c.token);
-  palette(ref, pal({0x4A3423, 0x8A5A2B, 0xB8893F, 0x6B6A3A, 0x5E6650, 0xD8B48C, 0xE9D7B0, 0x1E1A14, 0x6F7F86}), 0.55f, 0.85f, c.token);
+  palette(ref, pal({0x4A3423, 0x8A5A2B, 0xB8893F, 0x6B6A3A, 0x5E6650, 0xD8B48C, 0xE9D7B0, 0x1E1A14, 0x6F7F86}), 0.42f, 0.85f, c.token);
   const Img bg = background(c);
   // Aerial perspective: the land behind dissolves into a blue-green haze.
   mixInto(ref, blur(ref, c.S / 60.0f, c.token), 0.85f, &bg);
@@ -253,13 +354,14 @@ Img leonardo(Ctx& c) {
   Oil o;
   o.ground = hex(0x8C6E4A);
   o.maxFrac = 1.0f / 40, o.minFrac = 1.0f / 420;
+  o.abstraction = 1.0f / 260;  // sfumato: smooth, soft planes
   o.brush = {.maxLen = 6, .curvature = 0.6f, .opacity = 0.75f, .softness = 0.6f, .bristleAmp = 0.04f, .dryness = 0.1f, .taper = 0.3f,
              .thick = 0.08f, .threshold = 0.05f};
   Canvas cv = paintOil(c, ref, f, o);
   Img rgb = cv.rgb;
   mixInto(rgb, blur(rgb, c.S / 500.0f, c.token), 0.35f);  // glazes melt the strokes together
   vignette(rgb, 0.35f, hex(0x2A1E14));
-  finishOil(rgb, cv, c, 0.15f, 0, 0.15f, 0.02f, 0.8f, 0.55f, 0, {}, true);
+  finishOil(rgb, cv, c, 0.15f, 0, 0.15f, 0.02f, 0.5f, 0.45f, 0, {}, true);
   return rgb;
 }
 
@@ -351,6 +453,7 @@ Img rembrandt(Ctx& c) {
   Oil o;
   o.ground = hex(0x4A3524);
   o.maxFrac = 1.0f / 28, o.minFrac = 1.0f / 380;
+  c.textureFloor = 0.7f;  // the impasto is Rembrandt
   o.brush = {.maxLen = 7, .curvature = 0.45f, .opacity = 0.85f, .softness = 0.35f, .bristleAmp = 0.14f, .dryness = 0.45f, .thick = 0.25f,
              .thickLights = 1.0f, .ridge = 0.12f, .threshold = 0.06f};
   Canvas cv = paintOil(c, ref, f, o);
@@ -407,6 +510,8 @@ Img velazquez(Ctx& c) {
   Oil o;
   o.ground = hex(0x6E655A);
   o.maxFrac = 1.0f / 25, o.minFrac = 1.0f / 260;
+  o.abstraction = 1.0f / 220;
+  c.textureFloor = 0.5f;
   o.brush = {.maxLen = 10, .curvature = 0.35f, .opacity = 0.9f, .softness = 0.3f, .bristleAmp = 0.12f, .dryness = 0.55f, .thick = 0.18f,
              .thickLights = 0.4f, .valJitter = 0.06f, .threshold = 0.07f};
   o.brush.hueJitter = 0.01f;
@@ -425,6 +530,8 @@ Img goya(Ctx& c) {
   Oil o;
   o.ground = hex(0x2E2620);
   o.maxFrac = 1.0f / 22, o.minFrac = 1.0f / 220;
+  o.abstraction = 1.0f / 200;
+  c.textureFloor = 0.5f;
   o.brush = {.maxLen = 7, .curvature = 0.3f, .opacity = 0.92f, .softness = 0.25f, .bristleAmp = 0.2f, .dryness = 0.6f, .thick = 0.3f,
              .ridge = 0.5f, .valJitter = 0.1f, .threshold = 0.07f};
   Canvas cv = paintOil(c, ref, f, o);
@@ -480,7 +587,9 @@ Img monet(Ctx& c) {
   const Field f = formField(c, ref);
   Oil o;
   o.ground = hex(0xE8DCC4);
-  o.maxFrac = 1.0f / 40, o.minFrac = 1.0f / 320;
+  o.maxFrac = 1.0f / 30, o.minFrac = 1.0f / 230;
+  o.abstraction = 1.0f / 200;
+  c.textureFloor = 0.5f;
   // Broken colour: short dabs of slightly different pure hues, side by side, never blended.
   o.brush = {.maxLen = 2.2f, .minLen = 0.6f, .step = 0.55f, .curvature = 0.5f, .opacity = 0.88f, .softness = 0.3f, .bristleAmp = 0.1f,
              .dryness = 0.25f, .thick = 0.22f, .hueJitter = 0.035f, .satJitter = 0.25f, .valJitter = 0.07f, .threshold = 0.05f, .grid = 0.9f,
@@ -514,9 +623,11 @@ Img cezanne(Ctx& c) {
   Img ref = c.photo;
   grade(ref, {.contrast = 0.2f, .saturation = 1.05f, .warmth = 0.05f}, c.token);
   palette(ref, pal({0x3F7A5C, 0x5A9A6A, 0xC69A4A, 0xD27A3A, 0x2E4C78, 0x5A7FB4, 0x7C8A62, 0xEFEADB, 0x2A2A28}), 0.5f, 0.85f, c.token);
-  ref = flatten(c, ref, 1.0f / 250, 1);
+  ref = flatten(c, ref, 1.0f / 160, 2);  // geometric planes of colour
   const Field f = formField(c, ref);
   Oil o;
+  o.abstraction = 0;
+  c.textureFloor = 0.45f;
   o.ground = hex(0xE6DDC8);
   o.maxFrac = 1.0f / 70, o.minFrac = 1.0f / 300;
   // The constructive stroke: short parallel diagonal hatches, patch by patch.
@@ -560,13 +671,15 @@ Img seurat(Ctx& c) {
 
 Img vangogh(Ctx& c) {
   Img ref = c.photo;
-  grade(ref, {.gain = 1.02f, .contrast = 0.25f, .saturation = 1.45f, .warmth = 0.1f}, c.token);
-  palette(ref, pal({0x2A3F8F, 0x3F6FC0, 0x1E3A5F, 0xF2C230, 0xF3E07A, 0xE0862E, 0x2F8F5A, 0x3C7A6A, 0xF4EFE0, 0xC8452E}), 0.5f, 0.85f, c.token);
+  grade(ref, {.gain = 1.02f, .contrast = 0.22f, .saturation = 1.18f, .warmth = 0.05f}, c.token);
+  palette(ref, pal({0x2A3F8F, 0x3F6FC0, 0x1E3A5F, 0xF2C230, 0xF3E07A, 0xE0862E, 0x2F8F5A, 0x3C7A6A, 0xF4EFE0, 0xC8452E}), 0.4f, 0.85f, c.token);
   Field f = formField(c, ref, 1.0f / 300, 1.0f / 80);
   swirl(f, c.S / 10.0f, 0.85f, c.seed + 5U);  // the skies and walls swirl
   Oil o;
   o.ground = hex(0xC9B48A);
   o.maxFrac = 1.0f / 45, o.minFrac = 1.0f / 260;
+  o.abstraction = 1.0f / 240;
+  c.textureFloor = 0.8f;  // thick swirling paint is Van Gogh
   o.brush = {.maxLen = 4, .minLen = 1.5f, .step = 0.5f, .curvature = 0.85f, .opacity = 0.95f, .softness = 0.2f, .bristleAmp = 0.18f,
              .bristleFreq = 9, .dryness = 0.25f, .taper = 0.35f, .thick = 0.55f, .ridge = 0.6f, .hueJitter = 0.025f, .satJitter = 0.15f,
              .valJitter = 0.08f, .threshold = 0.06f};
@@ -643,6 +756,61 @@ Img borders(const std::vector<uint8_t>& idx, int w, int h, float width) {
   return out;
 }
 
+// The sitter's own skin, for a flat style: the mean colour of their skin and
+// a smooth light (0 shade .. 1 light) relative to it, at the face's scale.
+struct SkinTone {
+  Rgb3 mean{0.6f, 0.45f, 0.35f};
+  Img light;  // 0..1, 0.5 = the skin's own middle
+  bool found = false;
+};
+SkinTone skinTone(const Ctx& c, const Img& skin) {
+  SkinTone t;
+  double sk[3] = {0, 0, 0}, sw = 0;
+  std::vector<float> ls;
+  for (size_t i = 0; i < skin.d.size(); ++i)
+    if (skin.d[i] > 0.6f) {
+      for (size_t k = 0; k < 3; ++k) sk[k] += c.photo.d[i * 3 + k];
+      ls.push_back(luma(&c.photo.d[i * 3]));
+      sw += 1;
+    }
+  if (sw < 50) return t;
+  t.found = true;
+  t.mean = {static_cast<float>(sk[0] / sw), static_cast<float>(sk[1] / sw), static_cast<float>(sk[2] / sw)};
+  std::nth_element(ls.begin(), ls.begin() + static_cast<std::ptrdiff_t>(ls.size() / 2), ls.end());
+  const float med = std::max(0.05f, ls[ls.size() / 2]);
+  t.light = blur(lumaOf(c.photo), std::max(1.5f, (c.faceUnit > 0 ? c.faceUnit : c.G * 0.3f) / 28.0f), c.token);
+  for (float& v : t.light.d) v = clamp01(0.5f + 1.6f * (v - med) / (med + 0.15f));
+  return t;
+}
+
+// Drawn lines cleaned of specks (a printer's or a painter's line, not a photo's noise).
+Img cleanLines(const Img& l, float minPx) {
+  const int r = std::max(1, static_cast<int>(minPx * 0.5f + 0.5f));
+  Img o = rankFilter(rankFilter(l, r, false), r, true);
+  o = blur(o, 0.8f, nullptr);
+  for (float& v : o.d) v = smoothstep(0.2f, 0.6f, v);
+  return o;
+}
+
+// The features as ink: what is darker than the skin around it within each
+// face's eyes, brows, nose and mouth (pupils, lashes, brows, nostrils, the
+// line between the lips), found at the face's own scale, so it holds on dark
+// skin and in low light where outlines are faint.
+Img featureInk(const Ctx& c) {
+  Img ink(c.w, c.h, 1, 0.0f);
+  if (c.features.d.empty() || c.faceMin <= 0) return ink;
+  const Img l = lumaOf(c.photo);
+  const Img local = blur(l, std::max(1.0f, c.faceMin / 10.0f), c.token);
+  const Img fine = blur(l, std::max(0.6f, c.faceMin / 350.0f), c.token);
+  for (size_t i = 0; i < ink.d.size(); ++i) {
+    const float f = c.features.d[i];
+    if (f <= 0) continue;
+    const float d = (local.d[i] - fine.d[i]) / std::max(0.08f, local.d[i]);  // relative: the same on dark and light skin
+    ink.d[i] = smoothstep(0.12f, 0.35f, d) * smoothstep(0.3f, 0.7f, f);
+  }
+  return rankFilter(rankFilter(ink, 1, false), 1, true);  // no specks
+}
+
 Img gauguin(Ctx& c) {
   Img ref = c.photo;
   grade(ref, {.contrast = 0.2f, .saturation = 1.35f, .warmth = 0.35f}, c.token);
@@ -650,10 +818,35 @@ Img gauguin(Ctx& c) {
   const std::vector<Rgb3> colours =
       pal({0xE0892F, 0xD9A441, 0xD2557A, 0x7B4E9A, 0x23426E, 0x2E7A5E, 0x4FA36A, 0x9E2A22, 0x3A2418, 0xE6B79A, 0xF0E2C6, 0xB5502E});
   palette(ref, colours, 0.7f, 0.6f, c.token);
-  const auto idx = quantise(ref, colours, c.token);
+  auto idx = quantise(ref, colours, c.token);
   Img flat(c.w, c.h, 3);
   for (size_t i = 0; i < idx.size(); ++i)
     for (size_t k = 0; k < 3; ++k) flat.d[i * 3 + k] = mix(ref.d[i * 3 + k], colours[idx[i]][k], 0.75f);
+  // The face and skin: three warm tones of the sitter's own colour, laid flat
+  // with soft turns, so the face keeps its proportions (no fragments).
+  const Img skin = skinMask(c);
+  const SkinTone tone = skinTone(c, skin);
+  if (tone.found) {
+    float hsv[3];
+    rgbToHsv(tone.mean.data(), hsv);
+    hsv[0] = mix(hsv[0], 0.06f, 0.35f), hsv[1] = std::min(0.85f, hsv[1] * 1.25f + 0.05f);
+    float mid[3];
+    hsvToRgb(hsv, mid);
+    const Rgb3 shade{mid[0] * 0.78f, mid[1] * 0.72f, mid[2] * 0.74f}, light{std::min(1.0f, mid[0] * 1.1f + 0.04f), std::min(1.0f, mid[1] * 1.08f + 0.03f),
+                                                                              std::min(1.0f, mid[2] * 1.04f + 0.02f)};
+    const auto skinIdx = static_cast<uint8_t>(colours.size());  // one field: no borders inside the face
+    for (size_t i = 0; i < idx.size(); ++i) {
+      const float s = smoothstep(0.35f, 0.65f, skin.d[i]);
+      if (s <= 0) continue;
+      const float L = tone.light.d[i];
+      const float toLight = smoothstep(0.55f, 0.75f, L), toShade = 1 - smoothstep(0.22f, 0.42f, L);
+      for (size_t k = 0; k < 3; ++k) {
+        const float v = mix(mix(mid[k], light[k], toLight), shade[k], toShade);
+        flat.d[i * 3 + k] = mix(flat.d[i * 3 + k], v, s);
+      }
+      if (s > 0.5f) idx[i] = skinIdx;
+    }
+  }
   // Painted, not printed: a coarse dry brush over the flat fields.
   Canvas cv;
   cv.rgb = flat;
@@ -665,8 +858,15 @@ Img gauguin(Ctx& c) {
   strokes(c, cv, flat, f, b, c.seed + 11U, nullptr);
   Img rgb = cv.rgb;
   Img edge = borders(idx, c.w, c.h, std::max(1.0f, c.S / 450.0f));
-  const Img l = lines(blur(lumaOf(c.photo), 1.0f, c.token), std::max(1.0f, c.S / 450.0f), 1.6f, 0.012f, 0.03f, c.token);
-  for (size_t i = 0; i < edge.d.size(); ++i) edge.d[i] = 0.85f * std::max(edge.d[i] * 0.8f, l.d[i]);
+  Img l = cleanLines(lines(blur(lumaOf(c.photo), 1.0f, c.token), std::max(1.0f, c.S / 450.0f), 1.6f, 0.012f, 0.03f, c.token), c.G / 500.0f);
+  const Img feats = featureInk(c);
+  for (size_t i = 0; i < edge.d.size(); ++i) {
+    // Inside the skin only the features are drawn.
+    const float inside = smoothstep(0.4f, 0.7f, skin.d[i]);
+    const float feat = feats.d[i];
+    l.d[i] = mix(l.d[i], feat, inside);
+    edge.d[i] = 0.85f * std::max(edge.d[i] * 0.8f, l.d[i]);
+  }
   mixColour(rgb, hex(0x1F2A5A), 1.0f, &edge);  // bold dark-blue contours (cloisonnism)
   canvasWeave(cv.height, std::max(3.0f, c.S / 130.0f), 0.35f * c.ctl.texture, c.seed + 13U);  // coarse burlap
   lightRelief(rgb, cv.height, 0.4f * c.ctl.texture, 0.0f, c.token);
@@ -677,24 +877,21 @@ Img gauguin(Ctx& c) {
 Img hokusai(Ctx& c) {
   Img ref = c.photo;
   grade(ref, {.contrast = 0.15f, .saturation = 0.9f}, c.token);
-  ref = flatten(c, ref, 1.0f / 160, 2);
+  ref = flatten(c, ref, 1.0f / 120, 2);
   const std::vector<Rgb3> inks =
       pal({0x1B2A4A, 0x2F5A8A, 0x8EB2C8, 0xEDE4CF, 0xE8C9A8, 0xD49A8C, 0xC9AE7E, 0x7C8B5A, 0x7A7A72, 0x2A2622});
   std::vector<Rgb3> blocks = inks;
   // The face and skin: one flat block in the sitter's own tone (as a printer would cut it), the features left to the key block.
   const Img skin = skinMask(c);
-  double sk[3] = {0, 0, 0}, sw = 0;
-  for (size_t i = 0; i < skin.d.size(); ++i)
-    if (skin.d[i] > 0.6f) {
-      for (size_t k = 0; k < 3; ++k) sk[k] += ref.d[i * 3 + k];
-      sw += 1;
-    }
+  const SkinTone tone = skinTone(c, skin);
   auto idx = quantise(ref, inks, c.token);
-  if (sw > 50) {
-    blocks.push_back({static_cast<float>(sk[0] / sw), static_cast<float>(sk[1] / sw), static_cast<float>(sk[2] / sw)});
-    const auto skinBlock = static_cast<uint8_t>(blocks.size() - 1);
+  if (tone.found) {
+    // Two blocks cut for the skin: its tone, and a second printing for its shadow side.
+    blocks.push_back(tone.mean);
+    blocks.push_back({tone.mean[0] * 0.8f, tone.mean[1] * 0.76f, tone.mean[2] * 0.78f});
+    const auto skinBlock = static_cast<uint8_t>(blocks.size() - 2), shadeBlock = static_cast<uint8_t>(blocks.size() - 1);
     for (size_t i = 0; i < idx.size(); ++i)
-      if (skin.d[i] > 0.5f && luma(&c.photo.d[i * 3]) > 0.08f) idx[i] = skinBlock;
+      if (skin.d[i] > 0.5f && luma(&c.photo.d[i * 3]) > 0.06f) idx[i] = tone.light.d[i] < 0.3f ? shadeBlock : skinBlock;
   }
   Img paperTooth;
   Img rgb = paper(c.w, c.h, hex(0xF1E8D6), 0.08f * c.ctl.texture, false, c.seed + 19U, &paperTooth);
@@ -719,8 +916,17 @@ Img hokusai(Ctx& c) {
     }
   // The key block: black lines where the fields meet and along the drawing.
   Img key = borders(idx, c.w, c.h, std::max(1.0f, c.S / 700.0f));
-  const Img l = lines(blur(lumaOf(c.photo), 1.0f, c.token), std::max(1.0f, c.S / 550.0f), 1.6f, 0.014f, 0.03f, c.token);
-  for (size_t i = 0; i < key.d.size(); ++i) key.d[i] = clamp01(std::max(key.d[i] * 0.75f, l.d[i]) * (0.85f + 0.15f * paperTooth.d[i]));
+  Img l = cleanLines(lines(blur(lumaOf(c.photo), 1.0f, c.token), std::max(1.0f, c.S / 550.0f), 1.6f, 0.014f, 0.03f, c.token), c.G / 450.0f);
+  const Img feats = featureInk(c);
+  const size_t skinShade = blocks.size() - 1;
+  for (size_t i = 0; i < key.d.size(); ++i) {
+    // Within the skin the key block draws only the features (and not the edge between its two tones).
+    const float inside = smoothstep(0.4f, 0.7f, skin.d[i]);
+    const float feat = feats.d[i];
+    float k = key.d[i] * 0.75f;
+    if (tone.found && inside > 0.5f && (idx[i] == skinShade || idx[i] == skinShade - 1)) k = 0;
+    key.d[i] = clamp01(std::max(mix(k, 0.0f, inside * 0.0f), mix(l.d[i], feat, inside)) * (0.85f + 0.15f * paperTooth.d[i]));
+  }
   mixColour(rgb, hex(0x1E1A18), 0.95f, &key);
   // Old, slightly faded.
   grade(rgb, {.lift = 0.03f, .saturation = 0.9f, .warmth = 0.1f}, c.token);
@@ -746,60 +952,59 @@ float hatchLine(float x, float y, float a, float period, float weight, float str
   return cover;
 }
 
+// Buon fresco, as on the Sistine ceiling: sculptural form modelled in mineral
+// pigments on lime plaster, half-shadows built with hatched strokes
+// (tratteggio), a lapis sky behind, a matte, slightly faded surface.
 Img michelangelo(Ctx& c) {
-  Img l = lumaOf(c.photo);
-  const Img coarse = blur(l, c.S / 50.0f, c.token);
-  for (size_t i = 0; i < l.d.size(); ++i) l.d[i] = clamp01(l.d[i] + 0.6f * (l.d[i] - coarse.d[i]));
-  l = blur(l, std::max(0.6f, c.S / 900.0f), c.token);
-  Img tooth;
-  const Rgb3 cream = hex(0xE9DCC0), chalk = hex(0xA2412B), deep = hex(0x7E2E1C);
-  Img rgb = paper(c.w, c.h, cream, 0.1f * c.ctl.texture, true, c.seed + 29U, &tooth);
-  // The study: the figure drawn; the paper left bare around it.
-  Img fade = c.subject.d.empty() ? Img(c.w, c.h, 1, 1.0f) : c.subject;
-  if (c.subject.d.empty())
-    for (int y = 0; y < c.h; ++y)
-      for (int x = 0; x < c.w; ++x) {
-        const float dx = static_cast<float>(x) / static_cast<float>(c.w) - 0.5f, dy = static_cast<float>(y) / static_cast<float>(c.h) - 0.45f;
-        fade.at(x, y) = 1 - smoothstep(0.3f, 0.6f, std::sqrt(dx * dx + dy * dy));
-      }
-  else
-    fade = blur(fade, c.S / 60.0f, c.token);
-  const Field f = orientation(c.photo, std::max(1.0f, c.S / 250.0f), std::max(3.0f, c.S / 50.0f), c.token);
-  const float period = std::max(3.0f, c.S / 150.0f), stroke = c.S / 22.0f;
-  constexpr int kDirs = 6;
-  const bool cross = c.level != Level::Study;
+  Img ref = c.photo;
+  {
+    // Sculptural: the large forms modelled, at the scale of a limb.
+    const Img l = lumaOf(ref);
+    const Img broad = blur(l, c.G / 35.0f, c.token);
+    for (size_t i = 0; i < l.d.size(); ++i) {
+      const float d = 0.55f * (l.d[i] - broad.d[i]);
+      for (size_t k = 0; k < 3; ++k) ref.d[i * 3 + k] = clamp01(ref.d[i * 3 + k] + d);
+    }
+  }
+  grade(ref, {.lift = 0.05f, .gain = 0.95f, .contrast = 0.2f, .saturation = 0.72f, .warmth = 0.15f}, c.token);
+  palette(ref, pal({0xC9A26B, 0xB5794A, 0x8C4A2F, 0x6E7A5A, 0x4F6E9A, 0xE9DFC9, 0x3B2A20, 0xD7B48C}), 0.5f, 0.85f, c.token);
+  const Img bg = background(c);
+  mixInto(ref, blur(ref, c.G / 80.0f, c.token), 0.6f, &bg);
+  mixColour(ref, hex(0x6F8BAE), 0.55f, &bg);  // the lapis sky behind the figures
+  const Field f = formField(c, ref);
+  Oil o;
+  o.ground = hex(0xE6D8BE);
+  o.maxFrac = 1.0f / 30, o.minFrac = 1.0f / 300;
+  o.abstraction = 1.0f / 230;
+  o.brush = {.maxLen = 7, .curvature = 0.55f, .opacity = 0.85f, .softness = 0.5f, .bristleAmp = 0.06f, .dryness = 0.2f, .thick = 0.03f,
+             .threshold = 0.055f};
+  Canvas cv = paintOil(c, ref, f, o);
+  Img rgb = cv.rgb;
+  // Tratteggio: hatched modelling in the half-shadows, in a deeper tone of the same earth.
+  const Img l = lumaOf(rgb);
+  const float period = std::max(3.0f, c.G / 190.0f), stroke = c.G / 30.0f;
   parallelFor(c.h, c.token, [&](int32_t y0, int32_t y1) {
     for (int y = y0; y < y1; ++y)
       for (int x = 0; x < c.w; ++x) {
         const size_t i = static_cast<size_t>(y) * static_cast<size_t>(c.w) + static_cast<size_t>(x);
-        const float fd = fade.d[i];
-        const float T = std::pow(1 - l.d[i], 1.15f) * (0.15f + 0.85f * fd);
-        const float fx = static_cast<float>(x), fy = static_cast<float>(y);
-        // Hatching that wraps the form (blended between six directions), then the diagonal, then cross-hatching in the darks.
-        const float theta = std::atan2(f.ty[i], f.tx[i]);
-        float form = 0, wsum = 0;
-        for (int b = 0; b < kDirs; ++b) {
-          const float a = static_cast<float>(b) * kPi / kDirs;
-          const float w = std::pow(std::max(0.0f, std::cos(2 * (theta + 0.35f - a))), 4.0f);
-          if (w <= 0) continue;
-          form += w * hatchLine(fx, fy, a, period, T * 0.75f, stroke, c.seed + static_cast<uint32_t>(b));
-          wsum += w;
-        }
-        float cover = wsum > 0 ? form / wsum : 0;
-        cover = std::max(cover, hatchLine(fx, fy, -0.8f, period * 0.9f, (T - 0.3f) * 1.1f, stroke * 0.8f, c.seed + 11U));
-        if (cross) cover = std::max(cover, hatchLine(fx, fy, 0.55f, period * 0.85f, (T - 0.62f) * 1.3f, stroke * 0.7f, c.seed + 13U));
-        // Chalk catches the paper's peaks; a little is rubbed in with the finger (sfumato of the study).
-        const float grip = 0.25f + 0.75f * smoothstep(0.25f, 0.65f, tooth.d[i]);
-        const float rubbed = 0.28f * T * fd;
+        const float T = smoothstep(0.62f, 0.2f, l.d[i]) * (1 - 0.6f * bg.d[i]);
+        if (T <= 0.01f) continue;
+        const float a = std::atan2(f.ty[i], f.tx[i]) + 0.45f;
+        const float cover = hatchLine(static_cast<float>(x), static_cast<float>(y), a, period, T * 0.55f, stroke, c.seed + 101U);
         float* p = rgb.px(x, y);
-        const float a = clamp01(rubbed + cover * grip * 0.9f);
-        for (size_t k = 0; k < 3; ++k) p[k] = mix(p[k], chalk[k], a);
+        for (int k = 0; k < 3; ++k) p[k] = mix(p[k], p[k] * 0.7f, cover * 0.65f);
       }
   });
-  Img contour = lines(l, std::max(1.0f, c.S / 650.0f), 1.6f, 0.012f, 0.04f, c.token);
-  for (size_t i = 0; i < contour.d.size(); ++i) contour.d[i] *= 0.8f * (0.25f + 0.75f * fade.d[i]) * (0.35f + 0.65f * smoothstep(0.2f, 0.6f, tooth.d[i]));
-  mixColour(rgb, deep, 1.0f, &contour);
-  vignette(rgb, 0.12f, hex(0xB89C74));
+  // Plaster: matte and granular, with the broad unevenness of a wall; the colour a little faded.
+  Img h(c.w, c.h, 1, 0.0f);
+  for (int y = 0; y < c.h; ++y)
+    for (int x = 0; x < c.w; ++x)
+      h.at(x, y) = 0.6f * fbm(static_cast<float>(x) / std::max(1.5f, c.G / 220.0f), static_cast<float>(y) / std::max(1.5f, c.G / 220.0f), c.seed + 103U, 3) +
+                   0.4f * fbm(static_cast<float>(x) / (c.G / 30.0f), static_cast<float>(y) / (c.G / 30.0f), c.seed + 105U, 3);
+  lightRelief(rgb, h, 0.22f * std::max(c.ctl.texture, 0.5f), 0.0f, c.token);
+  grade(rgb, {.lift = 0.04f, .saturation = 0.92f}, c.token);
+  if (c.ctl.age > 0 && c.level != Level::Study) craquelure(rgb, c.G / 22.0f, 0.22f * std::min(1.0f, c.ctl.age), c.seed + 107U, c.token);
+  vignette(rgb, 0.15f, hex(0x8E7A5E));
   return rgb;
 }
 
@@ -812,6 +1017,10 @@ Img durer(Ctx& c) {
   const Img bg = background(c);
   Img rgb = paper(c.w, c.h, hex(0xF2ECDD), 0.06f * c.ctl.texture, false, c.seed + 37U, nullptr);
   const float period = std::max(3.0f, c.S / 170.0f);
+  // On a face the burin works finer and differently: fine lines only in the
+  // shadows, flicks and dots (stippling) in the half-tones, bare paper in the light.
+  const float periodFace = c.faceUnit > 0 ? std::clamp(c.faceUnit / 60.0f, 2.5f, period) : period;
+  const Img face = c.faces.d.empty() ? Img() : blur(c.faces, std::max(1.0f, c.faceUnit / 10.0f), c.token);
   const Rgb3 ink = hex(0x1A1612);
   constexpr int kDirs = 6;
   // Burin lines: stripes following the form (blended between six cut directions), swelling with the shadow.
@@ -819,7 +1028,9 @@ Img durer(Ctx& c) {
     for (int y = y0; y < y1; ++y)
       for (int x = 0; x < c.w; ++x) {
         const size_t i = static_cast<size_t>(y) * static_cast<size_t>(c.w) + static_cast<size_t>(x);
-        float T = std::pow(1 - l.d[i], 0.9f);
+        float T = std::pow(std::max(0.0f, 1 - l.d[i]), 0.9f);
+        const float fm = face.d.empty() ? 0.0f : face.d[i];
+        const float per = mix(period, periodFace, fm);
         float theta = std::atan2(f.ty[i], f.tx[i]);
         if (bg.d[i] > 0.5f) theta = 0.0f, T *= 0.55f;  // a sky of level lines
         auto stripes = [&](float rot) {
@@ -829,21 +1040,39 @@ Img durer(Ctx& c) {
             const float w = std::pow(std::max(0.0f, std::cos(2 * (theta + rot - a))), 4.0f);
             if (w <= 0) continue;
             const float nx = -std::sin(a), ny = std::cos(a);
-            s += w * (0.5f + 0.5f * std::cos(2 * kPi * (static_cast<float>(x) * nx + static_cast<float>(y) * ny) / period + static_cast<float>(b) * 1.7f));
+            s += w * (0.5f + 0.5f * std::cos(2 * kPi * (static_cast<float>(x) * nx + static_cast<float>(y) * ny) / per + static_cast<float>(b) * 1.7f));
             wsum += w;
           }
           return wsum > 0 ? s / wsum : 1.0f;
         };
-        const float aa = 1.5f / period;
+        const float aa = 1.5f / per;
         auto inked = [&](float s, float width) { return 1 - smoothstep(width - aa, width + aa, s); };
         float cover = inked(stripes(0), T * 0.9f);
         if (T > 0.5f) cover = std::max(cover, inked(stripes(kPi / 3), (T - 0.5f) * 1.4f));
         if (T > 0.75f) cover = std::max(cover, inked(stripes(-kPi / 3), (T - 0.75f) * 1.6f));
+        if (fm > 0.01f) {
+          // The face: lines only in its shadows, dots in its half-tones, the light left bare.
+          float fc = inked(stripes(0), std::max(0.0f, T - 0.32f) * 1.25f);
+          const float cell = per * 1.15f;
+          const int gx = static_cast<int>(static_cast<float>(x) / cell), gy = static_cast<int>(static_cast<float>(y) / cell);
+          const float jx = (static_cast<float>(gx) + 0.25f + 0.5f * hash01(gx, gy, c.seed + 111U)) * cell;
+          const float jy = (static_cast<float>(gy) + 0.25f + 0.5f * hash01(gx, gy, c.seed + 113U)) * cell;
+          const float rdot = cell * 0.42f * std::sqrt(smoothstep(0.08f, 0.55f, T));
+          const float dot = 1 - smoothstep(rdot - 0.7f, rdot + 0.7f, std::hypot(static_cast<float>(x) - jx, static_cast<float>(y) - jy));
+          fc = std::max(fc, dot * (1 - smoothstep(0.5f, 0.75f, T)));
+          cover = mix(cover, fc, fm);
+        }
         float* p = rgb.px(x, y);
         for (int k = 0; k < 3; ++k) p[k] = mix(p[k], ink[static_cast<size_t>(k)], cover * 0.95f);
       }
   });
   Img contour = lines(l, std::max(1.0f, c.S / 700.0f), 1.6f, 0.012f, 0.03f, c.token);
+  // Inside a face only its features are outlined (eyes, brows, nostrils, lips), cut at the face's scale.
+  if (!face.d.empty()) {
+    const Img feat = c.faceUnit > 0 ? lines(l, std::max(0.7f, c.faceMin / 260.0f), 1.6f, 0.01f, 0.03f, c.token) : Img();
+    for (size_t i = 0; i < contour.d.size(); ++i)
+      contour.d[i] = mix(contour.d[i], c.features.d.empty() ? 0.0f : feat.d[i] * c.features.d[i], face.d[i]);
+  }
   mixColour(rgb, ink, 0.9f, &contour);
   return rgb;
 }
@@ -889,7 +1118,18 @@ Img klimt(Ctx& c) {
   // The figure: a fine, pale, smooth painting.
   Img ref = c.photo;
   grade(ref, {.lift = 0.05f, .saturation = 0.9f, .warmth = 0.2f}, c.token);
-  const Img skin = skinMask(c);  // the sitter's own skin, painted finely
+  // The sitter's own skin, painted finely; their face is never covered by ornament.
+  Img skin = skinMask(c);
+  if (!c.faces.d.empty())
+    for (size_t i = 0; i < skin.d.size(); ++i) skin.d[i] = std::max(skin.d[i], smoothstep(0.2f, 0.6f, c.faces.d[i]));
+  // The hair around a face is painted too (Klimt framed his sitters' faces with their own dark hair).
+  if (!c.faces.d.empty() && !c.subject.d.empty()) {
+    const Img near = blur(c.faces, std::max(2.0f, c.faceUnit * 0.45f), c.token);
+    for (size_t i = 0; i < skin.d.size(); ++i) {
+      const float hair = c.subject.d[i] * (1 - smoothstep(0.1f, 0.22f, luma(&c.photo.d[i * 3]))) * smoothstep(0.05f, 0.2f, near.d[i]);
+      skin.d[i] = std::max(skin.d[i], hair);
+    }
+  }
   const Field f = formField(c, ref);
   Oil o;
   o.ground = hex(0xC9A86A);
@@ -915,7 +1155,7 @@ Img klimt(Ctx& c) {
         // Gold that keeps the form: darker where the photo is dark, shimmering.
         const float shimmer = 0.85f + 0.3f * fbm(fx / (c.S * 0.03f), fy / (c.S * 0.03f), c.seed + 51U, 3);
         Rgb3 col{};
-        for (size_t k = 0; k < 3; ++k) col[k] = clamp01(mix(goldDark[k], goldLight[k], std::pow(t, 0.8f)) * shimmer);
+        for (size_t k = 0; k < 3; ++k) col[k] = clamp01(mix(goldDark[k], goldLight[k], 0.45f + 0.55f * std::pow(t, 0.8f)) * shimmer);
         float hgt = 0.2f;
         const bool clothing = bg.at(x, y) < 0.5f && !c.subject.d.empty();
         if (!clothing) {
@@ -1008,18 +1248,20 @@ Img paintArtist(Ctx& c, Artist a) {
 // The person's colour and likeness choices, over the finished painting.
 void personalise(Img& out, const Ctx& c) {
   const Controls& k = c.ctl;
-  const bool colour = k.palette < 0.999f || std::fabs(k.vivid) > 0.001f;
+  // A natural painting keeps more of the photo's own colour; the full transformation is all the artist's.
+  const float paletteAmt = c.artist == Artist::Durer ? k.palette : k.palette * mix(0.55f, 1.0f, k.intensity);
+  const bool colour = paletteAmt < 0.999f || std::fabs(k.vivid) > 0.001f;
   if (colour)
     for (int y = 0; y < c.h; ++y)
       for (int x = 0; x < c.w; ++x) {
         float lab[3], ph[3];
         float* p = out.px(x, y);
         rgbToLab(p, lab);
-        if (k.palette < 0.999f) {
+        if (paletteAmt < 0.999f) {
           rgbToLab(c.photo.px(x, y), ph);
           // The photo's hue and colourfulness, at the painting's own light (no glaring colour in its shadows).
           const float fit = std::clamp(lab[0] / std::max(ph[0], 5.0f), 0.0f, 1.1f);
-          lab[1] = mix(ph[1] * fit, lab[1], k.palette), lab[2] = mix(ph[2] * fit, lab[2], k.palette);
+          lab[1] = mix(ph[1] * fit, lab[1], paletteAmt), lab[2] = mix(ph[2] * fit, lab[2], paletteAmt);
         }
         if (std::fabs(k.vivid) > 0.001f) {
           // Vibrance: quiet colours gain most, strong ones (skin, a red dress) little, so skin stays natural.
@@ -1179,6 +1421,235 @@ void keepWhites(Img& out, const Ctx& c) {
     }
 }
 
+// ---- the photograph, read before painting ----------------------------------
+
+// Levels: an underexposed or flat photo is stretched to a full range (its
+// tones in order, the skin's own depth kept), so every artist starts from a
+// clear picture whatever the light it was taken in.
+void adapt(Img& photo) {
+  std::vector<int> hist(256, 0);
+  for (size_t i = 0; i < photo.d.size(); i += 3) ++hist[static_cast<size_t>(std::clamp(luma(&photo.d[i]) * 255.0f, 0.0f, 255.0f))];
+  const size_t n = photo.d.size() / 3;
+  auto pct = [&](double q) {
+    size_t acc = 0;
+    for (int b = 0; b < 256; ++b) {
+      acc += static_cast<size_t>(hist[static_cast<size_t>(b)]);
+      if (static_cast<double>(acc) >= q * static_cast<double>(n)) return static_cast<float>(b) / 255.0f;
+    }
+    return 1.0f;
+  };
+  const float p1 = pct(0.01), p99 = pct(0.99);
+  const float lo = p1 > 0.06f ? std::min(p1 - 0.02f, 0.12f) : 0.0f;
+  const float hi = p99 < 0.9f ? std::max(p99 + 0.05f, 0.55f) : 1.0f;
+  if (lo <= 0 && hi >= 1) return;
+  const float scale = std::min(1.6f, 1.0f / (hi - lo));
+  for (float& v : photo.d) v = clamp01((v - lo) * scale);
+}
+
+// ---- backdrops: chosen behind the person, then painted in the artist's hand ----
+
+void applyBackdrop(Ctx& c) {
+  if (c.ctl.backdrop == Backdrop::Artist) return;
+  c.ctl.background = 0;  // the artist paints the chosen background as it is
+  if (c.ctl.backdrop == Backdrop::Scene || c.subject.d.empty()) return;
+  Img bd(c.w, c.h, 3);
+  const float W = static_cast<float>(c.w), H = static_cast<float>(c.h);
+  for (int y = 0; y < c.h; ++y)
+    for (int x = 0; x < c.w; ++x) {
+      const float u = static_cast<float>(x) / W, v = static_cast<float>(y) / H;
+      const float n = fbm(static_cast<float>(x) / (c.G * 0.25f), static_cast<float>(y) / (c.G * 0.25f), c.seed + 71U, 4);
+      const float r = std::hypot(u - 0.45f, (v - 0.4f) * 0.9f);
+      Rgb3 col{};
+      switch (c.ctl.backdrop) {
+        case Backdrop::DarkStudio: {
+          const Rgb3 a = hex(0x4E4740), b = hex(0x141210);
+          for (size_t k = 0; k < 3; ++k) col[k] = mix(a[k], b[k], smoothstep(0.05f, 0.75f, r)) * (0.9f + 0.2f * n);
+          break;
+        }
+        case Backdrop::WarmUmber: {
+          const Rgb3 a = hex(0x9A7046), b = hex(0x2C1D12);
+          for (size_t k = 0; k < 3; ++k) col[k] = mix(a[k], b[k], smoothstep(0.05f, 0.8f, r)) * (0.88f + 0.24f * n);
+          break;
+        }
+        case Backdrop::Sky: {
+          const Rgb3 top = hex(0x4F7FC0), low = hex(0xDCE6EC), cloud = hex(0xF6F4EE);
+          for (size_t k = 0; k < 3; ++k) col[k] = mix(top[k], low[k], smoothstep(0.0f, 0.85f, v));
+          const float cl = smoothstep(0.52f, 0.72f, fbm(static_cast<float>(x) / (c.G * 0.35f), static_cast<float>(y) / (c.G * 0.18f), c.seed + 73U, 5));
+          for (size_t k = 0; k < 3; ++k) col[k] = mix(col[k], cloud[k], cl * 0.85f);
+          break;
+        }
+        case Backdrop::Landscape: {
+          // A Renaissance distance: hazy sky, blue ridges, a warm valley.
+          const Rgb3 sky = hex(0xC9D3CC), skyTop = hex(0x8FA6B2), far = hex(0x7E95A0), near = hex(0x6F7E5C), valley = hex(0x9C8A5E);
+          const float ridge1 = 0.58f + 0.07f * fbm(u * 3.0f, 1.3f, c.seed + 75U, 4), ridge2 = 0.7f + 0.08f * fbm(u * 2.2f, 4.1f, c.seed + 77U, 4);
+          for (size_t k = 0; k < 3; ++k) col[k] = mix(skyTop[k], sky[k], smoothstep(0.0f, 0.55f, v));
+          if (v > ridge1)
+            for (size_t k = 0; k < 3; ++k) col[k] = mix(far[k], sky[k], 0.35f * (1 - smoothstep(ridge1, ridge1 + 0.08f, v)));
+          if (v > ridge2)
+            for (size_t k = 0; k < 3; ++k) col[k] = mix(near[k], valley[k], smoothstep(ridge2, 1.0f, v)) * (0.92f + 0.16f * n);
+          break;
+        }
+        case Backdrop::Gold: {
+          const Rgb3 a = hex(0xE6C46C), b = hex(0x9C7226);
+          const float leaf = fbm(static_cast<float>(x) / (c.G * 0.06f), static_cast<float>(y) / (c.G * 0.06f), c.seed + 79U, 3);
+          for (size_t k = 0; k < 3; ++k) col[k] = mix(a[k], b[k], 0.35f * smoothstep(0.1f, 0.9f, r) + 0.45f * leaf);
+          break;
+        }
+        default: break;
+      }
+      float* p = bd.px(x, y);
+      for (size_t k = 0; k < 3; ++k) p[k] = clamp01(col[k]);
+    }
+  for (int y = 0; y < c.h; ++y)
+    for (int x = 0; x < c.w; ++x) {
+      const float m = c.subject.at(x, y);
+      float* p = c.photo.px(x, y);
+      const float* b = bd.px(x, y);
+      for (int k = 0; k < 3; ++k) p[k] = mix(b[k], p[k], m);
+    }
+}
+
+// ---- after painting: the sitter kept, the surface chosen ----------------------
+
+// What each artist keeps of the sitter: how firmly skin stays its natural
+// hue and colourfulness (no orange or red faces), and how much of the
+// features' own shape (eyes, brows, nose, mouth) is drawn back in.
+struct Keep { float skin, features; };
+constexpr Keep kKeep[kArtistCount] = {
+    {0.7f, 0.45f},   // Leonardo
+    {0.55f, 0.5f},   // Michelangelo
+    {0.8f, 0.45f},   // Raphael
+    {0.0f, 0.0f},    // Dürer: lines say it all
+    {0.7f, 0.4f},    // Titian
+    {0.6f, 0.45f},   // Caravaggio
+    {0.6f, 0.4f},    // Rembrandt
+    {0.75f, 0.45f},  // Vermeer
+    {0.7f, 0.35f},   // Velázquez
+    {0.5f, 0.35f},   // Goya
+    {0.0f, 0.15f},   // Hokusai: the print's own colour
+    {0.5f, 0.3f},    // Turner
+    {0.55f, 0.35f},  // Monet
+    {0.5f, 0.35f},   // Degas
+    {0.7f, 0.4f},    // Renoir
+    {0.5f, 0.35f},   // Cézanne
+    {0.3f, 0.3f},    // Seurat
+    {0.45f, 0.35f},  // Van Gogh
+    {0.3f, 0.35f},   // Gauguin
+    {0.75f, 0.45f},  // Klimt
+};
+
+// Skin keeps its natural hue and is never more colourful than a little above the photo's.
+void naturalSkin(Img& out, const Ctx& c, float amount) {
+  amount *= mix(1.2f, 0.75f, c.ctl.intensity);
+  if (amount <= 0) return;
+  const Img skin = skinMask(c);
+  parallelFor(c.h, c.token, [&](int32_t y0, int32_t y1) {
+    for (int y = y0; y < y1; ++y)
+      for (int x = 0; x < c.w; ++x) {
+        const float s = std::min(1.0f, skin.at(x, y) * amount);
+        if (s < 0.01f) continue;
+        float o[3], ph[3];
+        float* p = out.px(x, y);
+        rgbToLab(p, o);
+        rgbToLab(c.photo.px(x, y), ph);
+        const float co = std::hypot(o[1], o[2]), cp = std::hypot(ph[1], ph[2]);
+        const float cap = cp * 1.2f + 6.0f;
+        if (co > cap) {
+          const float f = mix(1.0f, cap / co, s);
+          o[1] *= f, o[2] *= f;
+        }
+        if (cp > 3) {
+          const float cn = std::hypot(o[1], o[2]), t = 0.6f * s;
+          o[1] = mix(o[1], ph[1] / cp * cn, t), o[2] = mix(o[2], ph[2] / cp * cn, t);
+        }
+        labToRgb(o, p);
+        for (int k = 0; k < 3; ++k) p[k] = clamp01(p[k]);
+      }
+  });
+}
+
+// The features' own light and shade (eyes, brows, nostrils, lips) drawn back
+// into the painting at the face's scale: the likeness lives there.
+void featureDetail(Img& out, const Ctx& c, float amount) {
+  if (c.features.d.empty() || amount <= 0) return;
+  amount *= mix(1.15f, 0.55f, c.ctl.intensity) * mix(0.7f, 1.3f, c.ctl.likeness);
+  float minFace = 1e9f;
+  for (const FaceBox& f : c.faceBoxes) minFace = std::min(minFace, f.w * static_cast<float>(c.w));
+  if (minFace > 1e8f) return;
+  const Img l = lumaOf(c.photo);
+  const Img big = blur(l, std::max(1.0f, minFace / 30.0f), c.token);
+  const Img small = blur(l, std::max(0.5f, minFace / 380.0f), c.token);
+  for (size_t i = 0; i < l.d.size(); ++i) {
+    const float a = c.features.d[i] * amount;
+    if (a <= 0.005f) continue;
+    const float d = std::clamp(small.d[i] - big.d[i], -0.25f, 0.25f) * a;
+    for (size_t k = 0; k < 3; ++k) out.d[i * 3 + k] = clamp01(out.d[i * 3 + k] + d);
+  }
+}
+
+// The chosen surface: its texture lit across the painting, and its own tone.
+void applySurface(Img& rgb, const Ctx& c) {
+  if (c.ctl.surface == Surface::Artist) return;
+  const float str = 0.55f + 0.45f * std::clamp(c.ctl.texture / 1.5f, 0.0f, 1.0f);
+  Img h(c.w, c.h, 1, 0.0f);
+  float relief = 0;
+  Rgb3 tint{1, 1, 1};
+  float tintAmt = 0;
+  auto noise = [&](float scale, float amt, uint32_t seed, int oct) {
+    for (int y = 0; y < c.h; ++y)
+      for (int x = 0; x < c.w; ++x) h.at(x, y) += amt * fbm(static_cast<float>(x) / scale, static_cast<float>(y) / scale, seed, oct);
+  };
+  switch (c.ctl.surface) {
+    case Surface::Linen: canvasWeave(h, std::max(2.5f, c.G / 320.0f), 0.5f * str, c.seed + 81U), relief = 0.3f * str; break;
+    case Surface::RoughCanvas: canvasWeave(h, std::max(3.0f, c.G / 140.0f), 0.9f * str, c.seed + 83U), relief = 0.5f * str; break;
+    case Surface::FineArtPaper:
+      noise(std::max(1.5f, c.G / 300.0f), 0.35f * str, c.seed + 85U, 3), relief = 0.15f * str, tint = hex(0xFBF7EE), tintAmt = 0.5f;
+      break;
+    case Surface::WatercolourPaper:
+      noise(std::max(3.0f, c.G / 110.0f), 0.6f * str, c.seed + 87U, 4), noise(std::max(1.2f, c.G / 500.0f), 0.2f * str, c.seed + 88U, 2);
+      relief = 0.35f * str, tint = hex(0xFCFAF4), tintAmt = 0.55f;
+      break;
+    case Surface::Parchment:
+      noise(std::max(2.0f, c.G / 200.0f), 0.3f * str, c.seed + 89U, 4), relief = 0.12f * str, tint = hex(0xE8D3A2), tintAmt = 0.6f;
+      break;
+    case Surface::SmoothBoard: noise(std::max(2.0f, c.G / 260.0f), 0.08f * str, c.seed + 91U, 2), relief = 0.05f * str; break;
+    default: break;
+  }
+  if (tintAmt > 0)
+    for (size_t i = 0; i < rgb.d.size(); i += 3)
+      for (size_t k = 0; k < 3; ++k) rgb.d[i + k] *= mix(1.0f, tint[k], tintAmt);
+  if (c.ctl.surface == Surface::Parchment) {
+    // Age: soft stains and darker edges.
+    for (int y = 0; y < c.h; ++y)
+      for (int x = 0; x < c.w; ++x) {
+        const float st = smoothstep(0.55f, 0.8f, fbm(static_cast<float>(x) / (c.G * 0.2f), static_cast<float>(y) / (c.G * 0.2f), c.seed + 93U, 4));
+        float* p = rgb.px(x, y);
+        for (int k = 0; k < 3; ++k) p[k] *= 1 - 0.12f * st * str;
+      }
+    vignette(rgb, 0.35f * str, hex(0x8A6A3A));
+  }
+  if (relief > 0) lightRelief(rgb, h, relief, 0.02f, c.token);
+}
+
+// Where detail lives: every face (a little beyond it) and the photo's strong
+// edges (a jaw, a collar, a hand against a wall). The finest brushes go only there.
+Img detailMap(const Ctx& c) {
+  const Img l = blur(lumaOf(c.photo), std::max(1.0f, c.G / 450.0f), c.token);
+  Img g(c.w, c.h, 1, 0.0f);
+  for (int y = 1; y < c.h - 1; ++y)
+    for (int x = 1; x < c.w - 1; ++x) {
+      const float gx = l.at(x + 1, y) - l.at(x - 1, y), gy = l.at(x, y + 1) - l.at(x, y - 1);
+      g.at(x, y) = smoothstep(0.05f, 0.16f, std::hypot(gx, gy));
+    }
+  g = blur(g, std::max(1.0f, c.G / 220.0f), c.token);
+  for (float& v : g.d) v = smoothstep(0.08f, 0.35f, v);
+  for (const FaceBox& f : c.faceBoxes) {
+    const Img a = faceArea(c, f, 1.25f);
+    for (size_t i = 0; i < g.d.size(); ++i) g.d[i] = std::max(g.d[i], a.d[i]);
+  }
+  return g;
+}
+
 }  // namespace
 
 Error paint(ImageBuffer& image, const Options& options, const CancellationToken* token) {
@@ -1199,13 +1670,15 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
     Controls k = options.controls;
     auto ok = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
     if (!ok(k.brush, 0.5f, 2.0f) || !ok(k.palette, 0, 1) || !ok(k.vivid, -1, 1) || !ok(k.likeness, 0, 1) || !ok(k.texture, 0, 2) ||
-        !ok(k.age, 0, 2) || !ok(k.background, 0, 1))
+        !ok(k.age, 0, 2) || !ok(k.background, 0, 1) || !ok(k.intensity, 0, 1) || static_cast<int>(k.surface) < 0 ||
+        static_cast<int>(k.surface) >= kSurfaceCount || static_cast<int>(k.backdrop) < 0 || static_cast<int>(k.backdrop) >= kBackdropCount)
       return {PP_ERROR_INVALID_ARGUMENT, "A painting control is out of range"};
     c.ctl = k;
   }
   c.G = static_cast<float>(std::min(c.w, c.h));
   c.S = c.G * c.ctl.brush;
   c.level = options.level;
+  c.artist = options.artist;
   c.seed = options.seed == 0 ? 1U : options.seed;
   c.token = token;
   c.photo = Img(c.w, c.h, 3);
@@ -1218,6 +1691,7 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
       p[2] = static_cast<float>(row[x * 4 + (bgra ? 0 : 2)]) / 255.0f;
     }
   }
+  adapt(c.photo);  // an underexposed or flat photo starts from a full range
   if (options.subject != nullptr) {
     const ImageBuffer& m = *options.subject;
     Img mask(m.width(), m.height(), 1);
@@ -1230,7 +1704,8 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
     c.faceBoxes.push_back(f);
     if (c.faces.d.empty()) c.faces = Img(c.w, c.h, 1, 0.0f);
     const float cx = (f.x + f.w * 0.5f) * static_cast<float>(c.w), cy = (f.y + f.h * 0.5f) * static_cast<float>(c.h);
-    const float rx = f.w * static_cast<float>(c.w) * 0.65f, ry = f.h * static_cast<float>(c.h) * 0.75f;
+    // The face box itself, softly: a face oval that doesn't spill onto the hair or the wall beside it.
+    const float rx = f.w * static_cast<float>(c.w) * 0.55f, ry = f.h * static_cast<float>(c.h) * 0.6f;
     for (int y = 0; y < c.h; ++y)
       for (int x = 0; x < c.w; ++x) {
         const float dx = (static_cast<float>(x) - cx) / rx, dy = (static_cast<float>(y) - cy) / ry;
@@ -1242,10 +1717,28 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
     for (size_t i = 0; i < c.subject.d.size(); ++i) c.subject.d[i] = std::max(c.subject.d[i], c.faces.d[i]);
   if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
 
+  // The faces' sizes and features, where detail lives, and the chosen backdrop behind the person.
+  for (const FaceBox& f : c.faceBoxes) {
+    const float fw = f.w * static_cast<float>(c.w);
+    c.faceUnit = std::max(c.faceUnit, fw);
+    c.faceMin = c.faceMin > 0 ? std::min(c.faceMin, fw) : fw;
+  }
+  if (!c.faceBoxes.empty()) {
+    c.features = Img(c.w, c.h, 1, 0.0f);
+    for (const FaceBox& f : c.faceBoxes) addFeatures(c.features, c, f);
+  }
+  c.detail = detailMap(c);
+  applyBackdrop(c);
+  if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
+
   Img out = paintArtist(c, options.artist);
   if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
   personalise(out, c);
+  const Keep& keep = kKeep[a];
+  naturalSkin(out, c, keep.skin);
+  featureDetail(out, c, keep.features);
   keepWhites(out, c);
+  applySurface(out, c);
   if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
   for (int y = 0; y < c.h; ++y) {
     uint8_t* row = image.row(y);

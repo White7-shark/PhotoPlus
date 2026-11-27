@@ -58,6 +58,20 @@ struct FaceBox {
   std::array<float, 4> eyes{};
 };
 
+// What it is painted on: the artist's own (canvas, panel, paper), or a
+// surface the person chooses (its texture and tone over the painting).
+enum class Surface : int32_t { Artist = 0, Linen, FineArtPaper, WatercolourPaper, RoughCanvas, Parchment, SmoothBoard };
+constexpr int32_t kSurfaceCount = 7;
+
+// Behind the person: the artist's own treatment, the photo's own scene, or a
+// backdrop painted in the artist's hand (the person stays as they are).
+enum class Backdrop : int32_t { Artist = 0, Scene, DarkStudio, WarmUmber, Sky, Landscape, Gold };
+constexpr int32_t kBackdropCount = 7;
+
+// A museum frame around a finished painting.
+enum class Frame : int32_t { None = 0, Gilded, Baroque, BlackGallery, Walnut, WhiteMat };
+constexpr int32_t kFrameCount = 6;
+
 // The person's own say over the painting. The defaults are the artist's own
 // way (with a smooth texture); every control stays within what that artist would do.
 struct Controls {
@@ -69,6 +83,11 @@ struct Controls {
                             // bristle marks); smooth by default
   float age = 1.0f;         // 0 freshly painted .. 1.5 old varnish and craquelure
   float background = 1.0f;  // 0 the photo's own background, painted .. 1 the artist's (dark ground, haze, gold)
+  // How far the photograph is transformed: 0 a natural painting (close to the
+  // photo's colours, finest brushes) .. 1 the full artistic transformation.
+  float intensity = 0.6f;
+  Surface surface = Surface::Artist;
+  Backdrop backdrop = Backdrop::Artist;
 };
 
 struct Options {
@@ -85,5 +104,9 @@ struct Options {
 
 // Paints `image` (RGBA8 or BGRA8) in place. Alpha is kept.
 Error paint(ImageBuffer& image, const Options& options, const CancellationToken* token);
+
+// Frames a finished painting: `out` is the painting inside the frame (larger
+// than the painting by the frame's width on every side), same format.
+Error frame(const ImageBuffer& painting, Frame style, ImageBuffer& out, const CancellationToken* token);
 
 }  // namespace photoplus::art

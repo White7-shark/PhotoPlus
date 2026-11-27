@@ -30,7 +30,18 @@ import { createId } from '../../services/database/ids';
 import { recordActivity } from '../../services/rewards/RewardsService';
 import { getStorageService } from '../../services/storage/StorageService';
 import { getStudioService } from '../../services/studio/StudioService';
-import { ARTIST_WAY, clampControls, type ArtControls } from '../../services/masters/controls';
+import {
+  ARTIST_WAY,
+  INTENSITIES,
+  clampControls,
+  frameInset,
+  intensityOf,
+  type ArtControls,
+  type IntensityId,
+} from '../../services/masters/controls';
+import type { StringKey } from '../../i18n';
+import { CompareSlider } from './CompareSlider';
+import { PhotoArtsStudio } from './PhotoArtsStudio';
 import { useAppStore } from '../../state/store';
 import { PhotoArtsTouch } from './PhotoArtsTouch';
 import { useTheme } from '../../theme';
@@ -58,6 +69,10 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     prefs.remember ? clampControls(prefs.controls) : { ...ARTIST_WAY },
   );
   const [touchOpen, setTouchOpen] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
+  const [frame, setFrame] = useState(prefs.frame);
+  // This session's finished paintings, each with its own save and share.
+  const [gallery, setGallery] = useState<{ painting: Painting; artist: number; saved: boolean }[]>([]);
   // The latest touch, for when a finger lifts right after the last move (and for screen readers' steps).
   const touch = useRef(controls);
   const changeTouch = (k: ArtControls) => {
@@ -70,7 +85,6 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const [thumbs, setThumbs] = useState<Record<number, string>>({});
   const [allowance, setAllowance] = useState<Allowance | null>(null);
   const [busy, setBusy] = useState<null | 'preview' | 'full' | 'save'>(null);
-  const [comparing, setComparing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [premiumOpen, setPremiumOpen] = useState(false);
@@ -86,7 +100,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
 
   // The preview follows each choice (a newer one cancels the older).
   const job = useRef<string | null>(null);
-  const draw = (path: string, a: number, l: MastersLevel, sd: number, k: ArtControls = touch.current) => {
+  const draw = (path: string, a: number, l: MastersLevel, sd: number, k: ArtControls = touch.current, fr = frame) => {
     const id = createId('masters');
     if (job.current) masters.cancel(job.current);
     job.current = id;
@@ -94,7 +108,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     setSaved(false);
     setBusy('preview');
     masters
-      .paint(path, a, l, 'preview', sd, id, k)
+      .paint(path, a, l, 'preview', sd, id, k, fr)
       .then(p => {
         if (job.current !== id) return;
         setPreview(p);
@@ -135,8 +149,26 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     if (photo) draw(photo, artist, level, seed, touch.current);
     keepTouch(touch.current);
   };
+  // Transformation, surface and background repaint at once (one tap each), and are kept with the touch.
+  const setChoice = (next: Partial<ArtControls>) => {
+    const k = clampControls({ ...touch.current, ...next });
+    changeTouch(k);
+    if (photo) draw(photo, artist, level, seed, k);
+    keepTouch(k);
+  };
+  const chooseFrame = (f: number) => {
+    setFrame(f);
+    if (photo) draw(photo, artist, level, seed, touch.current, f);
+    void updateSetting('photoArts', { ...prefs, frame: f }).catch(() => undefined);
+  };
   const touchReset = () => {
-    const k = { ...ARTIST_WAY };
+    // The artist's way for the sliders; the transformation and the studio choices stay as chosen.
+    const k = {
+      ...ARTIST_WAY,
+      intensity: touch.current.intensity,
+      surface: touch.current.surface,
+      backdrop: touch.current.backdrop,
+    };
     changeTouch(k);
     if (photo) draw(photo, artist, level, seed, k);
     keepTouch(k);
@@ -205,8 +237,9 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     setBusy('full');
     setError(null);
     try {
-      const p = await masters.paint(photo, artist, level, 'full', seed, undefined, touch.current);
+      const p = await masters.paint(photo, artist, level, 'full', seed, undefined, touch.current, frame);
       setFinished(p);
+      setGallery(g => [{ painting: p, artist, saved: false }, ...g]);
       recordActivity('studio', 'edit');
       if (p.remaining !== undefined && allowance) setAllowance({ ...allowance, remaining: p.remaining });
       else refreshAllowance();
@@ -220,19 +253,22 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     }
   };
 
-  const save = async () => {
-    if (!finished) return;
+  const save = async (item: Painting = finished as Painting) => {
+    if (!item) return;
     setBusy('save');
     try {
-      await getStudioService().saveToGallery(finished.outputPath);
-      setSaved(true);
+      await getStudioService().saveToGallery(item.outputPath);
+      if (item === finished) setSaved(true);
+      setGallery(g => g.map(x => (x.painting === item ? { ...x, saved: true } : x)));
     } catch {
       setError(t('masters_failed'));
     } finally {
       setBusy(null);
     }
   };
-  const share = () => void getStorageService().share([finished?.outputPath ?? ''], artistName(chosen));
+  const share = (item: Painting | null = finished, a = artist) =>
+    void getStorageService().share([item?.outputPath ?? ''], artistName(artistById(a)));
+  const intensity: IntensityId = intensityOf(controls.intensity);
 
   const shown = finished ?? preview;
   const name = artistName(chosen);
@@ -278,22 +314,14 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
         ) : (
           <GlassSurface radius={22} style={styles.canvas}>
             {shown ? (
-              <Pressable
-                onPressIn={() => setComparing(true)}
-                onPressOut={() => setComparing(false)}
-                accessibilityRole="image"
-                accessibilityLabel={comparing ? t('masters_your_photo') : t('masters_painting_of', { artist: name })}
-                accessibilityHint={t('masters_hold_compare')}
+              <CompareSlider
+                painting={{ uri: `file://${shown.outputPath}`, width: shown.width, height: shown.height }}
+                photo={`file://${photo}`}
+                inset={frameInset(frame, shown.width, shown.height)}
+                label={t('masters_painting_of', { artist: name })}
+                hint={t('masters_compare')}
                 testID="masters-canvas"
-                style={{ width: '100%' }}
-              >
-                <Image
-                  source={{ uri: `file://${comparing ? photo : shown.outputPath}` }}
-                  style={{ width: '100%', aspectRatio: shown.width / shown.height, maxHeight: 460, borderRadius: 14 }}
-                  resizeMode="contain"
-                  testID="masters-painting"
-                />
-              </Pressable>
+              />
             ) : (
               <View style={styles.wait}>
                 <ActivityIndicator color={accent} />
@@ -309,7 +337,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
             ) : null}
             <View style={styles.caption}>
               <AppText variant="caption" tone="tertiary">
-                {comparing ? t('masters_your_photo') : t('masters_hold_compare')}
+                {t('masters_compare')}
               </AppText>
             </View>
           </GlassSurface>
@@ -435,6 +463,38 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
               </AppText>
             </View>
 
+            <View style={{ gap: 8 }}>
+              <AppText variant="overline" tone="secondary">
+                {t('masters_intensity').toUpperCase()}
+              </AppText>
+              <View style={styles.levels} accessibilityRole="radiogroup">
+                {INTENSITIES.map(i => {
+                  const on = intensity === i.id;
+                  return (
+                    <Pressable
+                      key={i.id}
+                      onPress={() => setChoice({ intensity: i.value })}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                      testID={`masters-intensity-${i.id}`}
+                      style={[
+                        styles.level,
+                        { borderColor: on ? accent : 'rgba(255,255,255,0.14)' },
+                        on ? { backgroundColor: 'rgba(245,198,107,0.12)' } : null,
+                      ]}
+                    >
+                      <AppText variant="caption" style={{ fontWeight: on ? '800' : '500' }}>
+                        {t(`masters_intensity_${i.id}` as StringKey)}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <AppText variant="caption" tone="tertiary">
+                {t(`masters_intensity_${intensity}_about` as StringKey)}
+              </AppText>
+            </View>
+
             <PhotoArtsTouch
               value={controls}
               open={touchOpen}
@@ -443,6 +503,17 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
               onEnd={touchDone}
               onReset={touchReset}
               disabled={busy === 'full'}
+            />
+
+            <PhotoArtsStudio
+              surface={controls.surface}
+              backdrop={controls.backdrop}
+              frame={frame}
+              open={studioOpen}
+              onToggle={() => setStudioOpen(o => !o)}
+              onSurface={i => setChoice({ surface: i })}
+              onBackdrop={i => setChoice({ backdrop: i })}
+              onFrame={chooseFrame}
             />
 
             <View style={styles.allowance} testID="masters-allowance">
@@ -477,7 +548,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
                     icon="share"
                     variant="glass"
                     size="lg"
-                    onPress={share}
+                    onPress={() => share()}
                     testID="masters-share"
                   />
                 </View>
@@ -509,6 +580,47 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
               onPress={() => void pick()}
               testID="masters-change"
             />
+
+            {gallery.length > 0 ? (
+              <View style={{ gap: 10 }} testID="masters-gallery">
+                <AppText variant="overline" tone="secondary">
+                  {t('masters_gallery').toUpperCase()}
+                </AppText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+                  {gallery.map((g, i) => (
+                    <GlassSurface key={`${g.painting.outputPath}-${i}`} radius={16} style={styles.galleryCard}>
+                      <Image
+                        source={{ uri: `file://${g.painting.outputPath}` }}
+                        style={{ width: '100%', aspectRatio: g.painting.width / g.painting.height, borderRadius: 10 }}
+                        resizeMode="cover"
+                        accessibilityLabel={t('masters_painting_of', { artist: artistName(artistById(g.artist)) })}
+                      />
+                      <AppText variant="caption" style={{ fontWeight: '700' }} numberOfLines={1}>
+                        {artistName(artistById(g.artist))}
+                      </AppText>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            label={g.saved ? t('masters_saved') : t('masters_save')}
+                            icon={g.saved ? 'check' : 'download'}
+                            disabled={g.saved || busy === 'save'}
+                            onPress={() => void save(g.painting)}
+                            testID={`masters-gallery-save-${i}`}
+                          />
+                        </View>
+                        <Button
+                          label={t('masters_share')}
+                          icon="share"
+                          variant="glass"
+                          onPress={() => share(g.painting, g.artist)}
+                          testID={`masters-gallery-share-${i}`}
+                        />
+                      </View>
+                    </GlassSurface>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
           </>
         ) : null}
       </View>
@@ -562,4 +674,5 @@ const styles = StyleSheet.create({
   levels: { flexDirection: 'row', gap: 8 },
   level: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 999, borderWidth: 1.5 },
   allowance: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  galleryCard: { width: 230, padding: 10, gap: 8 },
 });

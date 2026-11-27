@@ -2015,6 +2015,20 @@ pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const
 
 }  // extern "C"
 
+pp_status pp_art_frame(const pp_image* painting, int style, const pp_cancel_token* token, pp_image** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    if (painting == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "painting is required");
+    if (style <= 0 || style >= PP_ART_FRAMES) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown frame");
+    photoplus::ImageBuffer framed;
+    photoplus::Error e = photoplus::art::frame(painting->buffer, static_cast<photoplus::art::Frame>(style), framed, token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
+    *out = new pp_image{std::move(framed)};
+    return succeed();
+  });
+}
+
 pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
                        size_t face_stride, uint32_t seed, const pp_art_controls* controls, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
@@ -2027,7 +2041,10 @@ pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* s
     o.level = static_cast<photoplus::art::Level>(level);
     o.seed = seed;
     if (controls != nullptr)
-      o.controls = {controls->brush, controls->palette, controls->vivid, controls->likeness, controls->texture, controls->age, controls->background};
+      o.controls = {controls->brush,    controls->palette,   controls->vivid,
+                    controls->likeness, controls->texture,   controls->age,
+                    controls->background, controls->intensity, static_cast<photoplus::art::Surface>(controls->surface),
+                    static_cast<photoplus::art::Backdrop>(controls->backdrop)};
     o.subject = subject != nullptr ? &subject->buffer : nullptr;
     for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i) {
       const float* f = faces + i * face_stride;

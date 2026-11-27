@@ -664,7 +664,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
     val quality = map["quality"] as? String ?: "preview"
     val seed = (map["seed"] as? Number)?.toInt() ?: 7
     val controls = artControls(map["controls"])
-    if (controls == null) {
+    val frame = (map["frame"] as? Number)?.toInt() ?: 0
+    if (controls == null || frame !in 0 until ART_FRAMES) {
       promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_masters_unknown_artist))
       return
     }
@@ -694,7 +695,13 @@ class StudioModule(reactContext: ReactApplicationContext) :
         }
         // Cards show each artist's own way; the preview and the painting follow the person's controls.
         NativeEngine.nativeArtPaint(bitmap, artist, if (quality == "thumb") 0 else level, mask, faces, seed, if (quality == "thumb") null else controls, token)
-        val out = if (full) encodeStudio(bitmap, true, "Masters") else encodeStudio(bitmap, false, if (quality == "thumb") "MastersThumb$artist" else "Masters")
+        // The frame goes on the preview too, so what is seen is what is saved (cards stay unframed).
+        val shown = if (quality == "thumb") bitmap else framed(bitmap, frame, token)
+        val out = try {
+          if (full) encodeStudio(shown, true, "Masters") else encodeStudio(shown, false, if (quality == "thumb") "MastersThumb$artist" else "Masters")
+        } finally {
+          if (shown !== bitmap) shown.recycle()
+        }
         if (full) ArtAllowance.use(reactApplicationContext)
         out + mapOf("remaining" to ArtAllowance.remaining(reactApplicationContext))
       } finally {
@@ -715,7 +722,21 @@ class StudioModule(reactContext: ReactApplicationContext) :
       val v = m[name] ?: return@FloatArray ART_DEFAULTS[i]
       val f = (v as? Number)?.toFloat() ?: return null
       if (!f.isFinite()) return null
-      f.coerceIn(lo, hi)
+      // Surface and backdrop are choices (whole numbers).
+      if (i >= 8) f.roundToInt().toFloat().coerceIn(lo, hi) else f.coerceIn(lo, hi)
+    }
+  }
+
+  /** The finished painting (or its preview) in a museum frame; the painting itself when [style] is 0. */
+  private fun framed(painting: Bitmap, style: Int, token: Long): Bitmap {
+    if (style <= 0) return painting
+    val handle = NativeEngine.nativeArtFrame(painting, style, token)
+    try {
+      val out = Bitmap.createBitmap(NativeEngine.nativeResultWidth(handle), NativeEngine.nativeResultHeight(handle), Bitmap.Config.ARGB_8888)
+      NativeEngine.nativeCopyResultToBitmap(handle, out)
+      return out
+    } finally {
+      NativeEngine.nativeReleaseResult(handle)
     }
   }
 
@@ -862,8 +883,12 @@ class StudioModule(reactContext: ReactApplicationContext) :
       Triple("texture", 0f, 1.5f),
       Triple("age", 0f, 1.5f),
       Triple("background", 0f, 1f),
+      Triple("intensity", 0f, 1f),
+      Triple("surface", 0f, 6f),
+      Triple("backdrop", 0f, 6f),
     )
-    private val ART_DEFAULTS = floatArrayOf(1f, 1f, 0f, 0.5f, 0.4f, 1f, 1f)  // a smooth texture by default
+    private val ART_DEFAULTS = floatArrayOf(1f, 1f, 0f, 0.5f, 0.4f, 1f, 1f, 0.6f, 0f, 0f)  // a smooth texture, a balanced transformation
+    private const val ART_FRAMES = 6
     const val NAME = "PhotoPlusStudio"
     const val NO_PERSON = "NO_PERSON"
     const val NO_FACE = "NO_FACE"

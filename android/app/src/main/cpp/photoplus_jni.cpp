@@ -1083,19 +1083,33 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtPaint(JNI
     if (n > 0) env->GetFloatArrayRegion(faces, 0, n, f.data());
   }
   // The person's controls: brush, palette, vivid, likeness, texture, age, background (null: the artist's own way).
-  pp_art_controls k{1, 1, 0, 0.5f, 0.4f, 1, 1};
+  pp_art_controls k{1, 1, 0, 0.5f, 0.4f, 1, 1, 0.6f, 0, 0};
   if (controls != nullptr) {
-    if (env->GetArrayLength(controls) != 7) {
+    // brush, palette, vivid, likeness, texture, age, background, intensity, surface, backdrop
+    if (env->GetArrayLength(controls) != 10) {
       throwEngineException(env, "INVALID_ARGUMENT", "Bad painting controls");
       return;
     }
-    float v[7];
-    env->GetFloatArrayRegion(controls, 0, 7, v);
-    k = {v[0], v[1], v[2], v[3], v[4], v[5], v[6]};
+    float v[10];
+    env->GetFloatArrayRegion(controls, 0, 10, v);
+    k = {v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], static_cast<int>(std::lround(v[8])), static_cast<int>(std::lround(v[9]))};
   }
   const pp_status st = pp_art_paint(b.image, artist, level, m.image, f.empty() ? nullptr : f.data(), f.size() / 12, 12,
                                     static_cast<uint32_t>(seed), &k, reinterpret_cast<const pp_cancel_token*>(token));
   if (st != PP_OK) throwStatus(env, st);
+}
+
+// A finished painting in a museum frame: returns a result handle (a larger image).
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtFrame(JNIEnv* env, jobject, jobject bitmap, jint style, jlong token) {
+  WrappedBitmap b;
+  if (!b.open(env, bitmap, false)) return 0;
+  pp_image* out = nullptr;
+  const pp_status st = pp_art_frame(b.image, style, reinterpret_cast<const pp_cancel_token*>(token), &out);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(out);
 }
 
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeStudioRelightCompose(JNIEnv* env, jobject, jobject photo,

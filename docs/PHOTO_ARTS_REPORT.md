@@ -195,3 +195,90 @@ The titles of Premium features are now string resources too (`feature_<name>`, a
 - Android:
   - `buildCMakeDebug`, `compileDebugKotlin`, `testDebugUnitTest` (with the new `ArtAllowanceTest`), `lintDebug` and `minifyReleaseWithR8` pass.
   - No APK was built.
+
+## Engine v2: genuine painting, not filtered photos (after an outside review)
+
+An outside review of the first results said several artists looked like the photograph with a colour filter. It also found too much orange, faces losing their features, sketch-like Michelangelo and Hokusai, uniform Dürer lines, distorted Gauguin faces and over-saturated Van Gogh. It asked for:
+- a genuine painting simulation per artist;
+- face-aware processing, with every face in a couple or group handled on its own;
+- adaptation to each photo;
+- an intensity control;
+- canvas and paper choice;
+- artistic backgrounds;
+- museum frames;
+- a before/after slider;
+- a results gallery;
+- the seven categories below.
+
+**What changed in the shared pipeline (all artists)**
+- **Adaptive input:** an underexposed or flat photo is levelled first. Its tones stay in order, so a skin's own depth isn't lightened.
+- **Abstraction:** an edge-preserving simplification removes the photo's micro-texture (pores, noise, fabric weave) before the broad and middle strokes. This is what removes the "photo with a filter" look.
+- **Detail only where it lives:** the finest brushes go only to faces and strong edges. Backgrounds and clothes stay visibly painted.
+- **Face-sized brushes:** every face gets its own pass, with brushes sized to that face, then its eyes, brows, nose and mouth with the finest. A couple's or group's smaller faces keep their features.
+- **Feature detail:** the features' own light and shade is drawn back in at the face's scale (per-artist amount). Flat styles (Hokusai, Gauguin) ink the features as "darker than the skin around it". This holds on dark skin and in low light, where outlines are faint.
+- **Natural skin:** skin keeps its own hue and is never much more colourful than in the photo (per-artist strength). This ends orange and red faces.
+- **Intensity (Transformation):**
+  - Natural keeps more of the photo's colour, with finer brushes and gentler abstraction.
+  - Full art uses bolder brushes, the artist's full palette and stronger abstraction.
+  - Balanced is the default.
+- **Paint as signature:** Rembrandt, Van Gogh, Velázquez, Goya, Monet and Cézanne keep a minimum of their paint texture even at the smooth default.
+
+**Artists reworked**
+- **Michelangelo:** now buon fresco, as on the Sistine ceiling: sculptural modelling, a mineral palette on lime plaster, tratteggio hatching in the half-shadows, a lapis sky, a matte plaster surface. It was a red-chalk sketch before.
+- **Dürer:** on faces, fine lines only in the shadows, stippling in the half-tones and bare paper in the light. Only the features are outlined, at the face's scale. This replaces uniform stripes.
+- **Hokusai:** a finished print. The skin gets two cut tones, key lines are cleaned of specks, the features are inked, and blocks are flatter and cleaner.
+- **Gauguin:** the face is painted in three soft warm tones of the sitter's own colour, as one field with no fragments, and inside it only the features are drawn. Proportions hold.
+- **Van Gogh:** controlled saturation, impasto kept.
+- **Monet:** larger, cleaner broken-colour patches.
+- **Cézanne:** stronger colour planes.
+- **Leonardo:** less yellow.
+- **Klimt:** the face and the hair around it are never covered by ornament, and the gold is brighter.
+- **A latent bug fixed:** Dürer and Michelangelo showed black blobs in pure-white areas. A rounding overshoot above 1.0 produced NaN.
+
+**Studio features**
+- **Painted on:** the artist's own, linen canvas, fine art paper, watercolour paper, rough canvas, vintage parchment, or smooth illustration board.
+- **Background:** the artist's, your scene, dark studio, warm umber, sky, landscape, or gold leaf. A chosen background is composed behind the person before painting, so it is painted in the artist's hand.
+- **Frames** (`pp_art_frame`): gilded, baroque gold, black gallery, walnut, or white mat. Each is a lit moulding profile with mitred corners and its material, and it casts its shadow on the painting. Frames apply to the preview too, so what you see is what you save.
+- **Before/after:** a draggable divider. With a frame, the photo sits inside the frame's opening.
+- **Gallery:** every finished painting of the session, each with Save and Share.
+- **Categories:**
+
+  | Category | Artists |
+  |---|---|
+  | Renaissance | Leonardo, Michelangelo, Raphael |
+  | Classical masters | Rembrandt, Vermeer, Velázquez, Titian |
+  | Impressionism | Monet, Renoir, Degas, Seurat |
+  | Post-Impressionism | Van Gogh, Cézanne, Gauguin |
+  | Expressionism & Romanticism | Goya, Turner |
+  | Printmaking & decorative art | Dürer, Hokusai, Klimt |
+  | Dramatic realism | Caravaggio |
+
+**Face data from the phone.** Every face now passes its box, its mouth opening (inner lip contours) and its eye centres. Contours are measured for every face, not only the most prominent one.
+
+**Neural style transfer.** The review suggested it as an option for some artists. It was not added in this round, for three reasons:
+- Fast style-transfer models distort faces, which works against the review's first requirement, identity.
+- They add several MB of models.
+- They cannot be validated without downloading them.
+
+The traditional engine now meets the review's list. A neural pass could be tried later, styles first and faces protected.
+
+**Test collection** (all 20 artists on each):
+- the user's phone selfie: dark skin, flash, closed shiny lips;
+- a real studio couple photo: two small faces, smiling;
+- a real full-body couple photo: tiny faces, striped clothes;
+- a light-skinned portrait;
+- a low-light portrait with a lamp in frame;
+- a portrait in a busy living room;
+- a studio portrait with a wide smile.
+
+A group photo of four or more wasn't available, so that case is still untested.
+
+In these checks, person masks and face points were made by hand on the computer (GrabCut). Where a hand-made mask was wrong, a stray shape appears next to the person. On the phone, ML Kit provides them. The previews stay local.
+
+**Checks**
+- 246 engine tests pass, including teeth, intensity, surfaces, backdrops and frames.
+- Jest: 37 suites, 408 tests, including the studio flow, the compare slider, the gallery and the frame inset.
+- tsc and eslint are clean.
+- Gradle: CMake, Kotlin, unit tests and lint pass.
+- R8 passes.
+- No APK was built.
