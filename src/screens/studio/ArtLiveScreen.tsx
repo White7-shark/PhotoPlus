@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Screen } from '../../components';
+import { ValueSlider } from '../../components/ValueSlider';
 import { ArtRevealView } from '../../components/ArtRevealView';
-import { useT } from '../../i18n';
+import { t as tr, useT } from '../../i18n';
 import type { RootScreenProps } from '../../navigation/types';
 import { artistById, artistName } from '../../services/masters/catalog';
 import type { ArtControls } from '../../services/masters/controls';
@@ -14,6 +15,12 @@ import { saveWork } from '../../services/projects/studios';
 import { recordActivity } from '../../services/rewards/RewardsService';
 import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
+
+/** "Normal", "Slow · 0.5×", "Fast · 2×". */
+export function speedLabel(v: number): string {
+  const x = `${(Math.round(v * 10) / 10).toString()}×`;
+  return Math.abs(v - 1) < 0.05 ? tr('live_speed_normal') : v < 1 ? `${tr('live_speed_slow')} · ${x}` : `${tr('live_speed_fast')} · ${x}`;
+}
 
 /** A Photo Arts job: everything the work is made with (kept with the work, to edit it again). */
 export interface ArtJob {
@@ -37,6 +44,11 @@ export function ArtLiveScreen({ navigation, route }: RootScreenProps<'ArtLive'>)
   const theme = useTheme();
   const t = useT();
   const repos = useAppStore(s => s.repos);
+  const savedSpeed = useAppStore(s => s.settings.artLiveSpeed);
+  const updateSetting = useAppStore(s => s.updateSetting);
+  // The person's own pace: slower to savour every stroke, faster not to wait.
+  const [speed, setSpeed] = useState(savedSpeed);
+  const speedRef = useRef(savedSpeed);
   const masters = useMemo(() => getMastersService(), []);
   const { photo, projectId, title } = route.params;
   const job = route.params.job as unknown as ArtJob;
@@ -126,7 +138,7 @@ export function ArtLiveScreen({ navigation, route }: RootScreenProps<'ArtLive'>)
               tool={drawing ? 'pencil' : 'brush'}
               artist={job.artist}
               inner={live.inner}
-              durationMs={LIVE_MS[job.mode]}
+              durationMs={Math.round(LIVE_MS[job.mode] / speed)}
               finish={skip}
               onDone={() => setRevealed(true)}
               onError={() => setRevealed(true)}
@@ -150,6 +162,24 @@ export function ArtLiveScreen({ navigation, route }: RootScreenProps<'ArtLive'>)
             {caption}
           </AppText>
         </View>
+        {live && !revealed && !error ? (
+          <ValueSlider
+            label={drawing ? t('live_speed_drawing') : t('live_speed_painting')}
+            value={speed}
+            min={0.5}
+            max={2.5}
+            step={0.1}
+            onChange={v => {
+              speedRef.current = v;
+              setSpeed(v);
+            }}
+            onEnd={() =>
+              void updateSetting('artLiveSpeed', Math.round(speedRef.current * 10) / 10).catch(() => undefined)
+            }
+            format={v => speedLabel(v)}
+            testID="art-live-speed"
+          />
+        ) : null}
         {error ? (
           <Button label={t('common_back')} variant="glass" onPress={() => navigation.goBack()} testID="art-live-back" />
         ) : live && !revealed ? (

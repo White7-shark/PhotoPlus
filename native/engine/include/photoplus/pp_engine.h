@@ -1421,6 +1421,28 @@ pp_status pp_art_pencil(pp_image* image, int artist, int level, const pp_image* 
  * seed, size and paper). */
 pp_status pp_art_blank(pp_image* image, int kind, int artist, uint32_t seed, const pp_art_pencil_options* pencil);
 
+/* Toon: the photo as anime or a cartoon (toon.hpp). style: 0 anime, 1 manga,
+ * 2 comic, 3 cartoon, 4 webtoon, 5 retro 90s. background: 0 kept (simplified),
+ * 1 soft focus, 2 anime sky, 3 sunset, 4 starry night, 5 pastel. Controls:
+ * lines 0..1, shades 2..6, vivid -1..1, detail 0..1, eyes 0..1, skin 0..1,
+ * glow 0..1. subject and faces as for pp_art_paint (faces with stride 12
+ * give the eye centres for anime eyes). Renders in place. */
+#define PP_TOON_STYLES 6
+#define PP_TOON_BACKGROUNDS 6
+typedef struct pp_toon_options {
+  int style;
+  int background;
+  float lines;
+  int shades;
+  float vivid;
+  float detail;
+  float eyes;
+  float skin;
+  float glow;
+} pp_toon_options;
+pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const pp_image* subject, const float* faces, size_t face_count,
+                         size_t face_stride, uint32_t seed, const pp_cancel_token* token);
+
 /* The live studio: the blank sheet and a pencil (tool 0) or a brush (tool 1)
  * moving over it, each movement revealing the finished work beneath, until
  * it is complete. result and blank: the same size and format. inner: the

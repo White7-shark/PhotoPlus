@@ -97,10 +97,10 @@ export const MIGRATIONS: readonly Migration[] = [
     version: 3,
     name: 'studio_projects',
     statements: [
-      // Every studio (Photoshoot, Photo Arts, Photo Motion) works in projects of its own.
+      // Every studio (Photoshoot, Photo Arts, Photo Motion, Toon Studio) works in projects of its own.
       `CREATE TABLE studio_projects (
         id TEXT PRIMARY KEY NOT NULL,
-        studio TEXT NOT NULL CHECK (studio IN ('photoshoot', 'arts', 'motion')),
+        studio TEXT NOT NULL CHECK (studio IN ('photoshoot', 'arts', 'motion', 'toon')),
         name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL

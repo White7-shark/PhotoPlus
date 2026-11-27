@@ -34,7 +34,7 @@ class ArtRevealManager : SimpleViewManager<ArtRevealView>(), PhotoPlusArtRevealV
     view.inner = FloatArray(4) { i -> value.getDouble(i).toFloat().coerceIn(0f, 1f) }
   }
   override fun setDurationMs(view: ArtRevealView, value: Int) {
-    view.durationMs = value.coerceIn(1000, 30000)
+    view.durationMs = value.coerceIn(1000, 40000)
   }
   override fun setPlaying(view: ArtRevealView, value: Boolean) {
     view.playing = value

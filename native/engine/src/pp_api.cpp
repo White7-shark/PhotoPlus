@@ -37,6 +37,7 @@
 #include "photoplus/filters.hpp"
 #include "photoplus/codec.hpp"
 #include "photoplus/art.hpp"
+#include "photoplus/toon.hpp"
 #include "photoplus/motion.hpp"
 #include "photoplus/portrait.hpp"
 #include "photoplus/pp_engine.h"
@@ -2140,6 +2141,36 @@ pp_status pp_art_blank(pp_image* image, int kind, int artist, uint32_t seed, con
     } else {
       return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown kind");
     }
+    if (e.status != PP_OK) return fail(e);
+    return succeed();
+  });
+}
+
+pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const pp_image* subject, const float* faces, size_t face_count,
+                         size_t face_stride, uint32_t seed, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr || options == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image and options are required");
+    if (face_count > 0 && faces == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "faces are missing");
+    if (face_count > 0 && face_stride != 4 && face_stride != 12) return fail(PP_ERROR_INVALID_ARGUMENT, "face_stride must be 4 or 12");
+    if (options->style < 0 || options->style >= PP_TOON_STYLES || options->background < 0 || options->background >= PP_TOON_BACKGROUNDS)
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown style or background");
+    photoplus::toon::Options o;
+    o.style = static_cast<photoplus::toon::Style>(options->style);
+    o.background = static_cast<photoplus::toon::Background>(options->background);
+    o.lines = options->lines, o.shades = options->shades, o.vivid = options->vivid, o.detail = options->detail;
+    o.eyes = options->eyes, o.skin = options->skin, o.glow = options->glow;
+    o.seed = seed;
+    o.subject = subject != nullptr ? &subject->buffer : nullptr;
+    for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i) {
+      const float* f = faces + i * face_stride;
+      photoplus::art::FaceBox box;
+      box.x = f[0], box.y = f[1], box.w = f[2], box.h = f[3];
+      if (face_stride == 12) {
+        for (size_t k = 0; k < 4; ++k) box.mouth[k] = f[4 + k], box.eyes[k] = f[8 + k];
+      }
+      o.faces.push_back(box);
+    }
+    photoplus::Error e = photoplus::toon::render(image->buffer, o, token ? &token->token : nullptr);
     if (e.status != PP_OK) return fail(e);
     return succeed();
   });

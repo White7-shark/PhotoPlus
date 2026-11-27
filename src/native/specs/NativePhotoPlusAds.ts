@@ -16,7 +16,7 @@ export interface Spec extends TurboModule {
   showRewardedAd(photoPath: string): Promise<Object>;
   /** Rewards (free plan): one ad for points; resolves with { rewarded, points, state }. */
   showRewardedAdForPoints(): Promise<Object>;
-  /** A rewarded ad that unlocks one of today's free uses of a tool ('motion' | 'pencil') → { rewarded, allowance }. */
+  /** A rewarded ad that unlocks one of today's free uses of a tool ('motion' | 'pencil' | 'toon') → { rewarded, allowance }. */
   showRewardedAdForTool(tool: string): Promise<Object>;
   /** Whether a privacy (consent) settings entry must be offered. */
   privacyOptionsRequired(): Promise<boolean>;

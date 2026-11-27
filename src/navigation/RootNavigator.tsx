@@ -22,6 +22,7 @@ import { RelightScreen } from '../screens/studio/RelightScreen';
 import { MastersScreen } from '../screens/studio/MastersScreen';
 import { MotionScreen } from '../screens/studio/MotionScreen';
 import { ArtLiveScreen } from '../screens/studio/ArtLiveScreen';
+import { ToonScreen } from '../screens/studio/ToonScreen';
 import { StudioItemScreen } from '../screens/projects/StudioItemScreen';
 import { StudioProjectScreen } from '../screens/projects/StudioProjectScreen';
 import { StudioProjectsScreen } from '../screens/projects/StudioProjectsScreen';
@@ -76,6 +77,7 @@ const StudioProjects = guarded(StudioProjectsScreen, 'Projects');
 const StudioProject = guarded(StudioProjectScreen, 'Project');
 const StudioItem = guarded(StudioItemScreen, 'Work');
 const ArtLive = guarded(ArtLiveScreen, 'Photo Arts');
+const Toon = guarded(ToonScreen, 'Toon Studio');
 const ProductStudio = guarded(ProductStudioScreen, 'Product Studio');
 const Batch = guarded(BatchScreen, 'Batch edit');
 const Project = guarded(ProjectScreen, 'Project');
@@ -145,6 +147,7 @@ export function RootNavigator() {
         <Stack.Screen name="Relight" component={Relight} />
         <Stack.Screen name="Masters" component={Masters} />
         <Stack.Screen name="Motion" component={Motion} />
+        <Stack.Screen name="Toon" component={Toon} />
         <Stack.Screen name="StudioProjects" component={StudioProjects} />
         <Stack.Screen name="StudioProject" component={StudioProject} />
         <Stack.Screen name="StudioItem" component={StudioItem} />

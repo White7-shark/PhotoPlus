@@ -55,6 +55,8 @@ import { useAppStore } from '../../state/store';
 import { PhotoArtsTouch } from './PhotoArtsTouch';
 import { PencilPanel } from './PencilPanel';
 import { SignaturePanel } from './SignaturePanel';
+import { ValueSlider } from '../../components/ValueSlider';
+import { speedLabel } from './ArtLiveScreen';
 import { useTheme } from '../../theme';
 import type { ArtJob } from './ArtLiveScreen';
 
@@ -76,6 +78,9 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const masters = useMemo(() => getMastersService(), []);
   const prefs = useAppStore(s => s.settings.photoArts);
   const savedSignature = useAppStore(s => s.settings.artSignature);
+  const savedSpeed = useAppStore(s => s.settings.artLiveSpeed);
+  const [liveSpeed, setLiveSpeed] = useState(savedSpeed);
+  const liveSpeedRef = useRef(savedSpeed);
   const updateSetting = useAppStore(s => s.updateSetting);
   const repos = useAppStore(s => s.repos);
   const projectId = route.params?.projectId;
@@ -754,6 +759,22 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
             <AppText variant="caption" tone="tertiary" align="center">
               {mode === 'pencil' ? t('live_pencil_hint') : t('live_paint_hint')}
             </AppText>
+            <ValueSlider
+              label={mode === 'pencil' ? t('live_speed_drawing') : t('live_speed_painting')}
+              value={liveSpeed}
+              min={0.5}
+              max={2.5}
+              step={0.1}
+              onChange={v => {
+                liveSpeedRef.current = v;
+                setLiveSpeed(v);
+              }}
+              onEnd={() =>
+                void updateSetting('artLiveSpeed', Math.round(liveSpeedRef.current * 10) / 10).catch(() => undefined)
+              }
+              format={speedLabel}
+              testID="masters-live-speed"
+            />
             <Button
               label={t('masters_change_photo')}
               icon="image"

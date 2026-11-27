@@ -77,6 +77,7 @@ open class AdAllowance(private val prefsName: String, private val tool: String, 
     fun of(tool: String): AdAllowance? = when (tool) {
       "motion" -> MotionAllowance
       "pencil" -> PencilAllowance
+      "toon" -> ToonAllowance
       else -> null
     }
   }
@@ -87,3 +88,6 @@ object MotionAllowance : AdAllowance("photoplus.motion", "motion")
 
 /** Pencil Art on the free plan: two finished drawings a day, each unlocked by an ad. */
 object PencilAllowance : AdAllowance("photoplus.pencil", "pencil")
+
+/** Anime & Cartoon on the free plan: two finished pictures a day, each unlocked by an ad. */
+object ToonAllowance : AdAllowance("photoplus.toon", "toon")

@@ -1154,6 +1154,34 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeMotionDestro
   pp_motion_destroy(reinterpret_cast<pp_motion*>(handle));
 }
 
+// Toon (anime / cartoon). params: style, background, lines, shades, vivid, detail, eyes, skin, glow.
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeToonRender(JNIEnv* env, jobject, jobject bitmap, jfloatArray params,
+                                                                             jobject mask, jfloatArray faces, jint seed, jlong token) {
+  if (params == nullptr || env->GetArrayLength(params) != 9) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad toon settings");
+    return;
+  }
+  WrappedBitmap b, m;
+  if (!b.open(env, bitmap, false) || !m.open(env, mask, true)) return;
+  std::vector<float> f;
+  if (faces != nullptr) {
+    const jsize n = env->GetArrayLength(faces);
+    if (n % 12 != 0 || n > 96) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad face boxes");
+      return;
+    }
+    f.resize(static_cast<size_t>(n));
+    if (n > 0) env->GetFloatArrayRegion(faces, 0, n, f.data());
+  }
+  float v[9];
+  env->GetFloatArrayRegion(params, 0, 9, v);
+  const pp_toon_options o{static_cast<int>(std::lround(v[0])), static_cast<int>(std::lround(v[1])), v[2], static_cast<int>(std::lround(v[3])),
+                          v[4], v[5], v[6], v[7], v[8]};
+  const pp_status st = pp_toon_render(b.image, &o, m.image, f.empty() ? nullptr : f.data(), f.size() / 12, 12, static_cast<uint32_t>(seed),
+                                      reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
 // Pencil art. options: medium, paper, intensity, lines, shading (null: the defaults).
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtPencil(JNIEnv* env, jobject, jobject bitmap, jint artist, jint level,
                                                                             jobject mask, jfloatArray faces, jint seed, jfloatArray options,

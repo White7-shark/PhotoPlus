@@ -43,6 +43,8 @@ export type RootStackParamList = {
   Masters: StudioToolParams;
   /** Photo Motion: a photo as a living video loop; photo: one to open straight away. */
   Motion: StudioToolParams;
+  /** Toon Studio: the photo as anime or a cartoon. */
+  Toon: StudioToolParams;
   /** A studio's projects (Photoshoot, Photo Arts, Photo Motion); photo: one just taken, to go into the project chosen. */
   StudioProjects: { studio: StudioKind; photo?: string };
   /** One studio project: its photos and its gallery of finished works. */

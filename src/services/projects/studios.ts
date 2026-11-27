@@ -18,7 +18,7 @@ import { getStorageService } from '../storage/StorageService';
 export interface StudioDef {
   kind: StudioKind;
   /** The tool a project's photo opens in. */
-  route: 'SceneSwap' | 'Masters' | 'Motion';
+  route: 'SceneSwap' | 'Masters' | 'Motion' | 'Toon';
   /** A brand name (the same in every language). */
   title: string;
   icon: IconName;
@@ -35,6 +35,7 @@ export const STUDIOS: Record<StudioKind, StudioDef> = {
   },
   arts: { kind: 'arts', route: 'Masters', title: 'Photo Arts', icon: 'brush', about: 'masters_tile_about' },
   motion: { kind: 'motion', route: 'Motion', title: 'Photo Motion', icon: 'motion', about: 'motion_tile_about' },
+  toon: { kind: 'toon', route: 'Toon', title: 'Toon Studio', icon: 'sparkles', about: 'toon_tile_about' },
 };
 
 export const studioAbout = (kind: StudioKind) => t(STUDIOS[kind].about);

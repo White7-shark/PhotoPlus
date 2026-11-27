@@ -24,6 +24,13 @@ export interface Spec extends TurboModule {
   renderMasters(jobId: string, request: Object): Promise<Object>;
   /** { remaining (-1: unlimited), limit }: finished Masters paintings left today on the free plan. */
   mastersAllowance(): Promise<Object>;
+  /**
+   * Toon Studio: { inputPath, quality 'thumb' | 'preview' | 'full', style 0..5, background 0..5, lines, shades,
+   * vivid, detail, eyes, skin, glow, seed } → { outputPath, width, height, remaining }.
+   */
+  renderToon(jobId: string, request: Object): Promise<Object>;
+  /** { remaining (-1: unlimited), limit, credits, needsAd }: Toon Studio pictures today on the free plan (each after an ad). */
+  toonAllowance(): Promise<Object>;
   /** { remaining (-1: unlimited), limit, credits, needsAd }: Pencil Art drawings today on the free plan (each after an ad). */
   pencilAllowance(): Promise<Object>;
   /** Photo Motion: reads a photo once ({ inputPath }) → { sessionId, width, height, sky 0..1, depth, faces }. */

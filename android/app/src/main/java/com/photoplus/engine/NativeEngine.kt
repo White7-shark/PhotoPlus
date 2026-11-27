@@ -519,6 +519,8 @@ object NativeEngine {
   external fun nativeMotionDestroy(handle: Long)
 
   /** A finished painting in a museum frame ([style] 1..5): a result handle (nativeResultWidth/Height, nativeCopyResultToBitmap, nativeReleaseResult). */
+  /** Toon: the photo as anime or a cartoon. params: style, background, lines, shades, vivid, detail, eyes, skin, glow. */
+  external fun nativeToonRender(bitmap: Bitmap, params: FloatArray, mask: Bitmap?, faces: FloatArray?, seed: Int, token: Long)
   /** Pencil art: the photo drawn in pencil as the artist drew (no paint). options: medium, paper, intensity, lines, shading. */
   external fun nativeArtPencil(bitmap: Bitmap, artist: Int, level: Int, mask: Bitmap?, faces: FloatArray?, seed: Int, options: FloatArray?, token: Long)
   /** The blank a work starts from: kind 0 the painting's primed ground, 1 the pencil sheet. */

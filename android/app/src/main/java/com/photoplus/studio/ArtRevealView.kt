@@ -46,7 +46,21 @@ class ArtRevealView(context: Context) : View(context), Choreographer.FrameCallba
   var tool = 0
   var artist = 0
   var inner = floatArrayOf(0f, 0f, 1f, 1f)
+  /**
+   * How long the whole drawing takes (the person's speed): changed while it
+   * plays, the drawing carries on from where it is, faster or slower.
+   */
   var durationMs = 7000
+    set(v) {
+      val nv = v.coerceAtLeast(500)
+      if (nv == field) return
+      val now = SystemClock.uptimeMillis()
+      val elapsed = elapsedBefore + (if (running) now - startedAt else 0L)
+      val t = elapsed.toDouble() / field.coerceAtLeast(500)
+      field = nv
+      elapsedBefore = (t * nv).toLong()
+      startedAt = now
+    }
   var playing = true
     set(v) {
       field = v

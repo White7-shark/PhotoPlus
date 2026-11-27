@@ -78,6 +78,8 @@ export interface AppSettings {
   photoArts: PhotoArtsSettings;
   /** The artist's signature on Photo Arts works (Premium). */
   artSignature: Signature;
+  /** The live studio's speed (0.5 slow .. 2.5 fast; 1 normal). */
+  artLiveSpeed: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -107,6 +109,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customProps: [],
   photoArts: DEFAULT_PHOTO_ARTS,
   artSignature: SIGNATURE_DEFAULTS,
+  artLiveSpeed: 1,
 };
 
 type Validators = { [K in keyof AppSettings]: (v: unknown) => v is AppSettings[K] };
@@ -145,6 +148,7 @@ const VALIDATORS: Validators = {
   customProps: isCustomProps,
   photoArts: isPhotoArtsSettings,
   artSignature: isSignature,
+  artLiveSpeed: (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0.5 && v <= 2.5,
 };
 
 export function isValidSetting<K extends keyof AppSettings>(key: K, value: unknown): value is AppSettings[K] {

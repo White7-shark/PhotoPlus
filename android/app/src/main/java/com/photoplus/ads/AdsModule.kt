@@ -177,7 +177,11 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
       return
     }
     if ((allowance.state(reactApplicationContext)["remaining"] as? Int ?: 0) <= 0) {
-      promise.reject("DAILY_LIMIT", Words.get(reactApplicationContext, if (tool == "pencil") R.string.native_pencil_daily_used else R.string.native_motion_daily_used))
+      promise.reject("DAILY_LIMIT", Words.get(reactApplicationContext, when (tool) {
+        "pencil" -> R.string.native_pencil_daily_used
+        "toon" -> R.string.native_toon_daily_used
+        else -> R.string.native_motion_daily_used
+      }))
       return
     }
     main.post {

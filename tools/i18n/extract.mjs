@@ -35,6 +35,7 @@ const BRANDS = new Set([
   'Lucid',
   'Photo Arts',
   'Photo Motion',
+  'Toon Studio',
   // Apps people share to.
   'WhatsApp Business',
   'Messenger',

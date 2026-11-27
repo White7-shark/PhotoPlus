@@ -2,8 +2,8 @@ import { createId } from '../ids';
 import type { SqlExecutor } from '../SqlExecutor';
 
 /** The studios that work in projects of their own. */
-export type StudioKind = 'photoshoot' | 'arts' | 'motion';
-export const STUDIO_KINDS: readonly StudioKind[] = ['photoshoot', 'arts', 'motion'];
+export type StudioKind = 'photoshoot' | 'arts' | 'motion' | 'toon';
+export const STUDIO_KINDS: readonly StudioKind[] = ['photoshoot', 'arts', 'motion', 'toon'];
 
 export interface StudioProject {
   id: string;

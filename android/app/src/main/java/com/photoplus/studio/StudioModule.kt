@@ -26,6 +26,7 @@ import com.photoplus.engine.OutputFormat
 import com.photoplus.entitlement.ArtAllowance
 import com.photoplus.entitlement.MotionAllowance
 import com.photoplus.entitlement.PencilAllowance
+import com.photoplus.entitlement.ToonAllowance
 import com.photoplus.entitlement.Entitlements
 import com.photoplus.specs.NativePhotoPlusStudioSpec
 import com.photoplus.storage.AppPaths
@@ -759,6 +760,69 @@ class StudioModule(reactContext: ReactApplicationContext) :
   /** The largest drawing the engine's memory allows (about 64 bytes a pixel at its peak, a 4:3 sheet). */
   private fun pencilEdgeFor(engineBytes: Long): Int = kotlin.math.sqrt(engineBytes / 64.0 / 0.75).toInt().coerceIn(1200, 4096)
 
+  /**
+   * Anime & Cartoon: { inputPath, quality 'thumb' | 'preview' | 'full', style 0..5,
+   * background 0..5, lines, shades 2..6, vivid, detail, eyes, skin, glow, seed }
+   * → { outputPath, cleanPath, width, height, remaining }. Previews are
+   * free; the finished picture is Premium, or two a day on the free plan,
+   * each after an ad.
+   */
+  override fun renderToon(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val quality = map["quality"] as? String ?: "preview"
+    fun num(key: String, def: Float, lo: Float, hi: Float): Float? {
+      val v = map[key] ?: return def
+      val f = (v as? Number)?.toFloat() ?: return null
+      return if (f.isFinite()) f.coerceIn(lo, hi) else null
+    }
+    val params = listOf(
+      num("style", 0f, 0f, 5f)?.roundToInt()?.toFloat(), num("background", 0f, 0f, 5f)?.roundToInt()?.toFloat(),
+      num("lines", 0.5f, 0f, 1f), num("shades", 3f, 2f, 6f)?.roundToInt()?.toFloat(), num("vivid", 0.3f, -1f, 1f),
+      num("detail", 0.5f, 0f, 1f), num("eyes", 0.4f, 0f, 1f), num("skin", 0.6f, 0f, 1f), num("glow", 0.3f, 0f, 1f),
+    )
+    if (params.any { it == null } || quality !in setOf("thumb", "preview", "full")) {
+      promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_toon_bad_settings))
+      return
+    }
+    val full = quality == "full"
+    if (full && !ToonAllowance.allowed(reactApplicationContext)) {
+      val left = (ToonAllowance.state(reactApplicationContext)["remaining"] as? Int) ?: 0
+      if (left > 0) promise.reject("AD_REQUIRED", Words.get(reactApplicationContext, R.string.native_toon_ad_required))
+      else promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_toon_daily_used))
+      return
+    }
+    val seed = (map["seed"] as? Number)?.toInt() ?: 7
+    val file = paths.resolve(map["inputPath"] as? String ?: "")
+    val p = params.map { it!! }.toFloatArray()
+    jobs.submit(jobId, listener(promise)) { token ->
+      val edge = when (quality) {
+        "thumb" -> MASTERS_THUMB
+        "preview" -> TOON_PREVIEW
+        else -> min(budget.maxDecodeDimension, min(TOON_FULL, pencilEdgeFor(budget.engineBytes)))
+      }
+      val decoded = ImageCodec.decode(file, edge).bitmap
+      val bitmap = if (decoded.isMutable && decoded.config == Bitmap.Config.ARGB_8888) decoded
+      else decoded.copy(Bitmap.Config.ARGB_8888, true).also { decoded.recycle() }
+      try {
+        val (mask, faces) = synchronized(artSubjects) { artSubjects[file.absolutePath] } ?: portraitProcessor.personAndFaces(bitmap).also { found ->
+          synchronized(artSubjects) { artSubjects[file.absolutePath] = found }
+        }
+        NativeEngine.nativeToonRender(bitmap, p, mask, faces, seed, token)
+        val out = encodeStudio(bitmap, full, if (quality == "thumb") "ToonThumb${p[0].roundToInt()}" else "Toon")
+        if (full) ToonAllowance.use(reactApplicationContext)
+        out + mapOf("remaining" to (ToonAllowance.state(reactApplicationContext)["remaining"] as Int))
+      } finally {
+        bitmap.recycle()
+      }
+    }
+  }
+
+  /** { remaining (-1 unlimited), limit, credits, needsAd } — Anime & Cartoon on the free plan today. */
+  override fun toonAllowance(promise: Promise) {
+    promise.resolve(ToonAllowance.state(reactApplicationContext).toWritableMap())
+  }
+
   /** { remaining (-1 unlimited), limit, credits, needsAd } — Pencil Art on the free plan today. */
   override fun pencilAllowance(promise: Promise) {
     promise.resolve(PencilAllowance.state(reactApplicationContext).toWritableMap())
@@ -1114,6 +1178,9 @@ class StudioModule(reactContext: ReactApplicationContext) :
     private val MASTERS_FULL = intArrayOf(1100, 1500, 1800)
     // A drawing's lines stay crisp at full size: HD and above (a study 1600 px, a drawing 2048, a masterpiece 2560).
     private val PENCIL_FULL = intArrayOf(1600, 2048, 2560)
+    // Anime & Cartoon: a quick preview; the finished picture in HD.
+    private const val TOON_PREVIEW = 720
+    private const val TOON_FULL = 2048
     private const val MOTION_ANALYSIS = 1280
     private const val MOTION_PREVIEW = 480
     private const val MOTION_FULL = 1080

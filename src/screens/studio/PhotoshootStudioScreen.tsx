@@ -17,7 +17,7 @@ export interface StudioTool {
   icon: IconName;
   available: boolean;
   premium: boolean;
-  route?: 'SceneSwap' | 'FilmCollage' | 'Relight' | 'Masters' | 'Motion' | 'ProductStudio' | 'Batch';
+  route?: 'SceneSwap' | 'FilmCollage' | 'Relight' | 'Masters' | 'Motion' | 'Toon' | 'ProductStudio' | 'Batch';
   /** Studios that work in projects open their project list first. */
   studio?: StudioKind;
 }
@@ -70,6 +70,16 @@ export const STUDIO_TOOLS: StudioTool[] = [
     premium: true,
     route: 'Motion',
     studio: 'motion',
+  },
+  {
+    id: 'toon',
+    title: 'Toon Studio',
+    about: tx('toon_tile_about'),
+    icon: 'sparkles',
+    available: true,
+    premium: true,
+    route: 'Toon',
+    studio: 'toon',
   },
   {
     id: 'product',
