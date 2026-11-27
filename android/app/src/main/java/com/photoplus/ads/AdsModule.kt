@@ -156,6 +156,58 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
    * from the SDK's reward callback only, within the day's ads and the gap
    * between them.
    */
+  /**
+   * Photo Motion (free plan): one rewarded ad unlocks one of today's two
+   * videos. Resolves { rewarded, allowance }.
+   */
+  override fun showRewardedAdForMotion(promise: Promise) {
+    if (com.photoplus.integrity.Integrity.blocked()) {
+      promise.reject("BLOCKED", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_check_in))
+      return
+    }
+    if (Entitlements.subscribed) {
+      promise.reject("SUBSCRIBED", Words.get(reactApplicationContext, R.string.native_you_have_premium_already))
+      return
+    }
+    if ((com.photoplus.entitlement.MotionAllowance.state(reactApplicationContext)["remaining"] as? Int ?: 0) <= 0) {
+      promise.reject("DAILY_LIMIT", Words.get(reactApplicationContext, R.string.native_motion_daily_used))
+      return
+    }
+    main.post {
+      val activity = activity()
+      when {
+        activity == null -> promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_be_open))
+        !consent.canRequestAds() -> promise.reject("ADS_UNAVAILABLE", Words.get(reactApplicationContext, R.string.native_ads_can_t_be_shown_right))
+        !showing.compareAndSet(false, true) -> promise.reject("BUSY", Words.get(reactApplicationContext, R.string.native_an_ad_is_already_showing))
+        else -> {
+          var earned = false
+          val present = { ad: RewardedAd ->
+            showAd(activity, ad, promise, onReward = {
+              earned = true
+              com.photoplus.entitlement.MotionAllowance.grantAd(reactApplicationContext)
+            }) { _ ->
+              mapOf("rewarded" to earned, "allowance" to com.photoplus.entitlement.MotionAllowance.state(reactApplicationContext)).toWritableMap()
+            }
+          }
+          val ad = loaded
+          if (ad != null) {
+            loaded = null
+            present(ad)
+          } else {
+            startAds()
+            RewardedAd.load(reactApplicationContext, adUnit, AdRequest.Builder().build(), object : RewardedAdLoadCallback() {
+              override fun onAdLoaded(fresh: RewardedAd) = present(fresh)
+              override fun onAdFailedToLoad(error: LoadAdError) {
+                showing.set(false)
+                promise.reject("AD_NOT_AVAILABLE", Words.get(reactApplicationContext, R.string.native_no_ad_is_available_right_now))
+              }
+            })
+          }
+        }
+      }
+    }
+  }
+
   override fun showRewardedAdForPoints(promise: Promise) {
     if (com.photoplus.integrity.Integrity.blocked()) {
       promise.reject("BLOCKED", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_check_in))

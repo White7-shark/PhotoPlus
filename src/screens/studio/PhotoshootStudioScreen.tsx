@@ -16,7 +16,7 @@ export interface StudioTool {
   icon: IconName;
   available: boolean;
   premium: boolean;
-  route?: 'SceneSwap' | 'FilmCollage' | 'Relight' | 'Masters' | 'ProductStudio' | 'Batch';
+  route?: 'SceneSwap' | 'FilmCollage' | 'Relight' | 'Masters' | 'Motion' | 'ProductStudio' | 'Batch';
 }
 
 export const STUDIO_TOOLS: StudioTool[] = [
@@ -55,6 +55,15 @@ export const STUDIO_TOOLS: StudioTool[] = [
     available: true,
     premium: true,
     route: 'Masters',
+  },
+  {
+    id: 'motion',
+    title: 'Photo Motion',
+    about: tx('motion_tile_about'),
+    icon: 'motion',
+    available: true,
+    premium: true,
+    route: 'Motion',
   },
   {
     id: 'product',

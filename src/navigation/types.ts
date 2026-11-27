@@ -34,6 +34,8 @@ export type RootStackParamList = {
   FilmCollage: { photo?: string } | undefined;
   /** Masters: the photo painted as one of twenty great artists worked; photo: one to open straight away. */
   Masters: { photo?: string } | undefined;
+  /** Photo Motion: a photo as a living video loop; photo: one to open straight away. */
+  Motion: { photo?: string } | undefined;
   /**
    * Product Studio: a product photo made a catalogue shot. photo: one just
    * taken in the camera; imageId: a library photo; projectId: the project it

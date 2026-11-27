@@ -20,6 +20,18 @@ export interface Spec extends TurboModule {
   renderMasters(jobId: string, request: Object): Promise<Object>;
   /** { remaining (-1: unlimited), limit }: finished Masters paintings left today on the free plan. */
   mastersAllowance(): Promise<Object>;
+  /** Photo Motion: reads a photo once ({ inputPath }) → { sessionId, width, height, sky 0..1, depth, faces }. */
+  startMotion(jobId: string, request: Object): Promise<Object>;
+  /**
+   * Photo Motion: the loop as an MP4, a quick preview or the finished video
+   * ({ sessionId, quality, duration, camera, cameraAmount, flowSpeed, sky,
+   * skySpeed, effect, effectAmount, loop, keepFaces, arrows, anchors }) →
+   * { outputPath, posterPath, width, height, durationMs, remaining }.
+   */
+  renderMotion(jobId: string, request: Object): Promise<Object>;
+  endMotion(sessionId: string): void;
+  /** { remaining (-1: unlimited), limit, credits, needsAd }: the free plan's videos today. */
+  motionAllowance(): Promise<Object>;
   /** Film & Collage: photos as frames on a film strip (a preview, or the saved photo). */
   renderFilm(jobId: string, request: Object): Promise<Object>;
   /** Film & Collage: photos in a collage (a preview, or the saved photo). */

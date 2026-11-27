@@ -265,6 +265,35 @@ export const ICONS = {
       <Path d="M5.9 18.1 18.1 5.9M8 9h3M9.5 7.5v3M13.5 15h3" />
     </>
   ),
+  // Photo Motion: a photo frame with a play mark and motion lines.
+  motion: (
+    <>
+      <Path d="M6.5 5h8A2.5 2.5 0 0 1 17 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 4 16.5v-9A2.5 2.5 0 0 1 6.5 5z" />
+      <Path d="M9 9.3v5.4l4.2-2.7z" />
+      <Path d="M19.5 8.5c.7 1 1 2.2 1 3.5s-.3 2.5-1 3.5" />
+    </>
+  ),
+  // A flow arrow: a curved stroke with a head.
+  flow: (
+    <>
+      <Path d="M4 16c3-6 8-8 14-7" />
+      <Path d="M15 5.5 18.5 9 15 12.5" />
+    </>
+  ),
+  // A pin: hold this spot still.
+  pin: (
+    <>
+      <Circle cx={12} cy={9} r={4.5} />
+      <Path d="M12 13.5V20.5" />
+      <Circle cx={12} cy={9} r={1.4} />
+    </>
+  ),
+  eraser: (
+    <>
+      <Path d="M14.6 4.6a2 2 0 0 1 2.8 0l2 2a2 2 0 0 1 0 2.8L11 17.8H7.2l-2.6-2.6a2 2 0 0 1 0-2.8z" />
+      <Path d="M9.5 9.7l5 5M11 17.8h8.5" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof ICONS;

@@ -1099,6 +1099,61 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtPaint(JNI
   if (st != PP_OK) throwStatus(env, st);
 }
 
+// Photo Motion. params: camera, camera amount, flow speed, sky (0/1), sky
+// speed, effect, effect amount, loop (0/1), seed. depth and mask: ALPHA_8 or
+// null; arrows: 4 floats each, anchors: 3 floats each. Returns a handle.
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeMotionCreate(JNIEnv* env, jobject, jobject photo, jobject depth, jobject mask,
+                                                                                jfloatArray arrows, jfloatArray anchors, jfloatArray params,
+                                                                                jlong token) {
+  if (params == nullptr || env->GetArrayLength(params) != 9) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad motion settings");
+    return 0;
+  }
+  auto floats = [&](jfloatArray a, jsize stride, std::vector<float>& out) {
+    if (a == nullptr) return true;
+    const jsize n = env->GetArrayLength(a);
+    if (n % stride != 0 || n > stride * 64) return false;
+    out.resize(static_cast<size_t>(n));
+    if (n > 0) env->GetFloatArrayRegion(a, 0, n, out.data());
+    return true;
+  };
+  std::vector<float> ar, an;
+  if (!floats(arrows, 4, ar) || !floats(anchors, 3, an)) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad motion arrows or anchors");
+    return 0;
+  }
+  float v[9];
+  env->GetFloatArrayRegion(params, 0, 9, v);
+  const pp_motion_params p{static_cast<int>(std::lround(v[0])), v[1], v[2], static_cast<int>(std::lround(v[3])), v[4],
+                           static_cast<int>(std::lround(v[5])), v[6], static_cast<int>(std::lround(v[7])), static_cast<uint32_t>(v[8])};
+  WrappedBitmap img, dep, msk;
+  if (!img.open(env, photo, false) || !dep.open(env, depth, true) || !msk.open(env, mask, true)) return 0;
+  pp_motion* m = nullptr;
+  const pp_status st = pp_motion_create(img.image, dep.image, msk.image, ar.empty() ? nullptr : ar.data(), ar.size() / 4,
+                                        an.empty() ? nullptr : an.data(), an.size() / 3, &p, reinterpret_cast<const pp_cancel_token*>(token), &m);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(m);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeMotionRender(JNIEnv* env, jobject, jlong handle, jfloat t, jobject frame,
+                                                                               jlong token) {
+  WrappedBitmap f;
+  if (!f.open(env, frame, false)) return;
+  const pp_status st = pp_motion_render(reinterpret_cast<const pp_motion*>(handle), t, f.image, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+JNIEXPORT jfloat JNICALL Java_com_photoplus_engine_NativeEngine_nativeMotionSkyShare(JNIEnv*, jobject, jlong handle) {
+  return pp_motion_sky_share(reinterpret_cast<const pp_motion*>(handle));
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeMotionDestroy(JNIEnv*, jobject, jlong handle) {
+  pp_motion_destroy(reinterpret_cast<pp_motion*>(handle));
+}
+
 // A finished painting in a museum frame: returns a result handle (a larger image).
 JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtFrame(JNIEnv* env, jobject, jobject bitmap, jint style, jlong token) {
   WrappedBitmap b;

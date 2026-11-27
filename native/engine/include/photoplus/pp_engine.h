@@ -1398,6 +1398,37 @@ pp_status pp_art_frame(const pp_image* painting, int style, const pp_cancel_toke
 pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
                        size_t face_stride, uint32_t seed, const pp_art_controls* controls, const pp_cancel_token* token);
 
+/* ---- Photo Motion: a still photo brought to life as a seamless loop --------
+ * camera: 0 still, 1 push in, 2 pull out, 3 orbit, 4 pan, 5 dolly zoom,
+ * 6 float, 7 rise. effect: 0 none, 1 snow, 2 rain, 3 bokeh, 4 sparkles,
+ * 5 petals, 6 fireflies, 7 light leak, 8 film, 9 sun rays.
+ * depth: optional GRAY8 (255 near), subject: optional GRAY8 person mask (any
+ * size). arrows: arrow_count x (x0, y0, x1, y1) normalised — what is at the
+ * start moves to the end over one loop; anchors: anchor_count x (x, y, r),
+ * r a share of the short side — nothing there moves. render(t), t in [0, 1),
+ * is one loop; frames are the photo's size and format. */
+#define PP_MOTION_CAMERAS 8
+#define PP_MOTION_EFFECTS 10
+typedef struct pp_motion pp_motion;
+typedef struct pp_motion_params {
+  int camera;
+  float camera_amount; /* 0..1 (0.5) */
+  float flow_speed;    /* 0..2 (1) */
+  int sky;             /* 1: the sky drifts (found automatically) */
+  float sky_speed;     /* -1..1 (0.5: to the right) */
+  int effect;
+  float effect_amount; /* 0..1 (0.6) */
+  int loop;            /* 1: seamless loop (the camera returns); 0: one move */
+  uint32_t seed;
+} pp_motion_params;
+pp_status pp_motion_create(const pp_image* photo, const pp_image* depth, const pp_image* subject, const float* arrows, size_t arrow_count,
+                           const float* anchors, size_t anchor_count, const pp_motion_params* params, const pp_cancel_token* token,
+                           pp_motion** out);
+pp_status pp_motion_render(const pp_motion* motion, float t, pp_image* frame, const pp_cancel_token* token);
+/* The share of the picture that is sky (0..1): above ~0.03 the app offers sky motion. */
+float pp_motion_sky_share(const pp_motion* motion);
+void pp_motion_destroy(pp_motion* motion);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

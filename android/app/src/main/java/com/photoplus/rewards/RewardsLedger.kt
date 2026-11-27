@@ -314,7 +314,7 @@ class RewardsLedger(private val store: Store, private val clock: () -> Long = Sy
     const val TOOL_HOURS = 24
     const val MAX_BALANCE = 20_000
     /** Tools a single unlock can open (the native checks name them). */
-    val TOOLS = setOf("sceneSwap", "relight", "productPro", "exportHd", "studioLight", "hair", "batch", "masters")
+    val TOOLS = setOf("sceneSwap", "relight", "productPro", "exportHd", "studioLight", "hair", "batch", "masters", "motion")
     private val TARGET = Regex("^[A-Za-z0-9_.]{1,120}$")
 
     private const val K_POINTS = "points"

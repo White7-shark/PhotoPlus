@@ -9,7 +9,7 @@ import { t as tx } from '../../i18n';
 
 export type ActivityEvent = 'photo' | 'edit' | 'studio' | 'product' | 'film' | 'project' | 'glide';
 export type RewardItem = 'tool' | 'premium-1' | 'premium-3' | 'premium-7';
-export type RewardTool = 'sceneSwap' | 'relight' | 'productPro' | 'exportHd' | 'studioLight' | 'hair' | 'batch' | 'masters';
+export type RewardTool = 'sceneSwap' | 'relight' | 'productPro' | 'exportHd' | 'studioLight' | 'hair' | 'batch' | 'masters' | 'motion';
 
 export interface TaskState {
   id: string;
@@ -118,6 +118,7 @@ export const TOOL_TEXT: Record<RewardTool, string> = {
   hair: tx('rewards_tool_hair'),
   batch: tx('rewards_tool_batch'),
   masters: 'Photo Arts',
+  motion: 'Photo Motion',
 };
 
 export class RewardsService {

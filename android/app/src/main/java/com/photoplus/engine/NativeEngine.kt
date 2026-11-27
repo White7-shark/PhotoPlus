@@ -504,6 +504,20 @@ object NativeEngine {
    * vivid, likeness, texture, age, background, intensity, surface, backdrop: 10 floats), or
    * null for the artist's own way.
    */
+  /**
+   * Photo Motion: prepares [photo] (ARGB_8888) for animating; [depth] and
+   * [mask] are ALPHA_8 or null; [arrows] 4 floats each, [anchors] 3 each
+   * (normalised); [params] 9 floats (camera, amount, flow speed, sky, sky
+   * speed, effect, effect amount, loop, seed). Returns a handle for
+   * [nativeMotionRender]; free it with [nativeMotionDestroy].
+   */
+  external fun nativeMotionCreate(photo: Bitmap, depth: Bitmap?, mask: Bitmap?, arrows: FloatArray?, anchors: FloatArray?, params: FloatArray, token: Long): Long
+  /** One frame at [t] (0..1 of the loop) into [frame] (the photo's size, ARGB_8888). */
+  external fun nativeMotionRender(handle: Long, t: Float, frame: Bitmap, token: Long)
+  /** How much of the photo is sky (0..1). */
+  external fun nativeMotionSkyShare(handle: Long): Float
+  external fun nativeMotionDestroy(handle: Long)
+
   /** A finished painting in a museum frame ([style] 1..5): a result handle (nativeResultWidth/Height, nativeCopyResultToBitmap, nativeReleaseResult). */
   external fun nativeArtFrame(bitmap: Bitmap, style: Int, token: Long): Long
 

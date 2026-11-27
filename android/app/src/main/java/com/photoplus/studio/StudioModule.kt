@@ -24,6 +24,7 @@ import com.photoplus.engine.NativeCancelTokens
 import com.photoplus.engine.NativeEngine
 import com.photoplus.engine.OutputFormat
 import com.photoplus.entitlement.ArtAllowance
+import com.photoplus.entitlement.MotionAllowance
 import com.photoplus.entitlement.Entitlements
 import com.photoplus.specs.NativePhotoPlusStudioSpec
 import com.photoplus.storage.AppPaths
@@ -740,6 +741,171 @@ class StudioModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  // ---- Photo Motion --------------------------------------------------------------
+
+  /** A photo being animated: its person, faces and depth, found once. */
+  private class MotionSession(val id: String, val file: java.io.File, val mask: Bitmap?, val faces: FloatArray, val depth: Bitmap?) {
+    var lastUsed = android.os.SystemClock.elapsedRealtime()
+    fun release() {
+      mask?.recycle()
+      depth?.recycle()
+    }
+  }
+  private val motionSessions = java.util.concurrent.ConcurrentHashMap<String, MotionSession>()
+
+  /**
+   * Photo Motion: looks at the photo once — the person, their faces, the
+   * depth of the scene, how much of it is sky. { inputPath } → { sessionId,
+   * width, height, sky (0..1), depth (found), faces }.
+   */
+  override fun startMotion(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val file = try {
+      paths.resolve(request.toHashMap()["inputPath"] as? String ?: "")
+    } catch (e: EngineException) {
+      promise.reject(e.code, e.message, e)
+      return
+    }
+    jobs.submit(jobId, listener(promise)) { token ->
+      val decoded = ImageCodec.decode(file, MOTION_ANALYSIS).bitmap
+      val bmp = if (decoded.isMutable && decoded.config == Bitmap.Config.ARGB_8888) decoded
+      else decoded.copy(Bitmap.Config.ARGB_8888, true).also { decoded.recycle() }
+      try {
+        val (mask, faces) = portraitProcessor.personAndFaces(bmp)
+        val depth = runCatching { DepthEstimator.estimate(bmp) }.getOrNull()?.let { PortraitProcessor.alphaBitmap(it.bytes, it.width, it.height) }
+        // How much is sky, measured on a small copy.
+        val s = 360f / max(bmp.width, bmp.height)
+        val small = Bitmap.createScaledBitmap(bmp, max(16, (bmp.width * s).roundToInt()), max(16, (bmp.height * s).roundToInt()), true)
+        val sky = try {
+          val h = NativeEngine.nativeMotionCreate(small, depth, mask, null, null, floatArrayOf(0f, 0f, 1f, 0f, 0.5f, 0f, 0.6f, 1f, 1f), token)
+          try { NativeEngine.nativeMotionSkyShare(h) } finally { NativeEngine.nativeMotionDestroy(h) }
+        } finally {
+          if (small !== bmp) small.recycle()
+        }
+        while (motionSessions.size >= 2) motionSessions.values.minByOrNull { it.lastUsed }?.let { motionSessions.remove(it.id)?.release() } ?: break
+        val id = "motion_${System.nanoTime()}"
+        motionSessions[id] = MotionSession(id, file, mask, faces, depth)
+        mapOf("sessionId" to id, "width" to bmp.width, "height" to bmp.height, "sky" to sky.toDouble(), "depth" to (depth != null), "faces" to faces.size / 12)
+      } finally {
+        bmp.recycle()
+      }
+    }
+  }
+
+  /**
+   * Photo Motion: renders the loop as an MP4. { sessionId, quality 'preview' |
+   * 'full', duration (s), camera, cameraAmount, flowSpeed, sky, skySpeed,
+   * effect, effectAmount, loop, keepFaces, arrows [x0,y0,x1,y1,…],
+   * anchors [x,y,r,…] } → { outputPath, posterPath, width, height,
+   * durationMs, remaining }. Previews are free; a finished video is Premium,
+   * or on the free plan two a day, each unlocked by an ad (and watermarked).
+   */
+  override fun renderMotion(jobId: String, request: ReadableMap, promise: Promise) {
+    if (!requireEngine(promise)) return
+    val map = request.toHashMap()
+    val session = motionSessions[map["sessionId"] as? String ?: ""]
+    if (session == null) {
+      promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_motion_session_ended))
+      return
+    }
+    session.lastUsed = android.os.SystemClock.elapsedRealtime()
+    fun num(key: String, def: Float, lo: Float, hi: Float) = ((map[key] as? Number)?.toFloat() ?: def).let { if (it.isFinite()) it.coerceIn(lo, hi) else def }
+    val full = map["quality"] == "full"
+    val camera = num("camera", 6f, 0f, 7f).roundToInt()
+    val effect = num("effect", 0f, 0f, 9f).roundToInt()
+    val duration = num("duration", 5f, 2f, 10f)
+    val loop = map["loop"] as? Boolean ?: true
+    val keepFaces = map["keepFaces"] as? Boolean ?: true
+    val sky = map["sky"] as? Boolean ?: false
+    if (full && !MotionAllowance.allowed(reactApplicationContext)) {
+      val left = (MotionAllowance.state(reactApplicationContext)["remaining"] as? Int) ?: 0
+      if (left > 0) promise.reject("AD_REQUIRED", Words.get(reactApplicationContext, R.string.native_motion_ad_required))
+      else promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_motion_daily_used))
+      return
+    }
+    val params = floatArrayOf(
+      camera.toFloat(), num("cameraAmount", 0.5f, 0f, 1f), num("flowSpeed", 1f, 0f, 2f), if (sky) 1f else 0f,
+      num("skySpeed", 0.5f, -1f, 1f), effect.toFloat(), num("effectAmount", 0.6f, 0f, 1f), if (loop) 1f else 0f, 7f,
+    )
+    fun floats(key: String, stride: Int): FloatArray? =
+      (map[key] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }?.takeIf { it.isNotEmpty() && it.size % stride == 0 && it.size <= stride * 32 }?.toFloatArray()
+    val arrows = floats("arrows", 4)
+    val userAnchors = floats("anchors", 3)
+    jobs.submit(jobId, listener(promise)) { token ->
+      val edge = if (full) MOTION_FULL else MOTION_PREVIEW
+      val fps = if (full) 30f else 12f
+      val decoded = ImageCodec.decode(session.file, edge).bitmap
+      // Encoders want sizes in whole blocks: crop to multiples of 16 (a few pixels at most).
+      val w = max(16, decoded.width / 16 * 16)
+      val h = max(16, decoded.height / 16 * 16)
+      val photo = Bitmap.createBitmap(decoded, (decoded.width - w) / 2, (decoded.height - h) / 2, w, h).copy(Bitmap.Config.ARGB_8888, true)
+      decoded.recycle()
+      // Faces stay still (flow never warps a face): each face is an anchor.
+      val anchors = buildList {
+        userAnchors?.forEach { add(it) }
+        if (keepFaces) {
+          val g = min(w, h).toFloat()
+          for (i in 0 until session.faces.size / 12) {
+            val fx = session.faces[i * 12]; val fy = session.faces[i * 12 + 1]; val fw = session.faces[i * 12 + 2]; val fh = session.faces[i * 12 + 3]
+            add(fx + fw / 2); add(fy + fh / 2); add((max(fw * w, fh * h) / g * 0.62f).coerceIn(0.01f, 0.9f))
+          }
+        }
+      }.take(3 * 64).toFloatArray()
+      val handle = try {
+        NativeEngine.nativeMotionCreate(photo, session.depth, session.mask, arrows, anchors.takeIf { it.isNotEmpty() }, params, token)
+      } finally {
+        photo.recycle()
+      }
+      val frame = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+      val target = if (full) {
+        paths.exports.mkdirs()
+        java.io.File(paths.exports, "PhotoMotion_${stamp()}.mp4")
+      } else {
+        java.io.File(java.io.File(paths.processingCache, "motion-preview").apply { mkdirs() }, "preview_${System.nanoTime()}.mp4")
+      }
+      val poster = java.io.File(target.parentFile, target.nameWithoutExtension + "_poster.jpg")
+      val mark = if (full) com.photoplus.edit.ExportPolicy.resolve(com.photoplus.edit.WatermarkSpec(), Entitlements.plan) else null
+      val frames = (duration * fps).roundToInt()
+      try {
+        com.photoplus.video.GlideEncoder(target, w, h, fps, null).use { enc ->
+          for (i in 0 until frames) {
+            NativeEngine.nativeMotionRender(handle, i.toFloat() / frames, frame, token)
+            if (mark != null) com.photoplus.edit.WatermarkRenderer.apply(frame, mark)
+            if (i == 0) ImageCodec.encode(frame, poster, OutputFormat.JPEG, 88)
+            enc.encode(frame, (i * 1_000_000L / fps).toLong())
+          }
+          enc.finish((frames * 1_000_000L / fps).toLong())
+        }
+      } catch (e: Exception) {
+        target.delete()
+        throw e
+      } finally {
+        frame.recycle()
+        NativeEngine.nativeMotionDestroy(handle)
+      }
+      if (full) {
+        MotionAllowance.use(reactApplicationContext)
+      } else {
+        // Older previews go once this one is written (the one on screen plays until it is replaced).
+        val keep = setOf(target.name, poster.name)
+        target.parentFile?.listFiles()?.filter { it.name !in keep }?.sortedBy { it.lastModified() }?.dropLast(2)?.forEach { it.delete() }
+      }
+      mapOf(
+        "outputPath" to target.absolutePath, "posterPath" to poster.absolutePath, "width" to w, "height" to h,
+        "durationMs" to (frames * 1000.0 / fps), "remaining" to (MotionAllowance.state(reactApplicationContext)["remaining"] as Int),
+      )
+    }
+  }
+
+  override fun endMotion(sessionId: String) {
+    motionSessions.remove(sessionId)?.release()
+  }
+
+  /** { remaining (-1 unlimited), limit, credits, needsAd } — the free plan's videos today. */
+  override fun motionAllowance(promise: Promise) {
+    promise.resolve(MotionAllowance.state(reactApplicationContext).toWritableMap())
+  }
+
   /** { remaining (-1 unlimited), limit } — the free plan's finished paintings left today. */
   override fun mastersAllowance(promise: Promise) {
     promise.resolve(com.facebook.react.bridge.Arguments.createMap().apply {
@@ -874,6 +1040,9 @@ class StudioModule(reactContext: ReactApplicationContext) :
     private const val MASTERS_THUMB = 300
     private const val MASTERS_PREVIEW = 760
     private val MASTERS_FULL = intArrayOf(1100, 1500, 1800)
+    private const val MOTION_ANALYSIS = 1280
+    private const val MOTION_PREVIEW = 480
+    private const val MOTION_FULL = 1080
     /** The painting controls, in the engine's order, with their ranges (pp_art_controls). */
     private val ART_CONTROLS = listOf(
       Triple("brush", 0.6f, 1.6f),

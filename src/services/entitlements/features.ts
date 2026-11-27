@@ -119,6 +119,7 @@ export const FEATURES = {
   savedSetups: f('editing.savedSetups', 'Save your setups and looks, and reuse them in every project', 'editing', 'premium'),
   clothingTransform: f('replication.clothing', 'Clothing transformation (compatible packs)', 'replication', 'premium'),
   masters: f('studio.masters', 'Photo Arts: your photo painted as twenty great artists worked', 'replication', 'premium'),
+  motion: f('studio.motion', 'Photo Motion: your photo as a living video loop', 'replication', 'premium'),
   lucidCustom: f('appearance.lucidCustom', 'Lucid with your own photo or video clip behind the glass', 'editing', 'premium'),
 } as const;
 
@@ -131,6 +132,7 @@ export type FeatureKey = keyof typeof FEATURES;
 export const FREE_DAILY_ALLOWANCE: Partial<Record<FeatureKey, number>> = {
   transform: 2,
   masters: 1,
+  motion: 2,
 };
 
 export const PREMIUM_PRICE = { amount: 50, currency: 'GHS', period: 'month' } as const;

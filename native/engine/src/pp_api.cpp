@@ -37,6 +37,7 @@
 #include "photoplus/filters.hpp"
 #include "photoplus/codec.hpp"
 #include "photoplus/art.hpp"
+#include "photoplus/motion.hpp"
 #include "photoplus/portrait.hpp"
 #include "photoplus/pp_engine.h"
 #include "photoplus/profiler.hpp"
@@ -2014,6 +2015,62 @@ pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const
 }
 
 }  // extern "C"
+
+struct pp_motion {
+  photoplus::motion::Scene* scene = nullptr;
+  ~pp_motion() { photoplus::motion::destroy(scene); }
+};
+
+pp_status pp_motion_create(const pp_image* photo, const pp_image* depth, const pp_image* subject, const float* arrows, size_t arrow_count,
+                           const float* anchors, size_t anchor_count, const pp_motion_params* params, const pp_cancel_token* token,
+                           pp_motion** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    if (photo == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "photo is required");
+    if ((arrow_count > 0 && arrows == nullptr) || (anchor_count > 0 && anchors == nullptr) || arrow_count > 64 || anchor_count > 64)
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Bad arrows or anchors");
+    photoplus::motion::Input in;
+    in.photo = &photo->buffer;
+    in.depth = depth != nullptr ? &depth->buffer : nullptr;
+    in.subject = subject != nullptr ? &subject->buffer : nullptr;
+    for (size_t i = 0; i < arrow_count; ++i) in.arrows.push_back({arrows[i * 4], arrows[i * 4 + 1], arrows[i * 4 + 2], arrows[i * 4 + 3]});
+    for (size_t i = 0; i < anchor_count; ++i) in.anchors.push_back({anchors[i * 3], anchors[i * 3 + 1], anchors[i * 3 + 2]});
+    if (params != nullptr) {
+      if (params->camera < 0 || params->camera >= PP_MOTION_CAMERAS || params->effect < 0 || params->effect >= PP_MOTION_EFFECTS)
+        return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown camera move or effect");
+      in.params.camera = static_cast<photoplus::motion::Camera>(params->camera);
+      in.params.cameraAmount = params->camera_amount;
+      in.params.flowSpeed = params->flow_speed;
+      in.params.sky = params->sky != 0;
+      in.params.skySpeed = params->sky_speed;
+      in.params.effect = static_cast<photoplus::motion::Effect>(params->effect);
+      in.params.effectAmount = params->effect_amount;
+      in.params.loop = params->loop != 0;
+      in.params.seed = params->seed == 0 ? 1U : params->seed;
+    }
+    photoplus::motion::Scene* scene = nullptr;
+    photoplus::Error e = photoplus::motion::create(in, scene, token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
+    *out = new pp_motion{scene};
+    return succeed();
+  });
+}
+
+pp_status pp_motion_render(const pp_motion* motion, float t, pp_image* frame, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (motion == nullptr || motion->scene == nullptr || frame == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "motion and frame are required");
+    photoplus::Error e = photoplus::motion::render(*motion->scene, t, frame->buffer, token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
+    return succeed();
+  });
+}
+
+float pp_motion_sky_share(const pp_motion* motion) {
+  return motion != nullptr && motion->scene != nullptr ? photoplus::motion::skyShare(*motion->scene) : 0.0f;
+}
+
+void pp_motion_destroy(pp_motion* motion) { delete motion; }
 
 pp_status pp_art_frame(const pp_image* painting, int style, const pp_cancel_token* token, pp_image** out) {
   return guarded([&]() -> pp_status {
