@@ -8,6 +8,8 @@ import { errorCode, errorMessage, nativeModules, requireNative, type StudioSpec 
 import { createId } from '../database/ids';
 import { ARTISTS, type MastersLevel } from './catalog';
 import { clampControls, type ArtControls } from './controls';
+import { clampPencil, type ArtMode, type PencilOptions } from './pencil';
+import { getAdsService } from '../ads/AdsService';
 
 export type MastersQuality = 'thumb' | 'preview' | 'full';
 
@@ -18,6 +20,26 @@ export interface Painting {
   sizeBytes: number;
   /** Finished paintings left today on the free plan; -1 when unlimited (Premium); absent when unknown. */
   remaining?: number;
+  /** The picture inside its frame (x0, y0, x1, y1, 0..1). */
+  inner?: [number, number, number, number];
+  /** The live studio: the blank sheet or primed ground the work starts from. */
+  blankPath?: string;
+}
+
+/** What else a work is made with: drawing or painting, the pencil's options, a signature, the live studio's blank. */
+export interface PaintExtras {
+  mode?: ArtMode;
+  pencil?: PencilOptions;
+  signature?: Record<string, unknown>;
+  live?: boolean;
+}
+
+/** Pencil Art's day on the free plan: each drawing after an ad. */
+export interface AdAllowance {
+  remaining: number;
+  limit: number;
+  credits: number;
+  needsAd: boolean;
 }
 
 export interface Allowance {
@@ -67,6 +89,7 @@ export class MastersService {
     jobId: string = createId('masters'),
     controls?: ArtControls,
     frame = 0,
+    extras: PaintExtras = {},
   ): Promise<Painting> {
     if (!ARTISTS.some(a => a.id === artist)) throw new MastersError('Unknown artist', 'INVALID_ARGUMENT');
     let out: unknown;
@@ -79,18 +102,27 @@ export class MastersService {
         seed,
         ...(controls ? { controls: clampControls(controls) } : {}),
         ...(frame > 0 ? { frame } : {}),
+        ...(extras.mode === 'pencil' ? { mode: 'pencil', pencil: clampPencil(extras.pencil ?? {}) } : {}),
+        ...(extras.signature ? { signature: extras.signature } : {}),
+        ...(extras.live ? { live: true } : {}),
       });
     } catch (e) {
       throw new MastersError(errorMessage(e), errorCode(e) ?? 'INTERNAL');
     }
     if (!isPainting(out)) throw new MastersError('The painting came back unexpected', 'INTERNAL');
     const remaining = num(out.remaining) ? out.remaining : undefined;
+    const inner =
+      Array.isArray(out.inner) && out.inner.length === 4 && out.inner.every(num)
+        ? (out.inner as Painting['inner'])
+        : undefined;
     return {
       outputPath: out.outputPath,
       width: out.width,
       height: out.height,
       sizeBytes: num(out.sizeBytes) ? out.sizeBytes : 0,
       remaining,
+      ...(inner ? { inner } : {}),
+      ...(typeof out.blankPath === 'string' && out.blankPath ? { blankPath: out.blankPath } : {}),
     };
   }
 
@@ -109,6 +141,38 @@ export class MastersService {
     } catch {
       // Unknown: let the device decide when the painting is made.
       return { remaining: 1, limit: 1 };
+    }
+  }
+
+  /** Pencil Art today on the free plan (Premium: remaining -1). */
+  async pencilAllowance(): Promise<AdAllowance> {
+    const fallback: AdAllowance = { remaining: 2, limit: 2, credits: 0, needsAd: true };
+    try {
+      const a = (await this.native.pencilAllowance()) as Partial<AdAllowance> | null;
+      if (!a || !num(a.remaining)) return fallback;
+      const credits = num(a.credits) ? Math.max(0, a.credits) : 0;
+      return {
+        remaining: a.remaining,
+        limit: num(a.limit) ? a.limit : 2,
+        credits,
+        needsAd: a.remaining !== -1 && (typeof a.needsAd === 'boolean' ? a.needsAd : a.remaining > 0 && credits === 0),
+      };
+    } catch {
+      return fallback;
+    }
+  }
+
+  /** A rewarded ad for a free drawing; resolves whether it was watched to the end. */
+  async unlockPencil(ads = nativeModules.ads): Promise<{ rewarded: boolean; allowance: AdAllowance }> {
+    if (!ads) throw new MastersError('Ads aren’t available on this device', 'ADS_UNAVAILABLE');
+    try {
+      await getAdsService()
+        .start()
+        .catch(() => false);
+      const r = (await ads.showRewardedAdForTool('pencil')) as { rewarded?: boolean } | null;
+      return { rewarded: r?.rewarded === true, allowance: await this.pencilAllowance() };
+    } catch (e) {
+      throw new MastersError(errorMessage(e), errorCode(e) ?? 'AD_NOT_AVAILABLE');
     }
   }
 }

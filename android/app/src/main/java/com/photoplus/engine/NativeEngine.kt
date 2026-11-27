@@ -519,6 +519,16 @@ object NativeEngine {
   external fun nativeMotionDestroy(handle: Long)
 
   /** A finished painting in a museum frame ([style] 1..5): a result handle (nativeResultWidth/Height, nativeCopyResultToBitmap, nativeReleaseResult). */
+  /** Pencil art: the photo drawn in pencil as the artist drew (no paint). options: medium, paper, intensity, lines, shading. */
+  external fun nativeArtPencil(bitmap: Bitmap, artist: Int, level: Int, mask: Bitmap?, faces: FloatArray?, seed: Int, options: FloatArray?, token: Long)
+  /** The blank a work starts from: kind 0 the painting's primed ground, 1 the pencil sheet. */
+  external fun nativeArtBlank(bitmap: Bitmap, kind: Int, artist: Int, seed: Int, options: FloatArray?)
+  /** The live studio: the work revealed stroke by stroke under a pencil (tool 0) or brush (1); a handle. */
+  external fun nativeArtRevealCreate(work: Bitmap, blank: Bitmap, tool: Int, artist: Int, inner: FloatArray?, seed: Int): Long
+  external fun nativeArtRevealFrame(handle: Long, t: Float, frame: Bitmap)
+  external fun nativeArtRevealStrokes(handle: Long): Int
+  external fun nativeArtRevealDestroy(handle: Long)
+
   external fun nativeArtFrame(bitmap: Bitmap, style: Int, token: Long): Long
 
   external fun nativeArtPaint(bitmap: Bitmap, artist: Int, level: Int, mask: Bitmap?, faces: FloatArray?, seed: Int, controls: FloatArray?, token: Long)

@@ -93,6 +93,38 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE projects ADD COLUMN defaults_json TEXT NOT NULL DEFAULT '{}'`,
     ],
   },
+  {
+    version: 3,
+    name: 'studio_projects',
+    statements: [
+      // Every studio (Photoshoot, Photo Arts, Photo Motion) works in projects of its own.
+      `CREATE TABLE studio_projects (
+        id TEXT PRIMARY KEY NOT NULL,
+        studio TEXT NOT NULL CHECK (studio IN ('photoshoot', 'arts', 'motion')),
+        name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+      'CREATE INDEX idx_studio_projects ON studio_projects(studio, updated_at DESC)',
+      // A project's photos and the works made from them (with what made them, to edit again).
+      `CREATE TABLE studio_items (
+        id TEXT PRIMARY KEY NOT NULL,
+        project_id TEXT NOT NULL REFERENCES studio_projects(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('photo', 'work')),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 80),
+        path TEXT NOT NULL,
+        poster_path TEXT,
+        media TEXT NOT NULL DEFAULT 'image' CHECK (media IN ('image', 'video')),
+        source_path TEXT,
+        settings_json TEXT NOT NULL DEFAULT '{}',
+        width INTEGER NOT NULL DEFAULT 0,
+        height INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+      'CREATE INDEX idx_studio_items ON studio_items(project_id, kind, created_at DESC)',
+    ],
+  },
 ];
 
 const BOOKKEEPING = `CREATE TABLE IF NOT EXISTS schema_migrations (

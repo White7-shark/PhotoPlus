@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, GlassSurface, Icon, Screen } from '../../components';
+import { AdUnlockSheet } from '../../components/AdUnlockSheet';
 import { PremiumSheet } from '../../components/PremiumSheet';
 import { useT } from '../../i18n';
 import type { RootScreenProps } from '../../navigation/types';
@@ -23,13 +24,12 @@ import {
   FIRST_SEED,
   MastersError,
   getMastersService,
+  type AdAllowance,
   type Allowance,
   type Painting,
 } from '../../services/masters/MastersService';
 import { createId } from '../../services/database/ids';
-import { recordActivity } from '../../services/rewards/RewardsService';
 import { getStorageService } from '../../services/storage/StorageService';
-import { getStudioService } from '../../services/studio/StudioService';
 import {
   ARTIST_WAY,
   INTENSITIES,
@@ -39,28 +39,48 @@ import {
   type ArtControls,
   type IntensityId,
 } from '../../services/masters/controls';
+import {
+  PENCIL_DEFAULTS,
+  clampPencil,
+  signatureRequest,
+  type ArtMode,
+  type PencilOptions,
+  type Signature,
+} from '../../services/masters/pencil';
+import { addPhotos } from '../../services/projects/studios';
 import type { StringKey } from '../../i18n';
 import { CompareSlider } from './CompareSlider';
 import { PhotoArtsStudio } from './PhotoArtsStudio';
 import { useAppStore } from '../../state/store';
 import { PhotoArtsTouch } from './PhotoArtsTouch';
+import { PencilPanel } from './PencilPanel';
+import { SignaturePanel } from './SignaturePanel';
 import { useTheme } from '../../theme';
+import type { ArtJob } from './ArtLiveScreen';
 
 const LEVELS: readonly MastersLevel[] = [0, 1, 2];
+const MODES: readonly ArtMode[] = ['paint', 'pencil'];
 
 /**
- * Photo Arts: the person's photo painted the way one of twenty great artists
- * worked. Movements group the artists; each card shows the photo already in
- * that artist's hand. Previews are free; the finished painting (Study,
- * Painting or Masterpiece) is Premium, or one a day on the free plan.
+ * Photo Arts: the person's photo painted — or drawn in pencil — the way one
+ * of twenty great artists worked. Movements group the artists; each card
+ * shows the photo already in that artist's hand. Previews are free; the
+ * finished work is made live (the pencil or brush moving over the sheet)
+ * and kept in the project's gallery. Paintings: Premium, or one a day on the
+ * free plan; drawings: Premium, or two a day on the free plan, each after an
+ * ad. Premium can sign every work.
  */
 export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>) {
   const theme = useTheme();
   const t = useT();
   const masters = useMemo(() => getMastersService(), []);
   const prefs = useAppStore(s => s.settings.photoArts);
+  const savedSignature = useAppStore(s => s.settings.artSignature);
   const updateSetting = useAppStore(s => s.updateSetting);
+  const repos = useAppStore(s => s.repos);
+  const projectId = route.params?.projectId;
   const [photo, setPhoto] = useState<string | null>(null);
+  const [mode, setMode] = useState<ArtMode>('paint');
   const [movement, setMovement] = useState<Movement>('renaissance');
   const [artist, setArtist] = useState(0);
   const [level, setLevel] = useState<MastersLevel>(prefs.level);
@@ -68,47 +88,72 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const [controls, setControls] = useState<ArtControls>(() =>
     prefs.remember ? clampControls(prefs.controls) : { ...ARTIST_WAY },
   );
+  const [pencil, setPencil] = useState<PencilOptions>(PENCIL_DEFAULTS);
+  const [signature, setSignature] = useState<Signature>(savedSignature);
   const [touchOpen, setTouchOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
+  const [sigOpen, setSigOpen] = useState(false);
   const [frame, setFrame] = useState(prefs.frame);
-  // This session's finished paintings, each with its own save and share.
-  const [gallery, setGallery] = useState<{ painting: Painting; artist: number; saved: boolean }[]>([]);
-  // The latest touch, for when a finger lifts right after the last move (and for screen readers' steps).
+  // The latest choices, for previews made when a finger lifts (and for screen readers' steps).
   const touch = useRef(controls);
+  const pen = useRef(pencil);
+  const sig = useRef(signature);
+  const modeRef = useRef(mode);
   const changeTouch = (k: ArtControls) => {
     touch.current = k;
     setControls(k);
   };
   const [seed, setSeed] = useState(FIRST_SEED);
   const [preview, setPreview] = useState<Painting | null>(null);
-  const [finished, setFinished] = useState<Painting | null>(null);
-  const [thumbs, setThumbs] = useState<Record<number, string>>({});
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [allowance, setAllowance] = useState<Allowance | null>(null);
-  const [busy, setBusy] = useState<null | 'preview' | 'full' | 'save'>(null);
-  const [saved, setSaved] = useState(false);
+  const [pencilDay, setPencilDay] = useState<AdAllowance | null>(null);
+  const [busy, setBusy] = useState<null | 'preview' | 'ad'>(null);
   const [error, setError] = useState<string | null>(null);
-  const [premiumOpen, setPremiumOpen] = useState(false);
+  const [premiumOpen, setPremiumOpen] = useState<null | 'masters' | 'pencil' | 'artSignature'>(null);
+  const [adOpen, setAdOpen] = useState(false);
+  const [adNotice, setAdNotice] = useState<string | null>(null);
 
   const chosen = artistById(artist);
-  const unlimited = allowance?.remaining === -1;
-  const freeLeft = allowance && !unlimited ? Math.max(0, allowance.remaining) : null;
+  const premium = allowance?.remaining === -1;
+  const unlimited = mode === 'pencil' ? pencilDay?.remaining === -1 : premium;
+  const freeLeft = allowance && allowance.remaining !== -1 ? Math.max(0, allowance.remaining) : null;
+  const pencilLeft = pencilDay && pencilDay.remaining !== -1 ? Math.max(0, pencilDay.remaining) : null;
+  const pencilLimit = pencilDay?.limit ?? 2;
+  const pencilUnlocked = !!pencilDay && pencilDay.remaining !== -1 && pencilDay.credits > 0 && (pencilLeft ?? 0) > 0;
+  const used = mode === 'pencil' ? pencilLeft === 0 : freeLeft === 0;
 
   const refreshAllowance = useCallback(() => {
     void masters.allowance().then(setAllowance);
+    void masters.pencilAllowance().then(setPencilDay);
   }, [masters]);
   useEffect(refreshAllowance, [refreshAllowance]);
+  useEffect(() => navigation.addListener?.('focus', refreshAllowance), [navigation, refreshAllowance]);
+
+  /** What the preview (and the finished work) is made with: the signature only on Premium. */
+  const extras = (m: ArtMode = modeRef.current, p: PencilOptions = pen.current, s: Signature = sig.current) => ({
+    mode: m,
+    ...(m === 'pencil' ? { pencil: p } : {}),
+    ...(premium ? { signature: signatureRequest(s) } : {}),
+  });
 
   // The preview follows each choice (a newer one cancels the older).
   const job = useRef<string | null>(null);
-  const draw = (path: string, a: number, l: MastersLevel, sd: number, k: ArtControls = touch.current, fr = frame) => {
+  const draw = (
+    path: string,
+    a: number,
+    l: MastersLevel,
+    sd: number,
+    k: ArtControls = touch.current,
+    fr = frame,
+    ex = extras(),
+  ) => {
     const id = createId('masters');
     if (job.current) masters.cancel(job.current);
     job.current = id;
-    setFinished(null);
-    setSaved(false);
     setBusy('preview');
     masters
-      .paint(path, a, l, 'preview', sd, id, k, fr)
+      .paint(path, a, l, 'preview', sd, id, k, fr, ex)
       .then(p => {
         if (job.current !== id) return;
         setPreview(p);
@@ -123,6 +168,9 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
           setBusy(b => (b === 'preview' ? null : b));
         }
       });
+  };
+  const redraw = (ex = extras()) => {
+    if (photo) draw(photo, artist, level, seed, touch.current, frame, ex);
   };
   const choose = (next: { artist?: number; level?: MastersLevel; seed?: number }) => {
     const a = next.artist ?? artist;
@@ -140,6 +188,29 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     [masters],
   );
 
+  // Painting or pencil: the preview and the cards follow.
+  const chooseMode = (m: ArtMode) => {
+    if (m === modeRef.current) return;
+    modeRef.current = m;
+    setMode(m);
+    setThumbs({});
+    redraw(extras(m));
+  };
+  const changePencil = (p: PencilOptions, now: boolean) => {
+    const c = clampPencil(p);
+    pen.current = c;
+    setPencil(c);
+    if (now) redraw(extras('pencil', c));
+  };
+  const changeSignature = (s: Signature, done: boolean) => {
+    sig.current = s;
+    setSignature(s);
+    if (done) {
+      void updateSetting('artSignature', s).catch(() => undefined);
+      redraw(extras(modeRef.current, pen.current, s));
+    }
+  };
+
   // Your touch: the preview repaints when the finger lifts; kept for next time when remembered.
   const keepTouch = (k: ArtControls) => {
     if (prefs.remember)
@@ -153,7 +224,9 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const setChoice = (next: Partial<ArtControls>) => {
     const k = clampControls({ ...touch.current, ...next });
     changeTouch(k);
-    if (photo) draw(photo, artist, level, seed, k);
+    if (modeRef.current === 'pencil' && next.intensity !== undefined) {
+      changePencil({ ...pen.current, intensity: next.intensity }, true);
+    } else if (photo) draw(photo, artist, level, seed, k);
     keepTouch(k);
   };
   const chooseFrame = (f: number) => {
@@ -186,28 +259,77 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   useEffect(() => {
     openRef.current = openPhoto;
   });
+  /** A new photo goes into the project's photos too. */
   const pick = async () => {
     const path = await getStorageService().pickImage('imports');
-    if (path) openPhoto(path);
+    if (!path) return;
+    if (repos && projectId) void addPhotos(repos, projectId, [path]).catch(() => undefined);
+    openPhoto(path);
   };
+
+  // A photo from the project (and, to edit a work again, what it was made with).
   const shot = route.params?.photo;
+  const edit = route.params?.edit;
+  // Every creation starts from a project: without one, choose (or create) it first.
+  useEffect(() => {
+    if (!projectId) navigation.replace('StudioProjects', { studio: 'arts', ...(shot ? { photo: shot } : {}) });
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /** Opens a work again with what it was made with (artist, finish, mode, controls, pencil, frame). */
+  const applyEdit = (path: string, e: Record<string, unknown>) => {
+    const j = e as Partial<ArtJob>;
+    const a = typeof j.artist === 'number' && ARTISTS.some(x => x.id === j.artist) ? j.artist : 0;
+    setArtist(a);
+    setMovement(artistById(a).movement);
+    if (j.level === 0 || j.level === 1 || j.level === 2) setLevel(j.level);
+    if (typeof j.seed === 'number') setSeed(j.seed);
+    if (j.mode === 'pencil' || j.mode === 'paint') {
+      modeRef.current = j.mode;
+      setMode(j.mode);
+    }
+    if (j.controls) changeTouch(clampControls(j.controls));
+    if (j.pencil) {
+      pen.current = clampPencil(j.pencil);
+      setPencil(pen.current);
+    }
+    if (typeof j.frame === 'number') setFrame(j.frame);
+    setPhoto(path);
+    setPreview(null);
+    draw(
+      path,
+      a,
+      j.level ?? level,
+      j.seed ?? FIRST_SEED,
+      j.controls ? clampControls(j.controls) : touch.current,
+      j.frame ?? frame,
+      extras(modeRef.current, pen.current),
+    );
+  };
+  const editRef = useRef(applyEdit);
+  useEffect(() => {
+    editRef.current = applyEdit;
+  });
   useEffect(() => {
     if (!shot) return;
-    navigation.setParams({ photo: undefined });
-    openRef.current(shot);
+    navigation.setParams({ photo: undefined, edit: undefined });
+    if (edit) editRef.current(shot, edit);
+    else openRef.current(shot);
+    // Opened once per photo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shot, navigation]);
 
   // Each card shows the photo in that artist's hand: the movement on show, one at a time.
   useEffect(() => {
     if (!photo || !prefs.cardPreviews) return;
     let live = true;
-    const todo = artistsOf(movement).filter(a => !thumbs[a.id]);
+    const todo = artistsOf(movement).filter(a => !thumbs[`${mode}${a.id}`]);
     void (async () => {
       for (const a of todo) {
         try {
-          const p = await masters.paint(photo, a.id, 0, 'thumb');
+          const p = await masters.paint(photo, a.id, 0, 'thumb', FIRST_SEED, undefined, undefined, 0, { mode });
           if (!live) return;
-          setThumbs(cur => ({ ...cur, [a.id]: p.outputPath }));
+          setThumbs(cur => ({ ...cur, [`${mode}${a.id}`]: p.outputPath }));
         } catch {
           if (!live) return;
         }
@@ -218,7 +340,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     };
     // thumbs is read for what is missing; a new thumb must not restart the queue.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photo, movement, masters, prefs.cardPreviews]);
+  }, [photo, movement, mode, masters, prefs.cardPreviews]);
 
   const chooseMovement = (m: Movement) => {
     setMovement(m);
@@ -226,57 +348,126 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     if (first && chosen.movement !== m) choose({ artist: first.id });
   };
 
-  const paint = async () => {
-    if (!photo) return;
-    if (freeLeft === 0) {
-      setPremiumOpen(true);
-      return;
-    }
+  /** The finished work, made live in the studio and kept in the project. */
+  const begin = () => {
+    if (!photo || !projectId) return;
     if (job.current) masters.cancel(job.current);
     job.current = null;
-    setBusy('full');
-    setError(null);
+    const j: ArtJob = {
+      artist,
+      level,
+      seed,
+      mode,
+      frame,
+      ...(mode === 'paint' ? { controls: touch.current } : { pencil: pen.current }),
+      ...(premium && signatureRequest(sig.current) ? { signature: signatureRequest(sig.current) } : {}),
+    };
+    const title = `${artistName(chosen)} · ${mode === 'pencil' ? t('pencil_title') : t('masters_mode_paint')}`;
+    navigation.navigate('ArtLive', { job: j as unknown as Record<string, unknown>, photo, projectId, title });
+  };
+  const create = () => {
+    if (!photo) return;
+    if (mode === 'paint') {
+      if (freeLeft === 0) setPremiumOpen('masters');
+      else begin();
+      return;
+    }
+    if (pencilDay?.remaining === -1 || pencilUnlocked) begin();
+    else if (pencilLeft === 0) setPremiumOpen('pencil');
+    else {
+      setAdNotice(null);
+      setAdOpen(true);
+    }
+  };
+  const watchAd = async () => {
+    setBusy('ad');
+    setAdNotice(null);
     try {
-      const p = await masters.paint(photo, artist, level, 'full', seed, undefined, touch.current, frame);
-      setFinished(p);
-      setGallery(g => [{ painting: p, artist, saved: false }, ...g]);
-      recordActivity('studio', 'edit');
-      if (p.remaining !== undefined && allowance) setAllowance({ ...allowance, remaining: p.remaining });
-      else refreshAllowance();
+      const r = await masters.unlockPencil();
+      setPencilDay(r.allowance);
+      if (r.rewarded) {
+        setAdOpen(false);
+        begin();
+      } else setAdNotice(t('pencil_ad_not_finished'));
     } catch (e) {
-      if (e instanceof MastersError && e.code === 'PREMIUM_REQUIRED') {
-        refreshAllowance();
-        setPremiumOpen(true);
-      } else setError(t('masters_failed'));
+      const code = e instanceof MastersError ? e.code : '';
+      if (code === 'DAILY_LIMIT') {
+        setAdOpen(false);
+        setPremiumOpen('pencil');
+      } else if (code === 'SUBSCRIBED') {
+        setAdOpen(false);
+        begin();
+      } else setAdNotice(t('pencil_ad_unavailable'));
     } finally {
-      setBusy(null);
+      setBusy(b => (b === 'ad' ? null : b));
     }
   };
 
-  const save = async (item: Painting = finished as Painting) => {
-    if (!item) return;
-    setBusy('save');
-    try {
-      await getStudioService().saveToGallery(item.outputPath);
-      if (item === finished) setSaved(true);
-      setGallery(g => g.map(x => (x.painting === item ? { ...x, saved: true } : x)));
-    } catch {
-      setError(t('masters_failed'));
-    } finally {
-      setBusy(null);
-    }
-  };
-  const share = (item: Painting | null = finished, a = artist) =>
-    void getStorageService().share([item?.outputPath ?? ''], artistName(artistById(a)));
-  const intensity: IntensityId = intensityOf(controls.intensity);
-
-  const shown = finished ?? preview;
+  const intensity: IntensityId = intensityOf(mode === 'pencil' ? pencil.intensity : controls.intensity);
+  const shown = preview;
   const name = artistName(chosen);
   const accent = theme.colors.accent;
+  const technique = mode === 'pencil' ? t(`pencil_way_${chosen.key}` as StringKey) : artistTechnique(chosen);
+
+  const planLine =
+    mode === 'pencil'
+      ? unlimited
+        ? t('pencil_unlimited')
+        : pencilLeft === 0
+          ? t('pencil_free_used', { limit: pencilLimit })
+          : pencilUnlocked
+            ? t('pencil_free_unlocked')
+            : t('pencil_free_left', { n: pencilLeft ?? pencilLimit, limit: pencilLimit })
+      : unlimited
+        ? t('masters_unlimited')
+        : freeLeft === 0
+          ? t('masters_free_used')
+          : freeLeft !== null && freeLeft > 1
+            ? t('masters_free_left', { n: freeLeft })
+            : t('masters_free_ready');
+  const createLabel = used
+    ? t('masters_go_premium')
+    : mode === 'pencil'
+      ? unlimited || pencilUnlocked
+        ? t('pencil_draw')
+        : t('pencil_watch_draw')
+      : t('masters_paint');
 
   return (
-    <Screen title="Photo Arts" onBack={() => navigation.goBack()} bottomInset={32}>
+    <Screen
+      title={mode === 'pencil' ? t('pencil_title') : 'Photo Arts'}
+      onBack={() => navigation.goBack()}
+      bottomInset={32}
+    >
       <View style={{ gap: 16 }}>
+        <View style={styles.modes} accessibilityRole="tablist">
+          {MODES.map(m => {
+            const on = mode === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => chooseMode(m)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                testID={`masters-mode-${m}`}
+                style={[styles.mode, on ? { backgroundImage: theme.gradients.action } : null]}
+              >
+                <Icon
+                  name={m === 'paint' ? 'brush' : 'sliders'}
+                  size={16}
+                  color={on ? '#FFFFFF' : theme.colors.textSecondary}
+                />
+                <AppText
+                  variant="callout"
+                  style={{ fontWeight: '700', color: on ? '#FFFFFF' : theme.colors.textSecondary }}
+                >
+                  {m === 'paint' ? t('masters_mode_paint') : t('pencil_title')}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+
         {!photo ? (
           <GlassSurface radius={24} style={styles.intro} glow="rgba(245,198,107,0.22)">
             <View style={[styles.badge, { backgroundImage: theme.gradients.premium }]}>
@@ -286,10 +477,10 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
               {t('masters_overline').toUpperCase()}
             </AppText>
             <AppText variant="title1" align="center" accessibilityRole="header">
-              {t('masters_intro_title')}
+              {mode === 'pencil' ? t('pencil_intro_title') : t('masters_intro_title')}
             </AppText>
             <AppText variant="body" tone="secondary" align="center">
-              {t('masters_intro_body')}
+              {mode === 'pencil' ? t('pencil_intro_body') : t('masters_intro_body')}
             </AppText>
             <View style={styles.names}>
               {ARTISTS.slice(0, 8).map(a => (
@@ -307,7 +498,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
             />
             {!unlimited ? (
               <AppText variant="caption" tone="secondary" align="center">
-                {t('masters_premium_message')}
+                {mode === 'pencil' ? t('pencil_premium_message', { limit: pencilLimit }) : t('masters_premium_message')}
               </AppText>
             ) : null}
           </GlassSurface>
@@ -317,7 +508,9 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
               <CompareSlider
                 painting={{ uri: `file://${shown.outputPath}`, width: shown.width, height: shown.height }}
                 photo={`file://${photo}`}
-                inset={frameInset(frame, shown.width, shown.height)}
+                inset={
+                  shown.inner ? { x: shown.inner[0], y: shown.inner[1] } : frameInset(frame, shown.width, shown.height)
+                }
                 label={t('masters_painting_of', { artist: name })}
                 hint={t('masters_compare')}
                 testID="masters-canvas"
@@ -327,11 +520,11 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
                 <ActivityIndicator color={accent} />
               </View>
             )}
-            {busy === 'preview' || busy === 'full' ? (
+            {busy === 'preview' ? (
               <View style={styles.painting} accessibilityLiveRegion="polite">
                 <ActivityIndicator size="small" color={accent} />
                 <AppText variant="caption" style={{ fontWeight: '700' }}>
-                  {t('masters_painting')}
+                  {mode === 'pencil' ? t('pencil_drawing') : t('masters_painting')}
                 </AppText>
               </View>
             ) : null}
@@ -382,14 +575,14 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
               {artistsOf(movement).map(a => {
                 const on = artist === a.id;
-                const thumb = thumbs[a.id];
+                const thumb = thumbs[`${mode}${a.id}`];
                 return (
                   <Pressable
                     key={a.id}
                     onPress={() => choose({ artist: a.id })}
                     accessibilityRole="button"
                     accessibilityState={{ selected: on }}
-                    accessibilityLabel={`${artistName(a)}, ${artistTechnique(a)}`}
+                    accessibilityLabel={`${artistName(a)}, ${mode === 'pencil' ? t(`pencil_way_${a.key}` as StringKey) : artistTechnique(a)}`}
                     testID={`masters-artist-${a.key}`}
                     style={[styles.card, { borderColor: on ? accent : 'rgba(255,255,255,0.12)' }]}
                   >
@@ -399,7 +592,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
                       ) : prefs.cardPreviews ? (
                         <ActivityIndicator color={accent} />
                       ) : (
-                        // Cards without paintings (Settings): the artist's initial.
+                        // Cards without pictures (Settings): the artist's initial.
                         <AppText variant="title1" style={{ color: accent }}>
                           {artistName(a).charAt(0)}
                         </AppText>
@@ -423,8 +616,8 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
                   {chosen.years}
                 </AppText>
               </View>
-              <AppText variant="callout" style={{ color: accent, fontWeight: '700' }}>
-                {artistTechnique(chosen)}
+              <AppText variant="callout" style={{ color: accent, fontWeight: '700' }} testID="masters-technique">
+                {technique}
               </AppText>
               <AppText variant="body" tone="secondary">
                 {artistAbout(chosen)}
@@ -495,17 +688,26 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
               </AppText>
             </View>
 
-            <PhotoArtsTouch
-              value={controls}
-              open={touchOpen}
-              onToggle={() => setTouchOpen(o => !o)}
-              onChange={changeTouch}
-              onEnd={touchDone}
-              onReset={touchReset}
-              disabled={busy === 'full'}
-            />
+            {mode === 'pencil' ? (
+              <PencilPanel
+                value={pencil}
+                onChange={p => changePencil(p, p.medium !== pen.current.medium || p.paper !== pen.current.paper)}
+                onEnd={() => changePencil(pen.current, true)}
+              />
+            ) : (
+              <PhotoArtsTouch
+                value={controls}
+                open={touchOpen}
+                onToggle={() => setTouchOpen(o => !o)}
+                onChange={changeTouch}
+                onEnd={touchDone}
+                onReset={touchReset}
+                disabled={false}
+              />
+            )}
 
             <PhotoArtsStudio
+              frameOnly={mode === 'pencil'}
               surface={controls.surface}
               backdrop={controls.backdrop}
               frame={frame}
@@ -516,124 +718,115 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
               onFrame={chooseFrame}
             />
 
+            <SignaturePanel
+              value={signature}
+              premium={premium}
+              open={sigOpen}
+              onToggle={() => setSigOpen(o => !o)}
+              onChange={s => changeSignature(s, false)}
+              onEnd={s => changeSignature(s, true)}
+              onLocked={() => setPremiumOpen('artSignature')}
+            />
+
             <View style={styles.allowance} testID="masters-allowance">
               <Icon name="crown" size={14} color={accent} />
-              <AppText variant="caption" tone="secondary" style={{ flex: 1 }}>
-                {unlimited
-                  ? t('masters_unlimited')
-                  : freeLeft === 0
-                    ? t('masters_free_used')
-                    : freeLeft !== null && freeLeft > 1
-                      ? t('masters_free_left', { n: freeLeft })
-                      : t('masters_free_ready')}
-              </AppText>
+              <View style={{ flex: 1, gap: 2 }}>
+                <AppText variant="caption" tone="secondary">
+                  {planLine}
+                </AppText>
+                {mode === 'pencil' && !unlimited && pencilLeft !== 0 ? (
+                  <AppText variant="caption" tone="tertiary">
+                    {t('pencil_free_ad')}
+                  </AppText>
+                ) : null}
+              </View>
             </View>
 
-            {finished ? (
-              <View style={{ gap: 10 }}>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      label={saved ? t('masters_saved') : t('masters_save')}
-                      icon={saved ? 'check' : 'download'}
-                      size="lg"
-                      loading={busy === 'save'}
-                      disabled={busy === 'save' || saved}
-                      onPress={() => void save()}
-                      testID="masters-save"
-                    />
-                  </View>
-                  <Button
-                    label={t('masters_share')}
-                    icon="share"
-                    variant="glass"
-                    size="lg"
-                    onPress={() => share()}
-                    testID="masters-share"
-                  />
-                </View>
-                <Button
-                  label={t('masters_paint_again')}
-                  icon="refresh"
-                  variant="ghost"
-                  onPress={() => choose({ seed: seed + 1 })}
-                  testID="masters-again"
-                />
-              </View>
-            ) : (
-              <Button
-                label={freeLeft === 0 ? t('masters_go_premium') : t('masters_paint')}
-                icon={freeLeft === 0 ? 'crown' : 'brush'}
-                variant="premium"
-                size="lg"
-                loading={busy === 'full'}
-                disabled={busy === 'full'}
-                onPress={() => void paint()}
-                testID="masters-paint"
-              />
-            )}
+            <Button
+              label={createLabel}
+              icon={used ? 'crown' : mode === 'pencil' && !unlimited && !pencilUnlocked ? 'play' : 'brush'}
+              variant="premium"
+              size="lg"
+              disabled={busy === 'ad' || !projectId}
+              onPress={create}
+              testID="masters-paint"
+            />
+            <AppText variant="caption" tone="tertiary" align="center">
+              {mode === 'pencil' ? t('live_pencil_hint') : t('live_paint_hint')}
+            </AppText>
             <Button
               label={t('masters_change_photo')}
               icon="image"
               variant="glass"
-              disabled={busy === 'full'}
               onPress={() => void pick()}
               testID="masters-change"
             />
-
-            {gallery.length > 0 ? (
-              <View style={{ gap: 10 }} testID="masters-gallery">
-                <AppText variant="overline" tone="secondary">
-                  {t('masters_gallery').toUpperCase()}
-                </AppText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-                  {gallery.map((g, i) => (
-                    <GlassSurface key={`${g.painting.outputPath}-${i}`} radius={16} style={styles.galleryCard}>
-                      <Image
-                        source={{ uri: `file://${g.painting.outputPath}` }}
-                        style={{ width: '100%', aspectRatio: g.painting.width / g.painting.height, borderRadius: 10 }}
-                        resizeMode="cover"
-                        accessibilityLabel={t('masters_painting_of', { artist: artistName(artistById(g.artist)) })}
-                      />
-                      <AppText variant="caption" style={{ fontWeight: '700' }} numberOfLines={1}>
-                        {artistName(artistById(g.artist))}
-                      </AppText>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <View style={{ flex: 1 }}>
-                          <Button
-                            label={g.saved ? t('masters_saved') : t('masters_save')}
-                            icon={g.saved ? 'check' : 'download'}
-                            disabled={g.saved || busy === 'save'}
-                            onPress={() => void save(g.painting)}
-                            testID={`masters-gallery-save-${i}`}
-                          />
-                        </View>
-                        <Button
-                          label={t('masters_share')}
-                          icon="share"
-                          variant="glass"
-                          onPress={() => share(g.painting, g.artist)}
-                          testID={`masters-gallery-share-${i}`}
-                        />
-                      </View>
-                    </GlassSurface>
-                  ))}
-                </ScrollView>
-              </View>
+            {projectId ? (
+              <Button
+                label={t('sp_open_gallery')}
+                icon="grid"
+                variant="ghost"
+                onPress={() => navigation.navigate('StudioProject', { projectId, tab: 'gallery' })}
+                testID="masters-gallery"
+              />
             ) : null}
           </>
         ) : null}
       </View>
+      <AdUnlockSheet
+        open={adOpen}
+        title={t('pencil_ad_title')}
+        body={t('pencil_ad_body', { limit: pencilLimit })}
+        left={pencilLeft !== null ? t('pencil_free_left', { n: pencilLeft, limit: pencilLimit }) : null}
+        notice={adNotice}
+        busy={busy === 'ad'}
+        watchLabel={t('motion_ad_watch')}
+        premiumLabel={t('motion_go_premium')}
+        laterLabel={t('motion_ad_later')}
+        onWatch={() => void watchAd()}
+        onPremium={() => {
+          setAdOpen(false);
+          setPremiumOpen('pencil');
+        }}
+        onClose={() => setAdOpen(false)}
+        testID="pencil-ad-sheet"
+      />
       <PremiumSheet
-        feature={premiumOpen ? 'masters' : null}
-        message={freeLeft === 0 ? t('masters_free_used') : null}
-        onClose={() => setPremiumOpen(false)}
+        feature={premiumOpen}
+        message={
+          premiumOpen === 'masters' && freeLeft === 0
+            ? t('masters_free_used')
+            : premiumOpen === 'pencil'
+              ? pencilLeft === 0
+                ? t('pencil_free_used', { limit: pencilLimit })
+                : t('pencil_premium_message', { limit: pencilLimit })
+              : null
+        }
+        onClose={() => setPremiumOpen(null)}
       />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  modes: {
+    flexDirection: 'row',
+    padding: 4,
+    gap: 4,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  mode: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
   intro: { padding: 22, gap: 12, alignItems: 'stretch' },
   badge: {
     width: 56,
@@ -674,5 +867,4 @@ const styles = StyleSheet.create({
   levels: { flexDirection: 'row', gap: 8 },
   level: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 999, borderWidth: 1.5 },
   allowance: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  galleryCard: { width: 230, padding: 10, gap: 8 },
 });

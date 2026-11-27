@@ -25,6 +25,7 @@ import com.photoplus.engine.NativeEngine
 import com.photoplus.engine.OutputFormat
 import com.photoplus.entitlement.ArtAllowance
 import com.photoplus.entitlement.MotionAllowance
+import com.photoplus.entitlement.PencilAllowance
 import com.photoplus.entitlement.Entitlements
 import com.photoplus.specs.NativePhotoPlusStudioSpec
 import com.photoplus.storage.AppPaths
@@ -664,9 +665,13 @@ class StudioModule(reactContext: ReactApplicationContext) :
     val level = (map["level"] as? Number)?.toInt() ?: 1
     val quality = map["quality"] as? String ?: "preview"
     val seed = (map["seed"] as? Number)?.toInt() ?: 7
+    val pencil = map["mode"] == "pencil"
     val controls = artControls(map["controls"])
+    val pencilOptions = pencilOptions(map["pencil"])
     val frame = (map["frame"] as? Number)?.toInt() ?: 0
-    if (controls == null || frame !in 0 until ART_FRAMES) {
+    // The live studio: a preview of its own (never replaced by a newer preview while it plays), with its blank sheet.
+    val live = map["live"] == true
+    if (controls == null || pencilOptions == null || frame !in 0 until ART_FRAMES) {
       promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_masters_unknown_artist))
       return
     }
@@ -675,17 +680,26 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     val full = quality == "full"
-    if (full && !ArtAllowance.allowed(reactApplicationContext)) {
+    if (full && pencil && !PencilAllowance.allowed(reactApplicationContext)) {
+      // Pencil Art on the free plan: two a day, each after an ad.
+      val left = (PencilAllowance.state(reactApplicationContext)["remaining"] as? Int) ?: 0
+      if (left > 0) promise.reject("AD_REQUIRED", Words.get(reactApplicationContext, R.string.native_pencil_ad_required))
+      else promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_pencil_daily_used))
+      return
+    }
+    if (full && !pencil && !ArtAllowance.allowed(reactApplicationContext)) {
       promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_masters_daily_used))
       return
     }
+    // The signature is Premium's: on the free plan it is left off.
+    val signature = ArtSignature.parse(map["signature"])?.takeIf { Entitlements.plan == Plan.PREMIUM && quality != "thumb" }
     val file = paths.resolve(map["inputPath"] as? String ?: "")
     jobs.submit(jobId, listener(promise)) { token ->
-      // Big enough for the level's brushes, within the phone's memory.
+      // Big enough for the level's brushes (a drawing: HD and above), within the phone's memory.
       val edge = when (quality) {
         "thumb" -> MASTERS_THUMB
         "preview" -> MASTERS_PREVIEW
-        else -> min(budget.maxDecodeDimension, MASTERS_FULL[level])
+        else -> min(budget.maxDecodeDimension, if (pencil) min(PENCIL_FULL[level], pencilEdgeFor(budget.engineBytes)) else MASTERS_FULL[level])
       }
       val decoded = ImageCodec.decode(file, edge).bitmap
       val bitmap = if (decoded.isMutable && decoded.config == Bitmap.Config.ARGB_8888) decoded
@@ -694,20 +708,78 @@ class StudioModule(reactContext: ReactApplicationContext) :
         val (mask, faces) = synchronized(artSubjects) { artSubjects[file.absolutePath] } ?: portraitProcessor.personAndFaces(bitmap).also { found ->
           synchronized(artSubjects) { artSubjects[file.absolutePath] = found }
         }
-        // Cards show each artist's own way; the preview and the painting follow the person's controls.
-        NativeEngine.nativeArtPaint(bitmap, artist, if (quality == "thumb") 0 else level, mask, faces, seed, if (quality == "thumb") null else controls, token)
+        val blank = if (live) bitmap.copy(Bitmap.Config.ARGB_8888, true) else null
+        // Cards show each artist's own way; the preview and the work follow the person's controls.
+        if (pencil) {
+          NativeEngine.nativeArtPencil(bitmap, artist, if (quality == "thumb") 0 else level, mask, faces, seed, pencilOptions, token)
+        } else {
+          NativeEngine.nativeArtPaint(bitmap, artist, if (quality == "thumb") 0 else level, mask, faces, seed, if (quality == "thumb") null else controls, token)
+        }
+        signature?.let { ArtSignature.apply(bitmap, it, if (pencil) pencilOptions[0].roundToInt() else -1, java.time.Year.now().value) }
         // The frame goes on the preview too, so what is seen is what is saved (cards stay unframed).
         val shown = if (quality == "thumb") bitmap else framed(bitmap, frame, token)
+        // The picture inside the frame (normalised), for the live studio's strokes.
+        val ix = (shown.width - bitmap.width) / 2f / shown.width
+        val iy = (shown.height - bitmap.height) / 2f / shown.height
+        val inner = listOf(ix.toDouble(), iy.toDouble(), (1 - ix).toDouble(), (1 - iy).toDouble())
+        val name = when {
+          quality == "thumb" -> "${if (pencil) "PencilThumb" else "MastersThumb"}$artist"
+          live -> "MastersLive"
+          pencil -> "PencilArt"
+          else -> "Masters"
+        }
         val out = try {
-          if (full) encodeStudio(shown, true, "Masters") else encodeStudio(shown, false, if (quality == "thumb") "MastersThumb$artist" else "Masters")
+          encodeStudio(shown, full, name)
         } finally {
           if (shown !== bitmap) shown.recycle()
         }
-        if (full) ArtAllowance.use(reactApplicationContext)
-        out + mapOf("remaining" to ArtAllowance.remaining(reactApplicationContext))
+        // The blank sheet (or primed ground) the work starts from, in the same frame.
+        val blankPath = blank?.let { b ->
+          try {
+            NativeEngine.nativeArtBlank(b, if (pencil) 1 else 0, artist, seed, pencilOptions)
+            val bs = framed(b, frame, token)
+            try {
+              encodeStudio(bs, false, "MastersLiveBlank")["outputPath"]
+            } finally {
+              if (bs !== b) bs.recycle()
+            }
+          } finally {
+            b.recycle()
+          }
+        }
+        if (full) (if (pencil) PencilAllowance.use(reactApplicationContext) else ArtAllowance.use(reactApplicationContext))
+        val remaining = if (pencil) PencilAllowance.state(reactApplicationContext)["remaining"] as Int else ArtAllowance.remaining(reactApplicationContext)
+        out + mapOf("remaining" to remaining, "inner" to inner) + (if (blankPath != null) mapOf("blankPath" to blankPath) else emptyMap())
       } finally {
         bitmap.recycle()
       }
+    }
+  }
+
+  /** The largest drawing the engine's memory allows (about 64 bytes a pixel at its peak, a 4:3 sheet). */
+  private fun pencilEdgeFor(engineBytes: Long): Int = kotlin.math.sqrt(engineBytes / 64.0 / 0.75).toInt().coerceIn(1200, 4096)
+
+  /** { remaining (-1 unlimited), limit, credits, needsAd } — Pencil Art on the free plan today. */
+  override fun pencilAllowance(promise: Promise) {
+    promise.resolve(PencilAllowance.state(reactApplicationContext).toWritableMap())
+  }
+
+  /**
+   * The drawing's options from { medium 0..2, paper 0..3, intensity 0..1,
+   * lines 0.5..1.5, shading 0.5..1.5 } (each optional), clamped; null if a
+   * value isn't a number.
+   */
+  private fun pencilOptions(raw: Any?): FloatArray? {
+    val defaults = floatArrayOf(0f, 0f, 0.6f, 1f, 1f)
+    val m = raw as? Map<*, *> ?: return defaults
+    val names = listOf("medium" to (0f to 2f), "paper" to (0f to 3f), "intensity" to (0f to 1f), "lines" to (0.5f to 1.5f), "shading" to (0.5f to 1.5f))
+    return FloatArray(5) { i ->
+      val (name, range) = names[i]
+      val v = m[name] ?: return@FloatArray defaults[i]
+      val f = (v as? Number)?.toFloat() ?: return null
+      if (!f.isFinite()) return null
+      val c = f.coerceIn(range.first, range.second)
+      if (i < 2) c.roundToInt().toFloat() else c
     }
   }
 
@@ -1040,6 +1112,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
     private const val MASTERS_THUMB = 300
     private const val MASTERS_PREVIEW = 760
     private val MASTERS_FULL = intArrayOf(1100, 1500, 1800)
+    // A drawing's lines stay crisp at full size: HD and above (a study 1600 px, a drawing 2048, a masterpiece 2560).
+    private val PENCIL_FULL = intArrayOf(1600, 2048, 2560)
     private const val MOTION_ANALYSIS = 1280
     private const val MOTION_PREVIEW = 480
     private const val MOTION_FULL = 1080

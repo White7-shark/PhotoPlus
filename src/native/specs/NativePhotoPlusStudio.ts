@@ -16,10 +16,16 @@ export interface Spec extends TurboModule {
   renderScene(jobId: string, request: Object): Promise<Object>;
   /** Relight: the person, relit, back in their own photo (a preview, or the saved photo). */
   renderRelight(jobId: string, request: Object): Promise<Object>;
-  /** Masters: { inputPath, artist 0..19, level 0..2, quality 'thumb' | 'preview' | 'full', seed } → { outputPath, cleanPath, width, height, remaining }. */
+  /**
+   * Photo Arts: { inputPath, artist 0..19, level 0..2, quality 'thumb' | 'preview' | 'full', seed, mode 'paint' | 'pencil',
+   * controls, pencil { medium, paper, intensity, lines, shading }, frame, signature (Premium), live } →
+   * { outputPath, cleanPath, width, height, remaining, inner [x0, y0, x1, y1], blankPath (live) }.
+   */
   renderMasters(jobId: string, request: Object): Promise<Object>;
   /** { remaining (-1: unlimited), limit }: finished Masters paintings left today on the free plan. */
   mastersAllowance(): Promise<Object>;
+  /** { remaining (-1: unlimited), limit, credits, needsAd }: Pencil Art drawings today on the free plan (each after an ad). */
+  pencilAllowance(): Promise<Object>;
   /** Photo Motion: reads a photo once ({ inputPath }) → { sessionId, width, height, sky 0..1, depth, faces }. */
   startMotion(jobId: string, request: Object): Promise<Object>;
   /**

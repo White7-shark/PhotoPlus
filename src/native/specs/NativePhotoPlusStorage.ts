@@ -14,6 +14,8 @@ export interface Spec extends TurboModule {
    * Resolves with the new path, or null if the user cancelled.
    */
   pickImage(area: string): Promise<string | null>;
+  /** The picker with several choices (up to max): their copies' paths, in order (empty if cancelled). */
+  pickImages(area: string, max: number): Promise<string[]>;
   /** Opens the system share sheet for photos in app storage. */
   shareImages(paths: string[], title: string): Promise<boolean>;
   /** Saves a Glide clip from the exports area to the gallery (Movies/Photo Plus); resolves with its content URI. */

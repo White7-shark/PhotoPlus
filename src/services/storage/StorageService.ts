@@ -53,6 +53,21 @@ export class StorageService {
     return this.native.pickImage(area);
   }
 
+  /** The picker with several choices: copies of the chosen photos in app storage (empty if cancelled). */
+  async pickImages(area: 'imports' | 'backgrounds' = 'imports', max = 20): Promise<string[]> {
+    const paths = await this.native.pickImages(area, max);
+    return Array.isArray(paths) ? paths.filter((p): p is string => typeof p === 'string' && p.length > 0) : [];
+  }
+
+  /** Removes an app file (missing files are fine). */
+  async remove(path: string): Promise<void> {
+    try {
+      await this.native.deleteFile(path);
+    } catch {
+      // Already gone, or not ours to delete.
+    }
+  }
+
   /** Opens the share sheet so photos can be posted to other apps. */
   share(paths: string[], title = 'Share photo'): Promise<boolean> {
     return this.native.shareImages(paths, title);

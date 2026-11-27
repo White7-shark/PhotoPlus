@@ -40,3 +40,17 @@ class MotionAllowanceTest {
     assertEquals(2, MotionAllowance.left(t))
   }
 }
+
+class PencilAllowanceTest {
+  @Test
+  fun pencilHasItsOwnTwoADayAndToolsAreFoundByName() {
+    var t = PencilAllowance.today("2026-11-27", "2026-11-27", 0, 0)
+    assertEquals(2, PencilAllowance.left(t))
+    assertFalse(PencilAllowance.canMake(t))
+    t = PencilAllowance.withAd(t)
+    assertTrue(PencilAllowance.canMake(t))
+    assertEquals(PencilAllowance, AdAllowance.of("pencil"))
+    assertEquals(MotionAllowance, AdAllowance.of("motion"))
+    assertEquals(null, AdAllowance.of("masters"))
+  }
+}

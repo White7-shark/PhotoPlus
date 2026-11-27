@@ -21,6 +21,10 @@ import { FilmCollageScreen } from '../screens/studio/FilmCollageScreen';
 import { RelightScreen } from '../screens/studio/RelightScreen';
 import { MastersScreen } from '../screens/studio/MastersScreen';
 import { MotionScreen } from '../screens/studio/MotionScreen';
+import { ArtLiveScreen } from '../screens/studio/ArtLiveScreen';
+import { StudioItemScreen } from '../screens/projects/StudioItemScreen';
+import { StudioProjectScreen } from '../screens/projects/StudioProjectScreen';
+import { StudioProjectsScreen } from '../screens/projects/StudioProjectsScreen';
 import { BatchScreen } from '../screens/product/BatchScreen';
 import { ProductStudioScreen } from '../screens/product/ProductStudioScreen';
 import { ProjectScreen } from '../screens/product/ProjectScreen';
@@ -68,6 +72,10 @@ const FilmCollage = guarded(FilmCollageScreen, 'Film & Collage');
 const Relight = guarded(RelightScreen, 'Relight');
 const Masters = guarded(MastersScreen, 'Photo Arts');
 const Motion = guarded(MotionScreen, 'Photo Motion');
+const StudioProjects = guarded(StudioProjectsScreen, 'Projects');
+const StudioProject = guarded(StudioProjectScreen, 'Project');
+const StudioItem = guarded(StudioItemScreen, 'Work');
+const ArtLive = guarded(ArtLiveScreen, 'Photo Arts');
 const ProductStudio = guarded(ProductStudioScreen, 'Product Studio');
 const Batch = guarded(BatchScreen, 'Batch edit');
 const Project = guarded(ProjectScreen, 'Project');
@@ -137,6 +145,10 @@ export function RootNavigator() {
         <Stack.Screen name="Relight" component={Relight} />
         <Stack.Screen name="Masters" component={Masters} />
         <Stack.Screen name="Motion" component={Motion} />
+        <Stack.Screen name="StudioProjects" component={StudioProjects} />
+        <Stack.Screen name="StudioProject" component={StudioProject} />
+        <Stack.Screen name="StudioItem" component={StudioItem} />
+        <Stack.Screen name="ArtLive" component={ArtLive} options={{ gestureEnabled: false }} />
         <Stack.Screen name="ProductStudio" component={ProductStudio} />
         <Stack.Screen name="Batch" component={Batch} />
         <Stack.Screen name="Project" component={Project} options={{ animation: 'slide_from_right' }} />

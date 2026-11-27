@@ -249,6 +249,7 @@ describe('studio service', () => {
     renderMotion: jest.fn(),
     endMotion: jest.fn(),
     motionAllowance: jest.fn(),
+    pencilAllowance: jest.fn(),
     saveToGallery: jest.fn(),
     endSession: jest.fn(),
     cancel: jest.fn(),

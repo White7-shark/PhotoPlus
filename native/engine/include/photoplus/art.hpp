@@ -109,4 +109,63 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
 // than the painting by the frame's width on every side), same format.
 Error frame(const ImageBuffer& painting, Frame style, ImageBuffer& out, const CancellationToken* token);
 
+// ---- Pencil art -------------------------------------------------------------
+// A pencil drawing of the photo — no paint, only the pencil on paper — in the
+// way each master drew: their line, their hatching (Leonardo's left-handed
+// parallel strokes, Michelangelo's cross-contour hatching, Dürer's
+// engraver's cross-hatching, Rembrandt's loose sketching, Seurat's velvety
+// conté tone…), their blending and how much of the sheet they left bare.
+// Lines from the photo's edges as directional pencil strokes, tone matched
+// to a real drawing's tones and built from hatching layers that darken by
+// adding strokes, graphite caught on the paper's tooth.
+enum class PencilMedium : int32_t { Graphite = 0, Charcoal, RedChalk };
+constexpr int32_t kPencilMediumCount = 3;
+enum class PencilPaper : int32_t { White = 0, Cream, Grey, Tan };  // grey and tan: toned paper with white chalk lights
+constexpr int32_t kPencilPaperCount = 4;
+
+struct PencilOptions {
+  Artist artist = Artist::Leonardo;
+  Level level = Level::Painting;
+  uint32_t seed = 1;
+  const ImageBuffer* subject = nullptr;  // optional GRAY8 person mask, any size
+  std::vector<FaceBox> faces;
+  PencilMedium medium = PencilMedium::Graphite;
+  PencilPaper paper = PencilPaper::White;
+  float intensity = 0.6f;  // 0 close to the photo .. 1 the master's full manner
+  float lines = 1.0f;      // 0.5 lighter .. 1.5 bolder contour lines
+  float shading = 1.0f;    // 0.5 lighter .. 1.5 deeper shading
+};
+
+// Draws `image` (RGBA8 or BGRA8) in place. Alpha is kept. Deterministic for a seed.
+Error pencil(ImageBuffer& image, const PencilOptions& options, const CancellationToken* token);
+// The blank sheet the drawing is made on (the same paper, pixel for pixel, as
+// pencil() leaves where nothing is drawn), into `image` (its size and format).
+Error pencilSheet(ImageBuffer& image, const PencilOptions& options);
+// The primed ground a painting starts from (the artist's priming: a warm
+// white, a brown imprimatura, plaster, paper), into `image`.
+Error paintGround(ImageBuffer& image, const Options& options);
+
+// ---- The live studio --------------------------------------------------------
+// The work being made, stroke by stroke: the blank sheet, and a pencil (or a
+// brush) moving over it, each movement revealing the finished work beneath —
+// contour lines then hatching for a drawing; a block-in with broad strokes,
+// then smaller strokes, then the finest details for a painting — until the
+// work is complete. frame(t) for t in [0, 1]; t = 1 is the finished work.
+enum class RevealTool : int32_t { Pencil = 0, Brush = 1 };
+struct RevealOptions {
+  RevealTool tool = RevealTool::Pencil;
+  Artist artist = Artist::Leonardo;  // the hatching direction
+  // The picture inside a frame (normalised; strokes stay inside, the frame is there from the start).
+  float x0 = 0, y0 = 0, x1 = 1, y1 = 1;
+  uint32_t seed = 1;
+};
+class Reveal;
+// `result` and `blank`: RGBA8 or BGRA8, the same size and format.
+Error revealCreate(const ImageBuffer& result, const ImageBuffer& blank, const RevealOptions& options, Reveal*& out,
+                   const CancellationToken* token);
+// The frame at t (0..1) into `out` (allocated to the result's size and format if it isn't).
+Error revealFrame(Reveal& reveal, float t, ImageBuffer& out);
+int32_t revealStrokeCount(const Reveal& reveal);
+void revealDestroy(Reveal* reveal);
+
 }  // namespace photoplus::art

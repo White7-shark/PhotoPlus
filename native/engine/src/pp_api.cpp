@@ -2086,6 +2086,103 @@ pp_status pp_art_frame(const pp_image* painting, int style, const pp_cancel_toke
   });
 }
 
+namespace {
+photoplus::art::PencilOptions pencilOptions(int artist, int level, uint32_t seed, const pp_art_pencil_options* p) {
+  photoplus::art::PencilOptions o;
+  o.artist = static_cast<photoplus::art::Artist>(artist);
+  o.level = static_cast<photoplus::art::Level>(level);
+  o.seed = seed;
+  if (p != nullptr) {
+    o.medium = static_cast<photoplus::art::PencilMedium>(p->medium);
+    o.paper = static_cast<photoplus::art::PencilPaper>(p->paper);
+    o.intensity = p->intensity, o.lines = p->lines, o.shading = p->shading;
+  }
+  return o;
+}
+}  // namespace
+
+pp_status pp_art_pencil(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
+                        size_t face_stride, uint32_t seed, const pp_art_pencil_options* options, const pp_cancel_token* token) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is required");
+    if (artist < 0 || artist >= PP_ART_ARTISTS || level < 0 || level > 2) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown artist or level");
+    if (face_count > 0 && faces == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "faces are missing");
+    if (face_count > 0 && face_stride != 4 && face_stride != 12) return fail(PP_ERROR_INVALID_ARGUMENT, "face_stride must be 4 or 12");
+    photoplus::art::PencilOptions o = pencilOptions(artist, level, seed, options);
+    o.subject = subject != nullptr ? &subject->buffer : nullptr;
+    for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i) {
+      const float* f = faces + i * face_stride;
+      photoplus::art::FaceBox box;
+      box.x = f[0], box.y = f[1], box.w = f[2], box.h = f[3];
+      if (face_stride == 12) {
+        for (size_t k = 0; k < 4; ++k) box.mouth[k] = f[4 + k], box.eyes[k] = f[8 + k];
+      }
+      o.faces.push_back(box);
+    }
+    photoplus::Error e = photoplus::art::pencil(image->buffer, o, token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
+    return succeed();
+  });
+}
+
+pp_status pp_art_blank(pp_image* image, int kind, int artist, uint32_t seed, const pp_art_pencil_options* pencil) {
+  return guarded([&]() -> pp_status {
+    if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is required");
+    if (artist < 0 || artist >= PP_ART_ARTISTS) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown artist");
+    photoplus::Error e;
+    if (kind == 1) {
+      e = photoplus::art::pencilSheet(image->buffer, pencilOptions(artist, 1, seed, pencil));
+    } else if (kind == 0) {
+      photoplus::art::Options o;
+      o.artist = static_cast<photoplus::art::Artist>(artist);
+      o.seed = seed;
+      e = photoplus::art::paintGround(image->buffer, o);
+    } else {
+      return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown kind");
+    }
+    if (e.status != PP_OK) return fail(e);
+    return succeed();
+  });
+}
+
+struct pp_art_reveal {
+  photoplus::art::Reveal* reveal = nullptr;
+  ~pp_art_reveal() { photoplus::art::revealDestroy(reveal); }
+};
+
+pp_status pp_art_reveal_create(const pp_image* result, const pp_image* blank, int tool, int artist, const float* inner, uint32_t seed,
+                               const pp_cancel_token* token, pp_art_reveal** out) {
+  return guarded([&]() -> pp_status {
+    if (out == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "out is null");
+    *out = nullptr;
+    if (result == nullptr || blank == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "result and blank are required");
+    if (tool < 0 || tool > 1 || artist < 0 || artist >= PP_ART_ARTISTS) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown tool or artist");
+    photoplus::art::RevealOptions o;
+    o.tool = static_cast<photoplus::art::RevealTool>(tool);
+    o.artist = static_cast<photoplus::art::Artist>(artist);
+    o.seed = seed;
+    if (inner != nullptr) o.x0 = inner[0], o.y0 = inner[1], o.x1 = inner[2], o.y1 = inner[3];
+    photoplus::art::Reveal* r = nullptr;
+    photoplus::Error e = photoplus::art::revealCreate(result->buffer, blank->buffer, o, r, token ? &token->token : nullptr);
+    if (e.status != PP_OK) return fail(e);
+    *out = new pp_art_reveal{r};
+    return succeed();
+  });
+}
+
+pp_status pp_art_reveal_frame(pp_art_reveal* reveal, float t, pp_image* frame) {
+  return guarded([&]() -> pp_status {
+    if (reveal == nullptr || frame == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "reveal and frame are required");
+    photoplus::Error e = photoplus::art::revealFrame(*reveal->reveal, t, frame->buffer);
+    if (e.status != PP_OK) return fail(e);
+    return succeed();
+  });
+}
+
+int pp_art_reveal_strokes(const pp_art_reveal* reveal) { return reveal != nullptr ? photoplus::art::revealStrokeCount(*reveal->reveal) : 0; }
+
+void pp_art_reveal_destroy(pp_art_reveal* reveal) { delete reveal; }
+
 pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
                        size_t face_stride, uint32_t seed, const pp_art_controls* controls, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {

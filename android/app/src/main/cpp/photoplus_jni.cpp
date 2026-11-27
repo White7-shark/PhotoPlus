@@ -1154,6 +1154,89 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeMotionDestro
   pp_motion_destroy(reinterpret_cast<pp_motion*>(handle));
 }
 
+// Pencil art. options: medium, paper, intensity, lines, shading (null: the defaults).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtPencil(JNIEnv* env, jobject, jobject bitmap, jint artist, jint level,
+                                                                            jobject mask, jfloatArray faces, jint seed, jfloatArray options,
+                                                                            jlong token) {
+  WrappedBitmap b, m;
+  if (!b.open(env, bitmap, false) || !m.open(env, mask, true)) return;
+  std::vector<float> f;
+  if (faces != nullptr) {
+    const jsize n = env->GetArrayLength(faces);
+    if (n % 12 != 0 || n > 96) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad face boxes");
+      return;
+    }
+    f.resize(static_cast<size_t>(n));
+    if (n > 0) env->GetFloatArrayRegion(faces, 0, n, f.data());
+  }
+  pp_art_pencil_options o{0, 0, 0.6f, 1, 1};
+  if (options != nullptr) {
+    if (env->GetArrayLength(options) != 5) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad pencil options");
+      return;
+    }
+    float v[5];
+    env->GetFloatArrayRegion(options, 0, 5, v);
+    o = {static_cast<int>(std::lround(v[0])), static_cast<int>(std::lround(v[1])), v[2], v[3], v[4]};
+  }
+  const pp_status st = pp_art_pencil(b.image, artist, level, m.image, f.empty() ? nullptr : f.data(), f.size() / 12, 12,
+                                     static_cast<uint32_t>(seed), &o, reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+// The blank a work starts from: kind 0 a painting's primed ground, 1 the pencil sheet (options as for pencil).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtBlank(JNIEnv* env, jobject, jobject bitmap, jint kind, jint artist,
+                                                                           jint seed, jfloatArray options) {
+  WrappedBitmap b;
+  if (!b.open(env, bitmap, false)) return;
+  pp_art_pencil_options o{0, 0, 0.6f, 1, 1};
+  if (options != nullptr && env->GetArrayLength(options) == 5) {
+    float v[5];
+    env->GetFloatArrayRegion(options, 0, 5, v);
+    o = {static_cast<int>(std::lround(v[0])), static_cast<int>(std::lround(v[1])), v[2], v[3], v[4]};
+  }
+  const pp_status st = pp_art_blank(b.image, kind, artist, static_cast<uint32_t>(seed), &o);
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+// The live studio: the work revealed under a moving pencil (tool 0) or brush (1). inner: x0, y0, x1, y1 (or null).
+JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtRevealCreate(JNIEnv* env, jobject, jobject work, jobject blank,
+                                                                                   jint tool, jint artist, jfloatArray inner, jint seed) {
+  WrappedBitmap w, b;
+  if (!w.open(env, work, false) || !b.open(env, blank, false)) return 0;
+  float in[4] = {0, 0, 1, 1};
+  if (inner != nullptr) {
+    if (env->GetArrayLength(inner) != 4) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad picture area");
+      return 0;
+    }
+    env->GetFloatArrayRegion(inner, 0, 4, in);
+  }
+  pp_art_reveal* r = nullptr;
+  const pp_status st = pp_art_reveal_create(w.image, b.image, tool, artist, in, static_cast<uint32_t>(seed), nullptr, &r);
+  if (st != PP_OK) {
+    throwStatus(env, st);
+    return 0;
+  }
+  return reinterpret_cast<jlong>(r);
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtRevealFrame(JNIEnv* env, jobject, jlong handle, jfloat t, jobject frame) {
+  WrappedBitmap f;
+  if (!f.open(env, frame, false)) return;
+  const pp_status st = pp_art_reveal_frame(reinterpret_cast<pp_art_reveal*>(handle), t, f.image);
+  if (st != PP_OK) throwStatus(env, st);
+}
+
+JNIEXPORT jint JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtRevealStrokes(JNIEnv*, jobject, jlong handle) {
+  return pp_art_reveal_strokes(reinterpret_cast<const pp_art_reveal*>(handle));
+}
+
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtRevealDestroy(JNIEnv*, jobject, jlong handle) {
+  pp_art_reveal_destroy(reinterpret_cast<pp_art_reveal*>(handle));
+}
+
 // A finished painting in a museum frame: returns a result handle (a larger image).
 JNIEXPORT jlong JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtFrame(JNIEnv* env, jobject, jobject bitmap, jint style, jlong token) {
   WrappedBitmap b;

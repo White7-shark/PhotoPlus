@@ -180,7 +180,7 @@ export class MotionService {
     if (!ads) throw new MotionError('Ads aren’t available on this device', 'ADS_UNAVAILABLE');
     try {
       await this.startAds().catch(() => false);
-      const r = (await ads.showRewardedAdForMotion()) as { rewarded?: boolean; allowance?: unknown } | null;
+      const r = (await ads.showRewardedAdForTool('motion')) as { rewarded?: boolean; allowance?: unknown } | null;
       return { rewarded: r?.rewarded === true, allowance: readAllowance(r?.allowance, await this.allowance()) };
     } catch (e) {
       if (e instanceof MotionError) throw e;

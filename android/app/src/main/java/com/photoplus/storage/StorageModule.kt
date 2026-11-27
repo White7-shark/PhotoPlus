@@ -154,6 +154,53 @@ class StorageModule(reactContext: ReactApplicationContext) : NativePhotoPlusStor
     }
   }
 
+  /**
+   * The system photo picker with several choices (up to [max], 2..50): each
+   * chosen photo is copied into app storage. Resolves their paths, in the
+   * order chosen (empty if cancelled).
+   */
+  override fun pickImages(area: String, max: Double, promise: Promise) {
+    val target = if (area == "backgrounds") paths.backgrounds else paths.imports
+    val limit = max.toInt().coerceIn(2, 50)
+    val activity = reactApplicationContext.currentActivity as? ComponentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", Words.get(reactApplicationContext, R.string.native_photo_picker_needs_a_foreground_activity))
+      return
+    }
+    UiThreadUtil.runOnUiThread {
+      val key = "pp-pick-many-${pickCounter.incrementAndGet()}"
+      val settled = java.util.concurrent.atomic.AtomicBoolean(false)
+      var launcher: androidx.activity.result.ActivityResultLauncher<PickVisualMediaRequest>? = null
+      var observer: LifecycleEventObserver? = null
+      val finish = {
+        launcher?.unregister()
+        observer?.let { activity.lifecycle.removeObserver(it) }
+      }
+      launcher = activity.activityResultRegistry.register(key, ActivityResultContracts.PickMultipleVisualMedia(limit)) { uris: List<Uri> ->
+        if (!settled.compareAndSet(false, true)) return@register
+        finish()
+        executor.execute {
+          try {
+            val arr = com.facebook.react.bridge.Arguments.createArray()
+            // A photo that can't be opened is skipped; the others still come in.
+            uris.forEach { u -> runCatching { copyIn(u, target) }.getOrNull()?.let { arr.pushString(it.absolutePath) } }
+            promise.resolve(arr)
+          } catch (e: Exception) {
+            promise.reject("IO_ERROR", e.message, e)
+          }
+        }
+      }
+      observer = LifecycleEventObserver { _, event ->
+        if (event == Lifecycle.Event.ON_DESTROY && settled.compareAndSet(false, true)) {
+          finish()
+          promise.resolve(com.facebook.react.bridge.Arguments.createArray())
+        }
+      }
+      activity.lifecycle.addObserver(observer)
+      launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+  }
+
   private fun copyIn(uri: Uri, dir: File): File {
     dir.mkdirs()
     val resolver = reactApplicationContext.contentResolver

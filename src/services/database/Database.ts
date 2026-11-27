@@ -7,6 +7,7 @@ import { ImagesRepository } from './repositories/ImagesRepository';
 import { PresetsRepository } from './repositories/PresetsRepository';
 import { ProjectsRepository } from './repositories/ProjectsRepository';
 import { SettingsRepository } from './repositories/SettingsRepository';
+import { StudioProjectsRepository } from './repositories/StudioProjectsRepository';
 import type { SqlExecutor } from './SqlExecutor';
 
 const log = createLogger('database');
@@ -21,6 +22,7 @@ export interface Repositories {
   history: HistoryRepository;
   assets: AssetRegistry;
   presets: PresetsRepository;
+  studioProjects: StudioProjectsRepository;
 }
 
 export function createRepositories(executor: SqlExecutor): Repositories {
@@ -32,6 +34,7 @@ export function createRepositories(executor: SqlExecutor): Repositories {
     history: new HistoryRepository(executor),
     assets: new AssetRegistry(executor),
     presets: new PresetsRepository(executor),
+    studioProjects: new StudioProjectsRepository(executor),
   };
 }
 

@@ -72,7 +72,10 @@ export function PhotoArtsStudio({
   onSurface,
   onBackdrop,
   onFrame,
+  frameOnly = false,
 }: {
+  /** A drawing: only the frame (the paper is chosen with the pencil). */
+  frameOnly?: boolean;
   surface: number;
   backdrop: number;
   frame: number;
@@ -95,28 +98,32 @@ export function PhotoArtsStudio({
       >
         <Icon name="image" size={18} color={theme.colors.accent} />
         <AppText variant="bodyStrong" style={{ flex: 1 }}>
-          {t('masters_studio_title')}
+          {frameOnly ? t('masters_frame') : t('masters_studio_title')}
         </AppText>
         <Icon name={open ? 'minus' : 'plus'} size={18} color={theme.colors.textSecondary} />
       </Pressable>
       {open ? (
         <View style={{ gap: 14 }}>
-          <ChipRow
-            title={t('masters_surface')}
-            items={SURFACES}
-            value={surface}
-            word={s => t(`masters_surface_${s}` as StringKey)}
-            onChange={onSurface}
-            testID="masters-surface"
-          />
-          <ChipRow
-            title={t('masters_backdrop')}
-            items={BACKDROPS}
-            value={backdrop}
-            word={b => t(`masters_backdrop_${b}` as StringKey)}
-            onChange={onBackdrop}
-            testID="masters-backdrop"
-          />
+          {frameOnly ? null : (
+            <>
+              <ChipRow
+                title={t('masters_surface')}
+                items={SURFACES}
+                value={surface}
+                word={s => t(`masters_surface_${s}` as StringKey)}
+                onChange={onSurface}
+                testID="masters-surface"
+              />
+              <ChipRow
+                title={t('masters_backdrop')}
+                items={BACKDROPS}
+                value={backdrop}
+                word={b => t(`masters_backdrop_${b}` as StringKey)}
+                onChange={onBackdrop}
+                testID="masters-backdrop"
+              />
+            </>
+          )}
           <ChipRow
             title={t('masters_frame')}
             items={FRAMES}

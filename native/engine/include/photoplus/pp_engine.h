@@ -1398,6 +1398,43 @@ pp_status pp_art_frame(const pp_image* painting, int style, const pp_cancel_toke
 pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
                        size_t face_stride, uint32_t seed, const pp_art_controls* controls, const pp_cancel_token* token);
 
+/* Pencil art: the photo drawn in pencil as the artist drew (no paint):
+ * their lines, hatching, blending and how much of the sheet they left bare.
+ * medium: 0 graphite, 1 charcoal, 2 red chalk. paper: 0 white, 1 cream,
+ * 2 grey toned, 3 tan toned (toned papers get white chalk in the lights).
+ * intensity 0..1 (0.6), lines 0.3..2 (1), shading 0.3..2 (1). NULL options:
+ * the defaults. Same artists, levels, subject and faces as pp_art_paint. */
+#define PP_ART_PENCIL_MEDIA 3
+#define PP_ART_PENCIL_PAPERS 4
+typedef struct pp_art_pencil_options {
+  int medium;
+  int paper;
+  float intensity;
+  float lines;
+  float shading;
+} pp_art_pencil_options;
+pp_status pp_art_pencil(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
+                        size_t face_stride, uint32_t seed, const pp_art_pencil_options* options, const pp_cancel_token* token);
+/* The blank the work starts from, into `image` (its size): kind 0 the
+ * painting's primed ground for that artist, kind 1 the pencil sheet (the
+ * same paper, pixel for pixel, that pp_art_pencil leaves bare for the same
+ * seed, size and paper). */
+pp_status pp_art_blank(pp_image* image, int kind, int artist, uint32_t seed, const pp_art_pencil_options* pencil);
+
+/* The live studio: the blank sheet and a pencil (tool 0) or a brush (tool 1)
+ * moving over it, each movement revealing the finished work beneath, until
+ * it is complete. result and blank: the same size and format. inner: the
+ * picture inside a frame (x0, y0, x1, y1 normalised; NULL: all of it).
+ * pp_art_reveal_frame draws the moment t (0..1; 1 = the finished work) into
+ * frame (the result's size and format). Rendering forwards is incremental
+ * (cheap per frame); going back restarts. */
+typedef struct pp_art_reveal pp_art_reveal;
+pp_status pp_art_reveal_create(const pp_image* result, const pp_image* blank, int tool, int artist, const float* inner, uint32_t seed,
+                               const pp_cancel_token* token, pp_art_reveal** out);
+pp_status pp_art_reveal_frame(pp_art_reveal* reveal, float t, pp_image* frame);
+int pp_art_reveal_strokes(const pp_art_reveal* reveal);
+void pp_art_reveal_destroy(pp_art_reveal* reveal);
+
 /* ---- Photo Motion: a still photo brought to life as a seamless loop --------
  * camera: 0 still, 1 push in, 2 pull out, 3 orbit, 4 pan, 5 dolly zoom,
  * 6 float, 7 rise. effect: 0 none, 1 snow, 2 rain, 3 bokeh, 4 sparkles,

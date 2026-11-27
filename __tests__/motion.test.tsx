@@ -76,7 +76,7 @@ const mockStudio = {
 };
 const mockAds = {
   initialize: jest.fn(async () => ({ canRequestAds: true })),
-  showRewardedAdForMotion: jest.fn(async () => {
+  showRewardedAdForTool: jest.fn(async (_tool: string) => {
     if (mockDay.remaining <= 0) throw coded('DAILY_LIMIT');
     if (!mockDay.adFinishes) return { rewarded: false, allowance: mockState() };
     mockDay.credits += 1;
@@ -120,7 +120,7 @@ const step = async (fn: () => unknown) =>
     await wait(300);
     for (let i = 0; i < 6; i++) await wait(0);
   });
-const navigation = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn() };
+const navigation = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn(), replace: jest.fn() };
 const lastRender = () => mockStudio.renderMotion.mock.calls.at(-1)![1];
 const fulls = () => mockStudio.renderMotion.mock.calls.filter(c => c[1].quality === 'full').length;
 
@@ -279,12 +279,18 @@ describe('the Photo Motion screen', () => {
         route={{ key: 'p', name: 'PhotoshootStudio' } as never}
       />,
     );
+    // Every Photo Motion video starts from a project: the tile opens the studio's projects.
     await fireEvent.press(screen.getByTestId('studio-motion'));
-    expect(navigation.navigate).toHaveBeenCalledWith('Motion');
+    expect(navigation.navigate).toHaveBeenCalledWith('StudioProjects', { studio: 'motion' });
   });
 
   it('previews every change, draws motion, makes two free videos after an ad each, then offers Premium', async () => {
-    await wrap(<MotionScreen navigation={navigation as never} route={{ key: 'm', name: 'Motion' } as never} />);
+    await wrap(
+      <MotionScreen
+        navigation={navigation as never}
+        route={{ key: 'm', name: 'Motion', params: { projectId: 'sp1' } } as never}
+      />,
+    );
     expect(screen.getByText('Bring your photo to life')).toBeTruthy();
     expect(screen.getByText(/make 2 videos a day, each after a short ad/)).toBeTruthy();
 
@@ -356,7 +362,7 @@ describe('the Photo Motion screen', () => {
     expect(fulls()).toBe(0);
     mockDay.adFinishes = true;
     await step(() => fireEvent.press(screen.getByTestId('motion-ad-watch')));
-    expect(mockAds.showRewardedAdForMotion).toHaveBeenCalledTimes(2);
+    expect(mockAds.showRewardedAdForTool).toHaveBeenCalledTimes(2);
     expect(fulls()).toBe(1);
     expect(lastRender()).toMatchObject({ quality: 'full', camera: 5, effect: 1, duration: 8 });
     expect(screen.queryByTestId('motion-ad-sheet')).toBeNull();
@@ -387,7 +393,7 @@ describe('the Photo Motion screen', () => {
     expect(screen.getByTestId('premium-sheet-plans')).toBeTruthy();
     expect(screen.getByText(FEATURES.motion.title)).toBeTruthy();
     expect(fulls()).toBe(2);
-    expect(mockAds.showRewardedAdForMotion).toHaveBeenCalledTimes(3);
+    expect(mockAds.showRewardedAdForTool).toHaveBeenCalledTimes(3);
   });
 
   it('makes videos straight away, with no ads, on Premium', async () => {
@@ -395,11 +401,11 @@ describe('the Photo Motion screen', () => {
     await wrap(
       <MotionScreen
         navigation={navigation as never}
-        route={{ key: 'm', name: 'Motion', params: { photo: '/p.jpg' } } as never}
+        route={{ key: 'm', name: 'Motion', params: { photo: '/p.jpg', projectId: 'sp1' } } as never}
       />,
     );
     await step(() => undefined);
-    expect(navigation.setParams).toHaveBeenCalledWith({ photo: undefined });
+    expect(navigation.setParams).toHaveBeenCalledWith({ photo: undefined, edit: undefined });
     expect(screen.getByText('Premium: unlimited videos, no ads, no mark')).toBeTruthy();
     for (let i = 0; i < 3; i++) {
       await step(() => fireEvent.press(screen.getByTestId('motion-create')));
@@ -407,7 +413,7 @@ describe('the Photo Motion screen', () => {
       await step(() => fireEvent.press(screen.getByTestId('motion-edit')));
     }
     expect(fulls()).toBe(3);
-    expect(mockAds.showRewardedAdForMotion).not.toHaveBeenCalled();
+    expect(mockAds.showRewardedAdForTool).not.toHaveBeenCalled();
   });
 
   it('asks for an ad again when the device says one is needed, and closes the photo when leaving', async () => {
@@ -416,7 +422,7 @@ describe('the Photo Motion screen', () => {
     const view = await wrap(
       <MotionScreen
         navigation={navigation as never}
-        route={{ key: 'm', name: 'Motion', params: { photo: '/p.jpg' } } as never}
+        route={{ key: 'm', name: 'Motion', params: { photo: '/p.jpg', projectId: 'sp1' } } as never}
       />,
     );
     await step(() => undefined);

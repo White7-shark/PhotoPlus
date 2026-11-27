@@ -35,6 +35,9 @@ import { recordActivity } from '../../services/rewards/RewardsService';
 import { getStorageService } from '../../services/storage/StorageService';
 import { useTheme } from '../../theme';
 import { MotionCanvas, type MotionTool } from './MotionCanvas';
+import { addPhotos, saveWork } from '../../services/projects/studios';
+import { clampSettings } from '../../services/motion/catalog';
+import { useAppStore } from '../../state/store';
 
 type Tab = 'camera' | 'animate' | 'effects' | 'video';
 const TABS: readonly { id: Tab; icon: IconName }[] = [
@@ -62,6 +65,8 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
   const theme = useTheme();
   const t = useT();
   const motion = useMemo(() => getMotionService(), []);
+  const repos = useAppStore(st => st.repos);
+  const projectId = route.params?.projectId;
   const [photo, setPhoto] = useState<string | null>(null);
   const [scene, setScene] = useState<MotionScene | null>(null);
   const [settings, setSettings] = useState<MotionSettings>(DEFAULT_SETTINGS);
@@ -173,7 +178,7 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
 
   // A photo: read once, then a first preview (a gentle float, faces still; the sky drifts when found).
   const sessionRef = useRef<string | null>(null);
-  const openPhoto = async (path: string) => {
+  const openPhoto = async (path: string, keep = false) => {
     if (sessionRef.current) motion.end(sessionRef.current);
     sessionRef.current = null;
     if (job.current) motion.cancel(job.current);
@@ -182,15 +187,17 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
     setScene(null);
     setPreview(null);
     setFinished(null);
-    setArrows([]);
-    setPins([]);
+    if (!keep) {
+      setArrows([]);
+      setPins([]);
+    }
     setError(null);
     setBusy('reading');
     try {
       const sc = await motion.start(path);
       sessionRef.current = sc.sessionId;
-      const s = { ...latest.current.settings, sky: sc.sky >= SKY_MIN };
-      latest.current = { scene: sc, settings: s, arrows: [], pins: [] };
+      const s = keep ? latest.current.settings : { ...latest.current.settings, sky: sc.sky >= SKY_MIN };
+      latest.current = keep ? { ...latest.current, scene: sc } : { scene: sc, settings: s, arrows: [], pins: [] };
       setScene(sc);
       setSettings(s);
       setBusy(null);
@@ -206,13 +213,45 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
   });
   const pick = async () => {
     const path = await getStorageService().pickImage('imports');
-    if (path) await openPhoto(path);
+    if (!path) return;
+    if (repos && projectId) void addPhotos(repos, projectId, [path]).catch(() => undefined);
+    await openPhoto(path);
   };
   const shot = route.params?.photo;
+  const edit = route.params?.edit;
+  /** Opens a video again with what it was made with (its settings, arrows and pins). */
+  const applyEdit = (path: string, raw: Record<string, unknown>) => {
+    const e = raw as { settings?: Partial<MotionSettings>; arrows?: MotionArrow[]; pins?: MotionPin[] };
+    const st = clampSettings(e.settings ?? {});
+    const a = Array.isArray(e.arrows) ? e.arrows.slice(0, MAX_ARROWS) : [];
+    const p = Array.isArray(e.pins) ? e.pins.slice(0, MAX_PINS) : [];
+    latest.current = { ...latest.current, settings: st, arrows: a, pins: p };
+    setSettings(st);
+    setArrows(a);
+    setPins(p);
+    void openRef.current(path, true);
+  };
+  const editRef = useRef(applyEdit);
+  useEffect(() => {
+    editRef.current = applyEdit;
+  });
+  // Every creation starts from a project: without one, choose (or create) it first.
+  useEffect(() => {
+    if (!projectId) navigation.replace('StudioProjects', { studio: 'motion', ...(shot ? { photo: shot } : {}) });
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (!shot) return;
-    navigation.setParams({ photo: undefined });
+    navigation.setParams({ photo: undefined, edit: undefined });
+    // A work edited again: what it was made with.
+    if (edit) {
+      editRef.current(shot, edit);
+      return;
+    }
     void openRef.current(shot);
+    // edit comes with the photo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shot, navigation]);
   useEffect(
     () => () => {
@@ -239,6 +278,20 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
       setGallery(g => [{ video: v, saved: false }, ...g]);
       recordActivity('studio', 'edit');
       refreshAllowance();
+      // Kept in the project's gallery, with what made it (to edit it again).
+      if (repos && projectId && photo) {
+        const cam = CAMERAS[s.camera] ?? CAMERAS[0];
+        void saveWork(repos, projectId, {
+          path: v.outputPath,
+          posterPath: v.posterPath || null,
+          media: 'video',
+          sourcePath: photo,
+          title: `${cameraName(cam)} · ${t('motion_seconds', { n: s.duration })}`,
+          width: v.width,
+          height: v.height,
+          settings: { settings: s, arrows: a, pins: p },
+        }).catch(() => undefined);
+      }
     } catch (e) {
       const code = e instanceof MotionError ? e.code : '';
       refreshAllowance();

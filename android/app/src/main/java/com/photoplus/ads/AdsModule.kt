@@ -157,10 +157,17 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
    * between them.
    */
   /**
-   * Photo Motion (free plan): one rewarded ad unlocks one of today's two
-   * videos. Resolves { rewarded, allowance }.
+   * A rewarded ad that unlocks one of today's free uses of a tool ("motion":
+   * a Photo Motion video, "pencil": a Pencil Art drawing) on the free plan.
+   * The use is granted only from the ad network's reward callback.
+   * Resolves { rewarded, allowance }.
    */
-  override fun showRewardedAdForMotion(promise: Promise) {
+  override fun showRewardedAdForTool(tool: String, promise: Promise) {
+    val allowance = com.photoplus.entitlement.AdAllowance.of(tool)
+    if (allowance == null) {
+      promise.reject("INVALID_ARGUMENT", "Unknown tool")
+      return
+    }
     if (com.photoplus.integrity.Integrity.blocked()) {
       promise.reject("BLOCKED", Words.get(reactApplicationContext, R.string.native_photo_plus_needs_to_check_in))
       return
@@ -169,8 +176,8 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
       promise.reject("SUBSCRIBED", Words.get(reactApplicationContext, R.string.native_you_have_premium_already))
       return
     }
-    if ((com.photoplus.entitlement.MotionAllowance.state(reactApplicationContext)["remaining"] as? Int ?: 0) <= 0) {
-      promise.reject("DAILY_LIMIT", Words.get(reactApplicationContext, R.string.native_motion_daily_used))
+    if ((allowance.state(reactApplicationContext)["remaining"] as? Int ?: 0) <= 0) {
+      promise.reject("DAILY_LIMIT", Words.get(reactApplicationContext, if (tool == "pencil") R.string.native_pencil_daily_used else R.string.native_motion_daily_used))
       return
     }
     main.post {
@@ -184,9 +191,9 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
           val present = { ad: RewardedAd ->
             showAd(activity, ad, promise, onReward = {
               earned = true
-              com.photoplus.entitlement.MotionAllowance.grantAd(reactApplicationContext)
+              allowance.grantAd(reactApplicationContext)
             }) { _ ->
-              mapOf("rewarded" to earned, "allowance" to com.photoplus.entitlement.MotionAllowance.state(reactApplicationContext)).toWritableMap()
+              mapOf("rewarded" to earned, "allowance" to allowance.state(reactApplicationContext)).toWritableMap()
             }
           }
           val ad = loaded

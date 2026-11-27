@@ -1,3 +1,4 @@
+import type { StudioKind } from '../../services/database/repositories/StudioProjectsRepository';
 import React, { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -17,6 +18,8 @@ export interface StudioTool {
   available: boolean;
   premium: boolean;
   route?: 'SceneSwap' | 'FilmCollage' | 'Relight' | 'Masters' | 'Motion' | 'ProductStudio' | 'Batch';
+  /** Studios that work in projects open their project list first. */
+  studio?: StudioKind;
 }
 
 export const STUDIO_TOOLS: StudioTool[] = [
@@ -28,6 +31,7 @@ export const STUDIO_TOOLS: StudioTool[] = [
     available: true,
     premium: true,
     route: 'SceneSwap',
+    studio: 'photoshoot',
   },
   {
     id: 'film-collage',
@@ -55,6 +59,7 @@ export const STUDIO_TOOLS: StudioTool[] = [
     available: true,
     premium: true,
     route: 'Masters',
+    studio: 'arts',
   },
   {
     id: 'motion',
@@ -64,6 +69,7 @@ export const STUDIO_TOOLS: StudioTool[] = [
     available: true,
     premium: true,
     route: 'Motion',
+    studio: 'motion',
   },
   {
     id: 'product',
@@ -122,7 +128,13 @@ export function PhotoshootStudioScreen({ navigation }: RootScreenProps<'Photosho
           {STUDIO_TOOLS.map(t => (
             <View key={t.id} style={styles.cell}>
               <Pressable
-                onPress={() => (t.available && t.route ? navigation.navigate(t.route) : setTip(t.id))}
+                onPress={() =>
+                  t.available && t.studio
+                    ? navigation.navigate('StudioProjects', { studio: t.studio })
+                    : t.available && t.route
+                      ? navigation.navigate(t.route)
+                      : setTip(t.id)
+                }
                 onLongPress={() => setTip(t.id)}
                 accessibilityRole="button"
                 accessibilityLabel={`${t.title}${t.premium ? tx('photoshoot_studio_premium') : ''}${t.available ? '' : tx('photoshoot_studio_coming_soon')}`}

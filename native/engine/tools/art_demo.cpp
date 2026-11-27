@@ -88,7 +88,17 @@ int main(int argc, char** argv) {
   if (env != nullptr)
     std::sscanf(env, "%f %f %f %f %f %f %f %f %d %d", &k.brush, &k.palette, &k.vivid, &k.likeness, &k.texture, &k.age, &k.background,
                 &k.intensity, &k.surface, &k.backdrop);
-  const pp_status s = pp_art_paint(img, std::atoi(argv[3]), std::atoi(argv[4]), mask, faces ? face : nullptr, faces, stride, seed, &k, nullptr);
+  // ART_PENCIL="medium paper intensity lines shading": a pencil drawing instead of a painting.
+  // ART_BLANK=1: write the blank sheet (or primed ground) instead.
+  const char* pen = std::getenv("ART_PENCIL");
+  pp_art_pencil_options po{0, 0, 0.6f, 1, 1};
+  if (pen != nullptr) std::sscanf(pen, "%d %d %f %f %f", &po.medium, &po.paper, &po.intensity, &po.lines, &po.shading);
+  const char* blank = std::getenv("ART_BLANK");
+  const pp_status s = blank != nullptr && std::atoi(blank) == 1
+                          ? pp_art_blank(img, pen != nullptr ? 1 : 0, std::atoi(argv[3]), seed, &po)
+                      : pen != nullptr
+                          ? pp_art_pencil(img, std::atoi(argv[3]), std::atoi(argv[4]), mask, faces ? face : nullptr, faces, stride, seed, &po, nullptr)
+                          : pp_art_paint(img, std::atoi(argv[3]), std::atoi(argv[4]), mask, faces ? face : nullptr, faces, stride, seed, &k, nullptr);
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   if (s != PP_OK) {
     std::fprintf(stderr, "failed: %s\n", pp_last_error_message());

@@ -8,6 +8,7 @@ import { useFeatureCheck } from '../../hooks/useFeature';
 import type { RootScreenProps } from '../../navigation/types';
 import { createId } from '../../services/database/ids';
 import { getStorageService } from '../../services/storage/StorageService';
+import { addPhotos, saveWork } from '../../services/projects/studios';
 import {
   MAX_MY_BACKGROUNDS,
   myPlate,
@@ -107,9 +108,15 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
     else navigation.goBack();
   };
 
+  const projectId = route.params?.projectId;
+  // The photo the work is made from (kept with it, to edit it again).
+  const sourceRef = useRef<string | null>(null);
   const pick = async () => {
     const path = await getStorageService().pickImage('imports');
-    if (path) await s.start(path);
+    if (!path) return;
+    sourceRef.current = path;
+    if (repos && projectId) void addPhotos(repos, projectId, [path]).catch(() => undefined);
+    await s.start(path);
   };
 
   /** Take the photo with the app's camera; it comes straight back here. */
@@ -117,15 +124,22 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
 
   // A photo just taken in the camera opens straight away (once).
   const shot = route.params?.photo;
+  // Every creation starts from a project: without one (e.g. a photo just taken), choose or create it first.
+  useEffect(() => {
+    if (!projectId) navigation.replace('StudioProjects', { studio: 'photoshoot', ...(shot ? { photo: shot } : {}) });
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const startRef = useRef(s.start);
   useEffect(() => {
     startRef.current = s.start;
   });
   useEffect(() => {
-    if (!shot) return;
-    navigation.setParams({ photo: undefined });
+    if (!shot || !projectId) return;
+    navigation.setParams({ photo: undefined, edit: undefined });
+    sourceRef.current = shot;
     void startRef.current(shot);
-  }, [shot, navigation]);
+  }, [shot, navigation, projectId]);
 
   const addBackground = async () => {
     const path = await getStorageService().pickImage('backgrounds');
@@ -178,6 +192,23 @@ export function SceneSwapScreen({ navigation, route }: RootScreenProps<'SceneSwa
       metadata: { studio: { background: s.background.kind === 'plate' ? s.background.plate.id : s.background.kind } },
     });
     void loadProjects();
+    // In a project: kept in its gallery, and its preview opens.
+    if (projectId) {
+      try {
+        const item = await saveWork(repos, projectId, {
+          path: r.outputPath,
+          sourcePath: sourceRef.current,
+          title: tx('sp_scene_title'),
+          width: r.width,
+          height: r.height,
+          settings: { background: s.background.kind === 'plate' ? s.background.plate.id : s.background.kind },
+        });
+        navigation.navigate('StudioItem', { itemId: item.id, fresh: true });
+        return;
+      } catch {
+        // Fall back to the library's preview.
+      }
+    }
     navigation.navigate('PhotoPreview', { imageId: record.id });
   };
 

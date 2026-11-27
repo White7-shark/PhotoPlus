@@ -45,14 +45,14 @@ jest.mock('../src/native', () => {
   };
 });
 
-const navigation = { navigate: jest.fn(), goBack: jest.fn() };
+const navigation = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), setParams: jest.fn() };
 const images = { add: jest.fn(async (r: object) => ({ id: 'img1', ...r })) };
 const projects = { ensureInbox: jest.fn(async () => ({ id: 'inbox' })) };
 
 async function open() {
   await render(
     <ThemeProvider preference="dark">
-      <SceneSwapScreen navigation={navigation as never} route={{ key: 's', name: 'SceneSwap' } as never} />
+      <SceneSwapScreen navigation={navigation as never} route={{ key: 's', name: 'SceneSwap', params: { projectId: 'sp1' } } as never} />
     </ThemeProvider>,
   );
 }
@@ -177,8 +177,9 @@ describe('Scene Swap', () => {
         <PhotoshootStudioScreen navigation={navigation as never} route={{ key: 'p', name: 'PhotoshootStudio' } as never} />
       </ThemeProvider>,
     );
+    // Every Scene Swap starts from a project: the tile opens the studio's projects.
     fireEvent.press(await screen.findByTestId('studio-scene-swap'));
-    expect(navigation.navigate).toHaveBeenCalledWith('SceneSwap');
+    expect(navigation.navigate).toHaveBeenCalledWith('StudioProjects', { studio: 'photoshoot' });
   });
 });
 
@@ -194,19 +195,20 @@ describe('Scene Swap with the camera', () => {
   });
 
   it('starts straight away with a photo just taken, once', async () => {
-    const nav = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn() };
+    const nav = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn(), replace: jest.fn() };
     await render(
       <ThemeProvider preference="dark">
         <SceneSwapScreen
           navigation={nav as never}
-          route={{ key: 's', name: 'SceneSwap', params: { photo: '/files/captures/shot.jpg' } } as never}
+          route={{ key: 's', name: 'SceneSwap', params: { photo: '/files/captures/shot.jpg', projectId: 'sp1' } } as never}
         />
       </ThemeProvider>,
     );
     await act(async () => {
       for (let i = 0; i < 6; i++) await tick();
     });
-    expect(nav.setParams).toHaveBeenCalledWith({ photo: undefined });
+    expect(nav.setParams).toHaveBeenCalledWith({ photo: undefined, edit: undefined });
+    expect(nav.replace).not.toHaveBeenCalled();
     expect(mockStudio.startSession).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(mockStudio.startSession.mock.calls[0])).toContain('/files/captures/shot.jpg');
     expect(mockStorage.pickImage).not.toHaveBeenCalled();

@@ -27,6 +27,7 @@ import {
   type PoseAssistantSettings,
 } from '../../pose/settings';
 import { DEFAULT_PHOTO_ARTS, isPhotoArtsSettings, type PhotoArtsSettings } from '../../masters/controls';
+import { SIGNATURE_DEFAULTS, isSignature, type Signature } from '../../masters/pencil';
 
 /** 'lucid': the see-through theme (src/theme/lucid.ts). */
 export type ThemePreference = 'dark' | 'light' | 'system' | 'lucid';
@@ -75,6 +76,8 @@ export interface AppSettings {
   customProps: CustomProp[];
   /** Photo Arts: the finish to start with, the person's touch, the artist cards. */
   photoArts: PhotoArtsSettings;
+  /** The artist's signature on Photo Arts works (Premium). */
+  artSignature: Signature;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -103,6 +106,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   brandingPresets: [],
   customProps: [],
   photoArts: DEFAULT_PHOTO_ARTS,
+  artSignature: SIGNATURE_DEFAULTS,
 };
 
 type Validators = { [K in keyof AppSettings]: (v: unknown) => v is AppSettings[K] };
@@ -140,6 +144,7 @@ const VALIDATORS: Validators = {
   brandingPresets: isBrandingPresets,
   customProps: isCustomProps,
   photoArts: isPhotoArtsSettings,
+  artSignature: isSignature,
 };
 
 export function isValidSetting<K extends keyof AppSettings>(key: K, value: unknown): value is AppSettings[K] {

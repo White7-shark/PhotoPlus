@@ -78,7 +78,7 @@ const step = async (fn: () => unknown) =>
     await fn();
     for (let i = 0; i < 12; i++) await tick();
   });
-const navigation = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn() };
+const navigation = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn(), replace: jest.fn() };
 const nudge = (id: string, way: 'increment' | 'decrement', times = 1) =>
   step(async () => {
     for (let i = 0; i < times; i++)
@@ -127,7 +127,12 @@ describe('your touch: the controls', () => {
   });
 
   it('guides the painting from the screen, repaints when the finger lifts, remembers it and resets', async () => {
-    await wrap(<MastersScreen navigation={navigation as never} route={{ key: 'm', name: 'Masters' } as never} />);
+    await wrap(
+      <MastersScreen
+        navigation={navigation as never}
+        route={{ key: 'm', name: 'Masters', params: { projectId: 'sp1' } } as never}
+      />,
+    );
     expect(screen.getByText('Photo Arts')).toBeTruthy();
     await step(() => fireEvent.press(screen.getByTestId('masters-pick')));
     expect(lastRequest().controls).toEqual(ARTIST_WAY);
@@ -145,7 +150,10 @@ describe('your touch: the controls', () => {
 
     // The finished painting uses the touch too.
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
-    expect(lastRequest()).toMatchObject({ quality: 'full', controls: { brush: 1.1 } });
+    expect(navigation.navigate).toHaveBeenLastCalledWith(
+      'ArtLive',
+      expect.objectContaining({ job: expect.objectContaining({ controls: expect.objectContaining({ brush: 1.1 }) }) }),
+    );
 
     // Back to the artist's way.
     await step(() => fireEvent.press(screen.getByTestId('masters-touch-reset')));
@@ -160,7 +168,12 @@ describe('your touch: the controls', () => {
         photoArts: { level: 2, remember: false, cardPreviews: false, controls: { ...ARTIST_WAY, brush: 1.5 } },
       },
     } as never);
-    await wrap(<MastersScreen navigation={navigation as never} route={{ key: 'm', name: 'Masters' } as never} />);
+    await wrap(
+      <MastersScreen
+        navigation={navigation as never}
+        route={{ key: 'm', name: 'Masters', params: { projectId: 'sp1' } } as never}
+      />,
+    );
     await step(() => fireEvent.press(screen.getByTestId('masters-pick')));
     // A Masterpiece, the artist's way (the touch isn't remembered), and no card paintings.
     expect(lastRequest()).toMatchObject({ quality: 'preview', level: 2, controls: ARTIST_WAY });
@@ -208,7 +221,12 @@ describe('Settings', () => {
 
 describe('the Photo Arts studio', () => {
   it('chooses how far it goes, what it is painted on, what is behind and a frame, and keeps a gallery', async () => {
-    await wrap(<MastersScreen navigation={navigation as never} route={{ key: 'm', name: 'Masters' } as never} />);
+    await wrap(
+      <MastersScreen
+        navigation={navigation as never}
+        route={{ key: 'm', name: 'Masters', params: { projectId: 'sp1' } } as never}
+      />,
+    );
     await step(() => fireEvent.press(screen.getByTestId('masters-pick')));
     expect(lastRequest()).toMatchObject({ controls: { intensity: 0.6, surface: 0, backdrop: 0 } });
     expect((lastRequest() as { frame?: number }).frame).toBeUndefined();
@@ -241,15 +259,21 @@ describe('the Photo Arts studio', () => {
     await step(() => fireEvent.press(screen.getByTestId('masters-touch-reset')));
     expect(lastRequest().controls).toMatchObject({ brush: 1, surface: 3, backdrop: 5, intensity: 1 });
 
-    // Two finished paintings in the gallery, each saved on its own.
+    // The finished painting is made live in the studio with every choice, and kept in the project's gallery.
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
-    expect(lastRequest()).toMatchObject({ quality: 'full', frame: 1 });
-    await step(() => fireEvent.press(screen.getByTestId('masters-again')));
-    mockStudio.renderMasters.mockClear();
-    await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
-    expect(screen.getByTestId('masters-gallery-save-1')).toBeTruthy();
-    await step(() => fireEvent.press(screen.getByTestId('masters-gallery-save-1')));
-    expect(mockStudio.saveToGallery).toHaveBeenCalledTimes(1);
+    expect(navigation.navigate).toHaveBeenLastCalledWith(
+      'ArtLive',
+      expect.objectContaining({
+        projectId: 'sp1',
+        job: expect.objectContaining({
+          mode: 'paint',
+          frame: 1,
+          controls: expect.objectContaining({ surface: 3, backdrop: 5 }),
+        }),
+      }),
+    );
+    await step(() => fireEvent.press(screen.getByTestId('masters-gallery')));
+    expect(navigation.navigate).toHaveBeenLastCalledWith('StudioProject', { projectId: 'sp1', tab: 'gallery' });
   });
 
   it('places the photo inside a frame for comparing', () => {

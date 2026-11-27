@@ -209,7 +209,7 @@ describe('the library keeps setups, project kinds and defaults', () => {
     const repos = await freshRepos();
     const cols = await repos.executor.query<{ name: string }>('PRAGMA table_info(projects)');
     expect(cols.map(c => c.name)).toEqual(expect.arrayContaining(['kind', 'defaults_json']));
-    expect(MIGRATIONS.at(-1)?.name).toBe('professional_workflows');
+    expect(MIGRATIONS.map(m => m.name)).toContain('professional_workflows');
   });
 
   it('saves, lists, renames and removes setups, skipping damaged ones', async () => {
