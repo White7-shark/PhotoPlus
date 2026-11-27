@@ -49,6 +49,7 @@ add_library(photoplus_engine STATIC
   src/art/pencil.cpp
   src/art/reveal.cpp
   src/toon/toon.cpp
+  src/toon/filters.cpp
   src/motion/motion.cpp
   src/skintone/skintone.cpp
   src/light/light.cpp

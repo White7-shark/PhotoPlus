@@ -1443,6 +1443,22 @@ typedef struct pp_toon_options {
 pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const pp_image* subject, const float* faces, size_t face_count,
                          size_t face_stride, uint32_t seed, const pp_cancel_token* token);
 
+/* Toon with everything: the options above plus strength (0 the photo .. 1
+ * fully drawn), and the faces' contour points so the features are drawn
+ * from them (clean eyes, brows, nostrils and lips; no black blobs).
+ * contours: contour_count faces of PP_TOON_CONTOUR_POINTS (x, y) pairs,
+ * normalised, in ML Kit's contour order — face oval 36, left brow top 5 and
+ * bottom 5, right brow top 5 and bottom 5, left eye 16, right eye 16, upper
+ * lip top 11 and bottom 9, lower lip top 9 and bottom 9, nose bridge 2, nose
+ * bottom 3; negative values where unknown (that face then uses its box). */
+#define PP_TOON_CONTOUR_POINTS 131
+typedef struct pp_toon_settings {
+  pp_toon_options options;
+  float strength;
+} pp_toon_settings;
+pp_status pp_toon_render_ex(pp_image* image, const pp_toon_settings* settings, const pp_image* subject, const float* faces, size_t face_count,
+                            size_t face_stride, const float* contours, size_t contour_count, uint32_t seed, const pp_cancel_token* token);
+
 /* The live studio: the blank sheet and a pencil (tool 0) or a brush (tool 1)
  * moving over it, each movement revealing the finished work beneath, until
  * it is complete. result and blank: the same size and format. inner: the

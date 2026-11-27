@@ -37,6 +37,9 @@ const SHADES = [2, 3, 4, 5, 6] as const;
  * Premium, or two a day on the free plan, each after a short ad, and is kept
  * in the project's gallery.
  */
+/** Previews kept per photo (the device keeps as many files: StudioModule TOON_PREVIEWS_KEPT). */
+const PREVIEW_CACHE = 12;
+
 export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
   const theme = useTheme();
   const t = useT();
@@ -76,16 +79,29 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The preview follows each change (a newer one cancels the older).
+  // The preview follows each change (a newer one cancels the older); settings seen before come from the cache at once.
   const job = useRef<string | null>(null);
+  const cache = useRef(new Map<string, ToonPicture>());
   const draw = (path: string, s: ToonSettings) => {
-    const id = createId('toon');
+    const key = `${path}|${JSON.stringify(s)}`;
+    const hit = cache.current.get(key);
     if (job.current) toon.cancel(job.current);
+    if (hit) {
+      job.current = null;
+      setBusy(b => (b === 'preview' ? null : b));
+      setPreview(hit);
+      setError(null);
+      return;
+    }
+    const id = createId('toon');
     job.current = id;
     setBusy('preview');
     toon
       .render(path, s, 'preview', 7, id)
       .then(p => {
+        cache.current.delete(key);
+        cache.current.set(key, p);
+        while (cache.current.size > PREVIEW_CACHE) cache.current.delete(cache.current.keys().next().value as string);
         if (job.current !== id) return;
         setPreview(p);
         setError(null);
@@ -124,6 +140,7 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
   };
 
   const open = (path: string, s: ToonSettings = latest.current) => {
+    cache.current.clear();
     latest.current = s;
     setSettings(s);
     setPhoto(path);
@@ -357,10 +374,19 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
                       ) : (
                         <Icon name={s.icon} size={22} color={accent} />
                       )}
+                      {/* The name on a band inside the tile: never clipped by the edge. */}
+                      <View style={styles.label}>
+                        <AppText
+                          variant="caption"
+                          style={{ fontWeight: '700', color: '#fff', textAlign: 'center' }}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.75}
+                        >
+                          {styleName(s)}
+                        </AppText>
+                      </View>
                     </View>
-                    <AppText variant="caption" style={{ fontWeight: '700' }} numberOfLines={1}>
-                      {styleName(s)}
-                    </AppText>
                   </Pressable>
                 );
               })}
@@ -407,6 +433,14 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
               </Pressable>
               {tuneOpen ? (
                 <View style={{ gap: 12 }}>
+                  <ValueSlider
+                    label={t('toon_strength')}
+                    value={settings.strength}
+                    onChange={v => change({ strength: v }, false)}
+                    onEnd={done}
+                    format={v => `${Math.round(v * 100)}%`}
+                    testID="toon-strength"
+                  />
                   <ValueSlider
                     label={t('toon_lines')}
                     value={settings.lines}
@@ -592,7 +626,16 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  card: { width: 96, padding: 6, gap: 4, borderRadius: 16, borderWidth: 1.5 },
+  card: { width: 104, padding: 5, borderRadius: 16, borderWidth: 1.5 },
+  label: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
   thumb: {
     width: '100%',
     aspectRatio: 0.8,

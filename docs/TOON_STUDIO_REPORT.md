@@ -51,7 +51,8 @@ values. "Back to the style's own look" resets them; the background stays.
 
 | Control | Range | What it does |
 | --- | --- | --- |
-| Ink lines | 0–100% | Fine to bold line art |
+| Strength | 0–100% | How much of the photo shows through (blended) |
+| Line thickness | 0–100% | Fine to bold line art |
 | Shading steps | 2–6 | Number of cel bands |
 | Colour | Muted to vivid | Colour strength (skin is never pushed orange) |
 | Detail | 0–100% | Simple shapes to most detail kept |
@@ -60,10 +61,10 @@ values. "Back to the style's own look" resets them; the background stays.
 | Glow | 0–100% | A soft bloom around the lights |
 
 **Previews.**
-- Previews are 720 px and follow each change: taps at once, sliders when the
+- Previews are 1024 px and follow each change: taps at once, sliders when the
   finger lifts. A newer preview cancels the older one.
-- The finished picture is up to 2048 px on the long side, capped by the
-  phone's memory.
+- The finished picture is the photo's full size, capped by the phone's
+  memory.
 
 **Projects.** As in the other studios, Toon Studio starts from a project.
 - The finished picture is saved in the project's gallery, titled after its
@@ -71,68 +72,220 @@ values. "Back to the style's own look" resets them; the background stays.
 - The picture keeps its settings, so "Edit again" reopens the studio with
   the same choices.
 
-## Engine (`native/engine/src/toon/toon.cpp`)
+## Engine v2 (`native/engine/src/toon/`)
 
-This is a non-photorealistic rendering pipeline, made the way cel
-animation is drawn. It is not a filter over the photo, and not a
-generative model.
+The first version flattened the photo and traced it, which failed on real
+photos:
+- Edge detection turned eyes, nostrils and lips into black blobs.
+- Dark skin went grey or purple, and low-light noise was posterised.
+- Hair merged into the background.
+- The outline sat off the colour.
+- The styles looked alike.
+- Halftone dots covered faces.
 
-1. **Anime eyes.** A smooth bulge warp centred on each eye, scaled by the
-   control.
-2. **Flat colour areas.** An iterated, separable bilateral filter in Lab
-   (with tabulated range weights). Edges stay sharp while areas go flat.
-   The Detail control sets the radius and passes.
-3. **Skin.**
-   - The skin colour is the face's median colour.
-   - Skin is found everywhere on the person (neck, arms, hands) by
-     closeness to that colour. Inside the face, only skin-coloured and
-     skin-light pixels count, so a beard or hair keeps its own colour.
-   - Skin is painted in two tones, a base and one soft-edged shadow, on the
-     broad forms.
-   - It takes one clean colour. Its saturation is kept when it is
-     lightened, and a skin hue keeps a minimum warmth, so dark skin stays
-     rich brown and never turns ashy.
-4. **Cel shading.**
-   - Bands are placed at the image's own value quantiles, with soft steps.
-   - The light is lifted, but less on skin.
-   - The deepest darks (black hair, a beard, a dark coat) keep close to
-     their own depth.
-5. **Ink.**
-   - XDoG line art from the smoothed light.
-   - A feature pass on the photo's own light, so the eyes, brows and mouth
-     read even on a light face.
-   - A bold outline around the person, taken from the person mask.
-   - Skin is kept clean of ink, except for the features.
-   - Webtoon inks in a darker shade of the colour beneath; retro inks in
-     brown.
-6. **Backgrounds.** Painted behind the person through the mask:
-   - Skies are gradients with cel-shaded clouds: low-frequency noise
-     thresholded with crisp anti-aliased edges and a shaded underside.
-   - Sunset and night have their own palettes, and night has stars and a
-     moon.
-   - Without a mask, the photo's own background is kept.
-7. **Style touches.**
-   - Manga: screentone (halftone by shadow depth) and pure black-and-white.
-   - Comic: Ben-Day dots in the shadows.
-   - Glow: a screen blend.
-   - Anime eyes: catchlights.
-   - Retro: a grade, grain and a vignette.
+Version 2 is a rework, organised as:
+- `toon.cpp`: the pipeline;
+- `filters.cpp`: the image tools;
+- `presets.hpp`: one table that holds every style's look.
 
-It is deterministic for a seed, parallel by rows, and cancellable.
+### Pipeline
 
-**Speed on the build machine.**
+1. **Clean-up.**
+   - Sensor noise is measured (Immerkær's estimate) and removed before
+     anything is drawn: lightness lightly, with a guided filter; colour
+     strongly, with a guided filter steered by lightness (computed at half
+     size).
+   - Low light is then brought up: an exposure curve on lightness, plus
+     CLAHE (contrast-limited adaptive histogram equalisation, on the Lab
+     lightness channel). It is strong when the photo is dark and light
+     otherwise, and colour keeps its saturation as it brightens.
+   - It is equivalent to OpenCV's non-local-means denoise and CLAHE, but
+     written in the engine: no new dependency.
+2. **Where things are.**
+   - **Person:** ML Kit's subject mask, refined to the photo's own edges by
+     a guided filter whose radius covers the mask's coarseness. The colour
+     and the outline both come from this one refined mask, so they always
+     meet.
+   - **Faces:** ML Kit's contour points: oval, brows, eyes, lips and nose.
+   - **Skin:** found by the face's own colour (beard, shine and features
+     excluded).
+   - **Hair:** the area above and around the face, inside the person,
+     excluding face and skin.
+3. **Shapes.**
+   - Edge-preserving smoothing per style: multi-pass bilateral (Anime,
+     Manga, Retro), Kuwahara (Comic, Cartoon) or guided filter (Webtoon).
+   - It works at up to about 1100 px on the short side. For a larger
+     export, it is brought back up guided by the full-size lightness, so
+     edges stay crisp.
+   - The hair's local contrast is raised first, so it keeps its shape and
+     strands.
+   - The kept background is blurred harder than the person, without the
+     person's colours bleeding into it.
+4. **Colour.**
+   - **Palettes:** k-means in Lab, one for the person (5–14 colours by
+     style, ± shading and detail) and one for the background (4–8, with
+     soft boundaries, so smooth bokeh never becomes blotches).
+   - **No hue hijack:** a palette colour can't be much more colourful than
+     the pixel it replaces, and dark pixels keep their own hue (dark hair
+     stays hair-coloured, not the jeans' blue).
+   - **Skin tones:** shadow, base and highlight are made from the face's
+     own median colour, hue-preserving. A skin hue keeps a minimum warmth,
+     so it is never ashy.
+   - **Shine:** highlights are clamped a few units above the base, so shine
+     never turns into a white patch (the "moustache").
+   - Skin and skin-coloured rims are never colour-boosted.
+5. **The face, drawn from its contours.**
+   - **Eyes:** an eye white, and an iris placed where the photo is darkest
+     inside the eye, in its own colour (lightness at least 20). The pupil
+     is a deep shade of the iris, never a black hole. Catchlights, a lash
+     line that tapers towards the inner corner, and a light lower lid.
+   - **Brows:** filled in their own colour, so brows and makeup stay.
+   - **Nose:** a hint only: the nostrils' small curves, never filled.
+   - **Lips:** two tones, a touch deeper than the skin. A closed mouth gets
+     the mouth line; an open mouth gets a mouth colour and teeth (not pure
+     white). A short shadow line under the lower lip.
+   - **Without contours** (a face known only by its box), there's a thin,
+     gated line pass in the feature zones instead.
+   - All of it is anti-aliased: polygons are filled by supersampled
+     scanlines; strokes are capsules with tapers.
+6. **Line art.**
+   - **XDoG on the smoothed lightness**, gated to real edges: the middle of
+     a small dark spot gets a ring, not a fill.
+   - **Width** scales with the image and the Line thickness control.
+   - **Specks removed:** connected pieces below an area threshold are
+     dropped (they're stricter in the background).
+   - **Rounding:** Cartoon rounds its lines into smooth, even strokes.
+   - **Faces:** no generic ink inside a face drawn from contours.
+   - **Hair and background:** strands are kept in the hair at the style's
+     weight; the background has few lines.
+   - **Outline:** from the refined mask, at the style's width, on the
+     colour's own edge.
+7. **Finish.**
+   - Manga screentone and Comic Ben-Day dots go only in shadows and the
+     background, never on lit skin or a face.
+   - Bloom comes from lights, not from skin (no orange haze past the
+     outline).
+   - Webtoon has a soft glow on the skin.
+   - Retro has its period palette, cel shading, film grain, a slight
+     colour fringe, VHS warmth and scanlines.
+8. **Strength.** The picture is blended with the original photo (0 gives
+   the photo, 1 the full drawing).
 
-| Size | Time |
-| --- | --- |
-| 1100×1200 | 1.0–1.8 s by style |
-| 740×1070 | 0.6–0.8 s |
+### The styles (`presets.hpp`)
 
-**Tuning on real photos.** Four test photos, all six styles:
-- Dark hair and beards were lifted into grey; they now stay dark.
-- A pale palm turned orange; colour boost is now capped on anything
-  skin-coloured.
-- A low-colour face under cool light turned lavender; skin now keeps its
-  warmth.
+| Style | Colour | Lines | Shading and finish | Background |
+| --- | --- | --- | --- | --- |
+| Anime | 12 colours, +vibrance | thin, brown | soft 3-tone cel, catchlights, slight bloom | blurred and quieter |
+| Manga | grey | strong black | screentone in shadows only; white skin, line-only features | screentone and speed lines |
+| Comic | 5 punchy colours, high contrast | bold black | Ben-Day dots in shadows, warm lights and cool shadows | quieter |
+| Cartoon | 6 very flat bright colours | thick, rounded | flat 2-tone | simplified |
+| Webtoon | soft gradients, pastel | thin, coloured | gentle skin glow | very soft |
+| Retro 90s | 24-colour cel-paint palette | brown | hard cel, grain, colour fringe, VHS warmth | quieter |
+
+### Engines (Android, `studio/toon/ToonEngine.kt`)
+
+- `ToonEngine`: `isAvailable()` and `render(input, token)`.
+- `ClassicToonEngine`: the native engine above. It covers every style and
+  control, on every device.
+- `ModelToonEngine`: a learned image-to-image model (AnimeGANv2- or
+  White-box Cartoonization-like), run by the app's LiteRT runtime on the
+  GPU, else the CPU.
+  - It sits behind `BuildConfig.TOON_MODEL_ENGINE`, which is false.
+  - **No weights are bundled.** As far as I know, the published AnimeGANv2
+    and White-box Cartoonization weights are for non-commercial use only.
+    This must be verified with their authors (or a licensed model trained)
+    before shipping. The TODO lists the steps.
+- `CloudToonEngine`: an interface for a future server img2img backend
+  (line-art ControlNet with identity preservation). `NoCloudToonEngine`
+  says it isn't available. Uploading a person's photo would first need
+  consent, a privacy notice and a reviewed backend.
+- **Selection:** `ToonEngines.pick` uses the model only when its flag is on
+  and the model is present. A model failure falls back to the classic
+  engine; a cancel does not.
+
+**Plumbing.**
+- `pp_toon_render_ex` takes the strength setting and the faces' contour
+  points (131 per face, in ML Kit's order). `pp_toon_render` still works
+  and calls it.
+- `PortraitProcessor.personFacesAndContours` returns the mask, faces and
+  contours, found once per photo and cached.
+
+**Sizes.**
+- Previews are 1024 px (they were 720).
+- The finished picture is the photo's full size, as far as memory allows.
+  Peak memory is about 120 bytes per pixel (1.13 GB measured at 9 MP), so
+  the cap is `toonEdgeFor(engineBytes)`, between 1600 and 6144 px.
+
+## Results
+
+Test photos (at about 1024 px):
+- a light-skin studio portrait;
+- a dark-skin, low-light selfie with a cluttered background;
+- a two-person photo;
+- a low-light portrait with an afro and bokeh.
+
+Person masks and face contours came from MediaPipe models on the build
+machine, standing in for ML Kit on the phone.
+
+| Check | Before | After |
+| --- | --- | --- |
+| Skin hue shift (worst colour style) | 24° (Comic, couple) | ≤ 4.7°; 9.4° for Retro (period palette) |
+| Skin chroma kept (worst) | 0.60 | 0.65 (Retro, faded by design); others ≥ 0.82 |
+| Near-black area inside eyes and lips (worst colour style) | up to 1.00 (eyes filled black) | ≤ 0.08; Comic on small faces 0.30 (lash line) |
+| Hair separated from the background (vs the photo) | 0.12–0.97 | 0.75–3.2 |
+| Most similar pair of styles (mean ΔE on the person) | 3.1–7.9 | 5.5–11.4 |
+| Preview time, 4 cores (mean / max) | 0.50 / 0.84 s | 0.49 / 0.64 s |
+| Preview time, 1 core (mean / max) | 1.42 / 2.24 s | 1.09 / 1.51 s |
+| Export, 9 MP, 4 cores | — | 6.5 s, 1.13 GB peak |
+
+Manga is grey by design; it keeps a small solid pupil (a manga
+convention).
+
+Phone timing hasn't been measured. A mid-range phone's big cores are
+usually somewhat slower than this machine's; the single-core time (1.5 s
+worst case) suggests a preview under 2 s with 2–4 cores.
+
+**Interface.**
+- **Strength** slider (0–100%), and Ink lines renamed **Line thickness**.
+- **Preview cache:** the last 12 previews per photo are cached, so settings
+  seen before return at once (the phone keeps as many preview files).
+- **Labels:** style tiles show their name on a band inside the tile, so it
+  is never clipped.
+- **Compare:** the result screen already has its before/after slider.
+
+## Tests
+
+- **Engine `toon_tests.cpp`:** 12 tests.
+  - Five earlier tests, run through the old API, which still works.
+  - Seven new tests:
+    - eyes from contours have whites and no black blobs, brows and lips
+      are kept, and chin shine is no white patch;
+    - skin hue holds for light and dark skin, in normal and low light;
+    - the outline lands on the person's edge with a quarter-size mask
+      offset by 4 px;
+    - no dots on lit skin, and noise is flattened;
+    - Strength 0 gives the photo, and 0.5 lies between;
+    - every pair of styles differs;
+    - the new API refuses bad input.
+- **Kotlin `ToonEngineTest`:** contour encoding and its fallbacks, engine
+  choice by flag and availability, model-to-classic fallback (but not on a
+  cancel), no cloud engine.
+- **Jest `toon.test.tsx`:** Strength kept across styles and clamped, the
+  Strength slider, cached previews (no new render), and the saved picture
+  keeping its Strength.
+
+## Limitations (v2)
+
+- **Not generative.** The anime look is drawn by the pipeline, faithful to
+  the person; it isn't redrawn by a model. The model path is ready, but
+  needs a licensed model.
+- **On-device testing.** It hasn't been run on a phone here. ML Kit's
+  contours and masks were stood in for by MediaPipe on the build machine
+  (contours in the same layout).
+- **No real edge.** Where a person's edge has almost no contrast with the
+  scene, the refined outline follows the mask as given.
+- **Progress.** Shown as a spinner with "Drawing…" / "Making it in HD…".
+  The engine's progress isn't reported as a percentage.
 
 ## The live studio's speed
 

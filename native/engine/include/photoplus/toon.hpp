@@ -1,20 +1,27 @@
 #pragma once
 
 // Toon: a photo turned into anime or a cartoon — not a filter over the
-// photo, but the way those pictures are made: shapes simplified into flat
-// colour areas, cel shading in a few bands (two on skin), clean ink line
-// art with a bold outline around the person, bright eyes with catchlights,
-// and a background in the same hand (an anime sky with cel-shaded clouds, a
-// sunset, a starry night, a soft-focus or plain backdrop).
+// photo, but the way those pictures are made:
 //
-// Styles: anime (cel-shaded, bright, warm ink), manga (black ink and
-// screentone on white), comic (bold ink, flat colour and halftone dots),
-// cartoon (very flat, thick outlines, bold colour), webtoon (soft shading,
-// coloured lines, pastel glow), retro (90s cel anime: muted colour, brown
-// lines, film grain).
+//  - the photo cleaned first (noise, low light, flat contrast), so sensor
+//    grain never becomes blotches of colour;
+//  - the person and the scene drawn apart (the person mask, refined to the
+//    photo's own edges), the scene simplified so it never competes;
+//  - flat colour areas from a palette found in Lab (k-means), skin in its
+//    own hue-true tones (shadow, base, highlight) with no white shine;
+//  - clean line art (extended difference of Gaussians, gated to real edges,
+//    specks removed) at the same size and place as the colour;
+//  - the face drawn, not traced: from its contour points the eyes (white,
+//    iris, lash line, catchlight), brows, nostrils and lips, so no feature
+//    is ever filled with black; without contours, a light line pass instead;
+//  - hair given back its shape (local contrast) and strands;
+//  - each style's own finish (presets.hpp): screentone and dots only in
+//    shadows and the scene, bloom, period palette, grain.
 //
+// Styles: anime, manga, comic, cartoon, webtoon, retro (90s).
 // Deterministic for a seed, parallel by rows, cancellable.
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -31,6 +38,20 @@ constexpr int32_t kStyleCount = 6;
 enum class Background : int32_t { Keep = 0, Soft, Sky, Sunset, Night, Plain };
 constexpr int32_t kBackgroundCount = 6;
 
+// A face's contour points (normalised x, y; negative where unknown), in ML
+// Kit's contour order: the face oval (36), left brow top and bottom (5 + 5),
+// right brow top and bottom (5 + 5), left eye (16), right eye (16), upper lip
+// top (11) and bottom (9), lower lip top (9) and bottom (9), nose bridge (2)
+// and nose bottom (3). "Left" and "right" may be either side: only the shapes matter.
+namespace contour {
+constexpr int kOval = 0, kLeftBrowTop = 36, kLeftBrowBottom = 41, kRightBrowTop = 46, kRightBrowBottom = 51, kLeftEye = 56,
+              kRightEye = 72, kUpperLipTop = 88, kUpperLipBottom = 99, kLowerLipTop = 108, kLowerLipBottom = 117, kNoseBridge = 126,
+              kNoseBottom = 128, kPoints = 131;
+}  // namespace contour
+struct FaceContour {
+  std::array<float, contour::kPoints * 2> p{};
+};
+
 struct Options {
   Style style = Style::Anime;
   Background background = Background::Keep;
@@ -41,11 +62,14 @@ struct Options {
   float eyes = 0.4f;    // 0 the person's own eyes .. 1 big anime eyes (with catchlights)
   float skin = 0.6f;    // 0 the skin's own texture .. 1 smooth, two-tone anime skin
   float glow = 0.3f;    // 0 .. 1 a soft glow around the lights
+  float strength = 1;   // 0 the photo .. 1 fully drawn (blended)
   uint32_t seed = 1;
   // Optional person mask (GRAY8, any size; 255 = the person): the outline, the backdrop.
   const ImageBuffer* subject = nullptr;
   // Faces (normalised), with the eye centres and mouth when known.
   std::vector<art::FaceBox> faces;
+  // Their contour points, when known (any order; matched to a face by position).
+  std::vector<FaceContour> contours;
 };
 
 // Renders `image` (RGBA8 or BGRA8) in place. Alpha is kept.

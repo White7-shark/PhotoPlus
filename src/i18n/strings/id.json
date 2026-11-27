@@ -492,7 +492,7 @@
   "toon_bg_night": "Malam berbintang",
   "toon_bg_plain": "Pastel",
   "toon_tune": "Atur detail",
-  "toon_lines": "Garis tinta",
+  "toon_lines": "Ketebalan garis",
   "toon_shades": "Tingkat bayangan",
   "toon_shades_n": "{n} tingkat bayangan",
   "toon_vivid": "Warna",
@@ -516,5 +516,6 @@
   "native_toon_daily_used": "Kamu sudah membuat gambar gratis hari ini. Premium membuat gambar tanpa batas, atau kembali besok.",
   "native_toon_bad_settings": "Pengaturan kartun itu tidak dapat digunakan",
   "faq_studio_16_q": "Apa itu Toon Studio?",
-  "faq_studio_16_a": "Toon Studio mengubah fotomu jadi anime atau kartun: garis tinta bersih, warna datar cel-shading, mata berbinar, dan latar yang dilukis. Pilih gaya — anime, manga, komik, kartun, webtoon, atau retro 90-an — dan latar — latarmu sendiri, fokus lembut, langit anime, senja, malam berbintang, atau pastel — lalu atur garis tinta, tingkat bayangan, warna, detail, mata anime, kulit halus, dan cahaya. Pratinjau gratis; gambar akhir dibuat dalam HD dan disimpan di proyekmu. Paket gratis membuat 2 gambar per hari, masing-masing setelah iklan singkat; Premium membuat gambar tanpa batas tanpa iklan."
+  "faq_studio_16_a": "Toon Studio mengubah fotomu jadi anime atau kartun: garis tinta bersih, warna datar cel-shading, mata berbinar, dan latar yang dilukis. Pilih gaya — anime, manga, komik, kartun, webtoon, atau retro 90-an — dan latar — latarmu sendiri, fokus lembut, langit anime, senja, malam berbintang, atau pastel — lalu atur kekuatan (seberapa banyak fotomu terlihat), ketebalan garis, tingkat bayangan, warna, detail, mata anime, kulit halus, dan cahaya. Pratinjau gratis; gambar akhir dibuat dalam HD dan disimpan di proyekmu. Paket gratis membuat 2 gambar per hari, masing-masing setelah iklan singkat; Premium membuat gambar tanpa batas tanpa iklan.",
+  "toon_strength": "Kekuatan"
 }

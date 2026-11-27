@@ -492,7 +492,7 @@
   "toon_bg_night": "Noite estrelada",
   "toon_bg_plain": "Pastel",
   "toon_tune": "Ajuste fino",
-  "toon_lines": "Linhas de tinta",
+  "toon_lines": "Espessura da linha",
   "toon_shades": "Etapas de sombreado",
   "toon_shades_n": "{n} etapas de sombreado",
   "toon_vivid": "Cor",
@@ -516,5 +516,6 @@
   "native_toon_daily_used": "Você já criou as imagens grátis de hoje. O Premium cria imagens ilimitadas, ou volte amanhã.",
   "native_toon_bad_settings": "Essas configurações de desenho não podem ser usadas",
   "faq_studio_16_q": "O que é o Toon Studio?",
-  "faq_studio_16_a": "O Toon Studio transforma sua foto em anime ou desenho animado: linhas de tinta limpas, cor chapada com sombreado cel, olhos brilhantes e um fundo pintado. Escolha um estilo — anime, mangá, quadrinhos, desenho animado, webtoon ou retrô anos 90 — e um fundo — sua cena, desfocado, céu de anime, pôr do sol, noite estrelada ou pastel — e ajuste as linhas, as etapas de sombreado, a cor, o detalhe, os olhos de anime, a pele lisa e o brilho. As prévias são grátis; a imagem final é criada em HD e guardada no seu projeto. O plano grátis cria 2 imagens por dia, cada uma depois de um anúncio curto; o Premium cria imagens ilimitadas, sem anúncios."
+  "faq_studio_16_a": "O Toon Studio transforma sua foto em anime ou desenho animado: linhas de tinta limpas, cor chapada com sombreado cel, olhos brilhantes e um fundo pintado. Escolha um estilo — anime, mangá, quadrinhos, desenho animado, webtoon ou retrô anos 90 — e um fundo — sua cena, desfocado, céu de anime, pôr do sol, noite estrelada ou pastel — e ajuste a intensidade (quanto da sua foto aparece), a espessura da linha, as etapas de sombreado, a cor, o detalhe, os olhos de anime, a pele lisa e o brilho. As prévias são grátis; a imagem final é criada em HD e guardada no seu projeto. O plano grátis cria 2 imagens por dia, cada uma depois de um anúncio curto; o Premium cria imagens ilimitadas, sem anúncios.",
+  "toon_strength": "Intensidade"
 }

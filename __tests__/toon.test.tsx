@@ -152,8 +152,11 @@ describe('the Toon catalogue', () => {
       eyes: 1,
     });
     expect(clampToon({ shades: 3.6 }).shades).toBe(4);
-    const s = withStyle({ ...DEFAULT_TOON, background: 2, lines: 0.1 }, 3);
-    expect(s).toEqual({ style: 3, background: 2, ...STYLES[3].start });
+    const s = withStyle({ ...DEFAULT_TOON, background: 2, lines: 0.1, strength: 0.6 }, 3);
+    expect(s).toEqual({ style: 3, background: 2, strength: 0.6, ...STYLES[3].start });
+    expect(clampToon({ strength: 1.4 }).strength).toBe(1);
+    expect(clampToon({ strength: -1 }).strength).toBe(0);
+    expect(DEFAULT_TOON.strength).toBe(1);
   });
 });
 
@@ -242,6 +245,16 @@ describe('the Toon Studio screen', () => {
     // Back to the style's own look (the background stays).
     await step(() => fireEvent.press(screen.getByTestId('toon-reset')));
     expect(lastPreview()).toMatchObject({ style: 1, background: 2, ...STYLES[1].start });
+    // Strength: the drawing blended with the photo.
+    for (let i = 0; i < 3; i++) await step(() => slide('toon-strength', 1, 'decrement'));
+    expect(lastPreview().strength as number).toBeCloseTo(0.85, 5);
+    // Settings seen before come back from the cache: no new render.
+    const renders = mockStudio.renderToon.mock.calls.filter(c => c[1].quality === 'preview').length;
+    await step(() => fireEvent.press(screen.getByTestId('toon-style-anime')));
+    await step(() => fireEvent.press(screen.getByTestId('toon-style-manga')));
+    expect(mockStudio.renderToon.mock.calls.filter(c => c[1].quality === 'preview').length).toBe(renders + 1);
+    for (let i = 0; i < 3; i++) await step(() => slide('toon-strength', 1));
+    expect(screen.getByTestId('toon-canvas')).toBeTruthy();
 
     // A free picture: an ad first; one not watched to the end unlocks nothing.
     mockToon.adFinishes = false;
@@ -262,7 +275,7 @@ describe('the Toon Studio screen', () => {
       title: 'Manga · Anime sky',
       width: 1600,
       height: 2048,
-      settings: { style: 1, background: 2, ...STYLES[1].start },
+      settings: { style: 1, background: 2, strength: 1, ...STYLES[1].start },
     });
     expect(n.navigate).toHaveBeenCalledWith('StudioItem', { itemId: work.id, fresh: true });
     expect(screen.getByText('1 of 2 free pictures left today')).toBeTruthy();

@@ -13,6 +13,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceContour
+import com.photoplus.studio.toon.ToonContours
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
@@ -240,7 +241,12 @@ class PortraitProcessor {
    * null) and the faces (12 floats each: see [artFace]), from one look at the
    * upright photo.
    */
-  fun personAndFaces(bitmap: Bitmap): Pair<Bitmap?, FloatArray> {
+  fun personAndFaces(bitmap: Bitmap): Pair<Bitmap?, FloatArray> = personFacesAndContours(bitmap).let { it.mask to it.faces }
+
+  /** The person, their faces (12 floats each) and the faces' contour points for Toon ([ToonContours] layout). */
+  class Subjects(val mask: Bitmap?, val faces: FloatArray, val contours: FloatArray)
+
+  fun personFacesAndContours(bitmap: Bitmap): Subjects {
     val upright = scaledUpright(bitmap, 0, ANALYSIS_EDGE)
     try {
       val image = InputImage.fromBitmap(upright, 0)
@@ -255,12 +261,18 @@ class PortraitProcessor {
       val h = upright.height.toFloat()
       // Each face: its box, its mouth opening and its eyes (where teeth and
       // eye whites can be), 12 floats, normalised.
-      val boxes = withContours(upright, shapes.take(8)).flatMap { f -> artFace(f, w, h).toList() }.toFloatArray()
-      return mask to boxes
+      val shaped = withContours(upright, shapes.take(8))
+      val boxes = shaped.flatMap { f -> artFace(f, w, h).toList() }.toFloatArray()
+      val contours = shaped.flatMap { f -> toonContour(f, w, h).toList() }.toFloatArray()
+      return Subjects(mask, boxes, contours)
     } finally {
       upright.recycle()
     }
   }
+
+  /** A face's contour points in [ToonContours]' order, normalised (all -1 when a part wasn't found). */
+  private fun toonContour(f: FaceShape, w: Float, h: Float): FloatArray =
+    ToonContours.encode(TOON_ORDER.map { type -> f.contour(type)?.map { it.x to it.y } }, w, h)
 
   /**
    * A face for the painter (pp_art_paint, stride 12): box x, y, w, h; the
@@ -657,6 +669,13 @@ class PortraitProcessor {
     /** A detected face's landmarks, normalised to the [w] x [h] image it was found in (contours, else approximated). */
     fun landmarksOf(face: Face, w: Float, h: Float): FaceLandmarks? = FaceShape.of(face).landmarks(w, h)
     private const val ANALYSIS_EDGE = 1024
+    /** ML Kit's contour types in the order Toon reads them (pp_engine.h PP_TOON_CONTOUR_POINTS). */
+    private val TOON_ORDER = listOf(
+      FaceContour.FACE, FaceContour.LEFT_EYEBROW_TOP, FaceContour.LEFT_EYEBROW_BOTTOM, FaceContour.RIGHT_EYEBROW_TOP,
+      FaceContour.RIGHT_EYEBROW_BOTTOM, FaceContour.LEFT_EYE, FaceContour.RIGHT_EYE, FaceContour.UPPER_LIP_TOP,
+      FaceContour.UPPER_LIP_BOTTOM, FaceContour.LOWER_LIP_TOP, FaceContour.LOWER_LIP_BOTTOM, FaceContour.NOSE_BRIDGE,
+      FaceContour.NOSE_BOTTOM,
+    )
     /** Fixed, so a backdrop's lights and canvas look the same in the preview and the saved photo. */
     const val BACKDROP_SEED = 7
     private const val ML_TIMEOUT_S = 10L

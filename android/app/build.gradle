@@ -103,6 +103,8 @@ android {
         // before the production release.
         def premiumSimulation = (project.findProperty("photoplus.premiumSimulation") ?: "true").toString().toBoolean()
         buildConfigField("boolean", "PREMIUM_SIMULATION", premiumSimulation.toString())
+        // The learned cartoon model (ModelToonEngine): off until a licensed model is bundled.
+        buildConfigField("boolean", "TOON_MODEL_ENGINE", "false")
 
         externalNativeBuild {
             cmake {

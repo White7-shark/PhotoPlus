@@ -1182,6 +1182,47 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeToonRender(J
   if (st != PP_OK) throwStatus(env, st);
 }
 
+// Toon with everything. params: style, background, lines, shades, vivid, detail, eyes, skin, glow, strength;
+// faces 12 floats each; contours PP_TOON_CONTOUR_POINTS * 2 floats each (or null).
+JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeToonRenderEx(JNIEnv* env, jobject, jobject bitmap, jfloatArray params,
+                                                                               jobject mask, jfloatArray faces, jfloatArray contours, jint seed,
+                                                                               jlong token) {
+  if (params == nullptr || env->GetArrayLength(params) != 10) {
+    throwEngineException(env, "INVALID_ARGUMENT", "Bad toon settings");
+    return;
+  }
+  WrappedBitmap b, m;
+  if (!b.open(env, bitmap, false) || !m.open(env, mask, true)) return;
+  std::vector<float> f, c;
+  if (faces != nullptr) {
+    const jsize n = env->GetArrayLength(faces);
+    if (n % 12 != 0 || n > 96) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad face boxes");
+      return;
+    }
+    f.resize(static_cast<size_t>(n));
+    if (n > 0) env->GetFloatArrayRegion(faces, 0, n, f.data());
+  }
+  if (contours != nullptr) {
+    const jsize n = env->GetArrayLength(contours);
+    if (n % (PP_TOON_CONTOUR_POINTS * 2) != 0 || n > 8 * PP_TOON_CONTOUR_POINTS * 2) {
+      throwEngineException(env, "INVALID_ARGUMENT", "Bad face contours");
+      return;
+    }
+    c.resize(static_cast<size_t>(n));
+    if (n > 0) env->GetFloatArrayRegion(contours, 0, n, c.data());
+  }
+  float v[10];
+  env->GetFloatArrayRegion(params, 0, 10, v);
+  const pp_toon_settings s{{static_cast<int>(std::lround(v[0])), static_cast<int>(std::lround(v[1])), v[2], static_cast<int>(std::lround(v[3])), v[4],
+                            v[5], v[6], v[7], v[8]},
+                           v[9]};
+  const pp_status st = pp_toon_render_ex(b.image, &s, m.image, f.empty() ? nullptr : f.data(), f.size() / 12, 12, c.empty() ? nullptr : c.data(),
+                                         c.size() / (PP_TOON_CONTOUR_POINTS * 2), static_cast<uint32_t>(seed),
+                                         reinterpret_cast<const pp_cancel_token*>(token));
+  if (st != PP_OK) throwStatus(env, st);
+}
+
 // Pencil art. options: medium, paper, intensity, lines, shading (null: the defaults).
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtPencil(JNIEnv* env, jobject, jobject bitmap, jint artist, jint level,
                                                                             jobject mask, jfloatArray faces, jint seed, jfloatArray options,

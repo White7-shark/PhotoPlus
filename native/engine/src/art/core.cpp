@@ -121,14 +121,16 @@ float noise1(float x, uint32_t seed) {
 
 Img down2(const Img& src) {
   Img out(std::max(1, src.w / 2), std::max(1, src.h / 2), src.c);
-  for (int y = 0; y < out.h; ++y)
-    for (int x = 0; x < out.w; ++x) {
-      float* o = out.px(x, y);
-      const int sx = std::min(2 * x, src.w - 1), sy = std::min(2 * y, src.h - 1);
-      const int sx1 = std::min(sx + 1, src.w - 1), sy1 = std::min(sy + 1, src.h - 1);
-      for (int k = 0; k < src.c; ++k)
-        o[k] = 0.25f * (src.px(sx, sy)[k] + src.px(sx1, sy)[k] + src.px(sx, sy1)[k] + src.px(sx1, sy1)[k]);
-    }
+  parallelFor(out.h, nullptr, [&](int32_t y0, int32_t y1) {
+    for (int y = y0; y < y1; ++y)
+      for (int x = 0; x < out.w; ++x) {
+        float* o = out.px(x, y);
+        const int sx = std::min(2 * x, src.w - 1), sy = std::min(2 * y, src.h - 1);
+        const int sx1 = std::min(sx + 1, src.w - 1), sy1 = std::min(sy + 1, src.h - 1);
+        for (int k = 0; k < src.c; ++k)
+          o[k] = 0.25f * (src.px(sx, sy)[k] + src.px(sx1, sy)[k] + src.px(sx, sy1)[k] + src.px(sx1, sy1)[k]);
+      }
+  });
   return out;
 }
 
@@ -142,12 +144,14 @@ Img resize(const Img& src, int w, int h) {
   }
   Img out(w, h, src.c);
   const float sx = static_cast<float>(s->w) / static_cast<float>(w), sy = static_cast<float>(s->h) / static_cast<float>(h);
-  for (int y = 0; y < h; ++y)
-    for (int x = 0; x < w; ++x) {
-      float* o = out.px(x, y);
-      const float fx = (static_cast<float>(x) + 0.5f) * sx - 0.5f, fy = (static_cast<float>(y) + 0.5f) * sy - 0.5f;
-      for (int k = 0; k < src.c; ++k) o[k] = s->sample(fx, fy, k);
-    }
+  parallelFor(h, nullptr, [&](int32_t y0, int32_t y1) {
+    for (int y = y0; y < y1; ++y)
+      for (int x = 0; x < w; ++x) {
+        float* o = out.px(x, y);
+        const float fx = (static_cast<float>(x) + 0.5f) * sx - 0.5f, fy = (static_cast<float>(y) + 0.5f) * sy - 0.5f;
+        for (int k = 0; k < src.c; ++k) o[k] = s->sample(fx, fy, k);
+      }
+  });
   return out;
 }
 

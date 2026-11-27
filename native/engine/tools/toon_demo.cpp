@@ -81,12 +81,21 @@ int main(int argc, char** argv) {
     }
   }
   const uint32_t seed = argc > 10 ? static_cast<uint32_t>(std::strtoul(argv[10], nullptr, 10)) : 7U;
-  // TOON="background lines shades vivid detail eyes skin glow"
-  pp_toon_options o{std::atoi(argv[3]), 0, 0.5f, 3, 0.3f, 0.5f, 0.4f, 0.6f, 0.3f};
+  // TOON="background lines shades vivid detail eyes skin glow [strength]"
+  pp_toon_settings ts{{std::atoi(argv[3]), 0, 0.5f, 3, 0.3f, 0.5f, 0.4f, 0.6f, 0.3f}, 1.0f};
+  pp_toon_options& o = ts.options;
   if (const char* e = std::getenv("TOON"))
-    std::sscanf(e, "%d %f %d %f %f %f %f %f", &o.background, &o.lines, &o.shades, &o.vivid, &o.detail, &o.eyes, &o.skin, &o.glow);
+    std::sscanf(e, "%d %f %d %f %f %f %f %f %f", &o.background, &o.lines, &o.shades, &o.vivid, &o.detail, &o.eyes, &o.skin, &o.glow, &ts.strength);
+  // TOON_CONTOURS="x y x y ..." (PP_TOON_CONTOUR_POINTS pairs per face, normalised).
+  std::vector<float> contours;
+  if (const char* c = std::getenv("TOON_CONTOURS")) {
+    const char* p = c;
+    char* end = nullptr;
+    for (float v = std::strtof(p, &end); end != p; v = std::strtof(p, &end)) contours.push_back(v), p = end;
+  }
+  const size_t contourCount = contours.size() / (PP_TOON_CONTOUR_POINTS * 2);
   const auto t0 = std::chrono::steady_clock::now();
-  const pp_status s = pp_toon_render(img, &o, mask, faces ? face : nullptr, faces, stride, seed, nullptr);
+  const pp_status s = pp_toon_render_ex(img, &ts, mask, faces ? face : nullptr, faces, stride, contourCount ? contours.data() : nullptr, contourCount, seed, nullptr);
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   if (s != PP_OK) {
     std::fprintf(stderr, "failed: %s\n", pp_last_error_message());

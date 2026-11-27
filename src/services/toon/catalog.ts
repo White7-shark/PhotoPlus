@@ -23,6 +23,8 @@ export interface ToonSettings {
   skin: number;
   /** 0 .. 1 a soft glow around the lights */
   glow: number;
+  /** 0 the photo .. 1 fully drawn: the picture blended with the photo */
+  strength: number;
 }
 
 export interface ToonStyle {
@@ -30,7 +32,7 @@ export interface ToonStyle {
   key: 'anime' | 'manga' | 'comic' | 'cartoon' | 'webtoon' | 'retro';
   icon: IconName;
   /** The style's own way: where its controls start. */
-  start: Omit<ToonSettings, 'style' | 'background'>;
+  start: Omit<ToonSettings, 'style' | 'background' | 'strength'>;
 }
 
 export const STYLES: readonly ToonStyle[] = [
@@ -75,7 +77,7 @@ export const STYLES: readonly ToonStyle[] = [
 export const BACKGROUNDS = ['keep', 'soft', 'sky', 'sunset', 'night', 'plain'] as const;
 export type ToonBackground = (typeof BACKGROUNDS)[number];
 
-export const DEFAULT_TOON: ToonSettings = { style: 0, background: 0, ...STYLES[0].start };
+export const DEFAULT_TOON: ToonSettings = { style: 0, background: 0, strength: 1, ...STYLES[0].start };
 
 const clamp = (v: unknown, lo: number, hi: number, def: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def;
@@ -92,10 +94,11 @@ export function clampToon(s: Partial<ToonSettings>): ToonSettings {
     eyes: clamp(s.eyes, 0, 1, d.eyes),
     skin: clamp(s.skin, 0, 1, d.skin),
     glow: clamp(s.glow, 0, 1, d.glow),
+    strength: clamp(s.strength, 0, 1, d.strength),
   };
 }
 
-/** A style chosen: its own way for every control (the background stays). */
+/** A style chosen: its own way for every control (the background and Strength stay). */
 export const withStyle = (s: ToonSettings, style: number): ToonSettings =>
   clampToon({ ...s, style, ...(STYLES[style] ?? STYLES[0]).start });
 

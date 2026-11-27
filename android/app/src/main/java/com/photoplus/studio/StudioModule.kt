@@ -1,7 +1,5 @@
 package com.photoplus.studio
 
-import com.photoplus.R
-import com.photoplus.i18n.Words
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -12,6 +10,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.module.annotations.ReactModule
+import com.photoplus.R
 import com.photoplus.device.DeviceInfo
 import com.photoplus.device.MemoryPressureMonitor
 import com.photoplus.edit.Plan
@@ -24,12 +23,16 @@ import com.photoplus.engine.NativeCancelTokens
 import com.photoplus.engine.NativeEngine
 import com.photoplus.engine.OutputFormat
 import com.photoplus.entitlement.ArtAllowance
+import com.photoplus.entitlement.Entitlements
 import com.photoplus.entitlement.MotionAllowance
 import com.photoplus.entitlement.PencilAllowance
 import com.photoplus.entitlement.ToonAllowance
-import com.photoplus.entitlement.Entitlements
+import com.photoplus.i18n.Words
 import com.photoplus.specs.NativePhotoPlusStudioSpec
 import com.photoplus.storage.AppPaths
+import com.photoplus.studio.toon.ModelToonEngine
+import com.photoplus.studio.toon.ToonEngines
+import com.photoplus.studio.toon.ToonInput
 import com.photoplus.util.toWritableMap
 import java.io.File
 import java.util.UUID
@@ -760,9 +763,17 @@ class StudioModule(reactContext: ReactApplicationContext) :
   /** The largest drawing the engine's memory allows (about 64 bytes a pixel at its peak, a 4:3 sheet). */
   private fun pencilEdgeFor(engineBytes: Long): Int = kotlin.math.sqrt(engineBytes / 64.0 / 0.75).toInt().coerceIn(1200, 4096)
 
+  /** Toon's working memory is about 120 bytes a pixel at its peak (measured at 9 MP): the long side that fits. */
+  private fun toonEdgeFor(engineBytes: Long): Int = kotlin.math.sqrt(engineBytes / 128.0 / 0.75).toInt().coerceIn(1600, 6144)
+
+  /** Toon's subjects (mask, faces, contours) of the photos drawn lately, by path. */
+  private val toonSubjects = object : LinkedHashMap<String, PortraitProcessor.Subjects>(4, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PortraitProcessor.Subjects>?) = size > 3
+  }
+
   /**
    * Anime & Cartoon: { inputPath, quality 'thumb' | 'preview' | 'full', style 0..5,
-   * background 0..5, lines, shades 2..6, vivid, detail, eyes, skin, glow, seed }
+   * background 0..5, lines, shades 2..6, vivid, detail, eyes, skin, glow, strength 0..1, seed }
    * → { outputPath, cleanPath, width, height, remaining }. Previews are
    * free; the finished picture is Premium, or two a day on the free plan,
    * each after an ad.
@@ -780,6 +791,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       num("style", 0f, 0f, 5f)?.roundToInt()?.toFloat(), num("background", 0f, 0f, 5f)?.roundToInt()?.toFloat(),
       num("lines", 0.5f, 0f, 1f), num("shades", 3f, 2f, 6f)?.roundToInt()?.toFloat(), num("vivid", 0.3f, -1f, 1f),
       num("detail", 0.5f, 0f, 1f), num("eyes", 0.4f, 0f, 1f), num("skin", 0.6f, 0f, 1f), num("glow", 0.3f, 0f, 1f),
+      num("strength", 1f, 0f, 1f),
     )
     if (params.any { it == null } || quality !in setOf("thumb", "preview", "full")) {
       promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_toon_bad_settings))
@@ -796,20 +808,22 @@ class StudioModule(reactContext: ReactApplicationContext) :
     val file = paths.resolve(map["inputPath"] as? String ?: "")
     val p = params.map { it!! }.toFloatArray()
     jobs.submit(jobId, listener(promise)) { token ->
+      // Previews at 1024 px; the finished picture at the photo's full size, as far as memory allows.
       val edge = when (quality) {
         "thumb" -> MASTERS_THUMB
         "preview" -> TOON_PREVIEW
-        else -> min(budget.maxDecodeDimension, min(TOON_FULL, pencilEdgeFor(budget.engineBytes)))
+        else -> min(budget.maxDecodeDimension, toonEdgeFor(budget.engineBytes))
       }
       val decoded = ImageCodec.decode(file, edge).bitmap
       val bitmap = if (decoded.isMutable && decoded.config == Bitmap.Config.ARGB_8888) decoded
       else decoded.copy(Bitmap.Config.ARGB_8888, true).also { decoded.recycle() }
       try {
-        val (mask, faces) = synchronized(artSubjects) { artSubjects[file.absolutePath] } ?: portraitProcessor.personAndFaces(bitmap).also { found ->
-          synchronized(artSubjects) { artSubjects[file.absolutePath] = found }
-        }
-        NativeEngine.nativeToonRender(bitmap, p, mask, faces, seed, token)
-        val out = encodeStudio(bitmap, full, if (quality == "thumb") "ToonThumb${p[0].roundToInt()}" else "Toon")
+        // The person, faces and their contours: found once per photo (every style and size reuses them).
+        val subjects = synchronized(toonSubjects) { toonSubjects[file.absolutePath] }
+          ?: portraitProcessor.personFacesAndContours(bitmap).also { found -> synchronized(toonSubjects) { toonSubjects[file.absolutePath] = found } }
+        val input = ToonInput(bitmap, p, subjects.mask, subjects.faces, subjects.contours.takeIf { it.isNotEmpty() }, seed)
+        ToonEngines.render(ToonEngines.pick(ToonEngines.modelFlag, ModelToonEngine(reactApplicationContext.assets)), input, token)
+        val out = encodeStudio(bitmap, full, if (quality == "thumb") "ToonThumb${p[0].roundToInt()}" else "Toon", keep = if (full) 0 else TOON_PREVIEWS_KEPT)
         if (full) ToonAllowance.use(reactApplicationContext)
         out + mapOf("remaining" to (ToonAllowance.state(reactApplicationContext)["remaining"] as Int))
       } finally {
@@ -1140,13 +1154,14 @@ class StudioModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  private fun encodeStudio(out: Bitmap, full: Boolean, name: String): Map<String, Any?> {
+  /** [keep]: previews of this kind kept besides the new one (a screen may show them again from its cache). */
+  private fun encodeStudio(out: Bitmap, full: Boolean, name: String, keep: Int = 0): Map<String, Any?> {
     val target = if (full) {
       paths.studio.mkdirs()
       File(paths.studio, "${name}_${stamp()}.jpg")
     } else {
       val dir = File(paths.processingCache, "studio-${name.lowercase()}").apply { mkdirs() }
-      dir.listFiles()?.forEach { it.delete() }
+      dir.listFiles()?.sortedBy { it.lastModified() }?.dropLast(keep)?.forEach { it.delete() }
       File(dir, "${name.lowercase()}_${System.nanoTime()}.jpg")
     }
     ImageCodec.encode(out, target, OutputFormat.JPEG, if (full) 95 else 88)
@@ -1179,8 +1194,9 @@ class StudioModule(reactContext: ReactApplicationContext) :
     // A drawing's lines stay crisp at full size: HD and above (a study 1600 px, a drawing 2048, a masterpiece 2560).
     private val PENCIL_FULL = intArrayOf(1600, 2048, 2560)
     // Anime & Cartoon: a quick preview; the finished picture in HD.
-    private const val TOON_PREVIEW = 720
-    private const val TOON_FULL = 2048
+    private const val TOON_PREVIEW = 1024
+    /** Matches the Toon screen's preview cache (src/screens/studio/ToonScreen.tsx PREVIEW_CACHE). */
+    private const val TOON_PREVIEWS_KEPT = 12
     private const val MOTION_ANALYSIS = 1280
     private const val MOTION_PREVIEW = 480
     private const val MOTION_FULL = 1080

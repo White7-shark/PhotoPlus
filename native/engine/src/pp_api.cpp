@@ -2146,12 +2146,16 @@ pp_status pp_art_blank(pp_image* image, int kind, int artist, uint32_t seed, con
   });
 }
 
-pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const pp_image* subject, const float* faces, size_t face_count,
-                         size_t face_stride, uint32_t seed, const pp_cancel_token* token) {
+static_assert(PP_TOON_CONTOUR_POINTS == photoplus::toon::contour::kPoints, "contour layout");
+
+pp_status pp_toon_render_ex(pp_image* image, const pp_toon_settings* settings, const pp_image* subject, const float* faces, size_t face_count,
+                            size_t face_stride, const float* contours, size_t contour_count, uint32_t seed, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
-    if (image == nullptr || options == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image and options are required");
+    if (image == nullptr || settings == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image and settings are required");
     if (face_count > 0 && faces == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "faces are missing");
+    if (contour_count > 0 && contours == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "contours are missing");
     if (face_count > 0 && face_stride != 4 && face_stride != 12) return fail(PP_ERROR_INVALID_ARGUMENT, "face_stride must be 4 or 12");
+    const pp_toon_options* options = &settings->options;
     if (options->style < 0 || options->style >= PP_TOON_STYLES || options->background < 0 || options->background >= PP_TOON_BACKGROUNDS)
       return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown style or background");
     photoplus::toon::Options o;
@@ -2159,6 +2163,7 @@ pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const 
     o.background = static_cast<photoplus::toon::Background>(options->background);
     o.lines = options->lines, o.shades = options->shades, o.vivid = options->vivid, o.detail = options->detail;
     o.eyes = options->eyes, o.skin = options->skin, o.glow = options->glow;
+    o.strength = settings->strength;
     o.seed = seed;
     o.subject = subject != nullptr ? &subject->buffer : nullptr;
     for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i) {
@@ -2170,10 +2175,22 @@ pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const 
       }
       o.faces.push_back(box);
     }
+    for (size_t i = 0; i < std::min<size_t>(contour_count, 8); ++i) {
+      photoplus::toon::FaceContour c;
+      std::copy_n(contours + i * PP_TOON_CONTOUR_POINTS * 2, PP_TOON_CONTOUR_POINTS * 2, c.p.begin());
+      o.contours.push_back(c);
+    }
     photoplus::Error e = photoplus::toon::render(image->buffer, o, token ? &token->token : nullptr);
     if (e.status != PP_OK) return fail(e);
     return succeed();
   });
+}
+
+pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const pp_image* subject, const float* faces, size_t face_count,
+                         size_t face_stride, uint32_t seed, const pp_cancel_token* token) {
+  if (options == nullptr) return pp_toon_render_ex(image, nullptr, subject, faces, face_count, face_stride, nullptr, 0, seed, token);
+  const pp_toon_settings s{*options, 1.0f};
+  return pp_toon_render_ex(image, &s, subject, faces, face_count, face_stride, nullptr, 0, seed, token);
 }
 
 struct pp_art_reveal {
