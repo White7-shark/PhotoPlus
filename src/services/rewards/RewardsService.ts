@@ -117,7 +117,7 @@ export const TOOL_TEXT: Record<RewardTool, string> = {
   studioLight: tx('rewards_tool_studio_light'),
   hair: tx('rewards_tool_hair'),
   batch: tx('rewards_tool_batch'),
-  masters: 'Masterstroke',
+  masters: 'Photo Arts',
 };
 
 export class RewardsService {

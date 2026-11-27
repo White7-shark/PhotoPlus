@@ -118,7 +118,7 @@ export const FEATURES = {
   batchEditing: f('editing.batch', 'Batch editing: one setup or look on up to 50 photos at once', 'editing', 'premium'),
   savedSetups: f('editing.savedSetups', 'Save your setups and looks, and reuse them in every project', 'editing', 'premium'),
   clothingTransform: f('replication.clothing', 'Clothing transformation (compatible packs)', 'replication', 'premium'),
-  masters: f('studio.masters', 'Masterstroke: your photo painted as twenty great artists worked', 'replication', 'premium'),
+  masters: f('studio.masters', 'Photo Arts: your photo painted as twenty great artists worked', 'replication', 'premium'),
   lucidCustom: f('appearance.lucidCustom', 'Lucid with your own photo or video clip behind the glass', 'editing', 'premium'),
 } as const;
 

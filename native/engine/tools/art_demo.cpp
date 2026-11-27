@@ -54,20 +54,40 @@ int main(int argc, char** argv) {
       for (int y = 0; y < mh; ++y) std::memcpy(mp + static_cast<size_t>(y) * mi.stride, g.data() + static_cast<size_t>(y) * mw, mw);
     }
   }
-  float face[4] = {0, 0, 0, 0};
-  size_t faces = 0;
+  float face[96] = {0};
+  size_t faces = 0, stride = 4;
   if (argc > 9) {
     for (int i = 0; i < 4; ++i) face[i] = std::strtof(argv[6 + i], nullptr);
     faces = face[2] > 0 ? 1 : 0;
   }
+  // ART_FACES="x y w h [x y w h ...]" (normalised): several faces (up to 8);
+  // ART_FACE_STRIDE=12 adds each face's mouth box and eye centres.
+  if (const char* st = std::getenv("ART_FACE_STRIDE")) stride = std::strtoul(st, nullptr, 10) == 12 ? 12 : 4;
+  if (const char* fe = std::getenv("ART_FACES")) {
+    char* p = const_cast<char*>(fe);
+    faces = 0;
+    while (faces < 8) {
+      char* end = nullptr;
+      float v[12];
+      int got = 0;
+      for (; got < static_cast<int>(stride); ++got) {
+        v[got] = std::strtof(p, &end);
+        if (end == p) break;
+        p = end;
+      }
+      if (got < static_cast<int>(stride)) break;
+      for (size_t i = 0; i < stride; ++i) face[faces * stride + i] = v[i];
+      ++faces;
+    }
+  }
   const uint32_t seed = argc > 10 ? static_cast<uint32_t>(std::strtoul(argv[10], nullptr, 10)) : 7U;
   const auto t0 = std::chrono::steady_clock::now();
   // ART_CONTROLS="brush palette vivid likeness texture age background" for the person's controls.
-  pp_art_controls k{1, 1, 0, 0.5f, 1, 1, 1};
+  pp_art_controls k{1, 1, 0, 0.5f, 0.4f, 1, 1};
   const char* env = std::getenv("ART_CONTROLS");
   if (env != nullptr)
     std::sscanf(env, "%f %f %f %f %f %f %f", &k.brush, &k.palette, &k.vivid, &k.likeness, &k.texture, &k.age, &k.background);
-  const pp_status s = pp_art_paint(img, std::atoi(argv[3]), std::atoi(argv[4]), mask, faces ? face : nullptr, faces, seed, &k, nullptr);
+  const pp_status s = pp_art_paint(img, std::atoi(argv[3]), std::atoi(argv[4]), mask, faces ? face : nullptr, faces, stride, seed, &k, nullptr);
   const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   if (s != PP_OK) {
     std::fprintf(stderr, "failed: %s\n", pp_last_error_message());

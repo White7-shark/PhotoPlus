@@ -24,7 +24,7 @@ export function offset(key: ControlKey, v: number, min: number, max: number) {
  * vividness, likeness, texture, age and background. The preview repaints
  * when a finger lifts; "Paint it the artist's way" puts everything back.
  */
-export function MasterstrokeTouch({
+export function PhotoArtsTouch({
   value,
   open,
   onToggle,

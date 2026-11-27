@@ -81,7 +81,7 @@
     <string name="masters_hold_compare">Maintenez pour voir votre photo</string>
     <string name="masters_free_ready">1 tableau gratuit aujourd’hui</string>
     <string name="masters_free_used">Le tableau gratuit du jour est utilisé. Premium peint sans limite.</string>
-    <string name="masters_premium_message">Masterstroke fait partie de Premium. Avec l’offre gratuite, vous pouvez peindre un tableau par jour.</string>
+    <string name="masters_premium_message">Photo Arts fait partie de Premium. Avec l’offre gratuite, vous pouvez peindre un tableau par jour.</string>
     <string name="masters_failed">Le tableau n’a pas pu être terminé</string>
     <string name="masters_tile_about">Votre photo peinte comme vingt grands artistes travaillaient : Léonard, Rembrandt, Van Gogh, Monet, Klimt et d’autres.</string>
     <string name="masters_free_badge">1 gratuit par jour</string>
@@ -150,17 +150,13 @@
     <string name="masters_about_vangogh">Des traits de peinture épais et tourbillonnants qui suivent les formes, des bleus et jaunes vifs, des contours bleu profond.</string>
     <string name="masters_about_gauguin">Des aplats de couleurs chaudes et riches cernés de bleu sombre, sur une toile grossière.</string>
     <string name="masters_about_klimt">Le visage finement peint, le reste en feuille d’or et ornements : mosaïques, spirales, anneaux et damiers.</string>
-    <string name="feature_masters">Masterstroke : votre photo peinte comme vingt grands artistes travaillaient</string>
+    <string name="feature_masters">Photo Arts : votre photo peinte comme vingt grands artistes travaillaient</string>
     <string name="masters_painting_of">Votre photo peinte par <xliff:g id="artist">{artist}</xliff:g></string>
     <string name="masters_your_photo">Votre photo</string>
     <string name="masters_free_left">Encore <xliff:g id="n">{n}</xliff:g> tableaux gratuits aujourd’hui</string>
     <string name="masters_unlimited">Premium : peignez sans limite</string>
     <string name="masters_go_premium">Voir Premium</string>
     <string name="masters_choose_artist">Choisissez votre artiste</string>
-    <string name="faq_studio_10_q">Qu’est-ce que Masterstroke ?</string>
-    <string name="faq_studio_10_a">Masterstroke peint votre photo comme vingt grands artistes travaillaient vraiment — Léonard de Vinci, Rembrandt, Vermeer, Hokusai, Monet, Van Gogh, Klimt et d’autres — avec de vraies touches de pinceau, la palette et la lumière de chacun, et la finition authentique : toile, vernis et craquelures, sanguine sur papier, gravure ou estampe. Choisissez un mouvement, un artiste et une finition (Étude, Tableau ou Chef-d’œuvre). Masterstroke fait partie de Premium ; l’offre gratuite permet un tableau par jour.</string>
-    <string name="faq_studio_11_q">Pourquoi chaque artiste est-il si différent ?</string>
-    <string name="faq_studio_11_a">Parce que chacun est peint avec la méthode propre à l’artiste, pas avec un filtre : le sfumato doux et le vieux vernis de Léonard, la lumière unique sur fond noir du Caravage, les hachures à la sanguine de Michel-Ange, les tailles gravées de Dürer, les aplats d’estampe d’Hokusai, les points de Seurat, la peinture épaisse et tourbillonnante de Van Gogh, la feuille d’or de Klimt. Un Chef-d’œuvre utilise les pinceaux les plus fins et garde le visage au plus près du vôtre.</string>
     <string name="masters_touch_title">Votre touche</string>
     <string name="masters_touch_about">Guidez la main de l’artiste. Chaque réglage part de sa propre manière.</string>
     <string name="masters_touch_changed">Votre touche est appliquée</string>
@@ -199,4 +195,8 @@
     <string name="settings_sim_detail">Pour les testeurs : toutes les fonctions Premium sur ce téléphone, sans abonnement</string>
     <string name="settings_sim_on">Premium est simulé sur ce téléphone</string>
     <string name="settings_sim_failed">La simulation Premium n’a pas pu être modifiée</string>
+    <string name="faq_studio_10_q">Qu’est-ce que Photo Arts ?</string>
+    <string name="faq_studio_10_a">Photo Arts peint votre photo comme vingt grands artistes travaillaient vraiment — Léonard de Vinci, Rembrandt, Vermeer, Hokusai, Monet, Van Gogh, Klimt et d’autres — avec de vraies touches de pinceau, la palette et la lumière de chacun, et la finition authentique : toile, vernis et craquelures, sanguine sur papier, gravure ou estampe. Choisissez un mouvement, un artiste et une finition (Étude, Tableau ou Chef-d’œuvre). Photo Arts fait partie de Premium ; l’offre gratuite permet un tableau par jour.</string>
+    <string name="faq_studio_11_q">Pourquoi chaque artiste est-il si différent ?</string>
+    <string name="faq_studio_11_a">Parce que chacun est peint avec la méthode propre à l’artiste, pas avec un filtre : le sfumato doux et le vieux vernis de Léonard, la lumière unique sur fond noir du Caravage, les hachures à la sanguine de Michel-Ange, les tailles gravées de Dürer, les aplats d’estampe d’Hokusai, les points de Seurat, la peinture épaisse et tourbillonnante de Van Gogh, la feuille d’or de Klimt. Un Chef-d’œuvre utilise les pinceaux les plus fins et garde le visage au plus près du vôtre.</string>
 </resources>

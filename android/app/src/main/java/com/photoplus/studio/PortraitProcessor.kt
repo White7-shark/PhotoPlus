@@ -29,6 +29,7 @@ import java.nio.FloatBuffer
 import java.util.concurrent.TimeUnit
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -234,10 +235,9 @@ class PortraitProcessor {
     }
   }
 
-  /** Landmarks of every face, in the bitmap's own orientation (no segmentation needed). */
-/**
-   * For Masters: the person (an ALPHA_8 mask at the analysis size, or null)
-   * and the faces (normalised boxes x, y, w, h), from one look at the
+  /**
+   * For Photo Arts: the person (an ALPHA_8 mask at the analysis size, or
+   * null) and the faces (12 floats each: see [artFace]), from one look at the
    * upright photo.
    */
   fun personAndFaces(bitmap: Bitmap): Pair<Bitmap?, FloatArray> {
@@ -253,16 +253,61 @@ class PortraitProcessor {
       val mask = bytes?.let { alphaBitmap(it, upright.width, upright.height) }
       val w = upright.width.toFloat()
       val h = upright.height.toFloat()
-      val boxes = faces.take(8).flatMap { f ->
-        val b = f.boundingBox
-        listOf(b.left / w, b.top / h, b.width() / w, b.height() / h)
-      }.toFloatArray()
+      // Each face: its box, its mouth opening and its eyes (where teeth and
+      // eye whites can be), 12 floats, normalised.
+      val boxes = withContours(upright, shapes.take(8)).flatMap { f -> artFace(f, w, h).toList() }.toFloatArray()
       return mask to boxes
     } finally {
       upright.recycle()
     }
   }
 
+  /**
+   * A face for the painter (pp_art_paint, stride 12): box x, y, w, h; the
+   * mouth opening x0, y0, x1, y1 (between the inner lip lines, so a closed
+   * mouth has none; from the mouth landmarks when there are no contours;
+   * zeros when unknown); the eye centres lx, ly, rx, ry (zeros when unknown).
+   */
+  private fun artFace(f: FaceShape, w: Float, h: Float): FloatArray {
+    val out = FloatArray(12)
+    out[0] = f.box.left / w
+    out[1] = f.box.top / h
+    out[2] = f.box.width() / w
+    out[3] = f.box.height() / h
+    val upper = f.contour(FaceContour.UPPER_LIP_BOTTOM)
+    val lower = f.contour(FaceContour.LOWER_LIP_TOP)
+    val ml = f.marks[FaceLandmark.MOUTH_LEFT]
+    val mr = f.marks[FaceLandmark.MOUTH_RIGHT]
+    val mb = f.marks[FaceLandmark.MOUTH_BOTTOM]
+    if (!upper.isNullOrEmpty() && !lower.isNullOrEmpty()) {
+      val all = upper + lower
+      out[4] = all.minOf { it.x } / w
+      out[5] = upper.minOf { it.y } / h
+      out[6] = all.maxOf { it.x } / w
+      out[7] = lower.maxOf { it.y } / h
+    } else if (ml != null && mr != null && mb != null) {
+      val cy = (ml.y + mr.y) / 2
+      val depth = (mb.y - cy).coerceAtLeast(1f)
+      out[4] = min(ml.x, mr.x) / w
+      out[5] = (cy - 0.3f * depth) / h
+      out[6] = max(ml.x, mr.x) / w
+      out[7] = (cy + 0.6f * depth) / h
+    }
+    fun centre(contour: Int, mark: Int): PointF? =
+      f.contour(contour)?.takeIf { it.isNotEmpty() }?.let { pts -> PointF(pts.sumOf { it.x.toDouble() }.toFloat() / pts.size, pts.sumOf { it.y.toDouble() }.toFloat() / pts.size) }
+        ?: f.marks[mark]
+    val le = centre(FaceContour.LEFT_EYE, FaceLandmark.LEFT_EYE)
+    val re = centre(FaceContour.RIGHT_EYE, FaceLandmark.RIGHT_EYE)
+    if (le != null && re != null) {
+      out[8] = le.x / w
+      out[9] = le.y / h
+      out[10] = re.x / w
+      out[11] = re.y / h
+    }
+    return out
+  }
+
+  /** Landmarks of every face, in the bitmap's own orientation (no segmentation needed). */
   fun findLandmarks(bitmap: Bitmap, rotation: Int): List<FaceLandmarks> {
     val rot = MaskGeometry.normalise(rotation)
     val upright = scaledUpright(bitmap, rot, ANALYSIS_EDGE)

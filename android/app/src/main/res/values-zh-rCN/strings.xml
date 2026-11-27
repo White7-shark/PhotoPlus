@@ -81,7 +81,7 @@
     <string name="masters_hold_compare">长按查看原图</string>
     <string name="masters_free_ready">今日可免费作画 1 幅</string>
     <string name="masters_free_used">今日免费作画次数已用完。Premium 不限次数。</string>
-    <string name="masters_premium_message">Masterstroke 属于 Premium 功能。免费版每天可作画一幅。</string>
+    <string name="masters_premium_message">Photo Arts 属于 Premium 功能。免费版每天可作画一幅。</string>
     <string name="masters_failed">画作未能完成</string>
     <string name="masters_tile_about">以二十位艺术大师的手法绘制你的照片：达·芬奇、伦勃朗、梵高、莫奈、克里姆特等。</string>
     <string name="masters_free_badge">每天免费 1 次</string>
@@ -150,17 +150,13 @@
     <string name="masters_about_vangogh">厚重旋转的笔触顺着形体流动，鲜艳的蓝与黄，以深蓝勾勒轮廓。</string>
     <string name="masters_about_gauguin">粗布画布上，浓郁温暖的平涂色块以粗犷的深蓝轮廓勾勒。</string>
     <string name="masters_about_klimt">面部精细描绘，其余以金箔与装饰纹样装点：马赛克、螺旋、圆环与方格。</string>
-    <string name="feature_masters">Masterstroke：以二十位艺术大师的手法绘制你的照片</string>
+    <string name="feature_masters">Photo Arts：以二十位艺术大师的手法绘制你的照片</string>
     <string name="masters_painting_of"><xliff:g id="artist">{artist}</xliff:g> 绘制的你的照片</string>
     <string name="masters_your_photo">你的照片</string>
     <string name="masters_free_left">今日还可免费作画 <xliff:g id="n">{n}</xliff:g> 幅</string>
     <string name="masters_unlimited">Premium：不限次数作画</string>
     <string name="masters_go_premium">了解 Premium</string>
     <string name="masters_choose_artist">选择你的艺术家</string>
-    <string name="faq_studio_10_q">Masterstroke 是什么？</string>
-    <string name="faq_studio_10_a">Masterstroke 以二十位艺术大师真实的创作方式为你的照片作画——达·芬奇、伦勃朗、维米尔、葛饰北斋、莫奈、梵高、克里姆特等——使用真实的笔触、每位画家的色彩与光线，以及原作的质感：画布、光油与裂纹、纸上的红粉笔、铜版雕刻或木版画。选择流派、艺术家和完成度（习作、画作或杰作）即可。此功能属于 Premium，免费版每天可作画一幅。</string>
-    <string name="faq_studio_11_q">为什么每位艺术家的效果差别这么大？</string>
-    <string name="faq_studio_11_a">因为每幅作品都使用该艺术家自己的方法，而不是滤镜：达·芬奇柔和的晕涂与古老光油、卡拉瓦乔黑色背景中的单一光源、米开朗基罗的红粉笔排线、丢勒的雕刻线条、北斋的木版平涂色彩、修拉的点彩、梵高厚重的旋涡笔触、克里姆特的金箔。杰作模式使用最精细的画笔，让面容最接近你本人。</string>
     <string name="masters_touch_title">你的笔触</string>
     <string name="masters_touch_about">引导艺术家的手。每项设置都从艺术家本人的手法开始。</string>
     <string name="masters_touch_changed">已应用你的笔触</string>
@@ -199,4 +195,8 @@
     <string name="settings_sim_detail">测试专用：无需订阅即可在本机使用全部 Premium 功能</string>
     <string name="settings_sim_on">本机正在模拟 Premium</string>
     <string name="settings_sim_failed">无法更改 Premium 模拟</string>
+    <string name="faq_studio_10_q">Photo Arts 是什么？</string>
+    <string name="faq_studio_10_a">Photo Arts 以二十位艺术大师真实的创作方式为你的照片作画——达·芬奇、伦勃朗、维米尔、葛饰北斋、莫奈、梵高、克里姆特等——使用真实的笔触、每位画家的色彩与光线，以及原作的质感：画布、光油与裂纹、纸上的红粉笔、铜版雕刻或木版画。选择流派、艺术家和完成度（习作、画作或杰作）即可。此功能属于 Premium，免费版每天可作画一幅。</string>
+    <string name="faq_studio_11_q">为什么每位艺术家的效果差别这么大？</string>
+    <string name="faq_studio_11_a">因为每幅作品都使用该艺术家自己的方法，而不是滤镜：达·芬奇柔和的晕涂与古老光油、卡拉瓦乔黑色背景中的单一光源、米开朗基罗的红粉笔排线、丢勒的雕刻线条、北斋的木版平涂色彩、修拉的点彩、梵高厚重的旋涡笔触、克里姆特的金箔。杰作模式使用最精细的画笔，让面容最接近你本人。</string>
 </resources>

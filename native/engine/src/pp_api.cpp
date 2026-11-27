@@ -2015,12 +2015,13 @@ pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const
 
 }  // extern "C"
 
-pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count, uint32_t seed,
-                       const pp_art_controls* controls, const pp_cancel_token* token) {
+pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
+                       size_t face_stride, uint32_t seed, const pp_art_controls* controls, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
     if (image == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "image is required");
     if (artist < 0 || artist >= PP_ART_ARTISTS || level < 0 || level > 2) return fail(PP_ERROR_INVALID_ARGUMENT, "Unknown artist or level");
     if (face_count > 0 && faces == nullptr) return fail(PP_ERROR_INVALID_ARGUMENT, "faces are missing");
+    if (face_count > 0 && face_stride != 4 && face_stride != 12) return fail(PP_ERROR_INVALID_ARGUMENT, "face_stride must be 4 or 12");
     photoplus::art::Options o;
     o.artist = static_cast<photoplus::art::Artist>(artist);
     o.level = static_cast<photoplus::art::Level>(level);
@@ -2028,8 +2029,15 @@ pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* s
     if (controls != nullptr)
       o.controls = {controls->brush, controls->palette, controls->vivid, controls->likeness, controls->texture, controls->age, controls->background};
     o.subject = subject != nullptr ? &subject->buffer : nullptr;
-    for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i)
-      o.faces.push_back({faces[i * 4], faces[i * 4 + 1], faces[i * 4 + 2], faces[i * 4 + 3]});
+    for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i) {
+      const float* f = faces + i * face_stride;
+      photoplus::art::FaceBox box;
+      box.x = f[0], box.y = f[1], box.w = f[2], box.h = f[3];
+      if (face_stride == 12) {
+        for (size_t k = 0; k < 4; ++k) box.mouth[k] = f[4 + k], box.eyes[k] = f[8 + k];
+      }
+      o.faces.push_back(box);
+    }
     photoplus::Error e = photoplus::art::paint(image->buffer, o, token ? &token->token : nullptr);
     if (e.status != PP_OK) return fail(e);
     return succeed();

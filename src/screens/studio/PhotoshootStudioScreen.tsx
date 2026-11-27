@@ -49,7 +49,7 @@ export const STUDIO_TOOLS: StudioTool[] = [
   },
   {
     id: 'masters',
-    title: 'Masterstroke',
+    title: 'Photo Arts',
     about: tx('masters_tile_about'),
     icon: 'brush',
     available: true,

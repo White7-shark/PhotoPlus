@@ -20,7 +20,7 @@ namespace {
 constexpr int kW = 220, kH = 260;
 
 // A portrait: a person (skin face, dark hair, red top) before a light green wall.
-pp_image* portrait() {
+pp_image* portrait(bool smile = false) {
   pp_image* img = nullptr;
   pp_image_create(kW, kH, PP_FORMAT_RGBA8, &img);
   pp_image_info info{};
@@ -37,6 +37,7 @@ pp_image* portrait() {
       if (body > 0) r = 170, g = 40, b = 45;  // top
       if (std::fabs(static_cast<float>(x) - 95) < 5 && std::fabs(static_cast<float>(y) - 88) < 3) r = g = b = 30;  // eyes
       if (std::fabs(static_cast<float>(x) - 125) < 5 && std::fabs(static_cast<float>(y) - 88) < 3) r = g = b = 30;
+      if (smile && std::fabs(static_cast<float>(x) - 110) < 12 && std::fabs(static_cast<float>(y) - 121) < 3) r = 238, g = 234, b = 226;  // teeth
       p[0] = static_cast<unsigned char>(std::clamp(r, 0.0f, 255.0f));
       p[1] = static_cast<unsigned char>(std::clamp(g, 0.0f, 255.0f));
       p[2] = static_cast<unsigned char>(std::clamp(b, 0.0f, 255.0f));
@@ -81,7 +82,7 @@ std::vector<unsigned char> paint(int artist, int level = 1, uint32_t seed = 7, b
   pp_image* img = portrait();
   pp_image* m = mask ? personMask() : nullptr;
   const float face[4] = {68.0f / kW, 40.0f / kH, 84.0f / kW, 110.0f / kH};
-  EXPECT_EQ(pp_art_paint(img, artist, level, m, face, 1, seed, controls, nullptr), PP_OK);
+  EXPECT_EQ(pp_art_paint(img, artist, level, m, face, 1, 4, seed, controls, nullptr), PP_OK);
   auto out = pixels(img);
   pp_image_destroy(img);
   if (m) pp_image_destroy(m);
@@ -161,22 +162,22 @@ TEST(art_masterpiece_goes_further_than_a_study) {
 
 TEST(art_works_without_a_mask_or_faces) {
   pp_image* img = portrait();
-  EXPECT_EQ(pp_art_paint(img, 19, 1, nullptr, nullptr, 0, 3, nullptr, nullptr), PP_OK);
+  EXPECT_EQ(pp_art_paint(img, 19, 1, nullptr, nullptr, 0, 4, 3, nullptr, nullptr), PP_OK);
   pp_image_destroy(img);
 }
 
 TEST(art_refuses_bad_input_and_honours_cancel) {
   pp_image* img = portrait();
-  EXPECT_EQ(pp_art_paint(nullptr, 0, 1, nullptr, nullptr, 0, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_art_paint(img, PP_ART_ARTISTS, 1, nullptr, nullptr, 0, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_art_paint(img, 0, 3, nullptr, nullptr, 0, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
-  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 1, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(nullptr, 0, 1, nullptr, nullptr, 0, 4, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, PP_ART_ARTISTS, 1, nullptr, nullptr, 0, 4, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, 0, 3, nullptr, nullptr, 0, 4, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 1, 4, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image* wrong = nullptr;
   pp_image_create(20, 20, PP_FORMAT_RGBA8, &wrong);
-  EXPECT_EQ(pp_art_paint(img, 0, 1, wrong, nullptr, 0, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, 0, 1, wrong, nullptr, 0, 4, 1, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_cancel_token* t = pp_cancel_token_create();
   pp_cancel_token_cancel(t);
-  EXPECT_EQ(pp_art_paint(img, 6, 1, nullptr, nullptr, 0, 1, nullptr, t), PP_ERROR_CANCELLED);
+  EXPECT_EQ(pp_art_paint(img, 6, 1, nullptr, nullptr, 0, 4, 1, nullptr, t), PP_ERROR_CANCELLED);
   pp_cancel_token_destroy(t);
   pp_image_destroy(wrong);
   pp_image_destroy(img);
@@ -185,7 +186,7 @@ TEST(art_refuses_bad_input_and_honours_cancel) {
 // The person's controls: the defaults are the artist's own way; each control
 // changes what it says; out-of-range values are refused.
 TEST(art_controls_change_what_they_say) {
-  const pp_art_controls same{1, 1, 0, 0.5f, 1, 1, 1};
+  const pp_art_controls same{1, 1, 0, 0.5f, 0.4f, 1, 1};
   const auto base = paint(6);
   EXPECT_EQ(meanDiff(base, paint(6, 1, 7, true, &same)), 0.0);
 
@@ -226,8 +227,8 @@ TEST(art_controls_change_what_they_say) {
   EXPECT_TRUE((meanIn(leoFresh, 2, 0, 0, kW, kH) - meanIn(leoFresh, 0, 0, 0, kW, kH)) > (meanIn(leo, 2, 0, 0, kW, kH) - meanIn(leo, 0, 0, 0, kW, kH)));
 
   // Texture and likeness change the picture.
-  pp_art_controls smooth = same, close = same;
-  smooth.texture = 0, close.likeness = 1;
+  pp_art_controls smooth = same, close = same;  // (smooth: here the heavy texture against the smooth default)
+  smooth.texture = 1.5f, close.likeness = 1;
   EXPECT_TRUE((meanDiff(base, paint(6, 1, 7, true, &smooth))) > (0.3));
   EXPECT_TRUE((meanDiff(base, paint(6, 1, 7, true, &close))) > (0.1));
 
@@ -235,9 +236,49 @@ TEST(art_controls_change_what_they_say) {
   pp_image* img = portrait();
   pp_art_controls bad = same;
   bad.brush = 3;
-  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 0, 1, &bad, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 0, 4, 1, &bad, nullptr), PP_ERROR_INVALID_ARGUMENT);
   bad = same;
   bad.vivid = NAN;
-  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 0, 1, &bad, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  EXPECT_EQ(pp_art_paint(img, 0, 1, nullptr, nullptr, 0, 4, 1, &bad, nullptr), PP_ERROR_INVALID_ARGUMENT);
   pp_image_destroy(img);
+}
+
+// Teeth keep their light: a smile painted by the engraver, the chalk
+// draughtsman or the tenebrist isn't blackened or crossed out; a closed
+// mouth (no opening between the lips) gets no teeth.
+TEST(art_keeps_teeth_white) {
+  const float open[12] = {68.0f / kW, 40.0f / kH, 84.0f / kW, 110.0f / kH, 96.0f / kW, 116.0f / kH, 124.0f / kW, 126.0f / kH,
+                          95.0f / kW, 88.0f / kH, 125.0f / kW, 88.0f / kH};
+  float closed[12];
+  for (int i = 0; i < 12; ++i) closed[i] = open[i];
+  closed[7] = closed[5];  // the lips meet
+  for (int artist : {3, 1, 5, 10, 18}) {
+    pp_image* a = portrait(true);
+    EXPECT_EQ(pp_art_paint(a, artist, 1, nullptr, open, 1, 12, 7, nullptr, nullptr), PP_OK);
+    const auto pa = pixels(a);
+    const double teeth = lumaIn(pa, 102, 120, 118, 123), skin = lumaIn(pa, 80, 100, 92, 110);
+    EXPECT_TRUE(teeth > 160.0);  // at the painting's own light
+    EXPECT_TRUE(teeth > skin + 25.0);
+    pp_image_destroy(a);
+  }
+  // Hokusai flattens a mouth into the skin's colour block: with the lips
+  // closed (no opening) nothing there is taken for teeth.
+  for (int artist : {10, 18}) {
+    pp_image* a = portrait(true);
+    pp_image* b = portrait(true);
+    EXPECT_EQ(pp_art_paint(a, artist, 1, nullptr, open, 1, 12, 7, nullptr, nullptr), PP_OK);
+    EXPECT_EQ(pp_art_paint(b, artist, 1, nullptr, closed, 1, 12, 7, nullptr, nullptr), PP_OK);
+    EXPECT_TRUE(lumaIn(pixels(b), 102, 120, 118, 123) < lumaIn(pixels(a), 102, 120, 118, 123) - 20.0);
+    pp_image_destroy(a);
+    pp_image_destroy(b);
+  }
+  // A face box without landmarks still finds the teeth where a mouth sits.
+  pp_image* c = portrait(true);
+  EXPECT_EQ(pp_art_paint(c, 3, 1, nullptr, open, 1, 4, 7, nullptr, nullptr), PP_OK);
+  EXPECT_TRUE(lumaIn(pixels(c), 102, 120, 118, 123) > 175.0);
+  pp_image_destroy(c);
+  // A bad stride is refused.
+  pp_image* d = portrait();
+  EXPECT_EQ(pp_art_paint(d, 3, 1, nullptr, open, 1, 6, 7, nullptr, nullptr), PP_ERROR_INVALID_ARGUMENT);
+  pp_image_destroy(d);
 }

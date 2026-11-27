@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 #include "core.hpp"
 #include "photoplus/parallel.hpp"
@@ -173,6 +174,21 @@ std::vector<float> radii(const Ctx& c, float maxFrac, float minFrac) {
   return out;
 }
 
+// One layer of strokes, with the Texture control on the marks themselves:
+// smoother means fewer bristle streaks, no dry broken tails, flatter paint
+// (the artist's handling stays: stroke size, direction and colour).
+bool strokes(const Ctx& c, Canvas& cv, const Img& ref, const Field& field, Brush b, uint32_t seed, const Img* where) {
+  const float t = std::clamp(c.ctl.texture, 0.0f, 1.0f);
+  b.bristleAmp *= 0.25f + 0.75f * t;
+  b.dryness *= t;
+  b.ridge *= t;
+  b.thick *= 0.3f + 0.7f * t;
+  b.thickLights *= t;
+  b.tooth *= t;  // chalk and pastel skip less of the paper's grain
+  b.softness = mix(std::max(b.softness, 0.5f), b.softness, t);
+  return strokeLayer(cv, ref, field, b, seed, where, c.token);
+}
+
 struct Oil {
   Rgb3 ground{0.5f, 0.42f, 0.32f};
   float maxFrac = 1.0f / 30, minFrac = 1.0f / 400;
@@ -190,7 +206,7 @@ Canvas paintOil(const Ctx& c, const Img& ref, const Field& field, const Oil& o) 
   for (float r : radii(c, o.maxFrac, o.minFrac)) {
     Brush b = o.brush;
     b.radius = r;
-    if (!strokeLayer(cv, ref, field, b, c.seed * 977U + ++layer, nullptr, c.token)) return cv;
+    if (!strokes(c, cv, ref, field, b, c.seed * 977U + ++layer, nullptr)) return cv;
   }
   // The face, with the finest brush, so it stays the sitter.
   if (o.faceDetail && !c.faces.d.empty()) {
@@ -199,7 +215,7 @@ Canvas paintOil(const Ctx& c, const Img& ref, const Field& field, const Oil& o) 
     b.radius = std::max(1.0f, o.minFrac * c.S * keep * (c.level == Level::Masterpiece ? 0.55f : c.level == Level::Painting ? 0.8f : 1.2f));
     b.threshold *= mix(0.9f, 0.3f, c.ctl.likeness);
     b.maxLen = std::min(b.maxLen, 4.0f);
-    strokeLayer(cv, ref, field, b, c.seed * 977U + 99U, &c.faces, c.token);
+    strokes(c, cv, ref, field, b, c.seed * 977U + 99U, &c.faces);
   }
   return cv;
 }
@@ -374,7 +390,7 @@ Img vermeer(Ctx& c) {
   const std::vector<Rgb3> pearls = pal({0xFBF6E8, 0xF4E3A6, 0xFFFFFF});
   Brush dots{.radius = std::max(1.0f, c.S / 700.0f), .opacity = 0.7f, .softness = 0.5f, .thick = 0.25f, .threshold = 0.0f, .grid = 3.0f,
              .blur = 0, .mode = StrokeMode::Dot, .dotPalette = &pearls};
-  if (c.level != Level::Study) strokeLayer(cv, cv.rgb, f, dots, c.seed + 7U, &lights, c.token);
+  if (c.level != Level::Study) strokes(c, cv, cv.rgb, f, dots, c.seed + 7U, &lights);
   Img rgb = cv.rgb;
   mixInto(rgb, blur(rgb, c.S / 800.0f, c.token), 0.3f);  // the soft focus of a camera obscura
   finishOil(rgb, cv, c, 0.1f, c.S / 240.0f, 0.15f, 0.05f, 0.35f, 0.25f, 0.12f, hex(0x2A2620));
@@ -535,7 +551,7 @@ Img seurat(Ctx& c) {
   for (float r : rs) {
     Brush b{.radius = std::max(1.0f, r), .opacity = 0.95f, .softness = 0.25f, .bristleAmp = 0.05f, .thick = 0.08f, .threshold = 0.04f,
             .grid = 0.9f, .blur = 0.4f, .mode = StrokeMode::Dot, .dotPalette = &pigments};
-    if (!strokeLayer(cv, ref, f, b, c.seed * 31U + ++layer, nullptr, c.token)) break;
+    if (!strokes(c, cv, ref, f, b, c.seed * 31U + ++layer, nullptr)) break;
   }
   Img rgb = cv.rgb;
   finishOil(rgb, cv, c, 0.08f, c.S / 240.0f, 0.15f, 0.0f, 0.0f, 0, 0, {});
@@ -646,7 +662,7 @@ Img gauguin(Ctx& c) {
   const Field f = formField(c, flat);
   Brush b{.radius = c.S / 110.0f, .maxLen = 6, .curvature = 0.5f, .opacity = 0.35f, .softness = 0.4f, .bristleAmp = 0.15f, .dryness = 0.7f,
           .thick = 0.1f, .threshold = 0.0f, .blur = 0};
-  strokeLayer(cv, flat, f, b, c.seed + 11U, nullptr, c.token);
+  strokes(c, cv, flat, f, b, c.seed + 11U, nullptr);
   Img rgb = cv.rgb;
   Img edge = borders(idx, c.w, c.h, std::max(1.0f, c.S / 450.0f));
   const Img l = lines(blur(lumaOf(c.photo), 1.0f, c.token), std::max(1.0f, c.S / 450.0f), 1.6f, 0.012f, 0.03f, c.token);
@@ -857,7 +873,7 @@ Img degas(Ctx& c) {
     Brush b{.radius = r, .maxLen = 10, .minLen = 3, .curvature = 0.5f, .opacity = 0.9f, .softness = 0.45f, .bristleAmp = 0.15f, .dryness = 0.2f,
             .taper = 0.4f, .thick = 0, .threshold = 0.07f, .grid = 0.8f, .mode = layer % 2 == 0 ? StrokeMode::Fixed : StrokeMode::Flow,
             .angle = -1.0f, .angleJitter = 0.25f, .tooth = 0.25f};
-    if (!strokeLayer(cv, ref, f, b, c.seed * 13U + ++layer, nullptr, c.token)) break;
+    if (!strokes(c, cv, ref, f, b, c.seed * 13U + ++layer, nullptr)) break;
   }
   Img rgb = cv.rgb;
   Img contour = lines(blur(lumaOf(c.photo), 1.0f, c.token), std::max(1.0f, c.S / 600.0f), 1.6f, 0.015f, 0.04f, c.token);
@@ -1030,6 +1046,139 @@ void personalise(Img& out, const Ctx& c) {
   }
 }
 
+// Separable min (erode) or max (dilate) over a square of radius r.
+Img rankFilter(const Img& src, int r, bool max) {
+  Img a(src.w, src.h, 1), b(src.w, src.h, 1);
+  for (int y = 0; y < src.h; ++y)
+    for (int x = 0; x < src.w; ++x) {
+      float v = src.at(x, y);
+      for (int k = std::max(0, x - r); k <= std::min(src.w - 1, x + r); ++k) v = max ? std::max(v, src.at(k, y)) : std::min(v, src.at(k, y));
+      a.at(x, y) = v;
+    }
+  for (int y = 0; y < src.h; ++y)
+    for (int x = 0; x < src.w; ++x) {
+      float v = a.at(x, y);
+      for (int k = std::max(0, y - r); k <= std::min(src.h - 1, y + r); ++k) v = max ? std::max(v, a.at(x, k)) : std::min(v, a.at(x, k));
+      b.at(x, y) = v;
+    }
+  return b;
+}
+
+// Teeth and the whites of the eyes: found in the photo (bright, nearly
+// colourless spots within a face, well above the skin's own light) and given
+// back their light after the painting, at the painting's own brightness and
+// in its tint. Without this, hatching, key lines, dark glazes and old
+// varnish can blacken, cross out or yellow a smile.
+Img facialWhites(const Ctx& c) {
+  Img m(c.w, c.h, 1, 0.0f);
+  if (c.faces.d.empty()) return m;
+  for (const FaceBox& f : c.faceBoxes) {
+    const int x0 = std::clamp(static_cast<int>(f.x * static_cast<float>(c.w)), 0, c.w - 1);
+    const int y0 = std::clamp(static_cast<int>(f.y * static_cast<float>(c.h)), 0, c.h - 1);
+    const int x1 = std::clamp(static_cast<int>((f.x + f.w) * static_cast<float>(c.w)), x0 + 1, c.w);
+    const int y1 = std::clamp(static_cast<int>((f.y + f.h) * static_cast<float>(c.h)), y0 + 1, c.h);
+    // The face's own light: the median of its brightness.
+    std::vector<float> ys;
+    ys.reserve(static_cast<size_t>((x1 - x0) * (y1 - y0)));
+    for (int y = y0; y < y1; ++y)
+      for (int x = x0; x < x1; ++x)
+        if (c.faces.at(x, y) > 0.5f) ys.push_back(luma(c.photo.px(x, y)));
+    if (ys.size() < 16) continue;
+    std::nth_element(ys.begin(), ys.begin() + static_cast<std::ptrdiff_t>(ys.size() / 2), ys.end());
+    const float skin = ys[ys.size() / 2];
+    // The skin's own colourfulness: teeth and eye whites are far less colourful than it.
+    std::vector<float> ss;
+    ss.reserve(ys.capacity());
+    for (int y = y0; y < y1; ++y)
+      for (int x = x0; x < x1; ++x)
+        if (c.faces.at(x, y) > 0.5f) {
+          float hsv[3];
+          rgbToHsv(c.photo.px(x, y), hsv);
+          ss.push_back(hsv[1]);
+        }
+    std::nth_element(ss.begin(), ss.begin() + static_cast<std::ptrdiff_t>(ss.size() / 2), ss.end());
+    const float sh = std::clamp(0.5f * ss[ss.size() / 2], 0.15f, 0.3f);
+    // Clearly above the skin's light (on dark skin by half again; on light skin by a step), whatever the skin.
+    const float lo = std::clamp(std::min(skin * 1.45f, skin + 0.14f), 0.28f, 0.85f);
+    // Where they can be: the mouth and the eyes (from the face's landmarks, or
+    // where they sit in a face box), never the forehead's or cheeks' shine.
+    const float fw = f.w * static_cast<float>(c.w), fh = f.h * static_cast<float>(c.h);
+    const float bx = f.x * static_cast<float>(c.w), by = f.y * static_cast<float>(c.h);
+    struct Zone { float cx, cy, rx, ry; };
+    std::vector<Zone> zones;
+    const bool mouthKnown = f.mouth[2] > f.mouth[0] && f.mouth[3] >= f.mouth[1];
+    if (mouthKnown) {
+      // The opening between the lips: a closed mouth has none, so its shine stays the lips'.
+      const float mx0 = f.mouth[0] * static_cast<float>(c.w), mx1 = f.mouth[2] * static_cast<float>(c.w);
+      const float my0 = f.mouth[1] * static_cast<float>(c.h), my1 = f.mouth[3] * static_cast<float>(c.h);
+      if (my1 - my0 > 0.02f * fw) zones.push_back({(mx0 + mx1) * 0.5f, (my0 + my1) * 0.5f, (mx1 - mx0) * 0.55f, (my1 - my0) * 0.6f + 0.01f * fw});
+    } else {
+      zones.push_back({bx + 0.5f * fw, by + 0.76f * fh, 0.24f * fw, 0.13f * fh});
+    }
+    const bool eyesKnown = f.eyes[0] > 0 && f.eyes[2] > 0;
+    for (int e = 0; e < 2; ++e) {
+      const float ex = eyesKnown ? f.eyes[e * 2] * static_cast<float>(c.w) : bx + (e == 0 ? 0.31f : 0.69f) * fw;
+      const float ey = eyesKnown ? f.eyes[e * 2 + 1] * static_cast<float>(c.h) : by + 0.4f * fh;
+      zones.push_back({ex, ey, 0.11f * fw, 0.05f * fw});
+    }
+    for (int y = y0; y < y1; ++y)
+      for (int x = x0; x < x1; ++x) {
+        float zone = 0;
+        for (const Zone& z : zones) {
+          const float dx = (static_cast<float>(x) - z.cx) / z.rx, dy = (static_cast<float>(y) - z.cy) / z.ry;
+          zone = std::max(zone, 1 - smoothstep(0.8f, 1.0f, std::sqrt(dx * dx + dy * dy)));
+        }
+        if (zone <= 0) continue;
+        const float* p = c.photo.px(x, y);
+        float hsv[3];
+        rgbToHsv(p, hsv);
+        // Lip pinks and reds (a lip's gloss) aren't teeth.
+        const float pink = (hsv[0] > 0.9f || hsv[0] < 0.045f) ? smoothstep(0.08f, 0.16f, hsv[1]) : 0.0f;
+        const float v = smoothstep(lo, lo + 0.1f, luma(p)) * (1 - smoothstep(sh, sh + 0.12f, hsv[1])) * (1 - pink);
+        m.at(x, y) = std::max(m.at(x, y), v * zone);
+      }
+  }
+  // Whole features, not specks.
+  float faceW = 0;
+  for (const FaceBox& f : c.faceBoxes) faceW = std::max(faceW, f.w * static_cast<float>(c.w));
+  // Close the gaps between teeth first, then open away specks.
+  const int rc = std::max(1, static_cast<int>(faceW / 60.0f + 0.5f)), ro = std::max(1, static_cast<int>(faceW / 90.0f + 0.5f));
+  m = rankFilter(rankFilter(m, rc, true), rc, false);
+  m = rankFilter(rankFilter(m, ro, false), ro, true);
+  m = blur(m, std::max(0.8f, faceW / 300.0f), c.token);
+  for (float& v : m.d) v = smoothstep(0.2f, 0.55f, v);
+  return m;
+}
+
+void keepWhites(Img& out, const Ctx& c) {
+  const Img m = facialWhites(c);
+  double po = 0, pp = 0, wsum = 0;
+  for (size_t i = 0; i < m.d.size(); ++i) {
+    const float f = c.faces.d.empty() ? 0.0f : c.faces.d[i];
+    if (f < 0.5f) continue;
+    po += luma(&out.d[i * 3]), pp += luma(&c.photo.d[i * 3]), wsum += 1;
+  }
+  if (wsum < 16) return;
+  // How the painting lit the face against the photo: the whites follow it.
+  const float ratio = std::clamp(static_cast<float>(po / std::max(pp, 1e-3)), 0.55f, 1.25f);
+  const Img tint = blur(out, std::max(2.0f, c.G / 80.0f), c.token);  // the painting's colour around them
+  const Img soft = blur(c.photo, std::max(0.6f, c.G / 1400.0f), c.token);
+  for (int y = 0; y < c.h; ++y)
+    for (int x = 0; x < c.w; ++x) {
+      const float a = m.at(x, y);
+      if (a <= 0.01f) continue;
+      float lo[3], lp[3], lt[3];
+      float* o = out.px(x, y);
+      rgbToLab(o, lo);
+      rgbToLab(soft.px(x, y), lp);
+      rgbToLab(tint.px(x, y), lt);
+      float target[3] = {std::max(lo[0], std::min(95.0f, lp[0] * ratio)), lt[1] * 0.35f + lp[1] * 0.15f, lt[2] * 0.35f + lp[2] * 0.15f};
+      for (int k = 0; k < 3; ++k) lo[k] = mix(lo[k], target[k], a * 0.92f);
+      labToRgb(lo, o);
+      for (int k = 0; k < 3; ++k) o[k] = clamp01(o[k]);
+    }
+}
+
 }  // namespace
 
 Error paint(ImageBuffer& image, const Options& options, const CancellationToken* token) {
@@ -1096,6 +1245,7 @@ Error paint(ImageBuffer& image, const Options& options, const CancellationToken*
   Img out = paintArtist(c, options.artist);
   if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
   personalise(out, c);
+  keepWhites(out, c);
   if (isCancelled(token)) return {PP_ERROR_CANCELLED, "Cancelled"};
   for (int y = 0; y < c.h; ++y) {
     uint8_t* row = image.row(y);

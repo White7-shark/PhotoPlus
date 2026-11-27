@@ -26,7 +26,7 @@ import {
   type GridStyle,
   type PoseAssistantSettings,
 } from '../../pose/settings';
-import { DEFAULT_MASTERSTROKE, isMasterstrokeSettings, type MasterstrokeSettings } from '../../masters/controls';
+import { DEFAULT_PHOTO_ARTS, isPhotoArtsSettings, type PhotoArtsSettings } from '../../masters/controls';
 
 /** 'lucid': the see-through theme (src/theme/lucid.ts). */
 export type ThemePreference = 'dark' | 'light' | 'system' | 'lucid';
@@ -73,8 +73,8 @@ export interface AppSettings {
   brandingPresets: BrandingPreset[];
   /** Props people made from their own photos (Premium). */
   customProps: CustomProp[];
-  /** Masterstroke: the finish to start with, the person's touch, the artist cards. */
-  masterstroke: MasterstrokeSettings;
+  /** Photo Arts: the finish to start with, the person's touch, the artist cards. */
+  photoArts: PhotoArtsSettings;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -102,7 +102,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   watermark: DEFAULT_WATERMARK,
   brandingPresets: [],
   customProps: [],
-  masterstroke: DEFAULT_MASTERSTROKE,
+  photoArts: DEFAULT_PHOTO_ARTS,
 };
 
 type Validators = { [K in keyof AppSettings]: (v: unknown) => v is AppSettings[K] };
@@ -139,7 +139,7 @@ const VALIDATORS: Validators = {
   watermark: isWatermarkSpec,
   brandingPresets: isBrandingPresets,
   customProps: isCustomProps,
-  masterstroke: isMasterstrokeSettings,
+  photoArts: isPhotoArtsSettings,
 };
 
 export function isValidSetting<K extends keyof AppSettings>(key: K, value: unknown): value is AppSettings[K] {

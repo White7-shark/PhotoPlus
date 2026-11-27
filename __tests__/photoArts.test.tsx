@@ -2,16 +2,16 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
 
 import { MastersScreen } from '../src/screens/studio/MastersScreen';
-import { offset } from '../src/screens/studio/MasterstrokeTouch';
+import { offset } from '../src/screens/studio/PhotoArtsTouch';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import {
   ARTIST_WAY,
   CONTROL_RANGES,
-  DEFAULT_MASTERSTROKE,
+  DEFAULT_PHOTO_ARTS,
   clampControls,
   isArtControls,
   isArtistWay,
-  isMasterstrokeSettings,
+  isPhotoArtsSettings,
 } from '../src/services/masters/controls';
 import { DEFAULT_SETTINGS, isValidSetting } from '../src/services/database/repositories/SettingsRepository';
 import { getProcessingService } from '../src/services/processing/ImageProcessingService';
@@ -110,10 +110,10 @@ describe('your touch: the controls', () => {
       vivid: -1,
     });
     expect(isArtControls({ ...ARTIST_WAY, texture: 3 })).toBe(false);
-    expect(isMasterstrokeSettings(DEFAULT_MASTERSTROKE)).toBe(true);
-    expect(isMasterstrokeSettings({ ...DEFAULT_MASTERSTROKE, level: 3 })).toBe(false);
-    expect(isValidSetting('masterstroke', DEFAULT_MASTERSTROKE)).toBe(true);
-    expect(isValidSetting('masterstroke', { level: 1 })).toBe(false);
+    expect(isPhotoArtsSettings(DEFAULT_PHOTO_ARTS)).toBe(true);
+    expect(isPhotoArtsSettings({ ...DEFAULT_PHOTO_ARTS, level: 3 })).toBe(false);
+    expect(isValidSetting('photoArts', DEFAULT_PHOTO_ARTS)).toBe(true);
+    expect(isValidSetting('photoArts', { level: 1 })).toBe(false);
     // Shown as the distance from the artist's way, in any language.
     expect(offset('brush', 1, 0.6, 1.6)).toBe('0');
     expect(offset('brush', 1.3, 0.6, 1.6)).toBe('+30');
@@ -122,7 +122,7 @@ describe('your touch: the controls', () => {
 
   it('guides the painting from the screen, repaints when the finger lifts, remembers it and resets', async () => {
     await wrap(<MastersScreen navigation={navigation as never} route={{ key: 'm', name: 'Masters' } as never} />);
-    expect(screen.getByText('Masterstroke')).toBeTruthy();
+    expect(screen.getByText('Photo Arts')).toBeTruthy();
     await step(() => fireEvent.press(screen.getByTestId('masters-pick')));
     expect(lastRequest().controls).toEqual(ARTIST_WAY);
 
@@ -135,7 +135,7 @@ describe('your touch: the controls', () => {
     expect(req.quality).toBe('preview');
     expect(req.controls).toMatchObject({ brush: 1.1, background: 0.95 });
     // Remembered for next time.
-    expect(useAppStore.getState().settings.masterstroke.controls).toMatchObject({ brush: 1.1, background: 0.95 });
+    expect(useAppStore.getState().settings.photoArts.controls).toMatchObject({ brush: 1.1, background: 0.95 });
 
     // The finished painting uses the touch too.
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
@@ -144,14 +144,14 @@ describe('your touch: the controls', () => {
     // Back to the artist's way.
     await step(() => fireEvent.press(screen.getByTestId('masters-touch-reset')));
     expect(lastRequest().controls).toEqual(ARTIST_WAY);
-    expect(useAppStore.getState().settings.masterstroke.controls).toEqual(ARTIST_WAY);
+    expect(useAppStore.getState().settings.photoArts.controls).toEqual(ARTIST_WAY);
   });
 
   it('follows its settings: the finish to start with, not remembering, and cards without paintings', async () => {
     useAppStore.setState({
       settings: {
         ...DEFAULT_SETTINGS,
-        masterstroke: { level: 2, remember: false, cardPreviews: false, controls: { ...ARTIST_WAY, brush: 1.5 } },
+        photoArts: { level: 2, remember: false, cardPreviews: false, controls: { ...ARTIST_WAY, brush: 1.5 } },
       },
     } as never);
     await wrap(<MastersScreen navigation={navigation as never} route={{ key: 'm', name: 'Masters' } as never} />);
@@ -164,18 +164,18 @@ describe('your touch: the controls', () => {
 });
 
 describe('Settings', () => {
-  it('sets Masterstroke’s finish, memory, cards and resets the touch', async () => {
+  it('sets Photo Arts’s finish, memory, cards and resets the touch', async () => {
     useAppStore.setState({
-      settings: { ...DEFAULT_SETTINGS, masterstroke: { ...DEFAULT_MASTERSTROKE, controls: { ...ARTIST_WAY, age: 0 } } },
+      settings: { ...DEFAULT_SETTINGS, photoArts: { ...DEFAULT_PHOTO_ARTS, controls: { ...ARTIST_WAY, age: 0 } } },
     } as never);
     await wrap(<SettingsScreen navigation={{ navigate: jest.fn() } as never} route={{} as never} />);
-    expect(screen.getByTestId('settings-masterstroke')).toBeTruthy();
+    expect(screen.getByTestId('settings-photo-arts')).toBeTruthy();
     await fireEvent.press(screen.getByRole('radio', { name: 'Masterpiece' }));
-    expect(useAppStore.getState().settings.masterstroke.level).toBe(2);
+    expect(useAppStore.getState().settings.photoArts.level).toBe(2);
     await fireEvent.press(screen.getByTestId('settings-ms-reset'));
-    expect(useAppStore.getState().settings.masterstroke.controls).toEqual(ARTIST_WAY);
+    expect(useAppStore.getState().settings.photoArts.controls).toEqual(ARTIST_WAY);
     await fireEvent(screen.getByRole('switch', { name: /Remember my touch/ }), 'valueChange', false);
-    expect(useAppStore.getState().settings.masterstroke.remember).toBe(false);
+    expect(useAppStore.getState().settings.photoArts.remember).toBe(false);
     // No Testing section where the build doesn't allow the simulation.
     expect(screen.queryByTestId('settings-testing')).toBeNull();
   });

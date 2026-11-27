@@ -1,8 +1,8 @@
-# Masterstroke: your photo painted as twenty great artists worked
+# Photo Arts: your photo painted as twenty great artists worked
 
-(The tool was first called Masters. Code identifiers still say `masters`, but the name people see is **Masterstroke**.)
+(The tool was called Masters, then Masterstroke. Code identifiers still say `masters`, but the name people see is **Photo Arts**.)
 
-Masterstroke is a Photoshoot Studio tool. It is Premium; the free plan gets **one finished painting a day**. Previews and the artist cards are free and unlimited.
+Photo Arts is a Photoshoot Studio tool. It is Premium; the free plan gets **one finished painting a day**. Previews and the artist cards are free and unlimited.
 
 It is not a filter laid over the photo. The engine paints a new picture from it the way each artist worked:
 - the ground they painted on;
@@ -68,7 +68,7 @@ At every level the face gets its own fine-brush pass, so it stays true to the pe
   - `preview`: 760 px;
   - `full`: the finished painting.
 - A full render needs `ArtAllowance.allowed`. Otherwise it is refused with `PREMIUM_REQUIRED` and a translated message.
-- `ArtAllowance` counts one painting per local calendar day, using the trusted clock (Integrity), so changing the phone's date doesn't reset it. Premium, or Masterstroke redeemed with Rewards points, has no limit.
+- `ArtAllowance` counts one painting per local calendar day, using the trusted clock (Integrity), so changing the phone's date doesn't reset it. Premium, or Photo Arts redeemed with Rewards points, has no limit.
 - The free plan's finished paintings carry the watermark, like every other free export.
 - The person mask and faces are cached for the last three photos, so changing the artist doesn't run detection again.
 - R8 keeps the JNI method through the existing `native <methods>` keep rule (checked with `minifyReleaseWithR8`).
@@ -97,7 +97,7 @@ A collapsible panel on the screen ("Your touch") guides the artist's hand. Every
 | Colours | your photo's 0 – artist's palette 1 (1) | Takes the photo's hue and colourfulness at the painting's own light, so there is no glaring colour in the shadows. |
 | Vividness | −1–1 (0) | Raises quiet colours most and strong ones (skin, a red dress) little, so skin stays natural. Lower values mute. |
 | Likeness | artistic 0 – true to you 1 (0.5) | Uses finer brushes and a lower repaint threshold on the face. Above the middle, the photo's fine light and shade are drawn back into the face. |
-| Texture | 0–1.5 (1) | Canvas weave, paint relief, paper grain. |
+| Texture | 0–1.5 (**0.4: smooth by default**; 1 is the artist's full texture) | Canvas weave, paint relief and paper grain. It also governs the marks themselves: bristle streaks, dry broken tails, paint ridges and thickness, and how much chalk or pastel skips the paper's grain. |
 | Age | fresh paint 0 – centuries old 1.5 (1) | Varnish and craquelure. |
 | Background | your scene 0 – artist's 1 (1) | How far the artist takes over the background (Caravaggio's black ground, Leonardo's haze, Klimt's gold). At 0 your own background is painted as it is. |
 
@@ -112,9 +112,50 @@ How the controls behave:
   - Android clamps the values and passes them through JNI.
   - A test checks that each control changes what it says and that the defaults give exactly the artist's picture.
 
+## Teeth and the whites of the eyes
+
+Some artists blackened, crossed out or yellowed teeth:
+- Dürer's engraved lines and Michelangelo's chalk hatching left black specks.
+- Hokusai and Gauguin flattened the teeth into skin or drew lines across them.
+- Rembrandt, Leonardo and Turner turned them yellow-brown under the varnish.
+
+After painting, the engine now finds the teeth and the whites of the eyes in the photo and gives them back their light.
+
+**Where it looks.** Only where they can be:
+- **Mouth:** the opening between the inner lip lines (ML Kit's upper-lip-bottom and lower-lip-top contours). A closed mouth has no opening, so the shine on closed lips stays the lips' own.
+- **Eyes:** around each eye centre.
+- **Fallbacks:** when there are no contours, the mouth landmarks are used. When there are no landmarks, it uses where these features sit in a face box.
+
+**What counts.** Within those areas, a pixel counts when it is:
+- clearly brighter than the face's median skin (by half again on dark skin, by a step on light skin), and
+- far less colourful than the skin, and
+- not lip-pink.
+
+Gaps between teeth are closed, and specks are opened away, at the face's scale.
+
+**What it does.** The whites are lifted to the photo's own light, scaled to how the painting lit the face, so they are never brighter than the painting allows. They take the painting's tint, desaturated, so Dürer's teeth are paper-white and Michelangelo's are chalk-paper.
+
+**API.** Each face passes 12 floats: the box, the mouth opening and the eye centres (`face_stride` 12). The older 4-float faces still work.
+
+**Test.** `art_keeps_teeth_white` checks that:
+- a smile stays white and clearly brighter than the skin under Dürer, Michelangelo, Caravaggio, Hokusai and Gauguin;
+- a closed mouth gets no teeth;
+- a face box alone still finds the teeth.
+
+## Checked on real photos
+
+All 20 artists were rendered on three photos:
+- the user's own phone selfie: flash-lit, closed shiny lips, dark skin;
+- a real studio couple photo: two smiling faces, small in the frame;
+- a studio portrait with a wide smile.
+
+Then the mouths and faces were compared before and after. Teeth are white and natural for every artist. Closed lips keep their colour, and no shine on a cheek or forehead turns into a white dot. The smooth default removes the rough canvas, grain and specks (Van Gogh, Monet, Cézanne, Degas) and keeps each artist's brushwork.
+
+The person masks and face points for these checks were made by hand on the computer. On the phone, ML Kit provides them. The previews stay local and are not committed.
+
 ## Settings
 
-Settings has a Masterstroke section, stored as the validated `masterstroke` setting:
+Settings has a Photo Arts section, stored as the validated `photoArts` setting:
 - **Finish to start with:** Study, Painting or Masterpiece.
 - **Remember my touch:** keeps your controls for next time. When it's off, every session starts at the artist's way.
 - **Paint the artist cards:** when it's off, cards show the artist's initial. This saves battery.
@@ -122,7 +163,7 @@ Settings has a Masterstroke section, stored as the validated `masterstroke` sett
 
 ## Premium simulation (testers; to be removed for production)
 
-- **Where:** Settings has a Testing section with a **Simulate Premium** switch. It gives this phone Premium without a subscription: unlimited Masterstroke paintings, no watermark, and every Premium tool, because the native plan is what decides these.
+- **Where:** Settings has a Testing section with a **Simulate Premium** switch. It gives this phone Premium without a subscription: unlimited Photo Arts paintings, no watermark, and every Premium tool, because the native plan is what decides these.
 - **When it shows:** only where the build allows it. That is debug builds, and builds made with `PREMIUM_SIMULATION`, which `android/app/build.gradle` sets to `true` for now.
 - **Before the production release**, do one of these:
   - set the default to `false`, or
@@ -138,15 +179,15 @@ Every new text was written by hand in English and translated by hand into Spanis
 - the two new FAQ entries;
 - the native messages;
 - the Rewards tool names;
-- the Your touch controls, the Masterstroke settings and the Premium simulation texts.
+- the Your touch controls, the Photo Arts settings and the Premium simulation texts.
 
 The source is `tools/i18n/content/masters.py`, which merges into `src/i18n/strings/*.json`. `tools/i18n/build-strings.mjs` then generates `strings.xml` for each language.
 
-The titles of Premium features are now string resources too (`feature_<name>`, all 59), and the Premium sheet shows them in the app's language. Masterstroke's title is translated by hand; the rest are in `values/strings.xml` for Google Play to translate.
+The titles of Premium features are now string resources too (`feature_<name>`, all 59), and the Premium sheet shows them in the app's language. Photo Arts's title is translated by hand; the rest are in `values/strings.xml` for Google Play to translate.
 
 ## Checks
 
-- Engine: 7 art tests pass (244 engine tests in all). On the host, a 900×960 photo takes about 0.4–4 s, depending on the artist.
+- Engine: 8 art tests pass (245 engine tests in all). On the host, a 900×960 photo takes about 0.4–4 s, depending on the artist.
 - App:
   - `tsc` and `eslint` are clean.
   - Jest: 37 suites, 406 tests. The new `__tests__/masters.test.tsx` covers the catalogue, all 8 translations (with their placeholders), the service, the studio tile, the full screen flow (free painting, then Premium) and Premium without limits.

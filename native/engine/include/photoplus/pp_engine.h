@@ -1376,13 +1376,16 @@ pp_status pp_product_render(const pp_image* cutout, const pp_image* scene, const
 #define PP_ART_ARTISTS 20
 /* The person's controls (NULL: the artist's own way). Ranges: brush 0.5..2
  * (1), palette 0 photo colours..1 artist's (1), vivid -1..1 (0), likeness
- * 0..1 (0.5), texture 0..2 (1), age 0..2 (1), background 0 photo's..1
+ * 0..1 (0.5), texture 0..2 (0.4: smooth), age 0..2 (1), background 0 photo's..1
  * artist's (1). Out of range: PP_ERROR_INVALID_ARGUMENT. */
 typedef struct pp_art_controls {
   float brush, palette, vivid, likeness, texture, age, background;
 } pp_art_controls;
+/* faces: face_count faces of face_stride floats each (4 or 12): x, y, w, h,
+ * then (stride 12) the mouth x0, y0, x1, y1 and the eye centres lx, ly, rx,
+ * ry, normalised (zeros when unknown). */
 pp_status pp_art_paint(pp_image* image, int artist, int level, const pp_image* subject, const float* faces, size_t face_count,
-                       uint32_t seed, const pp_art_controls* controls, const pp_cancel_token* token);
+                       size_t face_stride, uint32_t seed, const pp_art_controls* controls, const pp_cancel_token* token);
 
 #ifdef __cplusplus
 } /* extern "C" */

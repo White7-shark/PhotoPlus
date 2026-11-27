@@ -1,5 +1,5 @@
 /**
- * Masterstroke: the twenty artists (engine order: pp_art_paint), grouped by
+ * Photo Arts: the twenty artists (engine order: pp_art_paint), grouped by
  * movement, each with their years, their technique and how they worked.
  * Names and words are string resources (translated); years are numbers.
  */

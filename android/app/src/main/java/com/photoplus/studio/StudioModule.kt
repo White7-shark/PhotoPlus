@@ -863,7 +863,7 @@ class StudioModule(reactContext: ReactApplicationContext) :
       Triple("age", 0f, 1.5f),
       Triple("background", 0f, 1f),
     )
-    private val ART_DEFAULTS = floatArrayOf(1f, 1f, 0f, 0.5f, 1f, 1f, 1f)
+    private val ART_DEFAULTS = floatArrayOf(1f, 1f, 0f, 0.5f, 0.4f, 1f, 1f)  // a smooth texture by default
     const val NAME = "PhotoPlusStudio"
     const val NO_PERSON = "NO_PERSON"
     const val NO_FACE = "NO_FACE"

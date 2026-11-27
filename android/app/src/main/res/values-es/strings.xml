@@ -81,7 +81,7 @@
     <string name="masters_hold_compare">Mantén pulsado para ver tu foto</string>
     <string name="masters_free_ready">1 cuadro gratis hoy</string>
     <string name="masters_free_used">Ya usaste el cuadro gratis de hoy. Premium pinta sin límites.</string>
-    <string name="masters_premium_message">Masterstroke forma parte de Premium. Con el plan gratuito puedes pintar un cuadro al día.</string>
+    <string name="masters_premium_message">Photo Arts forma parte de Premium. Con el plan gratuito puedes pintar un cuadro al día.</string>
     <string name="masters_failed">No se pudo terminar el cuadro</string>
     <string name="masters_tile_about">Tu foto pintada como trabajaban veinte grandes artistas: Leonardo, Rembrandt, Van Gogh, Monet, Klimt y más.</string>
     <string name="masters_free_badge">1 gratis al día</string>
@@ -150,17 +150,13 @@
     <string name="masters_about_vangogh">Trazos de pintura espesos y en remolino que siguen las formas, azules y amarillos intensos y contornos en azul profundo.</string>
     <string name="masters_about_gauguin">Campos planos de color cálido e intenso rodeados de contornos azul oscuro marcados, sobre lienzo grueso.</string>
     <string name="masters_about_klimt">El rostro pintado con finura y el resto en pan de oro y ornamento: mosaicos, espirales, anillos y damas.</string>
-    <string name="feature_masters">Masterstroke: tu foto pintada como trabajaban veinte grandes artistas</string>
+    <string name="feature_masters">Photo Arts: tu foto pintada como trabajaban veinte grandes artistas</string>
     <string name="masters_painting_of">Tu foto pintada por <xliff:g id="artist">{artist}</xliff:g></string>
     <string name="masters_your_photo">Tu foto</string>
     <string name="masters_free_left">Te quedan <xliff:g id="n">{n}</xliff:g> cuadros gratis hoy</string>
     <string name="masters_unlimited">Premium: pinta sin límites</string>
     <string name="masters_go_premium">Ver Premium</string>
     <string name="masters_choose_artist">Elige tu artista</string>
-    <string name="faq_studio_10_q">¿Qué es Masterstroke?</string>
-    <string name="faq_studio_10_a">Masterstroke pinta tu foto como trabajaban de verdad veinte grandes artistas —Leonardo da Vinci, Rembrandt, Vermeer, Hokusai, Monet, Van Gogh, Klimt y más— con pinceladas reales, la paleta y la luz de cada uno y el acabado auténtico: lienzo, barniz y grietas, sanguina sobre papel, grabado o xilografía. Elige un movimiento, un artista y un acabado (Estudio, Cuadro u Obra maestra). Forma parte de Premium; con el plan gratuito puedes pintar un cuadro al día.</string>
-    <string name="faq_studio_11_q">¿Por qué cada artista se ve tan distinto?</string>
-    <string name="faq_studio_11_a">Porque cada uno se pinta con el método propio de ese artista, no con un filtro: el sfumato suave y el barniz antiguo de Leonardo, la luz única sobre fondo negro de Caravaggio, el sombreado a sanguina de Miguel Ángel, las líneas grabadas de Durero, los colores planos de xilografía de Hokusai, los puntos de Seurat, la pintura espesa en remolinos de Van Gogh, el pan de oro de Klimt. Una Obra maestra usa los pinceles más finos y mantiene el rostro lo más fiel a ti.</string>
     <string name="masters_touch_title">Tu toque</string>
     <string name="masters_touch_about">Guía la mano del artista. Cada control empieza en su propio estilo.</string>
     <string name="masters_touch_changed">Tu toque está activo</string>
@@ -199,4 +195,8 @@
     <string name="settings_sim_detail">Para testers: todas las funciones Premium en este teléfono, sin suscripción</string>
     <string name="settings_sim_on">Premium está simulado en este teléfono</string>
     <string name="settings_sim_failed">No se pudo cambiar la simulación de Premium</string>
+    <string name="faq_studio_10_q">¿Qué es Photo Arts?</string>
+    <string name="faq_studio_10_a">Photo Arts pinta tu foto como trabajaban de verdad veinte grandes artistas —Leonardo da Vinci, Rembrandt, Vermeer, Hokusai, Monet, Van Gogh, Klimt y más— con pinceladas reales, la paleta y la luz de cada uno y el acabado auténtico: lienzo, barniz y grietas, sanguina sobre papel, grabado o xilografía. Elige un movimiento, un artista y un acabado (Estudio, Cuadro u Obra maestra). Forma parte de Premium; con el plan gratuito puedes pintar un cuadro al día.</string>
+    <string name="faq_studio_11_q">¿Por qué cada artista se ve tan distinto?</string>
+    <string name="faq_studio_11_a">Porque cada uno se pinta con el método propio de ese artista, no con un filtro: el sfumato suave y el barniz antiguo de Leonardo, la luz única sobre fondo negro de Caravaggio, el sombreado a sanguina de Miguel Ángel, las líneas grabadas de Durero, los colores planos de xilografía de Hokusai, los puntos de Seurat, la pintura espesa en remolinos de Van Gogh, el pan de oro de Klimt. Una Obra maestra usa los pinceles más finos y mantiene el rostro lo más fiel a ti.</string>
 </resources>

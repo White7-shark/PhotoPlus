@@ -40,7 +40,7 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
   const [clearing, setClearing] = useState(false);
   const simulation = useAppStore(s => s.premiumSimulation);
   const setPremiumSimulation = useAppStore(s => s.setPremiumSimulation);
-  const ms = settings.masterstroke;
+  const ms = settings.photoArts;
 
   const save = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) =>
     updateSetting(key, value).catch(e => Alert.alert(t('settings_not_saved'), errorMessage(e)));
@@ -143,12 +143,12 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
         {settings.themePreference === 'lucid' ? <LucidPanel /> : null}
       </GlassSurface>
 
-      <SectionHeader title="Masterstroke" overline={t('settings_ms_detail')} />
-      <GlassSurface style={{ padding: 16, gap: 14, marginBottom: 24 }} testID="settings-masterstroke">
+      <SectionHeader title="Photo Arts" overline={t('settings_ms_detail')} />
+      <GlassSurface style={{ padding: 16, gap: 14, marginBottom: 24 }} testID="settings-photo-arts">
         <SegmentedControl
           label={t('settings_ms_level')}
           value={String(ms.level) as '0' | '1' | '2'}
-          onChange={v => save('masterstroke', { ...ms, level: Number(v) as MastersLevel })}
+          onChange={v => save('photoArts', { ...ms, level: Number(v) as MastersLevel })}
           options={([0, 1, 2] as const).map(l => ({ value: String(l) as '0' | '1' | '2', label: levelName(l) }))}
         />
       </GlassSurface>
@@ -158,20 +158,20 @@ export function SettingsScreen({ navigation }: TabScreenProps<'Settings'>) {
           title={t('settings_ms_remember')}
           subtitle={t('settings_ms_remember_detail')}
           value={ms.remember}
-          onChange={v => save('masterstroke', { ...ms, remember: v })}
+          onChange={v => save('photoArts', { ...ms, remember: v })}
         />
         <ToggleRow
           icon="image"
           title={t('settings_ms_cards')}
           subtitle={t('settings_ms_cards_detail')}
           value={ms.cardPreviews}
-          onChange={v => save('masterstroke', { ...ms, cardPreviews: v })}
+          onChange={v => save('photoArts', { ...ms, cardPreviews: v })}
         />
         <ListRow
           icon="refresh"
           title={t('settings_ms_reset')}
           subtitle={t('settings_ms_reset_detail')}
-          onPress={() => save('masterstroke', { ...ms, controls: { ...ARTIST_WAY } })}
+          onPress={() => save('photoArts', { ...ms, controls: { ...ARTIST_WAY } })}
           testID="settings-ms-reset"
           last
         />

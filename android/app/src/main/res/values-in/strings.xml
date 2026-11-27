@@ -81,7 +81,7 @@
     <string name="masters_hold_compare">Tahan untuk melihat fotomu</string>
     <string name="masters_free_ready">1 lukisan gratis hari ini</string>
     <string name="masters_free_used">Lukisan gratis hari ini sudah dipakai. Premium melukis tanpa batas.</string>
-    <string name="masters_premium_message">Masterstroke adalah bagian dari Premium. Di paket gratis kamu bisa melukis satu gambar per hari.</string>
+    <string name="masters_premium_message">Photo Arts adalah bagian dari Premium. Di paket gratis kamu bisa melukis satu gambar per hari.</string>
     <string name="masters_failed">Lukisan tidak dapat diselesaikan</string>
     <string name="masters_tile_about">Fotomu dilukis seperti cara dua puluh seniman besar bekerja: Leonardo, Rembrandt, Van Gogh, Monet, Klimt, dan lainnya.</string>
     <string name="masters_free_badge">1 gratis per hari</string>
@@ -150,17 +150,13 @@
     <string name="masters_about_vangogh">Goresan cat tebal yang berpusar mengikuti bentuk, biru dan kuning cerah, kontur biru tua.</string>
     <string name="masters_about_gauguin">Bidang datar warna hangat yang kaya, dibatasi kontur biru tua yang tegas, di atas kanvas kasar.</string>
     <string name="masters_about_klimt">Wajah dilukis dengan halus, sisanya dengan daun emas dan ornamen: mosaik, spiral, cincin, dan kotak-kotak.</string>
-    <string name="feature_masters">Masterstroke: fotomu dilukis seperti cara dua puluh seniman besar bekerja</string>
+    <string name="feature_masters">Photo Arts: fotomu dilukis seperti cara dua puluh seniman besar bekerja</string>
     <string name="masters_painting_of">Fotomu dilukis oleh <xliff:g id="artist">{artist}</xliff:g></string>
     <string name="masters_your_photo">Fotomu</string>
     <string name="masters_free_left">Sisa <xliff:g id="n">{n}</xliff:g> lukisan gratis hari ini</string>
     <string name="masters_unlimited">Premium: melukis tanpa batas</string>
     <string name="masters_go_premium">Lihat Premium</string>
     <string name="masters_choose_artist">Pilih senimanmu</string>
-    <string name="faq_studio_10_q">Apa itu Masterstroke?</string>
-    <string name="faq_studio_10_a">Masterstroke melukis fotomu seperti cara dua puluh seniman besar benar-benar bekerja — Leonardo da Vinci, Rembrandt, Vermeer, Hokusai, Monet, Van Gogh, Klimt, dan lainnya — dengan sapuan kuas asli, palet dan cahaya tiap seniman, serta hasil akhir yang autentik: kanvas, pernis dan retakan, kapur merah di kertas, grafir, atau cetak balok kayu. Pilih aliran, seniman, dan hasil akhir (Studi, Lukisan, atau Mahakarya). Fitur ini bagian dari Premium; paket gratis bisa melukis satu gambar per hari.</string>
-    <string name="faq_studio_11_q">Mengapa setiap seniman terlihat sangat berbeda?</string>
-    <string name="faq_studio_11_a">Karena masing-masing dilukis dengan metode seniman itu sendiri, bukan filter: sfumato lembut dan pernis tua Leonardo, cahaya tunggal Caravaggio di latar hitam, arsiran kapur merah Michelangelo, garis grafir Dürer, warna datar cetak kayu Hokusai, titik-titik Seurat, cat tebal berpusar Van Gogh, daun emas Klimt. Mahakarya memakai kuas paling halus dan menjaga wajah paling mirip denganmu.</string>
     <string name="masters_touch_title">Sentuhanmu</string>
     <string name="masters_touch_about">Arahkan tangan sang seniman. Setiap kontrol dimulai dari gaya sang seniman sendiri.</string>
     <string name="masters_touch_changed">Sentuhanmu aktif</string>
@@ -199,4 +195,8 @@
     <string name="settings_sim_detail">Untuk penguji: semua fitur Premium di ponsel ini, tanpa langganan</string>
     <string name="settings_sim_on">Premium sedang disimulasikan di ponsel ini</string>
     <string name="settings_sim_failed">Simulasi Premium tidak dapat diubah</string>
+    <string name="faq_studio_10_q">Apa itu Photo Arts?</string>
+    <string name="faq_studio_10_a">Photo Arts melukis fotomu seperti cara dua puluh seniman besar benar-benar bekerja — Leonardo da Vinci, Rembrandt, Vermeer, Hokusai, Monet, Van Gogh, Klimt, dan lainnya — dengan sapuan kuas asli, palet dan cahaya tiap seniman, serta hasil akhir yang autentik: kanvas, pernis dan retakan, kapur merah di kertas, grafir, atau cetak balok kayu. Pilih aliran, seniman, dan hasil akhir (Studi, Lukisan, atau Mahakarya). Fitur ini bagian dari Premium; paket gratis bisa melukis satu gambar per hari.</string>
+    <string name="faq_studio_11_q">Mengapa setiap seniman terlihat sangat berbeda?</string>
+    <string name="faq_studio_11_a">Karena masing-masing dilukis dengan metode seniman itu sendiri, bukan filter: sfumato lembut dan pernis tua Leonardo, cahaya tunggal Caravaggio di latar hitam, arsiran kapur merah Michelangelo, garis grafir Dürer, warna datar cetak kayu Hokusai, titik-titik Seurat, cat tebal berpusar Van Gogh, daun emas Klimt. Mahakarya memakai kuas paling halus dan menjaga wajah paling mirip denganmu.</string>
 </resources>

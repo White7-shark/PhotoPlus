@@ -32,13 +32,13 @@ import { getStorageService } from '../../services/storage/StorageService';
 import { getStudioService } from '../../services/studio/StudioService';
 import { ARTIST_WAY, clampControls, type ArtControls } from '../../services/masters/controls';
 import { useAppStore } from '../../state/store';
-import { MasterstrokeTouch } from './MasterstrokeTouch';
+import { PhotoArtsTouch } from './PhotoArtsTouch';
 import { useTheme } from '../../theme';
 
 const LEVELS: readonly MastersLevel[] = [0, 1, 2];
 
 /**
- * Masterstroke: the person's photo painted the way one of twenty great artists
+ * Photo Arts: the person's photo painted the way one of twenty great artists
  * worked. Movements group the artists; each card shows the photo already in
  * that artist's hand. Previews are free; the finished painting (Study,
  * Painting or Masterpiece) is Premium, or one a day on the free plan.
@@ -47,7 +47,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const theme = useTheme();
   const t = useT();
   const masters = useMemo(() => getMastersService(), []);
-  const prefs = useAppStore(s => s.settings.masterstroke);
+  const prefs = useAppStore(s => s.settings.photoArts);
   const updateSetting = useAppStore(s => s.updateSetting);
   const [photo, setPhoto] = useState<string | null>(null);
   const [movement, setMovement] = useState<Movement>('renaissance');
@@ -129,7 +129,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   // Your touch: the preview repaints when the finger lifts; kept for next time when remembered.
   const keepTouch = (k: ArtControls) => {
     if (prefs.remember)
-      void updateSetting('masterstroke', { ...prefs, controls: clampControls(k) }).catch(() => undefined);
+      void updateSetting('photoArts', { ...prefs, controls: clampControls(k) }).catch(() => undefined);
   };
   const touchDone = () => {
     if (photo) draw(photo, artist, level, seed, touch.current);
@@ -239,7 +239,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const accent = theme.colors.accent;
 
   return (
-    <Screen title="Masterstroke" onBack={() => navigation.goBack()} bottomInset={32}>
+    <Screen title="Photo Arts" onBack={() => navigation.goBack()} bottomInset={32}>
       <View style={{ gap: 16 }}>
         {!photo ? (
           <GlassSurface radius={24} style={styles.intro} glow="rgba(245,198,107,0.22)">
@@ -435,7 +435,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
               </AppText>
             </View>
 
-            <MasterstrokeTouch
+            <PhotoArtsTouch
               value={controls}
               open={touchOpen}
               onToggle={() => setTouchOpen(o => !o)}

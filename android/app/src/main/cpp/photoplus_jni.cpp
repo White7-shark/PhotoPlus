@@ -1075,7 +1075,7 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtPaint(JNI
   std::vector<float> f;
   if (faces != nullptr) {
     const jsize n = env->GetArrayLength(faces);
-    if (n % 4 != 0 || n > 32) {
+    if (n % 12 != 0 || n > 96) {
       throwEngineException(env, "INVALID_ARGUMENT", "Bad face boxes");
       return;
     }
@@ -1083,7 +1083,7 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtPaint(JNI
     if (n > 0) env->GetFloatArrayRegion(faces, 0, n, f.data());
   }
   // The person's controls: brush, palette, vivid, likeness, texture, age, background (null: the artist's own way).
-  pp_art_controls k{1, 1, 0, 0.5f, 1, 1, 1};
+  pp_art_controls k{1, 1, 0, 0.5f, 0.4f, 1, 1};
   if (controls != nullptr) {
     if (env->GetArrayLength(controls) != 7) {
       throwEngineException(env, "INVALID_ARGUMENT", "Bad painting controls");
@@ -1093,7 +1093,7 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeArtPaint(JNI
     env->GetFloatArrayRegion(controls, 0, 7, v);
     k = {v[0], v[1], v[2], v[3], v[4], v[5], v[6]};
   }
-  const pp_status st = pp_art_paint(b.image, artist, level, m.image, f.empty() ? nullptr : f.data(), f.size() / 4,
+  const pp_status st = pp_art_paint(b.image, artist, level, m.image, f.empty() ? nullptr : f.data(), f.size() / 12, 12,
                                     static_cast<uint32_t>(seed), &k, reinterpret_cast<const pp_cancel_token*>(token));
   if (st != PP_OK) throwStatus(env, st);
 }

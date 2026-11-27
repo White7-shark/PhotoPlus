@@ -1,5 +1,5 @@
 /**
- * Masterstroke: the person's say over the painting (pp_art_controls), and
+ * Photo Arts: the person's say over the painting (pp_art_controls), and
  * the tool's saved settings. Every default is the artist's own way.
  */
 import type { MastersLevel } from './catalog';
@@ -13,7 +13,7 @@ export interface ArtControls {
   vivid: number;
   /** 0 the artist's freedom .. 1 true to the sitter. */
   likeness: number;
-  /** 0 smooth .. 1.5 heavy canvas, paper and paint relief. */
+  /** 0 smooth .. 1 the artist's full texture .. 1.5 heavy (canvas, paper, paint relief, bristle marks). Smooth by default. */
   texture: number;
   /** 0 fresh paint .. 1.5 old varnish and cracks. */
   age: number;
@@ -28,7 +28,7 @@ export const ARTIST_WAY: Readonly<ArtControls> = {
   palette: 1,
   vivid: 0,
   likeness: 0.5,
-  texture: 1,
+  texture: 0.4,
   age: 1,
   background: 1,
 };
@@ -70,8 +70,8 @@ export function clampControls(c: Partial<ArtControls>): ArtControls {
   return out;
 }
 
-/** Masterstroke's settings (Settings, and remembered from the tool). */
-export interface MasterstrokeSettings {
+/** Photo Arts's settings (Settings, and remembered from the tool). */
+export interface PhotoArtsSettings {
   /** The finish a painting starts at. */
   level: MastersLevel;
   /** Keep the person's touch (the controls) for next time. */
@@ -82,14 +82,14 @@ export interface MasterstrokeSettings {
   cardPreviews: boolean;
 }
 
-export const DEFAULT_MASTERSTROKE: MasterstrokeSettings = {
+export const DEFAULT_PHOTO_ARTS: PhotoArtsSettings = {
   level: 1,
   remember: true,
   controls: { ...ARTIST_WAY },
   cardPreviews: true,
 };
 
-export function isMasterstrokeSettings(v: unknown): v is MasterstrokeSettings {
+export function isPhotoArtsSettings(v: unknown): v is PhotoArtsSettings {
   if (!v || typeof v !== 'object') return false;
   const s = v as Record<string, unknown>;
   return (
