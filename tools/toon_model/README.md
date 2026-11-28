@@ -59,4 +59,4 @@ The pipeline was run end to end on a 4-core CPU with no GPU. The data was 4 of t
 - It is **not** a shippable model: 4 photos are far too few, and stage 2 has no art yet.
 - Its weights and pictures are of real people, so they stay local and are never committed.
 
-The results are in `docs/TOON_MODEL_REPORT.md`.
+The results (18.0 dB against the teacher on the held-out photo, still rising) are in `docs/TOON_MODEL_REPORT.md`.
