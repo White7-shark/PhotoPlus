@@ -134,10 +134,11 @@ export type FeatureKey = keyof typeof FEATURES;
  */
 export const FREE_DAILY_ALLOWANCE: Partial<Record<FeatureKey, number>> = {
   transform: 2,
-  masters: 1,
+  // Photo Arts: paintings and drawings share five a day, each after an ad.
+  masters: 5,
   motion: 2,
-  pencil: 2,
-  toon: 2,
+  pencil: 5,
+  toon: 5,
 };
 
 export const PREMIUM_PRICE = { amount: 50, currency: 'GHS', period: 'month' } as const;

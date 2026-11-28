@@ -2,6 +2,7 @@ package com.photoplus.ads
 
 import com.photoplus.R
 import com.photoplus.i18n.Words
+import com.photoplus.net.Connectivity
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
@@ -176,12 +177,19 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
       promise.reject("SUBSCRIBED", Words.get(reactApplicationContext, R.string.native_you_have_premium_already))
       return
     }
-    if ((allowance.state(reactApplicationContext)["remaining"] as? Int ?: 0) <= 0) {
+    val owed = allowance.owed(reactApplicationContext)
+    // Owed ads are paid off even when today's uses are gone; otherwise a use must be left.
+    if (owed == 0 && (allowance.state(reactApplicationContext)["remaining"] as? Int ?: 0) <= 0) {
       promise.reject("DAILY_LIMIT", Words.get(reactApplicationContext, when (tool) {
-        "pencil" -> R.string.native_pencil_daily_used
+        "pencil", "arts", "masters" -> R.string.native_arts_daily_used
         "toon" -> R.string.native_toon_daily_used
         else -> R.string.native_motion_daily_used
       }))
+      return
+    }
+    // Offline no ad can load: the use is unlocked now and its ad owed (up to MAX_OWED, then the tool freezes).
+    if (!Connectivity.online(reactApplicationContext)) {
+      offlineUnlock(allowance, promise)
       return
     }
     main.post {
@@ -210,12 +218,30 @@ class AdsModule(reactContext: ReactApplicationContext) : NativePhotoPlusAdsSpec(
               override fun onAdLoaded(fresh: RewardedAd) = present(fresh)
               override fun onAdFailedToLoad(error: LoadAdError) {
                 showing.set(false)
+                // The connection dropped on the way: the same as offline.
+                if (error.code == AdRequest.ERROR_CODE_NETWORK_ERROR && !Connectivity.online(reactApplicationContext)) {
+                  offlineUnlock(allowance, promise)
+                  return
+                }
                 promise.reject("AD_NOT_AVAILABLE", Words.get(reactApplicationContext, R.string.native_no_ad_is_available_right_now))
               }
             })
           }
         }
       }
+    }
+  }
+
+  /**
+   * Offline: unlocks the use and owes its ad, resolving { rewarded: true, offline: true, allowance };
+   * with every allowed ad already owed, rejects OWED_ADS (go online and watch them).
+   */
+  private fun offlineUnlock(allowance: com.photoplus.entitlement.AdAllowance, promise: Promise) {
+    val owed = allowance.owed(reactApplicationContext)
+    if (allowance.grantOffline(reactApplicationContext)) {
+      promise.resolve(mapOf("rewarded" to true, "offline" to true, "allowance" to allowance.state(reactApplicationContext)).toWritableMap())
+    } else {
+      promise.reject("OWED_ADS", Words.get(reactApplicationContext, R.string.native_ads_owed_frozen, "n" to owed))
     }
   }
 

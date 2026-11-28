@@ -17,8 +17,7 @@ Three additions to the studios:
 | | Free | Premium |
 | --- | --- | --- |
 | Pencil Art previews | Unlimited | Unlimited |
-| Finished pencil drawings | 2 a day, each after a rewarded ad | Unlimited, no ads |
-| Paintings | 1 a day (unchanged) | Unlimited |
+| Finished pencil drawings and paintings | 5 a day together, each after a rewarded ad (was 2 drawings + 1 painting) | Unlimited, no ads |
 | Signature / branding | Not available | Name, brand or studio line, year; script, serif or print; left, centre or right; size |
 
 Interpretation of the request: it said "for premium users 2 pencil art per

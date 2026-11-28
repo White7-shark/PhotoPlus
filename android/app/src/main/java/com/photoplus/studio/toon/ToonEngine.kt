@@ -18,7 +18,8 @@ import com.photoplus.ml.TensorInput
  * person's mask, the faces (12 floats each: box, mouth, eyes; normalised),
  * their contour points ([ToonContours.FLOATS] each, ML Kit's order), the
  * settings (style, background, lines, shades, vivid, detail, eyes, skin, glow,
- * strength) and the seed.
+ * strength, outline, backdrop, brightness, warmth, texture, face detail, hair
+ * detail, ink) and the seed.
  */
 class ToonInput(
   val bitmap: Bitmap,
@@ -35,7 +36,7 @@ class ToonInput(
   val strength: Float get() = params[9]
 
   companion object {
-    const val PARAMS = 10
+    const val PARAMS = 18
   }
 }
 

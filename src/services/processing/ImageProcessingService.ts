@@ -115,6 +115,16 @@ interface EventSource {
  * JS façade over the native engine. Every job has an id so it can be
  * cancelled from anywhere (navigating away, app backgrounded, user tap).
  */
+export interface TrialState {
+  /** This build simulates the trial (testing); production uses Play Billing. */
+  available: boolean;
+  active: boolean;
+  used: boolean;
+  /** When it ends (ms), 0 when none. */
+  endsAt: number;
+  days: number;
+}
+
 export class ImageProcessingService {
   private readonly active = new Set<string>();
 
@@ -370,6 +380,38 @@ export class ImageProcessingService {
     } catch {
       return { available: false, on: false };
     }
+  }
+
+  /** The 7-day free trial: { available (simulated in this build), active, used, endsAt, days }. */
+  async trialState(): Promise<TrialState> {
+    try {
+      const r = (await this.engine.trialState()) as Partial<TrialState> | null;
+      return {
+        available: r?.available === true,
+        active: r?.active === true,
+        used: r?.used === true,
+        endsAt: typeof r?.endsAt === 'number' ? r.endsAt : 0,
+        days: typeof r?.days === 'number' ? r.days : 7,
+      };
+    } catch {
+      return { available: false, active: false, used: false, endsAt: 0, days: 7 };
+    }
+  }
+
+  /**
+   * Starts the free trial. For testing it is simulated on the device (Premium
+   * for seven days, once); in production it is Google Play's subscription
+   * offer, started by Play Billing from the Premium page. Resolves with the
+   * plan now held and whether a trial started.
+   */
+  async startTrial(): Promise<{ started: boolean; plan: 'free' | 'premium' }> {
+    let started: boolean;
+    try {
+      started = (await this.engine.startTrial()) === true;
+    } catch {
+      started = false;
+    }
+    return { started, plan: await this.plan() };
   }
 
   /** Testers: simulate Premium, or go back to the real plan. Resolves with the plan now held. */

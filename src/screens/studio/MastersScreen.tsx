@@ -20,12 +20,12 @@ import {
   type MastersLevel,
   type Movement,
 } from '../../services/masters/catalog';
+import { owedLine, unlockNotice, unlockedNow } from '../../services/ads/toolAllowance';
 import {
   FIRST_SEED,
   MastersError,
   getMastersService,
   type AdAllowance,
-  type Allowance,
   type Painting,
 } from '../../services/masters/MastersService';
 import { createId } from '../../services/database/ids';
@@ -111,7 +111,6 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const [seed, setSeed] = useState(FIRST_SEED);
   const [preview, setPreview] = useState<Painting | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
-  const [allowance, setAllowance] = useState<Allowance | null>(null);
   const [pencilDay, setPencilDay] = useState<AdAllowance | null>(null);
   const [busy, setBusy] = useState<null | 'preview' | 'ad'>(null);
   const [error, setError] = useState<string | null>(null);
@@ -120,17 +119,19 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const [adNotice, setAdNotice] = useState<string | null>(null);
 
   const chosen = artistById(artist);
-  const premium = allowance?.remaining === -1;
-  const unlimited = mode === 'pencil' ? pencilDay?.remaining === -1 : premium;
-  const freeLeft = allowance && allowance.remaining !== -1 ? Math.max(0, allowance.remaining) : null;
+  // Photo Arts' day (paintings and drawings together): five works, each after an ad, on the free plan.
+  const premium = pencilDay?.remaining === -1;
+  const unlimited = premium;
   const pencilLeft = pencilDay && pencilDay.remaining !== -1 ? Math.max(0, pencilDay.remaining) : null;
-  const pencilLimit = pencilDay?.limit ?? 2;
+  const pencilLimit = pencilDay?.limit ?? 5;
   const pencilUnlocked = !!pencilDay && pencilDay.remaining !== -1 && pencilDay.credits > 0 && (pencilLeft ?? 0) > 0;
-  const used = mode === 'pencil' ? pencilLeft === 0 : freeLeft === 0;
+  // Ads owed from offline unlocks: paid off first; at the most allowed the tool waits for them.
+  const owed = pencilDay && !premium ? pencilDay.owed : 0;
+  const used = pencilLeft === 0 && owed === 0;
+  const [adNote, setAdNote] = useState<string | null>(null);
 
   const refreshAllowance = useCallback(() => {
-    void masters.allowance().then(setAllowance);
-    void masters.pencilAllowance().then(setPencilDay);
+    void masters.allowance().then(setPencilDay);
   }, [masters]);
   useEffect(refreshAllowance, [refreshAllowance]);
   useEffect(() => navigation.addListener?.('focus', refreshAllowance), [navigation, refreshAllowance]);
@@ -372,13 +373,8 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   };
   const create = () => {
     if (!photo) return;
-    if (mode === 'paint') {
-      if (freeLeft === 0) setPremiumOpen('masters');
-      else begin();
-      return;
-    }
-    if (pencilDay?.remaining === -1 || pencilUnlocked) begin();
-    else if (pencilLeft === 0) setPremiumOpen('pencil');
+    if (unlimited || pencilUnlocked) begin();
+    else if (used) setPremiumOpen(mode === 'pencil' ? 'pencil' : 'masters');
     else {
       setAdNotice(null);
       setAdOpen(true);
@@ -388,20 +384,25 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
     setBusy('ad');
     setAdNotice(null);
     try {
-      const r = await masters.unlockPencil();
+      const r = await masters.unlockArts();
       setPencilDay(r.allowance);
-      if (r.rewarded) {
+      setAdNote(unlockNotice(r));
+      if (r.rewarded && unlockedNow(r.allowance)) {
         setAdOpen(false);
         begin();
-      } else setAdNotice(t('pencil_ad_not_finished'));
+      } else setAdNotice(r.rewarded ? unlockNotice(r) : t('pencil_ad_not_finished'));
     } catch (e) {
       const code = e instanceof MastersError ? e.code : '';
       if (code === 'DAILY_LIMIT') {
         setAdOpen(false);
-        setPremiumOpen('pencil');
+        setPremiumOpen(mode === 'pencil' ? 'pencil' : 'masters');
       } else if (code === 'SUBSCRIBED') {
         setAdOpen(false);
         begin();
+      } else if (code === 'OWED_ADS') {
+        // Offline with every allowed ad owed: frozen until online.
+        setAdNotice(e instanceof Error ? e.message : t('ads_owed_frozen', { n: owed }));
+        refreshAllowance();
       } else setAdNotice(t('pencil_ad_unavailable'));
     } finally {
       setBusy(b => (b === 'ad' ? null : b));
@@ -414,29 +415,24 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
   const accent = theme.colors.accent;
   const technique = mode === 'pencil' ? t(`pencil_way_${chosen.key}` as StringKey) : artistTechnique(chosen);
 
-  const planLine =
-    mode === 'pencil'
-      ? unlimited
-        ? t('pencil_unlimited')
-        : pencilLeft === 0
-          ? t('pencil_free_used', { limit: pencilLimit })
-          : pencilUnlocked
-            ? t('pencil_free_unlocked')
-            : t('pencil_free_left', { n: pencilLeft ?? pencilLimit, limit: pencilLimit })
-      : unlimited
-        ? t('masters_unlimited')
-        : freeLeft === 0
-          ? t('masters_free_used')
-          : freeLeft !== null && freeLeft > 1
-            ? t('masters_free_left', { n: freeLeft })
-            : t('masters_free_ready');
+  const planLine = unlimited
+    ? t('arts_unlimited')
+    : pencilLeft === 0
+      ? t('arts_free_used', { limit: pencilLimit })
+      : pencilUnlocked
+        ? t('arts_free_unlocked')
+        : t('arts_free_left', { n: pencilLeft ?? pencilLimit, limit: pencilLimit });
   const createLabel = used
     ? t('masters_go_premium')
-    : mode === 'pencil'
-      ? unlimited || pencilUnlocked
-        ? t('pencil_draw')
-        : t('pencil_watch_draw')
-      : t('masters_paint');
+    : owed > 0 && !pencilUnlocked
+      ? t('ads_watch_owed', { n: owed })
+      : unlimited || pencilUnlocked
+        ? mode === 'pencil'
+          ? t('pencil_draw')
+          : t('masters_paint')
+        : mode === 'pencil'
+          ? t('pencil_watch_draw')
+          : t('arts_watch_paint');
 
   return (
     <Screen
@@ -503,7 +499,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
             />
             {!unlimited ? (
               <AppText variant="caption" tone="secondary" align="center">
-                {mode === 'pencil' ? t('pencil_premium_message', { limit: pencilLimit }) : t('masters_premium_message')}
+                {t('arts_premium_message', { limit: pencilLimit })}
               </AppText>
             ) : null}
           </GlassSurface>
@@ -739,9 +735,19 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
                 <AppText variant="caption" tone="secondary">
                   {planLine}
                 </AppText>
-                {mode === 'pencil' && !unlimited && pencilLeft !== 0 ? (
+                {!unlimited && pencilLeft !== 0 ? (
                   <AppText variant="caption" tone="tertiary">
-                    {t('pencil_free_ad')}
+                    {t('arts_free_ad')}
+                  </AppText>
+                ) : null}
+                {pencilDay && owedLine(pencilDay) ? (
+                  <AppText variant="caption" style={{ color: theme.colors.warning }} testID="masters-owed">
+                    {owedLine(pencilDay)}
+                  </AppText>
+                ) : null}
+                {adNote ? (
+                  <AppText variant="caption" tone="secondary" testID="masters-ad-note">
+                    {adNote}
                   </AppText>
                 ) : null}
               </View>
@@ -749,7 +755,7 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
 
             <Button
               label={createLabel}
-              icon={used ? 'crown' : mode === 'pencil' && !unlimited && !pencilUnlocked ? 'play' : 'brush'}
+              icon={used ? 'crown' : !unlimited && !pencilUnlocked ? 'play' : 'brush'}
               variant="premium"
               size="lg"
               disabled={busy === 'ad' || !projectId}
@@ -796,9 +802,9 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
       </View>
       <AdUnlockSheet
         open={adOpen}
-        title={t('pencil_ad_title')}
-        body={t('pencil_ad_body', { limit: pencilLimit })}
-        left={pencilLeft !== null ? t('pencil_free_left', { n: pencilLeft, limit: pencilLimit }) : null}
+        title={t('arts_ad_title')}
+        body={owed > 0 ? t('ads_owed_sheet', { n: owed }) : t('arts_ad_body', { limit: pencilLimit })}
+        left={pencilLeft !== null ? t('arts_free_left', { n: pencilLeft, limit: pencilLimit }) : null}
         notice={adNotice}
         busy={busy === 'ad'}
         watchLabel={t('motion_ad_watch')}
@@ -807,21 +813,19 @@ export function MastersScreen({ navigation, route }: RootScreenProps<'Masters'>)
         onWatch={() => void watchAd()}
         onPremium={() => {
           setAdOpen(false);
-          setPremiumOpen('pencil');
+          setPremiumOpen(mode === 'pencil' ? 'pencil' : 'masters');
         }}
         onClose={() => setAdOpen(false)}
-        testID="pencil-ad-sheet"
+        testID="arts-ad-sheet"
       />
       <PremiumSheet
         feature={premiumOpen}
         message={
-          premiumOpen === 'masters' && freeLeft === 0
-            ? t('masters_free_used')
-            : premiumOpen === 'pencil'
-              ? pencilLeft === 0
-                ? t('pencil_free_used', { limit: pencilLimit })
-                : t('pencil_premium_message', { limit: pencilLimit })
-              : null
+          premiumOpen === 'masters' || premiumOpen === 'pencil'
+            ? used
+              ? t('arts_free_used', { limit: pencilLimit })
+              : t('arts_premium_message', { limit: pencilLimit })
+            : null
         }
         onClose={() => setPremiumOpen(null)}
       />

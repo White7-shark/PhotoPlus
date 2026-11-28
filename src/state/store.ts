@@ -56,6 +56,8 @@ export interface AppStore {
   setForeground: (active: boolean) => void;
   dismissWarning: (index: number) => void;
   /** Testers: simulate Premium on this phone (or stop). */
+  /** The 7-day free trial (simulated for testing; Play Billing in production): true when it started. */
+  startFreeTrial: () => Promise<boolean>;
   setPremiumSimulation: (on: boolean) => Promise<void>;
 }
 
@@ -120,6 +122,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
         bootError: error instanceof BootstrapError ? error.message : `Startup failed: ${errorMessage(error)}`,
       });
     }
+  },
+
+  async startFreeTrial() {
+    const r = await getProcessingService().startTrial();
+    set(s => ({ entitlements: { ...s.entitlements, plan: r.plan } }));
+    return r.started;
   },
 
   async setPremiumSimulation(on) {

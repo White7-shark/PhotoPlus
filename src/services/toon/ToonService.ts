@@ -6,6 +6,7 @@
  */
 import { errorCode, errorMessage, nativeModules, requireNative, type AdsSpec, type StudioSpec } from '../../native';
 import { getAdsService } from '../ads/AdsService';
+import { readToolAllowance, readToolUnlock, unknownAllowance, type ToolAllowance, type ToolUnlock } from '../ads/toolAllowance';
 import { createId } from '../database/ids';
 import { clampToon, type ToonSettings } from './catalog';
 
@@ -19,12 +20,7 @@ export interface ToonPicture {
   remaining?: number;
 }
 
-export interface ToonAllowance {
-  remaining: number;
-  limit: number;
-  credits: number;
-  needsAd: boolean;
-}
+export type ToonAllowance = ToolAllowance;
 
 export class ToonError extends Error {
   constructor(
@@ -37,7 +33,7 @@ export class ToonError extends Error {
 }
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const FALLBACK: ToonAllowance = { remaining: 2, limit: 2, credits: 0, needsAd: true };
+const FALLBACK: ToonAllowance = unknownAllowance(5);
 
 export class ToonService {
   constructor(
@@ -88,28 +84,20 @@ export class ToonService {
 
   async allowance(): Promise<ToonAllowance> {
     try {
-      const a = (await this.native.toonAllowance()) as Partial<ToonAllowance> | null;
-      if (!a || !num(a.remaining)) return FALLBACK;
-      const credits = num(a.credits) ? Math.max(0, a.credits) : 0;
-      return {
-        remaining: a.remaining,
-        limit: num(a.limit) ? a.limit : 2,
-        credits,
-        needsAd: a.remaining !== -1 && (typeof a.needsAd === 'boolean' ? a.needsAd : a.remaining > 0 && credits === 0),
-      };
+      return readToolAllowance(await this.native.toonAllowance(), FALLBACK);
     } catch {
       return FALLBACK;
     }
   }
 
-  /** A rewarded ad for a free picture; resolves whether it was watched to the end. */
-  async unlock(): Promise<{ rewarded: boolean; allowance: ToonAllowance }> {
+  /** A rewarded ad for a free picture (offline: unlocked on credit, the ad owed). */
+  async unlock(): Promise<ToolUnlock> {
     const ads = this.ads;
     if (!ads) throw new ToonError('Ads aren’t available on this device', 'ADS_UNAVAILABLE');
     try {
       await this.startAds().catch(() => false);
-      const r = (await ads.showRewardedAdForTool('toon')) as { rewarded?: boolean } | null;
-      return { rewarded: r?.rewarded === true, allowance: await this.allowance() };
+      const r = await ads.showRewardedAdForTool('toon');
+      return readToolUnlock(r, await this.allowance());
     } catch (e) {
       throw new ToonError(errorMessage(e), errorCode(e) ?? 'AD_NOT_AVAILABLE');
     }

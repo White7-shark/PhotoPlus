@@ -43,6 +43,10 @@ export interface Spec extends TurboModule {
   setDebugPlan(plan: string): Promise<boolean>;
   /** Testers: { available, on } — whether this build can simulate Premium, and whether it is. */
   getPremiumSimulation(): Promise<Object>;
+  /** The 7-day free trial, simulated for testing (Play Billing in production): true when it started. */
+  startTrial(): Promise<boolean>;
+  /** { available, active, used, endsAt, days } of the free trial. */
+  trialState(): Promise<Object>;
   cancel(jobId: string): void;
   cancelAll(): void;
   getMemoryStats(): Promise<Object>;

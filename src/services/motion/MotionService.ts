@@ -9,6 +9,7 @@
  */
 import { errorCode, errorMessage, nativeModules, requireNative, type AdsSpec, type StudioSpec } from '../../native';
 import { getAdsService } from '../ads/AdsService';
+import { readToolAllowance, readToolUnlock, unknownAllowance, type ToolAllowance, type ToolUnlock } from '../ads/toolAllowance';
 import { createId } from '../database/ids';
 import { clampSettings, packArrows, packPins, type MotionArrow, type MotionPin, type MotionSettings } from './catalog';
 
@@ -35,15 +36,8 @@ export interface MotionVideo {
   remaining?: number;
 }
 
-export interface MotionAllowance {
-  /** Videos left today; -1 when unlimited (Premium). */
-  remaining: number;
-  limit: number;
-  /** Videos unlocked by an ad and not made yet. */
-  credits: number;
-  /** The next video needs an ad first. */
-  needsAd: boolean;
-}
+/** The free plan's videos today (shared with every ad-unlocked tool). */
+export type MotionAllowance = ToolAllowance;
 
 export class MotionError extends Error {
   constructor(
@@ -64,20 +58,11 @@ export function isVideo(v: unknown): v is MotionVideo {
 }
 
 export function readAllowance(v: unknown, fallback: MotionAllowance): MotionAllowance {
-  const a = v as Partial<MotionAllowance> | null;
-  if (!a || !num(a.remaining)) return fallback;
-  const limit = num(a.limit) ? a.limit : 2;
-  const credits = num(a.credits) ? Math.max(0, a.credits) : 0;
-  return {
-    remaining: a.remaining,
-    limit,
-    credits,
-    needsAd: a.remaining !== -1 && (typeof a.needsAd === 'boolean' ? a.needsAd : a.remaining > 0 && credits === 0),
-  };
+  return readToolAllowance(v, fallback);
 }
 
 /** What the free plan has before the device answers: a video, after an ad. */
-export const UNKNOWN_ALLOWANCE: MotionAllowance = { remaining: 2, limit: 2, credits: 0, needsAd: true };
+export const UNKNOWN_ALLOWANCE: MotionAllowance = unknownAllowance(2);
 
 export class MotionService {
   constructor(
@@ -174,14 +159,14 @@ export class MotionService {
     }
   }
 
-  /** Shows a rewarded ad; watched to the end, it unlocks one of today's free videos. */
-  async unlock(): Promise<{ rewarded: boolean; allowance: MotionAllowance }> {
+  /** Shows a rewarded ad (offline: unlocks on credit, the ad owed); watched to the end, it unlocks one of today's free videos. */
+  async unlock(): Promise<ToolUnlock> {
     const ads = this.ads;
     if (!ads) throw new MotionError('Ads aren’t available on this device', 'ADS_UNAVAILABLE');
     try {
       await this.startAds().catch(() => false);
-      const r = (await ads.showRewardedAdForTool('motion')) as { rewarded?: boolean; allowance?: unknown } | null;
-      return { rewarded: r?.rewarded === true, allowance: readAllowance(r?.allowance, await this.allowance()) };
+      const r = await ads.showRewardedAdForTool('motion');
+      return readToolUnlock(r, await this.allowance());
     } catch (e) {
       if (e instanceof MotionError) throw e;
       throw new MotionError(errorMessage(e), errorCode(e) ?? 'AD_NOT_AVAILABLE');

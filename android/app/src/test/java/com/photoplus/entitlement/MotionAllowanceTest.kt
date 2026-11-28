@@ -41,16 +41,67 @@ class MotionAllowanceTest {
   }
 }
 
-class PencilAllowanceTest {
+class ArtsAndToonAllowanceTest {
   @Test
-  fun pencilHasItsOwnTwoADayAndToolsAreFoundByName() {
-    var t = PencilAllowance.today("2026-11-27", "2026-11-27", 0, 0)
-    assertEquals(2, PencilAllowance.left(t))
-    assertFalse(PencilAllowance.canMake(t))
-    t = PencilAllowance.withAd(t)
-    assertTrue(PencilAllowance.canMake(t))
-    assertEquals(PencilAllowance, AdAllowance.of("pencil"))
+  fun photoArtsAndToonHaveFiveADayEachAfterAnAdAndToolsAreFoundByName() {
+    var t = ArtsAllowance.today("2026-11-27", "2026-11-27", 0, 0)
+    assertEquals(5, ArtsAllowance.left(t))
+    assertFalse(ArtsAllowance.canMake(t))
+    t = ArtsAllowance.withAd(t)
+    assertTrue(ArtsAllowance.canMake(t))
+    assertEquals(5, ToonAllowance.perDay)
+    // Paintings and drawings share one allowance.
+    assertEquals(ArtsAllowance, AdAllowance.of("pencil"))
+    assertEquals(ArtsAllowance, AdAllowance.of("masters"))
+    assertEquals(ArtsAllowance, AdAllowance.of("arts"))
+    assertEquals(ToonAllowance, AdAllowance.of("toon"))
     assertEquals(MotionAllowance, AdAllowance.of("motion"))
-    assertEquals(null, AdAllowance.of("masters"))
+    assertEquals(null, AdAllowance.of("glide"))
+  }
+}
+
+class OwedAdsTest {
+  private val a = ToonAllowance
+  private fun day(used: Int = 0, credits: Int = 0) = a.today("2026-11-27", "2026-11-27", used, credits)
+
+  @Test
+  fun offlineUnlocksOnCreditUpToThreeOwedThenFreezes() {
+    var t = day()
+    var owed = 0
+    repeat(3) {
+      val r = a.offlineUnlock(t, owed)!!
+      assertTrue(a.canMake(r.first))
+      owed = r.second
+      t = a.afterVideo(r.first) // the picture is made
+    }
+    assertEquals(3, owed)
+    assertEquals(AdAllowance.MAX_OWED, owed)
+    // A fourth offline unlock: frozen.
+    assertEquals(null, a.offlineUnlock(t, owed))
+    assertFalse(a.canMake(t))
+  }
+
+  @Test
+  fun onlineEachAdPaysOffAnOwedOneBeforeItUnlocksAUse() {
+    var t = day(used = 3)
+    var owed = 3
+    repeat(3) {
+      val r = a.watched(t, owed)
+      assertFalse(a.canMake(r.first)) // paying off unlocks nothing
+      t = r.first
+      owed = r.second
+    }
+    assertEquals(0, owed)
+    val r = a.watched(t, owed)
+    assertTrue(a.canMake(r.first))
+    assertEquals(0, r.second)
+  }
+
+  @Test
+  fun noOfflineCreditBeyondTodaysUsesAndOwedIsCapped() {
+    // Every use made today: offline gives nothing more.
+    assertEquals(null, a.offlineUnlock(day(used = 5), 0))
+    // A use already unlocked and waiting: no second credit for it.
+    assertEquals(null, a.offlineUnlock(day(used = 4, credits = 1), 0))
   }
 }

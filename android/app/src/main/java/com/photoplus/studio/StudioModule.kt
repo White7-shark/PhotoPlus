@@ -22,10 +22,9 @@ import com.photoplus.engine.MemoryBudgetPolicy
 import com.photoplus.engine.NativeCancelTokens
 import com.photoplus.engine.NativeEngine
 import com.photoplus.engine.OutputFormat
-import com.photoplus.entitlement.ArtAllowance
+import com.photoplus.entitlement.ArtsAllowance
 import com.photoplus.entitlement.Entitlements
 import com.photoplus.entitlement.MotionAllowance
-import com.photoplus.entitlement.PencilAllowance
 import com.photoplus.entitlement.ToonAllowance
 import com.photoplus.i18n.Words
 import com.photoplus.specs.NativePhotoPlusStudioSpec
@@ -684,15 +683,11 @@ class StudioModule(reactContext: ReactApplicationContext) :
       return
     }
     val full = quality == "full"
-    if (full && pencil && !PencilAllowance.allowed(reactApplicationContext)) {
-      // Pencil Art on the free plan: two a day, each after an ad.
-      val left = (PencilAllowance.state(reactApplicationContext)["remaining"] as? Int) ?: 0
-      if (left > 0) promise.reject("AD_REQUIRED", Words.get(reactApplicationContext, R.string.native_pencil_ad_required))
-      else promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_pencil_daily_used))
-      return
-    }
-    if (full && !pencil && !ArtAllowance.allowed(reactApplicationContext)) {
-      promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_masters_daily_used))
+    if (full && !ArtsAllowance.allowed(reactApplicationContext)) {
+      // Photo Arts on the free plan: five works a day (paintings and drawings), each after an ad.
+      val left = (ArtsAllowance.state(reactApplicationContext)["remaining"] as? Int) ?: 0
+      if (left > 0) promise.reject("AD_REQUIRED", Words.get(reactApplicationContext, R.string.native_arts_ad_required))
+      else promise.reject("PREMIUM_REQUIRED", Words.get(reactApplicationContext, R.string.native_arts_daily_used))
       return
     }
     // The signature is Premium's: on the free plan it is left off.
@@ -751,8 +746,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
             b.recycle()
           }
         }
-        if (full) (if (pencil) PencilAllowance.use(reactApplicationContext) else ArtAllowance.use(reactApplicationContext))
-        val remaining = if (pencil) PencilAllowance.state(reactApplicationContext)["remaining"] as Int else ArtAllowance.remaining(reactApplicationContext)
+        if (full) ArtsAllowance.use(reactApplicationContext)
+        val remaining = ArtsAllowance.state(reactApplicationContext)["remaining"] as Int
         out + mapOf("remaining" to remaining, "inner" to inner) + (if (blankPath != null) mapOf("blankPath" to blankPath) else emptyMap())
       } finally {
         bitmap.recycle()
@@ -773,7 +768,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
 
   /**
    * Anime & Cartoon: { inputPath, quality 'thumb' | 'preview' | 'full', style 0..5,
-   * background 0..5, lines, shades 2..6, vivid, detail, eyes, skin, glow, strength 0..1, seed }
+   * background 0..5, lines, shades 2..6, vivid, detail, eyes, skin, glow, strength 0..1,
+   * outline, backdrop, brightness -1..1, warmth -1..1, texture, faceDetail, hairDetail, ink 0..3, seed }
    * → { outputPath, cleanPath, width, height, remaining }. Previews are
    * free; the finished picture is Premium, or two a day on the free plan,
    * each after an ad.
@@ -792,6 +788,8 @@ class StudioModule(reactContext: ReactApplicationContext) :
       num("lines", 0.5f, 0f, 1f), num("shades", 3f, 2f, 6f)?.roundToInt()?.toFloat(), num("vivid", 0.3f, -1f, 1f),
       num("detail", 0.5f, 0f, 1f), num("eyes", 0.4f, 0f, 1f), num("skin", 0.6f, 0f, 1f), num("glow", 0.3f, 0f, 1f),
       num("strength", 1f, 0f, 1f),
+      num("outline", 0.5f, 0f, 1f), num("backdrop", 0.5f, 0f, 1f), num("brightness", 0f, -1f, 1f), num("warmth", 0f, -1f, 1f),
+      num("texture", 0.5f, 0f, 1f), num("faceDetail", 0.5f, 0f, 1f), num("hairDetail", 0.5f, 0f, 1f), num("ink", 0f, 0f, 3f)?.roundToInt()?.toFloat(),
     )
     if (params.any { it == null } || quality !in setOf("thumb", "preview", "full")) {
       promise.reject("INVALID_ARGUMENT", Words.get(reactApplicationContext, R.string.native_toon_bad_settings))
@@ -837,9 +835,9 @@ class StudioModule(reactContext: ReactApplicationContext) :
     promise.resolve(ToonAllowance.state(reactApplicationContext).toWritableMap())
   }
 
-  /** { remaining (-1 unlimited), limit, credits, needsAd } — Pencil Art on the free plan today. */
+  /** Pencil Art shares Photo Arts' allowance: { remaining, limit, credits, needsAd, owed, maxOwed, frozen }. */
   override fun pencilAllowance(promise: Promise) {
-    promise.resolve(PencilAllowance.state(reactApplicationContext).toWritableMap())
+    promise.resolve(ArtsAllowance.state(reactApplicationContext).toWritableMap())
   }
 
   /**
@@ -1056,12 +1054,9 @@ class StudioModule(reactContext: ReactApplicationContext) :
     promise.resolve(MotionAllowance.state(reactApplicationContext).toWritableMap())
   }
 
-  /** { remaining (-1 unlimited), limit } — the free plan's finished paintings left today. */
+  /** { remaining (-1 unlimited), limit, credits, needsAd, owed, maxOwed, frozen } — Photo Arts on the free plan today. */
   override fun mastersAllowance(promise: Promise) {
-    promise.resolve(com.facebook.react.bridge.Arguments.createMap().apply {
-      putInt("remaining", ArtAllowance.remaining(reactApplicationContext))
-      putInt("limit", ArtAllowance.FREE_PER_DAY)
-    })
+    promise.resolve(ArtsAllowance.state(reactApplicationContext).toWritableMap())
   }
 
   // ------------------------------------------------------------ Film & Collage

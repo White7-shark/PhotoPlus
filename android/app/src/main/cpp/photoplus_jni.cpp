@@ -1182,12 +1182,13 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeToonRender(J
   if (st != PP_OK) throwStatus(env, st);
 }
 
-// Toon with everything. params: style, background, lines, shades, vivid, detail, eyes, skin, glow, strength;
+// Toon with everything. params: style, background, lines, shades, vivid, detail, eyes, skin, glow, strength,
+// outline, backdrop, brightness, warmth, texture, face detail, hair detail, ink;
 // faces 12 floats each; contours PP_TOON_CONTOUR_POINTS * 2 floats each (or null).
 JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeToonRenderEx(JNIEnv* env, jobject, jobject bitmap, jfloatArray params,
                                                                                jobject mask, jfloatArray faces, jfloatArray contours, jint seed,
                                                                                jlong token) {
-  if (params == nullptr || env->GetArrayLength(params) != 10) {
+  if (params == nullptr || env->GetArrayLength(params) != 18) {
     throwEngineException(env, "INVALID_ARGUMENT", "Bad toon settings");
     return;
   }
@@ -1212,11 +1213,14 @@ JNIEXPORT void JNICALL Java_com_photoplus_engine_NativeEngine_nativeToonRenderEx
     c.resize(static_cast<size_t>(n));
     if (n > 0) env->GetFloatArrayRegion(contours, 0, n, c.data());
   }
-  float v[10];
-  env->GetFloatArrayRegion(params, 0, 10, v);
-  const pp_toon_settings s{{static_cast<int>(std::lround(v[0])), static_cast<int>(std::lround(v[1])), v[2], static_cast<int>(std::lround(v[3])), v[4],
-                            v[5], v[6], v[7], v[8]},
-                           v[9]};
+  float v[18];
+  env->GetFloatArrayRegion(params, 0, 18, v);
+  pp_toon_settings s;
+  pp_toon_settings_init(&s);
+  s.options = {static_cast<int>(std::lround(v[0])), static_cast<int>(std::lround(v[1])), v[2], static_cast<int>(std::lround(v[3])), v[4], v[5], v[6], v[7], v[8]};
+  s.strength = v[9];
+  s.outline = v[10], s.backdrop = v[11], s.brightness = v[12], s.warmth = v[13], s.texture = v[14], s.face_detail = v[15], s.hair_detail = v[16];
+  s.ink = static_cast<int>(std::lround(v[17]));
   const pp_status st = pp_toon_render_ex(b.image, &s, m.image, f.empty() ? nullptr : f.data(), f.size() / 12, 12, c.empty() ? nullptr : c.data(),
                                          c.size() / (PP_TOON_CONTOUR_POINTS * 2), static_cast<uint32_t>(seed),
                                          reinterpret_cast<const pp_cancel_token*>(token));

@@ -14,14 +14,18 @@ import { getStorageService } from '../../services/storage/StorageService';
 import {
   BACKGROUNDS,
   DEFAULT_TOON,
+  FINE_DEFAULTS,
+  INKS,
   STYLES,
   backgroundName,
+  inkName,
   clampToon,
   styleAbout,
   styleName,
   withStyle,
   type ToonSettings,
 } from '../../services/toon/catalog';
+import { owedLine, unlockNotice, unlockedNow } from '../../services/ads/toolAllowance';
 import { ToonError, getToonService, type ToonAllowance, type ToonPicture } from '../../services/toon/ToonService';
 import { useAppStore } from '../../state/store';
 import { useTheme } from '../../theme';
@@ -51,6 +55,7 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
   const [preview, setPreview] = useState<ToonPicture | null>(null);
   const [thumbs, setThumbs] = useState<Record<number, string>>({});
   const [tuneOpen, setTuneOpen] = useState(true);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [allowance, setAllowance] = useState<ToonAllowance | null>(null);
   const [busy, setBusy] = useState<null | 'preview' | 'full' | 'ad'>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +69,9 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
   const limit = allowance?.limit ?? 2;
   const left = allowance && !unlimited ? Math.max(0, allowance.remaining) : null;
   const unlocked = !!allowance && !unlimited && allowance.credits > 0 && (left ?? 0) > 0;
+  // Ads owed from offline unlocks: paid off first; at the most allowed the tool waits for them.
+  const owed = allowance && !unlimited ? allowance.owed : 0;
+  const [adNote, setAdNote] = useState<string | null>(null);
 
   const refreshAllowance = useCallback(() => {
     void toon.allowance().then(setAllowance);
@@ -228,7 +236,7 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
   const create = () => {
     if (!photo || busy === 'full') return;
     if (unlimited || unlocked) void make();
-    else if (left === 0) setPremiumOpen(true);
+    else if (left === 0 && owed === 0) setPremiumOpen(true);
     else {
       setAdNotice(null);
       setAdOpen(true);
@@ -240,13 +248,15 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
     try {
       const r = await toon.unlock();
       setAllowance(r.allowance);
-      if (r.rewarded) {
+      setAdNote(unlockNotice(r));
+      if (r.rewarded && unlockedNow(r.allowance)) {
         setAdOpen(false);
         setBusy(null);
         await make();
         return;
       }
-      setAdNotice(t('toon_ad_not_finished'));
+      // An owed ad paid off (more to go), or an ad not watched to the end.
+      setAdNotice(r.rewarded ? unlockNotice(r) : t('toon_ad_not_finished'));
     } catch (e) {
       const code = e instanceof ToonError ? e.code : '';
       if (code === 'DAILY_LIMIT') {
@@ -257,6 +267,10 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
         setBusy(null);
         await make();
         return;
+      } else if (code === 'OWED_ADS') {
+        // Offline with every allowed ad owed: frozen until online.
+        setAdNotice(e instanceof Error ? e.message : t('ads_owed_frozen', { n: owed }));
+        refreshAllowance();
       } else setAdNotice(t('motion_ad_unavailable'));
     }
     setBusy(b => (b === 'ad' ? null : b));
@@ -515,9 +529,80 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
                     label={t('toon_reset')}
                     icon="refresh"
                     variant="ghost"
-                    onPress={() => chooseStyle(settings.style)}
+                    onPress={() => {
+                      latest.current = { ...latest.current, ...FINE_DEFAULTS };
+                      chooseStyle(settings.style);
+                    }}
                     testID="toon-reset"
                   />
+                </View>
+              ) : null}
+            </GlassSurface>
+
+            {/* More controls: outline, the scene's softness, light and warmth, texture, face lines, hair, ink. */}
+            <GlassSurface radius={18} style={styles.section} testID="toon-more">
+              <Pressable
+                onPress={() => setMoreOpen(o => !o)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: moreOpen }}
+                testID="toon-more-toggle"
+                style={styles.head}
+              >
+                <Icon name="sliders" size={18} color={accent} />
+                <AppText variant="bodyStrong" style={{ flex: 1 }}>
+                  {t('toon_more')}
+                </AppText>
+                <Icon name={moreOpen ? 'minus' : 'plus'} size={18} color={theme.colors.textSecondary} />
+              </Pressable>
+              {moreOpen ? (
+                <View style={{ gap: 12 }}>
+                  {(
+                    [
+                      ['outline', 'toon_outline', 0, 1],
+                      ['backdrop', 'toon_backdrop', 0, 1],
+                      ['brightness', 'toon_brightness', -1, 1],
+                      ['warmth', 'toon_warmth', -1, 1],
+                      ['texture', 'toon_texture', 0, 1],
+                      ['faceDetail', 'toon_face_detail', 0, 1],
+                      ['hairDetail', 'toon_hair_detail', 0, 1],
+                    ] as const
+                  ).map(([key, label, min, max]) => (
+                    <ValueSlider
+                      key={key}
+                      label={t(label)}
+                      value={settings[key]}
+                      min={min}
+                      max={max}
+                      onChange={v => change({ [key]: v }, false)}
+                      onEnd={done}
+                      format={v => (min < 0 ? `${v > 0 ? '+' : ''}${Math.round(v * 100)}` : `${Math.round(v * 100)}%`)}
+                      testID={`toon-${key}`}
+                    />
+                  ))}
+                  <AppText variant="caption" tone="secondary" style={{ fontWeight: '700' }}>
+                    {t('toon_ink')}
+                  </AppText>
+                  <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup">
+                    {INKS.map((ink, i) => (
+                      <Pressable
+                        key={ink}
+                        onPress={() => change({ ink: i })}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: settings.ink === i }}
+                        testID={`toon-ink-${ink}`}
+                        style={[chip(settings.ink === i), { flex: 1, alignItems: 'center' }]}
+                      >
+                        <AppText
+                          variant="caption"
+                          style={{ fontWeight: settings.ink === i ? '800' : '500' }}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                        >
+                          {inkName(i)}
+                        </AppText>
+                      </Pressable>
+                    ))}
+                  </View>
                 </View>
               ) : null}
             </GlassSurface>
@@ -539,14 +624,30 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
                     {t('toon_free_ad')}
                   </AppText>
                 ) : null}
+                {allowance && owedLine(allowance) ? (
+                  <AppText variant="caption" style={{ color: theme.colors.warning }} testID="toon-owed">
+                    {owedLine(allowance)}
+                  </AppText>
+                ) : null}
+                {adNote ? (
+                  <AppText variant="caption" tone="secondary" testID="toon-ad-note">
+                    {adNote}
+                  </AppText>
+                ) : null}
               </View>
             </View>
 
             <Button
               label={
-                unlimited || unlocked ? t('toon_create') : left === 0 ? t('motion_go_premium') : t('toon_watch_create')
+                unlimited || unlocked
+                  ? t('toon_create')
+                  : owed > 0
+                    ? t('ads_watch_owed', { n: owed })
+                    : left === 0
+                      ? t('motion_go_premium')
+                      : t('toon_watch_create')
               }
-              icon={unlimited || unlocked ? 'sparkles' : left === 0 ? 'crown' : 'play'}
+              icon={unlimited || unlocked ? 'sparkles' : left === 0 && owed === 0 ? 'crown' : 'play'}
               variant="premium"
               size="lg"
               loading={busy === 'full'}
@@ -577,7 +678,7 @@ export function ToonScreen({ navigation, route }: RootScreenProps<'Toon'>) {
       <AdUnlockSheet
         open={adOpen}
         title={t('toon_ad_title')}
-        body={t('toon_ad_body', { limit })}
+        body={owed > 0 ? t('ads_owed_sheet', { n: owed }) : t('toon_ad_body', { limit })}
         left={left !== null ? t('toon_free_left', { n: left, limit }) : null}
         notice={adNotice}
         busy={busy === 'ad'}

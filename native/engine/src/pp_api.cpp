@@ -2148,6 +2148,11 @@ pp_status pp_art_blank(pp_image* image, int kind, int artist, uint32_t seed, con
 
 static_assert(PP_TOON_CONTOUR_POINTS == photoplus::toon::contour::kPoints, "contour layout");
 
+void pp_toon_settings_init(pp_toon_settings* settings) {
+  if (settings == nullptr) return;
+  *settings = pp_toon_settings{{0, 0, 0.5f, 3, 0.3f, 0.5f, 0.4f, 0.6f, 0.3f}, 1.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0.5f, 0.5f, 0.5f, 0};
+}
+
 pp_status pp_toon_render_ex(pp_image* image, const pp_toon_settings* settings, const pp_image* subject, const float* faces, size_t face_count,
                             size_t face_stride, const float* contours, size_t contour_count, uint32_t seed, const pp_cancel_token* token) {
   return guarded([&]() -> pp_status {
@@ -2164,6 +2169,8 @@ pp_status pp_toon_render_ex(pp_image* image, const pp_toon_settings* settings, c
     o.lines = options->lines, o.shades = options->shades, o.vivid = options->vivid, o.detail = options->detail;
     o.eyes = options->eyes, o.skin = options->skin, o.glow = options->glow;
     o.strength = settings->strength;
+    o.outline = settings->outline, o.backdrop = settings->backdrop, o.brightness = settings->brightness, o.warmth = settings->warmth;
+    o.texture = settings->texture, o.faceDetail = settings->face_detail, o.hairDetail = settings->hair_detail, o.ink = settings->ink;
     o.seed = seed;
     o.subject = subject != nullptr ? &subject->buffer : nullptr;
     for (size_t i = 0; i < std::min<size_t>(face_count, 8); ++i) {
@@ -2189,7 +2196,9 @@ pp_status pp_toon_render_ex(pp_image* image, const pp_toon_settings* settings, c
 pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const pp_image* subject, const float* faces, size_t face_count,
                          size_t face_stride, uint32_t seed, const pp_cancel_token* token) {
   if (options == nullptr) return pp_toon_render_ex(image, nullptr, subject, faces, face_count, face_stride, nullptr, 0, seed, token);
-  const pp_toon_settings s{*options, 1.0f};
+  pp_toon_settings s;
+  pp_toon_settings_init(&s);
+  s.options = *options;
   return pp_toon_render_ex(image, &s, subject, faces, face_count, face_stride, nullptr, 0, seed, token);
 }
 

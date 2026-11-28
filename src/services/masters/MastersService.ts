@@ -10,6 +10,7 @@ import { ARTISTS, type MastersLevel } from './catalog';
 import { clampControls, type ArtControls } from './controls';
 import { clampPencil, type ArtMode, type PencilOptions } from './pencil';
 import { getAdsService } from '../ads/AdsService';
+import { readToolAllowance, readToolUnlock, unknownAllowance, type ToolAllowance, type ToolUnlock } from '../ads/toolAllowance';
 
 export type MastersQuality = 'thumb' | 'preview' | 'full';
 
@@ -34,19 +35,13 @@ export interface PaintExtras {
   live?: boolean;
 }
 
-/** Pencil Art's day on the free plan: each drawing after an ad. */
-export interface AdAllowance {
-  remaining: number;
-  limit: number;
-  credits: number;
-  needsAd: boolean;
-}
+/** Photo Arts' day on the free plan (paintings and drawings together): each work after an ad. */
+export type AdAllowance = ToolAllowance;
+/** The same. */
+export type Allowance = ToolAllowance;
 
-export interface Allowance {
-  /** -1 when unlimited. */
-  remaining: number;
-  limit: number;
-}
+/** Five works a day on the free plan. */
+export const ARTS_FALLBACK: ToolAllowance = unknownAllowance(5);
 
 export class MastersError extends Error {
   constructor(
@@ -134,46 +129,37 @@ export class MastersService {
     }
   }
 
+  /** Photo Arts today on the free plan (Premium: remaining -1). */
   async allowance(): Promise<Allowance> {
     try {
-      const a = (await this.native.mastersAllowance()) as Partial<Allowance> | null;
-      return { remaining: num(a?.remaining) ? a.remaining : 0, limit: num(a?.limit) ? a.limit : 1 };
+      return readToolAllowance(await this.native.mastersAllowance(), ARTS_FALLBACK);
     } catch {
-      // Unknown: let the device decide when the painting is made.
-      return { remaining: 1, limit: 1 };
+      return ARTS_FALLBACK;
     }
   }
 
-  /** Pencil Art today on the free plan (Premium: remaining -1). */
+  /** Pencil Art shares Photo Arts' allowance. */
   async pencilAllowance(): Promise<AdAllowance> {
-    const fallback: AdAllowance = { remaining: 2, limit: 2, credits: 0, needsAd: true };
-    try {
-      const a = (await this.native.pencilAllowance()) as Partial<AdAllowance> | null;
-      if (!a || !num(a.remaining)) return fallback;
-      const credits = num(a.credits) ? Math.max(0, a.credits) : 0;
-      return {
-        remaining: a.remaining,
-        limit: num(a.limit) ? a.limit : 2,
-        credits,
-        needsAd: a.remaining !== -1 && (typeof a.needsAd === 'boolean' ? a.needsAd : a.remaining > 0 && credits === 0),
-      };
-    } catch {
-      return fallback;
-    }
+    return this.allowance();
   }
 
-  /** A rewarded ad for a free drawing; resolves whether it was watched to the end. */
-  async unlockPencil(ads = nativeModules.ads): Promise<{ rewarded: boolean; allowance: AdAllowance }> {
+  /** A rewarded ad for a free work (offline: unlocked on credit, the ad owed). */
+  async unlockArts(ads = nativeModules.ads): Promise<ToolUnlock> {
     if (!ads) throw new MastersError('Ads aren’t available on this device', 'ADS_UNAVAILABLE');
     try {
       await getAdsService()
         .start()
         .catch(() => false);
-      const r = (await ads.showRewardedAdForTool('pencil')) as { rewarded?: boolean } | null;
-      return { rewarded: r?.rewarded === true, allowance: await this.pencilAllowance() };
+      const r = await ads.showRewardedAdForTool('arts');
+      return readToolUnlock(r, await this.allowance());
     } catch (e) {
       throw new MastersError(errorMessage(e), errorCode(e) ?? 'AD_NOT_AVAILABLE');
     }
+  }
+
+  /** The same (the name the pencil flow used). */
+  unlockPencil(ads = nativeModules.ads): Promise<ToolUnlock> {
+    return this.unlockArts(ads);
   }
 }
 

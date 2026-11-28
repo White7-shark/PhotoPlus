@@ -2,7 +2,7 @@
 
 (The tool was called Masters, then Masterstroke. Code identifiers still say `masters`, but the name people see is **Photo Arts**.)
 
-Photo Arts is a Photoshoot Studio tool. It is Premium; the free plan gets **one finished painting a day**. Previews and the artist cards are free and unlimited.
+Photo Arts is a Photoshoot Studio tool. It is Premium; the free plan gets **five finished works of art a day** (paintings and pencil drawings together), each unlocked by a rewarded ad and carrying the app's watermark. Previews and the artist cards are free and unlimited.
 
 It is not a filter laid over the photo. The engine paints a new picture from it the way each artist worked:
 - the ground they painted on;
@@ -82,7 +82,7 @@ At every level the face gets its own fine-brush pass, so it stays true to the pe
   5. Choose Study, Painting or Masterpiece.
   6. Hold the picture to compare it with the photo.
   7. Tap "Paint it", then save to the gallery, share, or paint again.
-- Below the button, a line shows what is left: one free painting today, today's painting used, or Premium with no limit.
+- Below the button, a line shows what is left: how many of today's five are left, an ad to watch, owed ads, or Premium with no limit.
 - When the day's painting is used, the Premium sheet opens.
 - A newer preview cancels the older one.
 - The catalogue (`src/services/masters/catalog.ts`) holds names, techniques, descriptions and movements as string resources. Years are numbers.

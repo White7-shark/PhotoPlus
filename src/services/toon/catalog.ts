@@ -25,14 +25,45 @@ export interface ToonSettings {
   glow: number;
   /** 0 the photo .. 1 fully drawn: the picture blended with the photo */
   strength: number;
+  /** Finer controls (0.5 / 0: the style's own look). 0 no outline .. 1 twice as bold */
+  outline: number;
+  /** 0 the kept scene crisp .. 1 very soft */
+  backdrop: number;
+  /** -1 darker .. 1 brighter */
+  brightness: number;
+  /** -1 cooler .. 1 warmer */
+  warmth: number;
+  /** 0 no dots, screentone or grain .. 1 twice as much */
+  texture: number;
+  /** 0 the lightest face lines .. 1 the boldest */
+  faceDetail: number;
+  /** 0 smooth hair .. 1 every strand */
+  hairDetail: number;
+  /** 0 the style's own ink, 1 black, 2 brown, 3 a darker shade of the colour */
+  ink: number;
 }
+
+/** The finer controls at the style's own look. */
+export const FINE_DEFAULTS = {
+  outline: 0.5,
+  backdrop: 0.5,
+  brightness: 0,
+  warmth: 0,
+  texture: 0.5,
+  faceDetail: 0.5,
+  hairDetail: 0.5,
+  ink: 0,
+} as const;
+type Fine = keyof typeof FINE_DEFAULTS;
+
+export const INKS = ['style', 'black', 'brown', 'colour'] as const;
 
 export interface ToonStyle {
   id: number;
   key: 'anime' | 'manga' | 'comic' | 'cartoon' | 'webtoon' | 'retro';
   icon: IconName;
   /** The style's own way: where its controls start. */
-  start: Omit<ToonSettings, 'style' | 'background' | 'strength'>;
+  start: Omit<ToonSettings, 'style' | 'background' | 'strength' | Fine>;
 }
 
 export const STYLES: readonly ToonStyle[] = [
@@ -77,7 +108,13 @@ export const STYLES: readonly ToonStyle[] = [
 export const BACKGROUNDS = ['keep', 'soft', 'sky', 'sunset', 'night', 'plain'] as const;
 export type ToonBackground = (typeof BACKGROUNDS)[number];
 
-export const DEFAULT_TOON: ToonSettings = { style: 0, background: 0, strength: 1, ...STYLES[0].start };
+export const DEFAULT_TOON: ToonSettings = {
+  style: 0,
+  background: 0,
+  strength: 1,
+  ...FINE_DEFAULTS,
+  ...STYLES[0].start,
+};
 
 const clamp = (v: unknown, lo: number, hi: number, def: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def;
@@ -95,13 +132,23 @@ export function clampToon(s: Partial<ToonSettings>): ToonSettings {
     skin: clamp(s.skin, 0, 1, d.skin),
     glow: clamp(s.glow, 0, 1, d.glow),
     strength: clamp(s.strength, 0, 1, d.strength),
+    outline: clamp(s.outline, 0, 1, d.outline),
+    backdrop: clamp(s.backdrop, 0, 1, d.backdrop),
+    brightness: clamp(s.brightness, -1, 1, d.brightness),
+    warmth: clamp(s.warmth, -1, 1, d.warmth),
+    texture: clamp(s.texture, 0, 1, d.texture),
+    faceDetail: clamp(s.faceDetail, 0, 1, d.faceDetail),
+    hairDetail: clamp(s.hairDetail, 0, 1, d.hairDetail),
+    ink: Math.round(clamp(s.ink, 0, INKS.length - 1, d.ink)),
   };
 }
 
-/** A style chosen: its own way for every control (the background and Strength stay). */
+/** A style chosen: its own way for every control (the background, Strength and the finer controls stay). */
 export const withStyle = (s: ToonSettings, style: number): ToonSettings =>
   clampToon({ ...s, style, ...(STYLES[style] ?? STYLES[0]).start });
 
 export const styleName = (s: ToonStyle) => t(`toon_style_${s.key}` as StringKey);
 export const styleAbout = (s: ToonStyle) => t(`toon_style_${s.key}_about` as StringKey);
 export const backgroundName = (b: ToonBackground) => t(`toon_bg_${b}` as StringKey);
+
+export const inkName = (i: number) => t(`toon_ink_${INKS[i] ?? 'style'}` as StringKey);

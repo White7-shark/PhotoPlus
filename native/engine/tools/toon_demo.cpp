@@ -82,10 +82,15 @@ int main(int argc, char** argv) {
   }
   const uint32_t seed = argc > 10 ? static_cast<uint32_t>(std::strtoul(argv[10], nullptr, 10)) : 7U;
   // TOON="background lines shades vivid detail eyes skin glow [strength]"
-  pp_toon_settings ts{{std::atoi(argv[3]), 0, 0.5f, 3, 0.3f, 0.5f, 0.4f, 0.6f, 0.3f}, 1.0f};
+  pp_toon_settings ts;
+  pp_toon_settings_init(&ts);
+  ts.options.style = std::atoi(argv[3]);
   pp_toon_options& o = ts.options;
   if (const char* e = std::getenv("TOON"))
     std::sscanf(e, "%d %f %d %f %f %f %f %f %f", &o.background, &o.lines, &o.shades, &o.vivid, &o.detail, &o.eyes, &o.skin, &o.glow, &ts.strength);
+  // TOON_FINE="outline backdrop brightness warmth texture face hair ink"
+  if (const char* e = std::getenv("TOON_FINE"))
+    std::sscanf(e, "%f %f %f %f %f %f %f %d", &ts.outline, &ts.backdrop, &ts.brightness, &ts.warmth, &ts.texture, &ts.face_detail, &ts.hair_detail, &ts.ink);
   // TOON_CONTOURS="x y x y ..." (PP_TOON_CONTOUR_POINTS pairs per face, normalised).
   std::vector<float> contours;
   if (const char* c = std::getenv("TOON_CONTOURS")) {

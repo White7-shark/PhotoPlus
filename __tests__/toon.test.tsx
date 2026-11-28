@@ -16,6 +16,7 @@ import { STUDIOS } from '../src/services/projects/studios';
 import {
   BACKGROUNDS,
   DEFAULT_TOON,
+  FINE_DEFAULTS,
   STYLES,
   backgroundName,
   clampToon,
@@ -131,7 +132,7 @@ describe('the Toon catalogue', () => {
     // Manga is ink on paper: no colour boost, no glow.
     expect(STYLES[1].start).toMatchObject({ vivid: 0, glow: 0 });
     expect(FEATURES.toon.plan).toBe('premium');
-    expect(FREE_DAILY_ALLOWANCE.toon).toBe(2);
+    expect(FREE_DAILY_ALLOWANCE.toon).toBe(5);
     expect(STUDIOS.toon).toMatchObject({ kind: 'toon', route: 'Toon' });
     expect(STUDIO_TOOLS.find(t => t.id === 'toon')).toMatchObject({
       route: 'Toon',
@@ -153,7 +154,8 @@ describe('the Toon catalogue', () => {
     });
     expect(clampToon({ shades: 3.6 }).shades).toBe(4);
     const s = withStyle({ ...DEFAULT_TOON, background: 2, lines: 0.1, strength: 0.6 }, 3);
-    expect(s).toEqual({ style: 3, background: 2, strength: 0.6, ...STYLES[3].start });
+    expect(s).toEqual({ style: 3, background: 2, strength: 0.6, ...FINE_DEFAULTS, ...STYLES[3].start });
+    expect(clampToon({ warmth: 3, ink: 7.2, brightness: -4 })).toMatchObject({ warmth: 1, ink: 3, brightness: -1 });
     expect(clampToon({ strength: 1.4 }).strength).toBe(1);
     expect(clampToon({ strength: -1 }).strength).toBe(0);
     expect(DEFAULT_TOON.strength).toBe(1);
@@ -178,9 +180,9 @@ describe('the Toon service', () => {
     mockStudio.renderToon.mockRejectedValueOnce(Object.assign(new Error('ad'), { code: 'AD_REQUIRED' }));
     await expect(s.render('/a.jpg', DEFAULT_TOON, 'full')).rejects.toMatchObject({ code: 'AD_REQUIRED' });
 
-    expect(await s.allowance()).toEqual({ remaining: 2, limit: 2, credits: 0, needsAd: true });
+    expect(await s.allowance()).toMatchObject({ remaining: 2, limit: 2, credits: 0, needsAd: true, owed: 0 });
     mockStudio.toonAllowance.mockRejectedValueOnce(new Error('x'));
-    expect(await s.allowance()).toEqual({ remaining: 2, limit: 2, credits: 0, needsAd: true });
+    expect(await s.allowance()).toMatchObject({ remaining: 5, limit: 5, credits: 0, needsAd: true });
     mockToon.premium = true;
     expect((await s.allowance()).needsAd).toBe(false);
     mockToon.premium = false;
@@ -242,8 +244,18 @@ describe('the Toon Studio screen', () => {
     expect(last.glow as number).toBeGreaterThan(0);
     expect(last.skin as number).toBeLessThan(STYLES[1].start.skin);
     expect(last.vivid as number).toBeGreaterThan(0);
-    // Back to the style's own look (the background stays).
+    // More controls: outline, warmth, ink.
+    await step(() => fireEvent.press(screen.getByTestId('toon-more-toggle')));
+    for (let i = 0; i < 2; i++) await step(() => slide('toon-warmth', 1));
+    for (let i = 0; i < 2; i++) await step(() => slide('toon-outline', 1, 'decrement'));
+    await step(() => fireEvent.press(screen.getByTestId('toon-ink-brown')));
+    expect(lastPreview().warmth as number).toBeGreaterThan(0);
+    expect(lastPreview().outline as number).toBeLessThan(0.5);
+    expect(lastPreview().ink).toBe(2);
+    expect(screen.getByText('Brown')).toBeTruthy();
+    // Back to the style's own look (the background stays; the finer controls go back too).
     await step(() => fireEvent.press(screen.getByTestId('toon-reset')));
+    expect(lastPreview()).toMatchObject(FINE_DEFAULTS);
     expect(lastPreview()).toMatchObject({ style: 1, background: 2, ...STYLES[1].start });
     // Strength: the drawing blended with the photo.
     for (let i = 0; i < 3; i++) await step(() => slide('toon-strength', 1, 'decrement'));

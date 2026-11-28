@@ -63,6 +63,15 @@ struct Options {
   float skin = 0.6f;    // 0 the skin's own texture .. 1 smooth, two-tone anime skin
   float glow = 0.3f;    // 0 .. 1 a soft glow around the lights
   float strength = 1;   // 0 the photo .. 1 fully drawn (blended)
+  // Finer controls (0.5 / 0: the style's own look).
+  float outline = 0.5f;     // 0 no outline around the person .. 1 twice as bold
+  float backdrop = 0.5f;    // 0 the kept scene crisp .. 1 very soft
+  float brightness = 0;     // -1 darker .. 1 brighter
+  float warmth = 0;         // -1 cooler .. 1 warmer
+  float texture = 0.5f;     // 0 no dots, screentone or grain .. 1 twice as much
+  float faceDetail = 0.5f;  // 0 the lightest face lines .. 1 the boldest
+  float hairDetail = 0.5f;  // 0 smooth hair .. 1 every strand
+  int32_t ink = 0;          // 0 the style's own ink, 1 black, 2 brown, 3 a darker shade of the colour
   uint32_t seed = 1;
   // Optional person mask (GRAY8, any size; 255 = the person): the outline, the backdrop.
   const ImageBuffer* subject = nullptr;

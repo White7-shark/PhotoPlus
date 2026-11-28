@@ -245,15 +245,16 @@ describe('the Photo Motion service', () => {
 
   it('reads the allowance safely, and an ad unlocks a video only when watched to the end', async () => {
     const s = new MotionService(mockStudio as never, mockAds as never, async () => true);
-    expect(await s.allowance()).toEqual({ remaining: 2, limit: 2, credits: 0, needsAd: true });
+    expect(await s.allowance()).toMatchObject({ remaining: 2, limit: 2, credits: 0, needsAd: true, owed: 0 });
     expect(readAllowance(null, UNKNOWN_ALLOWANCE)).toBe(UNKNOWN_ALLOWANCE);
     expect(readAllowance({ remaining: -1, limit: 2 }, UNKNOWN_ALLOWANCE)).toMatchObject({ needsAd: false });
     mockStudio.motionAllowance.mockRejectedValueOnce(new Error('gone'));
     expect(await s.allowance()).toEqual(UNKNOWN_ALLOWANCE);
 
-    expect(await s.unlock()).toEqual({
+    expect(await s.unlock()).toMatchObject({
       rewarded: true,
-      allowance: { remaining: 2, limit: 2, credits: 1, needsAd: false },
+      offline: false,
+      allowance: { remaining: 2, limit: 2, credits: 1, needsAd: false, owed: 0, frozen: false },
     });
     mockDay.adFinishes = false;
     expect((await s.unlock()).rewarded).toBe(false);

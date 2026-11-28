@@ -272,7 +272,10 @@ std::vector<unsigned char> render2(const Photo& photo, int style, float strength
   for (int y = 0; y < kH2; ++y) std::copy_n(&photo.px[static_cast<size_t>(y) * kW2 * 4], kW2 * 4, px + static_cast<size_t>(y) * info.stride);
   pp_image* m = mask2(maskScale, maskShift);
   const std::vector<float> c = contours();
-  const pp_toon_settings s{{style, 0, lines, 3, 0.3f, 0.5f, 0.4f, 0.7f, 0.3f}, strength};
+  pp_toon_settings s;
+  pp_toon_settings_init(&s);
+  s.options = {style, 0, lines, 3, 0.3f, 0.5f, 0.4f, 0.7f, 0.3f};
+  s.strength = strength;
   EXPECT_EQ(pp_toon_render_ex(img, &s, m, kFace2, 1, 12, withContours ? c.data() : nullptr, withContours ? 1 : 0, 7, nullptr), PP_OK);
   std::vector<unsigned char> out(static_cast<size_t>(kW2) * kH2 * 4);
   for (int y = 0; y < kH2; ++y) std::copy_n(px + static_cast<size_t>(y) * info.stride, kW2 * 4, &out[static_cast<size_t>(y) * kW2 * 4]);
@@ -425,13 +428,69 @@ TEST(toon_styles_are_clearly_different) {
 
 TEST(toon_ex_refuses_bad_input) {
   pp_image* img = portrait();
-  pp_toon_settings s{{0, 0, 0.5f, 3, 0.3f, 0.5f, 0.4f, 0.6f, 0.3f}, 1.5f};
+  pp_toon_settings s;
+  pp_toon_settings_init(&s);
+  s.strength = 1.5f;
   EXPECT_EQ(pp_toon_render_ex(img, &s, nullptr, nullptr, 0, 4, nullptr, 0, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);  // strength
   s.strength = 1;
   EXPECT_EQ(pp_toon_render_ex(img, &s, nullptr, nullptr, 0, 4, nullptr, 2, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);  // contours missing
+  s.ink = 4;
+  EXPECT_EQ(pp_toon_render_ex(img, &s, nullptr, nullptr, 0, 4, nullptr, 0, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);  // ink
+  s.ink = 0, s.warmth = 2;
+  EXPECT_EQ(pp_toon_render_ex(img, &s, nullptr, nullptr, 0, 4, nullptr, 0, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);  // warmth
+  s.warmth = 0;
   EXPECT_EQ(pp_toon_render_ex(img, nullptr, nullptr, nullptr, 0, 4, nullptr, 0, 1, nullptr), PP_ERROR_INVALID_ARGUMENT);
   // Contour points that are unknown (negative) are fine: that face uses its box.
   std::vector<float> unknown(PP_TOON_CONTOUR_POINTS * 2, -1.0f);
   EXPECT_EQ(pp_toon_render_ex(img, &s, nullptr, kFace, 1, 12, unknown.data(), 1, 1, nullptr), PP_OK);
   pp_image_destroy(img);
+}
+
+TEST(toon_finer_controls_do_what_they_say) {
+  const Photo photo = face(150, 100, 75, 0.9f, 3);
+  auto render = [&](auto set) {
+    pp_image* img = nullptr;
+    pp_image_create(kW2, kH2, PP_FORMAT_RGBA8, &img);
+    pp_image_info info{};
+    pp_image_get_info(img, &info);
+    auto* px = static_cast<unsigned char*>(pp_image_pixels(img));
+    for (int y = 0; y < kH2; ++y) std::copy_n(&photo.px[static_cast<size_t>(y) * kW2 * 4], kW2 * 4, px + static_cast<size_t>(y) * info.stride);
+    pp_image* m = mask2(1, 0);
+    const std::vector<float> c = contours();
+    pp_toon_settings s;
+    pp_toon_settings_init(&s);
+    s.options.style = 3;
+    set(s);
+    EXPECT_EQ(pp_toon_render_ex(img, &s, m, kFace2, 1, 12, c.data(), 1, 7, nullptr), PP_OK);
+    std::vector<unsigned char> out(static_cast<size_t>(kW2) * kH2 * 4);
+    for (int y = 0; y < kH2; ++y) std::copy_n(px + static_cast<size_t>(y) * info.stride, kW2 * 4, &out[static_cast<size_t>(y) * kW2 * 4]);
+    pp_image_destroy(img);
+    pp_image_destroy(m);
+    return out;
+  };
+  auto meanLum = [](const std::vector<unsigned char>& p) {
+    double s = 0;
+    for (size_t i = 0; i < p.size(); i += 4) s += 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+    return s / (static_cast<double>(p.size()) / 4);
+  };
+  auto warm = [](const std::vector<unsigned char>& p) {
+    double s = 0;
+    for (size_t i = 0; i < p.size(); i += 4) s += static_cast<double>(p[i]) - p[i + 2];
+    return s / (static_cast<double>(p.size()) / 4);
+  };
+  const auto base = render([](pp_toon_settings&) {});
+  EXPECT_TRUE(meanLum(render([](pp_toon_settings& s) { s.brightness = 1; })) > meanLum(base) + 4);
+  EXPECT_TRUE(meanLum(render([](pp_toon_settings& s) { s.brightness = -1; })) < meanLum(base) - 4);
+  EXPECT_TRUE(warm(render([](pp_toon_settings& s) { s.warmth = 1; })) > warm(base) + 4);
+  // No outline: the face's edge is no longer inked.
+  const auto noOutline = render([](pp_toon_settings& s) { s.outline = 0; });
+  const int edge = static_cast<int>(kCx + kRx);
+  EXPECT_TRUE(lum2(noOutline, edge, 120) > lum2(base, edge, 120) + 30 || lum2(base, edge - 1, 120) < lum2(noOutline, edge - 1, 120) - 30);
+  // Brown ink is brown, black ink is near black (on the outline).
+  const auto brown = render([](pp_toon_settings& s) { s.ink = 2; });
+  int best = edge;
+  for (int x = edge - 6; x <= edge + 6; ++x)
+    if (lum2(brown, x, 120) < lum2(brown, best, 120)) best = x;
+  const unsigned char* q = &brown[(static_cast<size_t>(120) * kW2 + best) * 4];
+  EXPECT_TRUE(q[0] > q[2] + 10);
 }

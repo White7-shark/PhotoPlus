@@ -390,13 +390,25 @@ Error render(ImageBuffer& image, const Options& o, const CancellationToken* toke
   if (si < 0 || si >= kStyleCount || bi < 0 || bi >= kBackgroundCount) return {PP_ERROR_INVALID_ARGUMENT, "Unknown style or background"};
   auto ok = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
   if (!ok(o.lines, 0, 1) || o.shades < 2 || o.shades > 6 || !ok(o.vivid, -1, 1) || !ok(o.detail, 0, 1) || !ok(o.eyes, 0, 1) ||
-      !ok(o.skin, 0, 1) || !ok(o.glow, 0, 1) || !ok(o.strength, 0, 1))
+      !ok(o.skin, 0, 1) || !ok(o.glow, 0, 1) || !ok(o.strength, 0, 1) || !ok(o.outline, 0, 1) || !ok(o.backdrop, 0, 1) ||
+      !ok(o.brightness, -1, 1) || !ok(o.warmth, -1, 1) || !ok(o.texture, 0, 1) || !ok(o.faceDetail, 0, 1) || !ok(o.hairDetail, 0, 1) ||
+      o.ink < 0 || o.ink > 3)
     return {PP_ERROR_INVALID_ARGUMENT, "A toon control is out of range"};
   if (o.subject != nullptr && (o.subject->empty() || o.subject->format() != PixelFormat::Gray8))
     return {PP_ERROR_INVALID_ARGUMENT, "The person mask must be a grey image"};
   if (o.strength <= 0) return {PP_OK, {}};  // the photo itself
 
-  const StylePreset& P = kPresets[static_cast<size_t>(si)];
+  // The style's look, with the person's finer controls on top (0.5 and 0 keep it as it is).
+  StylePreset P = kPresets[static_cast<size_t>(si)];
+  P.toneStrength = std::min(1.0f, P.toneStrength * 2 * o.texture);
+  P.grain *= 2 * o.texture;
+  P.hairLines = std::min(1.0f, P.hairLines * 2 * o.hairDetail);
+  P.faceLine *= mix(0.55f, 1.45f, o.faceDetail);
+  P.outline *= 2 * o.outline;
+  P.backBlur *= std::max(0.15f, 2 * o.backdrop);
+  if (o.ink == 1) P.ink = Ink::Black, P.inkColour = {0.04f, 0.04f, 0.05f};
+  if (o.ink == 2) P.ink = Ink::Brown, P.inkColour = {0.26f, 0.14f, 0.10f};
+  if (o.ink == 3) P.ink = Ink::Coloured;
   const int w = image.width(), h = image.height();
   const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
   const float G = static_cast<float>(std::min(w, h));
@@ -677,7 +689,7 @@ Error render(ImageBuffer& image, const Options& o, const CancellationToken* toke
     // The hair's local contrast raised: its shape and strands survive the flattening.
     const Img Lb = blur(L, std::max(1.5f, G / 220), token);
     for (size_t i = 0; i < n; ++i)
-      if (hair.d[i] > 0.01f) lab.d[i * 3] = std::clamp(L.d[i] + 0.9f * hair.d[i] * (L.d[i] - Lb.d[i]), 0.0f, 100.0f);
+      if (hair.d[i] > 0.01f) lab.d[i * 3] = std::clamp(L.d[i] + 1.8f * o.hairDetail * hair.d[i] * (L.d[i] - Lb.d[i]), 0.0f, 100.0f);
   }
   const float simplify = std::clamp(P.smooth * (1.15f - 0.7f * o.detail), 0.1f, 1.2f);
   // Edge-preserving smoothing at a working size of at most ~1100 px on the short side (a large export
@@ -857,6 +869,9 @@ Error render(ImageBuffer& image, const Options& o, const CancellationToken* toke
         const float cool = P.shadowCool * (1 - 0.7f * sk);
         a += cool * (3.0f * sh - 1.0f * (1 - sh));
         b += cool * (-10.0f * sh + 4.0f * (1 - sh));
+        // The person's brightness and warmth.
+        l = std::clamp(l + 12 * o.brightness, 0.0f, 100.0f);
+        a += 3 * o.warmth, b += 9 * o.warmth;
         // Pastel: lighter, softer colour.
         l += P.pastel * (100 - l) * 0.32f;
         a *= 1 - 0.28f * P.pastel, b *= 1 - 0.28f * P.pastel;
@@ -1212,7 +1227,7 @@ Error render(ImageBuffer& image, const Options& o, const CancellationToken* toke
     }
   }
   // The person's outline: on the refined mask's edge, exactly where the person's colour meets the scene's.
-  if (hasMask) {
+  if (hasMask && P.outline > 0.01f) {
     const float wO = std::max(1.0f, P.outline * px * lineScale);
     // Distance from the edge, from the mask softened to the outline's width (its 0.5 crossing stays put):
     // a thick outline is as thick as asked, centred where the person's colour meets the scene's.
@@ -1282,7 +1297,7 @@ Error render(ImageBuffer& image, const Options& o, const CancellationToken* toke
           }
       }
       const Rgb3 ink3{0.06f, 0.06f, 0.07f};
-      dots(out, tone, std::max(3.0f, G / 170.0f), 0.785f, 0, &ink3, 0.9f);
+      dots(out, tone, std::max(3.0f, G / 170.0f), 0.785f, 0, &ink3, std::min(1.0f, 0.9f * 2 * o.texture));
     } else if (P.tone == Tone::BenDay) {
       Img amt(w, h, 1);
       for (size_t i = 0; i < n; ++i) amt.d[i] = allow.d[i] * 0.85f;

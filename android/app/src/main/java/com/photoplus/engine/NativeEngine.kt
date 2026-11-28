@@ -522,7 +522,8 @@ object NativeEngine {
   /** Toon: the photo as anime or a cartoon. params: style, background, lines, shades, vivid, detail, eyes, skin, glow. */
   external fun nativeToonRender(bitmap: Bitmap, params: FloatArray, mask: Bitmap?, faces: FloatArray?, seed: Int, token: Long)
   /**
-   * Toon with everything. params: style, background, lines, shades, vivid, detail, eyes, skin, glow, strength;
+   * Toon with everything. params: style, background, lines, shades, vivid, detail, eyes, skin, glow, strength,
+   * outline, backdrop, brightness, warmth, texture, faceDetail, hairDetail, ink (0..3);
    * faces: 12 floats each; contours: 262 floats each (PP_TOON_CONTOUR_POINTS pairs, ML Kit's order, -1 unknown).
    */
   external fun nativeToonRenderEx(bitmap: Bitmap, params: FloatArray, mask: Bitmap?, faces: FloatArray?, contours: FloatArray?, seed: Int, token: Long)

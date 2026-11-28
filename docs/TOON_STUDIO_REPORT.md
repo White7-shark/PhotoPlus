@@ -13,9 +13,10 @@ Two additions:
 | | Free | Premium |
 | --- | --- | --- |
 | Previews and style cards | Unlimited | Unlimited |
-| Finished pictures (HD) | 2 a day, each after a rewarded ad | Unlimited, no ads |
+| Finished pictures (HD) | 5 a day, each after a rewarded ad, with the app's watermark | Unlimited, no ads, no mark |
 
-This is the same pattern as Photo Motion and Pencil Art.
+This is the same pattern as Photo Motion and Photo Arts. Offline, ads are owed
+(see `FREE_PLAN_ADS_ONBOARDING_REPORT.md`).
 - **Counting.** The device counts pictures (`ToonAllowance`) on the trusted
   clock.
 - **Ads.** An ad unlocks a picture only from the ad network's reward
@@ -58,6 +59,20 @@ values. "Back to the style's own look" resets them; the background stays.
 | Detail | 0–100% | Simple shapes to most detail kept |
 | Anime eyes | 0–100% | The person's own eyes to large anime eyes with catchlights |
 | Smooth skin | 0–100% | The skin's texture to clean two-tone anime skin |
+
+**More controls** (folded away under "More controls"; all start in the middle,
+which is the style's own look, and reset with it):
+
+| Control | Range | What it does |
+| --- | --- | --- |
+| Outline | 0–100% | No outline round the person to a bold one |
+| Background | 0–100% | Sharp drawn scene to a soft, far background |
+| Brightness | Darker to brighter | The light of the whole picture |
+| Warmth | Cooler to warmer | Blue to golden light |
+| Texture | 0–100% | Clean flat colour to more shading, grain and screentone |
+| Face lines | 0–100% | Fewer to more lines on the face |
+| Hair lines | 0–100% | Fewer to more strands drawn in the hair |
+| Ink | Style / Black / Brown / Colour | The colour of the line art |
 | Glow | 0–100% | A soft bloom around the lights |
 
 **Previews.**
@@ -191,10 +206,10 @@ Version 2 is a rework, organised as:
   White-box Cartoonization-like), run by the app's LiteRT runtime on the
   GPU, else the CPU.
   - It sits behind `BuildConfig.TOON_MODEL_ENGINE`, which is false.
-  - **No weights are bundled.** As far as I know, the published AnimeGANv2
-    and White-box Cartoonization weights are for non-commercial use only.
-    This must be verified with their authors (or a licensed model trained)
-    before shipping. The TODO lists the steps.
+  - **No weights are bundled.** The licence search (see
+    `FREE_PLAN_ADS_ONBOARDING_REPORT.md`) found no published cartoon model
+    whose weights are clearly free for commercial use. A model must be
+    licensed from its authors or trained on licensed data before shipping.
 - `CloudToonEngine`: an interface for a future server img2img backend
   (line-art ControlNet with identity preservation). `NoCloudToonEngine`
   says it isn't available. Uploading a person's photo would first need
@@ -307,7 +322,7 @@ It is remembered in Settings (`artLiveSpeed`).
   from the shared `artSubjects` cache, encoding) and
   `StudioModule.toonAllowance`.
 - `NativeEngine.nativeToonRender`, which wraps `pp_toon_render`.
-- `ToonAllowance` uses the shared `AdAllowance` class (2 a day).
+- `ToonAllowance` uses the shared `AdAllowance` class (5 a day, owed ads offline).
 - `RewardsLedger` and `AdsModule` know the `toon` tool.
 
 ## App
@@ -318,7 +333,7 @@ It is remembered in Settings (`artLiveSpeed`).
   - `services/toon/ToonService.ts`.
 - **Studio hub.** A "Toon Studio" tile (Premium) and the `toon` studio
   kind for projects. Migration v3's studio check includes `toon`.
-- **Feature.** `FEATURES.toon` and `FREE_DAILY_ALLOWANCE.toon = 2`.
+- **Feature.** `FEATURES.toon` and `FREE_DAILY_ALLOWANCE.toon = 5`.
 
 ## Strings
 

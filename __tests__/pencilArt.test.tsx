@@ -52,7 +52,7 @@ const mockStudio = {
     return out(String(req.quality));
   }),
   pencilAllowance: jest.fn(async () => ({ remaining: 2, limit: 2, credits: 0, needsAd: true })),
-  mastersAllowance: jest.fn(async () => ({ remaining: 1, limit: 1 })),
+  mastersAllowance: jest.fn(async () => ({ remaining: 2, limit: 5, credits: 0, needsAd: true })),
   cancel: jest.fn(),
 };
 jest.mock('../src/native', () => {
@@ -114,7 +114,7 @@ describe('Pencil Art', () => {
     expect(LIVE_MS.pencil).toBeGreaterThanOrEqual(5000);
     expect(LIVE_MS.paint).toBeLessThanOrEqual(10000);
     expect(FEATURES.pencil.plan).toBe('premium');
-    expect(FREE_DAILY_ALLOWANCE.pencil).toBe(2);
+    expect(FREE_DAILY_ALLOWANCE.pencil).toBe(5);
   });
 
   it('sends the drawing’s choices, and reads its picture area and blank sheet', async () => {
@@ -138,8 +138,8 @@ describe('Pencil Art', () => {
       live: true,
     });
     expect(p).toMatchObject({ blankPath: '/cache/blank.jpg', inner: [0, 0, 1, 1] });
-    expect(await s.pencilAllowance()).toEqual({ remaining: 2, limit: 2, credits: 0, needsAd: true });
-    mockStudio.pencilAllowance.mockRejectedValueOnce(new Error('x'));
+    expect(await s.pencilAllowance()).toMatchObject({ remaining: 2, limit: 5, credits: 0, needsAd: true, owed: 0, frozen: false });
+    mockStudio.mastersAllowance.mockRejectedValueOnce(new Error('x'));
     expect((await s.pencilAllowance()).needsAd).toBe(true);
   });
 

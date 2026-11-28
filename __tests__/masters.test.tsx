@@ -26,12 +26,21 @@ import { featureTitleKey } from '../src/components/PremiumSheet';
 import { ThemeProvider } from '../src/theme';
 
 let mockLeft = 1;
-// Pencil Art's day on the free plan (two, each after an ad), as the device counts it.
-const mockPencil = { premium: false, remaining: 2, credits: 0, adFinishes: true };
+// Photo Arts' day on the free plan (paintings and drawings together: five, each after an ad), as the device
+// counts it, with the ads owed from offline unlocks (frozen at three).
+const mockPencil = { premium: false, remaining: 5, credits: 0, owed: 0, adFinishes: true, offline: false };
 const pencilState = () =>
   mockPencil.premium
-    ? { remaining: -1, limit: 2, credits: 0, needsAd: false }
-    : { remaining: mockPencil.remaining, limit: 2, credits: mockPencil.credits, needsAd: mockPencil.credits === 0 };
+    ? { remaining: -1, limit: 5, credits: 0, needsAd: false, owed: 0, maxOwed: 3, frozen: false }
+    : {
+        remaining: mockPencil.remaining,
+        limit: 5,
+        credits: mockPencil.credits,
+        needsAd: mockPencil.credits === 0,
+        owed: mockPencil.owed,
+        maxOwed: 3,
+        frozen: mockPencil.owed >= 3,
+      };
 const mockStudio = {
   renderMasters: jest.fn(async (_id: string, req: { quality: string; artist: number; mode?: string }) => {
     if (req.quality === 'full') {
@@ -47,7 +56,7 @@ const mockStudio = {
       remaining: mockLeft,
     };
   }),
-  mastersAllowance: jest.fn(async () => ({ remaining: mockLeft, limit: 1 })),
+  mastersAllowance: jest.fn(async () => pencilState()),
   pencilAllowance: jest.fn(async () => pencilState()),
   saveToGallery: jest.fn(async () => 'content://gallery/1'),
   cancel: jest.fn(),
@@ -55,8 +64,16 @@ const mockStudio = {
 const mockAds = {
   initialize: jest.fn(async () => ({ canRequestAds: true })),
   showRewardedAdForTool: jest.fn(async (_tool: string) => {
+    if (mockPencil.offline) {
+      if (mockPencil.owed >= 3)
+        throw Object.assign(new Error('You’re offline and owe 3 ads for this tool.'), { code: 'OWED_ADS' });
+      mockPencil.owed += 1;
+      mockPencil.credits += 1;
+      return { rewarded: true, offline: true, allowance: pencilState() };
+    }
     if (!mockPencil.adFinishes) return { rewarded: false, allowance: pencilState() };
-    mockPencil.credits += 1;
+    if (mockPencil.owed > 0) mockPencil.owed -= 1;
+    else mockPencil.credits += 1;
     return { rewarded: true, allowance: pencilState() };
   }),
 };
@@ -87,14 +104,24 @@ const step = async (fn: () => unknown) =>
     await fn();
     for (let i = 0; i < 12; i++) await tick();
   });
-const navigation = { navigate: jest.fn(), goBack: jest.fn(), setParams: jest.fn(), replace: jest.fn() };
+let onFocus: (() => void) | null = null;
+const navigation = {
+  navigate: jest.fn(),
+  goBack: jest.fn(),
+  setParams: jest.fn(),
+  replace: jest.fn(),
+  addListener: jest.fn((_event: string, cb: () => void) => {
+    onFocus = cb;
+    return () => undefined;
+  }),
+};
 const lastPreview = () =>
   mockStudio.renderMasters.mock.calls.filter(c => c[1].quality === 'preview').at(-1)![1] as Record<string, unknown>;
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockLeft = 1;
-  Object.assign(mockPencil, { premium: false, remaining: 2, credits: 0, adFinishes: true });
+  Object.assign(mockPencil, { premium: false, remaining: 5, credits: 0, owed: 0, adFinishes: true, offline: false });
 });
 
 describe('the twenty masters', () => {
@@ -113,7 +140,7 @@ describe('the twenty masters', () => {
     }
     expect(artistName(ARTISTS[0])).toBe('Leonardo da Vinci');
     expect(FEATURES.masters.plan).toBe('premium');
-    expect(FREE_DAILY_ALLOWANCE.masters).toBe(1);
+    expect(FREE_DAILY_ALLOWANCE.masters).toBe(5);
     // Every feature's title is a string resource (so Google Play translates it).
     for (const k of Object.keys(FEATURES) as FeatureKey[])
       expect((en as Record<string, string>)[featureTitleKey(k)]).toBe(FEATURES[k].title);
@@ -156,7 +183,7 @@ describe('the Masters service', () => {
     await expect(s.paint('/a.jpg', 1, 1, 'full')).rejects.toMatchObject({ code: 'PREMIUM_REQUIRED' });
     expect(isPainting({ outputPath: '', width: 1, height: 1 })).toBe(false);
     expect(isPainting({ outputPath: '/x', width: 0, height: 1 })).toBe(false);
-    expect(await s.allowance()).toEqual({ remaining: 0, limit: 1 });
+    expect(await s.allowance()).toMatchObject({ remaining: 5, limit: 5, owed: 0, frozen: false });
   });
 });
 
@@ -184,7 +211,7 @@ describe('the Masters screen', () => {
     expect(navigation.replace).toHaveBeenCalledWith('StudioProjects', { studio: 'arts', photo: '/x.jpg' });
   });
 
-  it('paints a preview, fills the cards, and makes the finished painting live in the studio, free once a day', async () => {
+  it('paints a preview, fills the cards, and makes the finished painting live in the studio, after an ad on the free plan', async () => {
     await wrap(
       <MastersScreen
         navigation={navigation as never}
@@ -200,7 +227,7 @@ describe('the Masters screen', () => {
     // The cards of the movement on show, each the photo in that artist's hand.
     const thumbs = mockStudio.renderMasters.mock.calls.filter(c => c[1].quality === 'thumb').map(c => c[1].artist);
     expect(thumbs).toEqual(artistsOf('renaissance').map(a => a.id));
-    expect(screen.getByText('1 free painting today')).toBeTruthy();
+    expect(screen.getByText('5 of 5 free works of art left today')).toBeTruthy();
 
     // Another movement and artist, a Masterpiece.
     await step(() => fireEvent.press(screen.getByTestId('masters-movement-classical')));
@@ -221,8 +248,11 @@ describe('the Masters screen', () => {
     );
     expect(screen.getByTestId('masters-before').props.source.uri).toBe('file:///files/imports/me.jpg');
 
-    // The finished painting: made live in the studio, for this project.
+    // The finished painting: an ad first (free plan), then made live in the studio, for this project.
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
+    expect(screen.getByTestId('arts-ad-sheet')).toBeTruthy();
+    await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
+    expect(mockAds.showRewardedAdForTool).toHaveBeenCalledWith('arts');
     expect(navigation.navigate).toHaveBeenLastCalledWith('ArtLive', {
       job: expect.objectContaining({ artist: 6, level: 2, mode: 'paint', seed: 7 }),
       photo: '/files/imports/me.jpg',
@@ -233,8 +263,8 @@ describe('the Masters screen', () => {
     expect((navigation.navigate.mock.calls.at(-1)![1] as { job: object }).job).not.toHaveProperty('signature');
   });
 
-  it('offers Premium when the day’s free painting is used', async () => {
-    mockLeft = 0;
+  it('offers Premium when the day’s five free works are made', async () => {
+    mockPencil.remaining = 0;
     await wrap(
       <MastersScreen
         navigation={navigation as never}
@@ -242,14 +272,55 @@ describe('the Masters screen', () => {
       />,
     );
     await step(() => undefined);
-    expect(screen.getAllByText(/today’s free painting is used/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/today’s 5 free works of art/i).length).toBeGreaterThan(0);
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
     expect(navigation.navigate).not.toHaveBeenCalledWith('ArtLive', expect.anything());
+    expect(screen.queryByTestId('arts-ad-sheet')).toBeNull();
     expect(screen.getByTestId('premium-sheet-plans')).toBeTruthy();
     expect(screen.getByText(FEATURES.masters.title)).toBeTruthy();
   });
 
-  it('draws in pencil: the master’s drawing manner, medium and paper, two free a day each after an ad', async () => {
+  it('offline: unlocks on credit and owes the ad; at three owed it waits until they’re watched online', async () => {
+    mockPencil.offline = true;
+    await wrap(
+      <MastersScreen
+        navigation={navigation as never}
+        route={{ key: 'm', name: 'Masters', params: { photo: '/p.jpg', projectId: 'sp1' } } as never}
+      />,
+    );
+    await step(() => undefined);
+    // Three works made offline: each unlocked on credit, its ad owed.
+    for (let i = 1; i <= 3; i++) {
+      navigation.navigate.mockClear();
+      await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
+      await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
+      expect(navigation.navigate).toHaveBeenLastCalledWith('ArtLive', expect.anything());
+      expect(screen.getByTestId('masters-ad-note').props.children).toContain(`Ads owed: ${i} of 3`);
+      mockPencil.credits = 0; // the work was made
+      mockPencil.remaining -= 1;
+      await step(() => onFocus?.()); // back from the live studio
+    }
+    // Frozen: the fourth needs the three owed ads first, and offline none can be shown.
+    navigation.navigate.mockClear();
+    await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
+    expect(screen.getByTestId('masters-owed').props.children).toMatch(/Paused: 3 ads are owed/);
+    expect(screen.getByText(/You owe 3 ads from using this tool offline/)).toBeTruthy();
+    await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
+    expect(screen.getByText(/You’re offline and owe 3 ads/)).toBeTruthy();
+    expect(navigation.navigate).not.toHaveBeenCalledWith('ArtLive', expect.anything());
+    // Online: each ad pays one off; when none are owed, the next unlocks a new work.
+    mockPencil.offline = false;
+    await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
+    expect(screen.getAllByText('Thank you — an owed ad is paid. Still owed: 2.').length).toBeGreaterThan(0);
+    await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
+    await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
+    expect(navigation.navigate).not.toHaveBeenCalledWith('ArtLive', expect.anything());
+    expect(mockPencil.owed).toBe(0);
+    await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
+    expect(navigation.navigate).toHaveBeenLastCalledWith('ArtLive', expect.anything());
+  });
+
+  it('draws in pencil: the master’s drawing manner, medium and paper, from the same five a day, each after an ad', async () => {
     await wrap(
       <MastersScreen
         navigation={navigation as never}
@@ -269,7 +340,7 @@ describe('the Masters screen', () => {
     expect(screen.getByTestId('masters-technique').props.children).toBe(
       'Left-handed parallel hatching under a smoky sfumato',
     );
-    expect(screen.getByText('2 of 2 free drawings left today')).toBeTruthy();
+    expect(screen.getByText('5 of 5 free works of art left today')).toBeTruthy();
 
     await step(() => fireEvent.press(screen.getByTestId('pencil-medium-red_chalk')));
     await step(() => fireEvent.press(screen.getByTestId('pencil-paper-tan')));
@@ -281,13 +352,13 @@ describe('the Masters screen', () => {
     // A free drawing: an ad first; one not watched to the end unlocks nothing.
     mockPencil.adFinishes = false;
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
-    expect(screen.getByTestId('pencil-ad-sheet')).toBeTruthy();
-    await step(() => fireEvent.press(screen.getByTestId('pencil-ad-sheet-watch')));
-    expect(mockAds.showRewardedAdForTool).toHaveBeenCalledWith('pencil');
+    expect(screen.getByTestId('arts-ad-sheet')).toBeTruthy();
+    await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
+    expect(mockAds.showRewardedAdForTool).toHaveBeenCalledWith('arts');
     expect(screen.getByText(/The ad didn’t finish/)).toBeTruthy();
     expect(navigation.navigate).not.toHaveBeenCalledWith('ArtLive', expect.anything());
     mockPencil.adFinishes = true;
-    await step(() => fireEvent.press(screen.getByTestId('pencil-ad-sheet-watch')));
+    await step(() => fireEvent.press(screen.getByTestId('arts-ad-sheet-watch')));
     expect(navigation.navigate).toHaveBeenLastCalledWith(
       'ArtLive',
       expect.objectContaining({
@@ -296,7 +367,7 @@ describe('the Masters screen', () => {
       }),
     );
 
-    // Today's two are used: Premium is offered, with no ad.
+    // Today's five are made: Premium is offered, with no ad.
     mockPencil.remaining = 0;
     mockPencil.credits = 0;
     await step(() => navigation.navigate.mockClear());
@@ -309,7 +380,7 @@ describe('the Masters screen', () => {
     await step(() => undefined);
     await step(() => fireEvent.press(screen.getByTestId('masters-mode-pencil')));
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
-    expect(screen.queryByTestId('pencil-ad-sheet')).toBeNull();
+    expect(screen.queryByTestId('arts-ad-sheet')).toBeNull();
     expect(screen.getByText(FEATURES.pencil.title)).toBeTruthy();
   });
 
@@ -328,7 +399,6 @@ describe('the Masters screen', () => {
   it('paints without limits on Premium, signed with the artist’s name', async () => {
     mockLeft = -1;
     mockPencil.premium = true;
-    mockStudio.mastersAllowance.mockResolvedValue({ remaining: -1, limit: 1 });
     await wrap(
       <MastersScreen
         navigation={navigation as never}
@@ -336,7 +406,7 @@ describe('the Masters screen', () => {
       />,
     );
     await step(() => undefined);
-    expect(screen.getByText('Premium: paint without limits')).toBeTruthy();
+    expect(screen.getByText('Premium: unlimited works of art, no ads, no mark')).toBeTruthy();
     expect(navigation.setParams).toHaveBeenCalledWith({ photo: undefined, edit: undefined });
     await step(() => fireEvent.press(screen.getByTestId('signature-toggle')));
     await step(() => fireEvent.changeText(screen.getByTestId('signature-name'), 'Ama Owusu'));
@@ -352,12 +422,10 @@ describe('the Masters screen', () => {
     );
     // Pencil on Premium: no ads.
     await step(() => fireEvent.press(screen.getByTestId('masters-mode-pencil')));
-    expect(screen.getByText('Premium: unlimited drawings, no ads')).toBeTruthy();
+    expect(screen.getByText('Premium: unlimited works of art, no ads, no mark')).toBeTruthy();
     await step(() => fireEvent.press(screen.getByTestId('masters-paint')));
-    expect(screen.queryByTestId('pencil-ad-sheet')).toBeNull();
+    expect(screen.queryByTestId('arts-ad-sheet')).toBeNull();
     expect(mockAds.showRewardedAdForTool).not.toHaveBeenCalled();
-    mockStudio.mastersAllowance.mockReset();
-    mockStudio.mastersAllowance.mockImplementation(async () => ({ remaining: mockLeft, limit: 1 }));
   });
 
   it('opens a work again with what it was made with', async () => {

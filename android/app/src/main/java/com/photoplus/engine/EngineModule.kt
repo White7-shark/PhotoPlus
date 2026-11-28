@@ -836,6 +836,16 @@ class EngineModule(reactContext: ReactApplicationContext) :
 
   override fun getPlan(promise: Promise) = promise.resolve(Entitlements.plan.name.lowercase())
 
+  /** The 7-day free trial, simulated for testing (Play Billing starts it in production). */
+  override fun startTrial(promise: Promise) {
+    promise.resolve(Entitlements.startTrialSimulation())
+  }
+
+  /** { available, active, used, endsAt, days } of the free trial. */
+  override fun trialState(promise: Promise) {
+    promise.resolve(Entitlements.trialState().toWritableMap())
+  }
+
   override fun setDebugPlan(plan: String, promise: Promise) {
     promise.resolve(Entitlements.setDebugPlan(if (plan == "premium") Plan.PREMIUM else Plan.FREE))
   }

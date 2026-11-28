@@ -32,7 +32,16 @@ const mockStudio = {
     sizeBytes: 1000,
     remaining: 1,
   })),
-  mastersAllowance: jest.fn(async () => ({ remaining: 1, limit: 1 })),
+  // One use already unlocked by an ad today, so painting goes straight through (ads are tested in masters.test).
+  mastersAllowance: jest.fn(async () => ({
+    remaining: 1,
+    limit: 5,
+    credits: 1,
+    needsAd: false,
+    owed: 0,
+    maxOwed: 3,
+    frozen: false,
+  })),
   saveToGallery: jest.fn(),
   cancel: jest.fn(),
 };

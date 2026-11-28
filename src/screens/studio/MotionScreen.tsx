@@ -23,6 +23,7 @@ import {
   type MotionPin,
   type MotionSettings,
 } from '../../services/motion/catalog';
+import { owedLine, unlockNotice, unlockedNow } from '../../services/ads/toolAllowance';
 import {
   MotionError,
   UNKNOWN_ALLOWANCE,
@@ -89,6 +90,9 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
   const limit = allowance?.limit ?? UNKNOWN_ALLOWANCE.limit;
   const left = allowance && !unlimited ? Math.max(0, allowance.remaining) : null;
   const unlocked = !!allowance && !unlimited && allowance.credits > 0 && (left ?? 0) > 0;
+  // Ads owed from offline unlocks: paid off first; at the most allowed the tool waits for them.
+  const owed = allowance && !unlimited ? allowance.owed : 0;
+  const [adNote, setAdNote] = useState<string | null>(null);
 
   const refreshAllowance = useCallback(() => {
     void motion.allowance().then(setAllowance);
@@ -306,7 +310,7 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
     if (!scene || busy === 'full') return;
     if (unlimited || unlocked) {
       void make();
-    } else if (left === 0) {
+    } else if (left === 0 && owed === 0) {
       setPremiumOpen(true);
     } else {
       setAdNotice(null);
@@ -319,13 +323,15 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
     try {
       const r = await motion.unlock();
       setAllowance(r.allowance);
-      if (r.rewarded) {
+      setAdNote(unlockNotice(r));
+      if (r.rewarded && unlockedNow(r.allowance)) {
         setAdOpen(false);
         setBusy(null);
         await make();
         return;
       }
-      setAdNotice(t('motion_ad_not_finished'));
+      // An owed ad paid off (more to go), or an ad not watched to the end.
+      setAdNotice(r.rewarded ? unlockNotice(r) : t('motion_ad_not_finished'));
     } catch (e) {
       const code = e instanceof MotionError ? e.code : '';
       if (code === 'DAILY_LIMIT') {
@@ -337,6 +343,10 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
         setBusy(null);
         await make();
         return;
+      } else if (code === 'OWED_ADS') {
+        // Offline with every allowed ad owed: frozen until online.
+        setAdNotice(e instanceof Error ? e.message : t('ads_owed_frozen', { n: owed }));
+        refreshAllowance();
       } else setAdNotice(t('motion_ad_unavailable'));
     }
     setBusy(b => (b === 'ad' ? null : b));
@@ -811,6 +821,16 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
                         {t('motion_free_ad')}
                       </AppText>
                     ) : null}
+                    {allowance && owedLine(allowance) ? (
+                      <AppText variant="caption" style={{ color: theme.colors.warning }} testID="motion-owed">
+                        {owedLine(allowance)}
+                      </AppText>
+                    ) : null}
+                    {adNote ? (
+                      <AppText variant="caption" tone="secondary" testID="motion-ad-note">
+                        {adNote}
+                      </AppText>
+                    ) : null}
                   </View>
                 </View>
 
@@ -818,11 +838,13 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
                   label={
                     unlimited || unlocked
                       ? t('motion_create')
-                      : left === 0
-                        ? t('motion_go_premium')
-                        : t('motion_watch_create')
+                      : owed > 0
+                        ? t('ads_watch_owed', { n: owed })
+                        : left === 0
+                          ? t('motion_go_premium')
+                          : t('motion_watch_create')
                   }
-                  icon={unlimited || unlocked ? 'motion' : left === 0 ? 'crown' : 'play'}
+                  icon={unlimited || unlocked ? 'motion' : left === 0 && owed === 0 ? 'crown' : 'play'}
                   variant="premium"
                   size="lg"
                   loading={busy === 'full'}
@@ -925,7 +947,7 @@ export function MotionScreen({ navigation, route }: RootScreenProps<'Motion'>) {
                   {t('motion_ad_title')}
                 </AppText>
                 <AppText variant="body" tone="secondary" align="center">
-                  {t('motion_ad_body', { limit })}
+                  {owed > 0 ? t('ads_owed_sheet', { n: owed }) : t('motion_ad_body', { limit })}
                 </AppText>
                 {left !== null ? (
                   <AppText variant="caption" align="center" style={{ fontWeight: '700' }}>

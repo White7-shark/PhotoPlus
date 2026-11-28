@@ -1455,7 +1455,21 @@ pp_status pp_toon_render(pp_image* image, const pp_toon_options* options, const 
 typedef struct pp_toon_settings {
   pp_toon_options options;
   float strength;
+  /* Finer controls; 0.5 (and 0) keep the style's own look: outline 0..1, backdrop
+   * (kept scene's softness) 0..1, brightness -1..1, warmth -1..1, texture (dots,
+   * screentone, grain) 0..1, face_detail 0..1, hair_detail 0..1, ink 0 the style's,
+   * 1 black, 2 brown, 3 coloured. */
+  float outline;
+  float backdrop;
+  float brightness;
+  float warmth;
+  float texture;
+  float face_detail;
+  float hair_detail;
+  int ink;
 } pp_toon_settings;
+/* Fills settings with the style's own look (anime, kept background, the default controls, strength 1, the finer controls at 0.5 / 0). */
+void pp_toon_settings_init(pp_toon_settings* settings);
 pp_status pp_toon_render_ex(pp_image* image, const pp_toon_settings* settings, const pp_image* subject, const float* faces, size_t face_count,
                             size_t face_stride, const float* contours, size_t contour_count, uint32_t seed, const pp_cancel_token* token);
 

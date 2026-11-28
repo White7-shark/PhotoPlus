@@ -2111,6 +2111,25 @@
     <string name="native_toon_ad_required">Watch a short ad to make this free picture.</string>
     <string name="native_toon_daily_used">You’ve made today’s free pictures. Premium makes unlimited pictures, or come back tomorrow.</string>
     <string name="native_toon_bad_settings">Those cartoon settings can’t be used</string>
+    <string name="toon_strength">Strength</string>
+    <string name="arts_free_left"><xliff:g id="n">{n}</xliff:g> of <xliff:g id="limit">{limit}</xliff:g> free works of art left today</string>
+    <string name="arts_free_ad">Each free painting or drawing unlocks after a short ad, and carries the Photo Plus mark.</string>
+    <string name="arts_free_unlocked">Unlocked: your next work of art is ready to make</string>
+    <string name="arts_free_used">You’ve made today’s <xliff:g id="limit">{limit}</xliff:g> free works of art. Premium paints and draws without limits, with no ads and no mark.</string>
+    <string name="arts_unlimited">Premium: unlimited works of art, no ads, no mark</string>
+    <string name="arts_premium_message">Photo Arts is part of Premium. On the free plan you can make <xliff:g id="limit">{limit}</xliff:g> paintings or drawings a day, each after a short ad, with the Photo Plus mark.</string>
+    <string name="arts_ad_title">Unlock this work of art</string>
+    <string name="arts_ad_body">Watch a short ad to make this painting or drawing. The free plan makes <xliff:g id="limit">{limit}</xliff:g> a day, with the Photo Plus mark; Premium makes unlimited works with no ads and no mark.</string>
+    <string name="arts_watch_paint">Watch ad &amp; paint</string>
+    <string name="ads_offline_unlocked">You’re offline, so no ad could load: this one is unlocked on credit. Ads owed: <xliff:g id="n">{n}</xliff:g> of <xliff:g id="max">{max}</xliff:g>. Watch them when you’re back online.</string>
+    <string name="ads_owed_some">Ads owed from offline use: <xliff:g id="n">{n}</xliff:g> of <xliff:g id="max">{max}</xliff:g>. At <xliff:g id="max">{max}</xliff:g> this tool waits until you watch them online.</string>
+    <string name="ads_owed_frozen">Paused: <xliff:g id="n">{n}</xliff:g> ads are owed from offline use. Connect to the internet and watch them to use this tool again.</string>
+    <string name="ads_owed_paid">Thank you — an owed ad is paid. Still owed: <xliff:g id="n">{n}</xliff:g>.</string>
+    <string name="ads_owed_sheet">You owe <xliff:g id="n">{n}</xliff:g> ads from using this tool offline. Each ad you watch now pays one off; when none are owed, the next ad unlocks a new one.</string>
+    <string name="ads_watch_owed">Watch owed ads (<xliff:g id="n">{n}</xliff:g>)</string>
+    <string name="native_arts_ad_required">Watch a short ad to make this free work of art.</string>
+    <string name="native_arts_daily_used">You’ve made today’s free works of art. Premium paints and draws without limits, or come back tomorrow.</string>
+    <string name="native_ads_owed_frozen">You’re offline and owe <xliff:g id="n">{n}</xliff:g> ads for this tool. Connect to the internet and watch them to use it again.</string>
     <string name="faq_cat_start">Getting started</string>
     <string name="faq_start_1_q">What is Photo Plus?</string>
     <string name="faq_start_1_a">Photo Plus turns your phone into a photo studio. Take photos and videos with a smarter camera, then retouch, relight, change the background, make product photos, film strips and collages — all on your phone, in seconds.</string>
@@ -2204,7 +2223,7 @@
     <string name="faq_studio_9_q">What download sizes can I choose?</string>
     <string name="faq_studio_9_a">Free downloads are a standard size. Premium can download at 720p, 1080p, HD and 4K.</string>
     <string name="faq_studio_10_q">What is Photo Arts?</string>
-    <string name="faq_studio_10_a">Photo Arts paints your photo the way twenty great artists really worked — Leonardo da Vinci, Rembrandt, Vermeer, Hokusai, Monet, Van Gogh, Klimt and more — with real brush strokes, each artist’s palette and light, and the surface of the real thing. Choose an artist, how far the painting goes (Natural, Balanced or Full art) and its finish (Study, Painting or Masterpiece); then, if you like, what it is painted on, the background behind you and a museum frame. Drag across the picture to compare it with your photo. It’s part of Premium; the free plan can paint one picture a day.</string>
+    <string name="faq_studio_10_a">Photo Arts paints your photo the way twenty great artists really worked — Leonardo da Vinci, Rembrandt, Vermeer, Hokusai, Monet, Van Gogh, Klimt and more — with real brush strokes, each artist’s palette and light, and the surface of the real thing. Choose an artist, how far the painting goes (Natural, Balanced or Full art) and its finish (Study, Painting or Masterpiece); then, if you like, what it is painted on, the background behind you and a museum frame. Drag across the picture to compare it with your photo. It’s part of Premium; the free plan makes 5 paintings or drawings a day, each after a short ad and with the Photo Plus mark.</string>
     <string name="faq_studio_11_q">Why does each artist look so different?</string>
     <string name="faq_studio_11_a">Because each one is painted with that artist’s own method, not a filter: Leonardo’s soft sfumato, Michelangelo’s sculptural fresco on plaster, Caravaggio’s single light from a black ground, Dürer’s engraved lines and stippling, Hokusai’s woodblock colours, Seurat’s dots, Van Gogh’s thick swirling paint, Klimt’s gold leaf. Your face is painted with brushes sized to it, and your eyes, brows, nose and mouth with the finest, so you stay recognisable — in a couple or a group too.</string>
     <string name="faq_studio_12_q">What is Recreate a shoot?</string>
@@ -2212,11 +2231,11 @@
     <string name="faq_studio_13_q">What is Photo Motion?</string>
     <string name="faq_studio_13_a">Photo Motion turns one photo into a short video that loops forever. Choose a 3D camera move (push in, orbit, dolly zoom and more) — your phone works out the depth of the scene, so near things move more than far ones and you stay sharp in front. Draw arrows where things should flow, like water, hair, smoke or clouds, and tap to pin what must stay still; faces always stay still. Add snow, rain, bokeh lights, petals, fireflies, sun rays or film. Previews are free. The free plan makes 2 videos a day, each after a short ad and with a small Photo Plus mark; Premium makes unlimited videos with no ads and no mark.</string>
     <string name="faq_studio_14_q">What is Pencil Art?</string>
-    <string name="faq_studio_14_a">Pencil Art, in Photo Arts, draws your photo in pencil — no paint — the way each of the twenty masters drew: their own lines, hatching and shading. Choose graphite, charcoal or red chalk, and white, cream or toned paper. Drawings are made in HD and above, and you can watch the master draw it live before you download it. The free plan makes 2 drawings a day, each after a short ad; Premium draws without limits and with no ads, and can sign every work with your name, brand and the year.</string>
+    <string name="faq_studio_14_a">Pencil Art, in Photo Arts, draws your photo in pencil — no paint — the way each of the twenty masters drew: their own lines, hatching and shading. Choose graphite, charcoal or red chalk, and white, cream or toned paper. Drawings are made in HD and above, and you can watch the master draw it live before you download it. The free plan makes 5 paintings or drawings a day in all, each after a short ad and with the Photo Plus mark; Premium draws without limits and with no ads, and can sign every work with your name, brand and the year.</string>
     <string name="faq_studio_15_q">How do projects work in the studios?</string>
     <string name="faq_studio_15_a">Scene Swap, Photo Arts and Photo Motion each start from a project. Create one, add as many photos as you like, and tap a photo to create with it. Every finished work is kept in the project’s own gallery, where you can view it, download it to your phone’s gallery, share it, edit it again, rename it or delete it. You can rename or delete a whole project too.</string>
     <string name="faq_studio_16_q">What is Toon Studio?</string>
-    <string name="faq_studio_16_a">Toon Studio turns your photo into anime or a cartoon: clean ink lines, flat cel-shaded colour, bright eyes and a painted background. Choose a style — anime, manga, comic, cartoon, webtoon or retro 90s — and a background — your own scene, soft focus, an anime sky, a sunset, a starry night or pastel — then fine-tune the strength (how much of your photo shows through), line thickness, shading steps, colour, detail, anime eyes, smooth skin and glow. Previews are free; the finished picture is made in HD and kept in your project. The free plan makes 2 pictures a day, each after a short ad; Premium makes unlimited pictures with no ads.</string>
+    <string name="faq_studio_16_a">Toon Studio turns your photo into anime or a cartoon: clean ink lines, flat cel-shaded colour, bright eyes and a painted background. Choose a style — anime, manga, comic, cartoon, webtoon or retro 90s — and a background — your own scene, soft focus, an anime sky, a sunset, a starry night or pastel — then fine-tune the strength (how much of your photo shows through), line thickness, shading steps, colour, detail, anime eyes, smooth skin and glow. Previews are free; the finished picture is made in HD and kept in your project. The free plan makes 5 pictures a day, each after a short ad and with the Photo Plus mark; Premium makes unlimited pictures with no ads.</string>
     <string name="faq_cat_product">Product photos &amp; business</string>
     <string name="faq_product_1_q">What is Product Studio?</string>
     <string name="faq_product_1_a">Product Studio makes catalogue shots of what you sell: the product is cut out onto white, paper or grey, with a natural shadow, true colour and the right size for online shops.</string>
@@ -2343,5 +2362,45 @@
     <string name="privacy_16_body">We may update this policy as Photo Plus changes. The date at the top shows the latest version; important changes will be shown in the app.</string>
     <string name="privacy_17_title">Contact us</string>
     <string name="privacy_17_body">Questions about privacy? Contact us through the developer contact on Photo Plus’s Google Play page.</string>
-    <string name="toon_strength">Strength</string>
+    <string name="toon_more">More controls</string>
+    <string name="toon_outline">Outline</string>
+    <string name="toon_backdrop">Background softness</string>
+    <string name="toon_brightness">Brightness</string>
+    <string name="toon_warmth">Warmth</string>
+    <string name="toon_texture">Texture (dots, tone, grain)</string>
+    <string name="toon_face_detail">Face lines</string>
+    <string name="toon_hair_detail">Hair detail</string>
+    <string name="toon_ink">Ink colour</string>
+    <string name="toon_ink_style">Style’s own</string>
+    <string name="toon_ink_black">Black</string>
+    <string name="toon_ink_brown">Brown</string>
+    <string name="toon_ink_colour">Colour</string>
+    <string name="onb_page">Page <xliff:g id="n">{n}</xliff:g> of <xliff:g id="total">{total}</xliff:g></string>
+    <string name="onb_skip">Skip</string>
+    <string name="onb_next">Next</string>
+    <string name="onb_welcome_title">Welcome to Photo Plus</string>
+    <string name="onb_welcome_body">A pro camera, a photoshoot studio and an art studio in one app — fast, private, and working even offline.</string>
+    <string name="onb_camera_title">A pro camera in your pocket</string>
+    <string name="onb_camera_body">Lively colour, beauty looks, manual controls, props and Glide videos — great shots from the first tap.</string>
+    <string name="onb_assist_title">A director that guides you</string>
+    <string name="onb_assist_body">Pose matching, framing and light guidance — and Spotlight puts depth and studio light on any portrait.</string>
+    <string name="onb_studio_title">Photoshoot Studio</string>
+    <string name="onb_studio_body">Swap the scene, restyle hair, lips and light, shoot products, and make films and collages.</string>
+    <string name="onb_arts_title">Photo Arts</string>
+    <string name="onb_arts_body">Twenty great masters paint or draw your photo — and you watch them work, live, stroke by stroke.</string>
+    <string name="onb_motion_title">Photo Motion</string>
+    <string name="onb_motion_body">One photo becomes a living, looping video: 3D camera moves, and water, sky and hair that flow.</string>
+    <string name="onb_toon_title">Toon Studio</string>
+    <string name="onb_toon_body">Turn a photo into anime, manga, a comic, a cartoon, a webtoon or 90s retro — with control over every line and colour.</string>
+    <string name="onb_private_title">Private by design</string>
+    <string name="onb_private_body">Your photos stay on your phone and most tools work offline. Earn rewards as you create; on the free plan, short ads unlock the Premium tools.</string>
+    <string name="onb_trial_title">Get <xliff:g id="days">{days}</xliff:g> days free trial</string>
+    <string name="onb_trial_body">Try everything in Premium free for <xliff:g id="days">{days}</xliff:g> days.</string>
+    <string name="onb_trial_point_tools">Every tool, with no daily limits</string>
+    <string name="onb_trial_point_ads">No ads and no watermark</string>
+    <string name="onb_trial_point_cancel">Cancel anytime before the trial ends</string>
+    <string name="onb_trial_cta">Get <xliff:g id="days">{days}</xliff:g> days free trial</string>
+    <string name="onb_trial_free">Continue with the free plan</string>
+    <string name="onb_trial_used">The free trial has already been used on this phone.</string>
+    <string name="onb_trial_test_note">Testing build: the trial is simulated on this phone. In the store version, Google Play starts it.</string>
 </resources>
