@@ -1,0 +1,11 @@
+# Training data, runs and exports: never committed (they may show real people).
+pairs/
+runs/
+eval/
+build/
+eng/
+*.pt
+*.onnx
+*.tflite
+*.npz
+__pycache__/

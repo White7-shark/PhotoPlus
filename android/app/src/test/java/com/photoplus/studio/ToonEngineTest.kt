@@ -3,6 +3,8 @@ package com.photoplus.studio
 import com.photoplus.engine.EngineException
 import com.photoplus.studio.toon.CloudToonEngine
 import com.photoplus.studio.toon.NoCloudToonEngine
+import com.photoplus.studio.toon.ModelToonEngine
+import com.photoplus.studio.toon.ToonCond
 import com.photoplus.studio.toon.ToonContours
 import com.photoplus.studio.toon.ToonEngine
 import com.photoplus.studio.toon.ToonEngines
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class ToonEngineTest {
@@ -79,5 +82,32 @@ class ToonEngineTest {
     val cloud: CloudToonEngine = NoCloudToonEngine
     assertFalse(cloud.isAvailable())
     assertEquals("cloud", cloud.id)
+  }
+
+  // The same example as tools/toon_model/cond.py (EXAMPLE_PARAMS, EXAMPLE_COND): the app and the training agree.
+  @Test
+  fun theModelReadsTheSettingsExactlyAsItWasTrained() {
+    val params = floatArrayOf(2f, 3f, 0.75f, 4f, 0.5f, 0.45f, 0.15f, 0.5f, 0f, 0.8f, 0.25f, 1f, -0.5f, 0.5f, 0.5f, 0.6f, 0.4f, 1f)
+    val want = floatArrayOf(
+      0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f,
+      0.75f, 0.5f, 0.75f, 0.45f, 0.15f, 0.5f, 0f, 0.25f, 1f, 0.25f, 0.75f, 0.5f, 0.6f, 0.4f, 1f,
+    )
+    assertEquals(31, ToonCond.SIZE)
+    assertArrayEquals(want, ToonCond.encode(params, hasMask = true), 1e-6f)
+    // Out of range is clamped; no mask is said so.
+    val wild = ToonCond.encode(FloatArray(ToonInput.PARAMS) { 99f }, hasMask = false)
+    assertEquals(1f, wild[5])
+    assertEquals(1f, wild[11])
+    assertEquals(1f, wild[15])
+    assertEquals(0f, wild.last())
+    assertTrue(wild.all { it in 0f..1f })
+    assertThrows(IllegalArgumentException::class.java) { ToonCond.encode(FloatArray(3), true) }
+  }
+
+  @Test
+  fun theModelIsPhotoPlusOwnAndNotShippedYet() {
+    assertEquals("toon_photoplus.tflite", ModelToonEngine.SPEC.asset)
+    assertFalse(ModelToonEngine(null).isAvailable())
+    assertFalse(com.photoplus.BuildConfig.TOON_MODEL_ENGINE)
   }
 }

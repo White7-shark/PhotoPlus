@@ -202,14 +202,14 @@ Version 2 is a rework, organised as:
 - `ToonEngine`: `isAvailable()` and `render(input, token)`.
 - `ClassicToonEngine`: the native engine above. It covers every style and
   control, on every device.
-- `ModelToonEngine`: a learned image-to-image model (AnimeGANv2- or
-  White-box Cartoonization-like), run by the app's LiteRT runtime on the
+- `ModelToonEngine`: a learned image-to-image model (ToonNet), run by the app's LiteRT runtime on the
   GPU, else the CPU.
   - It sits behind `BuildConfig.TOON_MODEL_ENGINE`, which is false.
-  - **No weights are bundled.** The licence search (see
-    `FREE_PLAN_ADS_ONBOARDING_REPORT.md`) found no published cartoon model
-    whose weights are clearly free for commercial use. A model must be
-    licensed from its authors or trained on licensed data before shipping.
+  - **It is Photo Plus's own model, ToonNet** (`tools/toon_model`,
+    `TOON_MODEL_REPORT.md`): one network for every style and control, which
+    also reads the person mask. No published cartoon weights were found
+    clearly free for commercial use. Until ToonNet is trained on licensed
+    data and bundled, the flag stays off.
 - `CloudToonEngine`: an interface for a future server img2img backend
   (line-art ControlNet with identity preservation). `NoCloudToonEngine`
   says it isn't available. Uploading a person's photo would first need

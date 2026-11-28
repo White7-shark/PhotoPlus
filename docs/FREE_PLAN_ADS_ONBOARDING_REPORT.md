@@ -29,10 +29,10 @@ Sources:
 
 The MIT licence on a code repository does not cover weights trained on data that carries its own terms. This is not legal advice.
 
-**Decision.** No weights are bundled. Photo Toon keeps using the app's own classic engine, which carries no model risk. `ModelToonEngine` stays behind `BuildConfig.TOON_MODEL_ENGINE = false`. To ship a learned model, the app needs one of these:
-- a written commercial licence from the model's author (for example, AnimeGAN's author offers one);
-- a model trained in-house on images the app has the rights to use;
-- a licensed cloud API, which would also need the user's consent before a photo is uploaded.
+**Decision.** No third-party weights are bundled. Photo Plus trains its own model instead: **ToonNet** (`tools/toon_model`, `docs/TOON_MODEL_REPORT.md`).
+- It first learns from the app's own classic engine.
+- It can then be sharpened on art the app has licensed.
+- Until a ToonNet trained on licensed data is bundled, `ModelToonEngine` stays behind `BuildConfig.TOON_MODEL_ENGINE = false`, and the classic engine draws every picture.
 
 ## 2. Five a day, unlocked by ads, with the watermark
 

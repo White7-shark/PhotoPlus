@@ -37,6 +37,21 @@ class InferenceSession private constructor(
     return runPrepared(input)
   }
 
+  /**
+   * Prepares [bitmap] as input 0 like [run], writes [extra] to inputs 1, 2, ... in
+   * order (a model with several inputs, e.g. ToonNet's mask and settings), runs
+   * the model and returns output 0.
+   */
+  fun run(bitmap: Bitmap, extra: List<FloatArray>): FloatArray {
+    require(inputs.size == 1 + extra.size) { "${spec.id}: the model has ${inputs.size} inputs, given ${1 + extra.size}" }
+    val t = spec.input
+    NativeEngine.nativeImageToTensor(bitmap, t.width, t.height, t.layout.id, t.fit.id, t.mean, t.std, input, placement)
+    inputs[0].writeFloat(input)
+    extra.forEachIndexed { i, data -> inputs[i + 1].writeFloat(data) }
+    model.run(inputs, outputs)
+    return outputs[0].readFloat()
+  }
+
   fun runPrepared(data: FloatArray): FloatArray {
     inputs[0].writeFloat(data)
     model.run(inputs, outputs)
